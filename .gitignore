@@ -25,5 +25,6 @@ nativelink.bazelrc
 user.bazelrc
 *.log
 buck-out/
+book/out/
 nativelink_config.schema.json
 .gstack/

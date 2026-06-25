@@ -977,6 +977,21 @@ pub struct GlobalConfig {
     /// Default: 1024*1024 (1MiB)
     #[serde(default, deserialize_with = "convert_data_size_with_shellexpand")]
     pub default_digest_size_health_check: usize,
+
+    /// When true, reject any request where the digest function is not explicitly
+    /// set (i.e. arrives as 0/UNKNOWN) rather than silently defaulting to
+    /// `default_digest_hash_function`. This prevents a class of bugs where a
+    /// BLAKE3 client omits the field, the server defaults to SHA256, and output
+    /// Directory trees are hashed with the wrong algorithm — corrupting results.
+    ///
+    /// When false (the default for backwards compatibility), unset digest
+    /// functions fall through to `default_digest_hash_function` as before.
+    ///
+    /// Recommended: true for new deployments.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub require_explicit_digest_function: bool,
 }
 
 pub type StoreConfig = NamedConfig<StoreSpec>;

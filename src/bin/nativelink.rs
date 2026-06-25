@@ -49,7 +49,9 @@ use nativelink_service::worker_api_server::WorkerApiServer;
 use nativelink_store::default_store_factory::store_factory;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::common::fs::set_open_file_limit;
-use nativelink_util::digest_hasher::{DigestHasherFunc, set_default_digest_hasher_func};
+use nativelink_util::digest_hasher::{
+    DigestHasherFunc, set_default_digest_hasher_func, set_require_explicit_digest_function,
+};
 use nativelink_util::health_utils::HealthRegistryBuilder;
 use nativelink_util::origin_event_publisher::OriginEventPublisher;
 #[cfg(target_family = "unix")]
@@ -793,6 +795,7 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
             max_open_files: fs::DEFAULT_OPEN_FILE_LIMIT,
             default_digest_hash_function: None,
             default_digest_size_health_check: DEFAULT_DIGEST_SIZE_HEALTH_CHECK_CFG,
+            require_explicit_digest_function: false,
         }
     };
     set_open_file_limit(global_cfg.max_open_files);
@@ -801,6 +804,7 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
             .default_digest_hash_function
             .unwrap_or(ConfigDigestHashFunction::Sha256),
     ))?;
+    set_require_explicit_digest_function(global_cfg.require_explicit_digest_function)?;
     set_default_digest_size_health_check(global_cfg.default_digest_size_health_check)?;
 
     // Initiates the shutdown process by broadcasting the shutdown signal via the `oneshot::Sender` to all listeners.

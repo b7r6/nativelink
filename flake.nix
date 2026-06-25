@@ -87,18 +87,25 @@
           then q.pkgsMusl.stdenv
           else q.stdenv;
         craneLibFor = p:
-          ((crane.mkLib p).overrideToolchain pkgs.lre.stableRustFor).overrideScope (_: _: {
-            stdenvSelector = stdenvSelectorFor;
-          });
+          ((crane.mkLib p).overrideToolchain pkgs.lre.stableRustFor).overrideScope (
+            _: _: {
+              stdenvSelector = stdenvSelectorFor;
+            }
+          );
         nightlyCraneLibFor = p:
-          ((crane.mkLib p).overrideToolchain pkgs.lre.nightlyRustFor).overrideScope (_: _: {
-            stdenvSelector = stdenvSelectorFor;
-          });
+          ((crane.mkLib p).overrideToolchain pkgs.lre.nightlyRustFor).overrideScope (
+            _: _: {
+              stdenvSelector = stdenvSelectorFor;
+            }
+          );
 
         src = pkgs.lib.cleanSourceWith {
           src = (craneLibFor pkgs).path ./.;
           filter = path: type:
-            (builtins.match "^.*(tests/.+\.json5|examples/.+\.json5|data/.+|nativelink-config/README\.md)" path != null)
+            (
+              builtins.match "^.*(tests/.+\.json5|examples/.+\.json5|data/.+|nativelink-config/README\.md)" path
+              != null
+            )
             || ((craneLibFor pkgs).filterCargoSources path type);
         };
 
@@ -120,7 +127,8 @@
                   "aarch64-linux" = "aarch64-unknown-linux-musl";
                   "x86_64-darwin" = "x86_64-apple-darwin";
                   "aarch64-darwin" = "aarch64-apple-darwin";
-                }.${
+                }
+                  .${
                   nixSystem
                 } or (throw "Unsupported Nix host platform: ${nixSystem}")
             )
@@ -132,19 +140,25 @@
             then "${pkgs.mold}/bin/ld.mold"
             else "${pkgs.llvmPackages_22.lld}/bin/ld.lld";
 
-          linkerEnvVar = "CARGO_TARGET_${pkgs.lib.toUpper (pkgs.lib.replaceStrings ["-"] ["_"] targetArch)}_LINKER";
+          linkerEnvVar = "CARGO_TARGET_${
+            pkgs.lib.toUpper (pkgs.lib.replaceStrings ["-"] ["_"] targetArch)
+          }_LINKER";
         in
           {
             inherit src;
             strictDeps = true;
             buildInputs =
-              [p.cacert]
+              [
+                p.cacert
+              ]
               ++ pkgs.lib.optionals p.stdenv.targetPlatform.isDarwin [
                 p.apple-sdk_14
                 p.libiconv
               ];
             nativeBuildInputs =
-              [p.bashNonInteractive] # needed for some command tests
+              [
+                p.bashNonInteractive
+              ] # needed for some command tests
               ++ (
                 if isLinuxBuild
                 then [pkgs.mold]
@@ -172,13 +186,15 @@
         nightlyCargoArtifactsFor = p: (nightlyCraneLibFor p).buildDepsOnly (commonArgsFor p);
 
         nativelinkFor = p:
-          (craneLibFor p).buildPackage ((commonArgsFor p)
+          (craneLibFor p).buildPackage (
+            (commonArgsFor p)
             // {
               cargoArtifacts = cargoArtifactsFor p;
               # If you're testing Nativelink locally, doing a dev profile will
               # massively speedup build times. Just don't commit/push anything build with dev!
               # CARGO_PROFILE = "dev";
-            });
+            }
+          );
 
         nativeTargetPkgs =
           if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
@@ -194,14 +210,13 @@
         nativelink-aarch64-linux = nativelinkFor pkgs.pkgsCross.aarch64-multiplatform-musl;
         nativelink-x86_64-linux = nativelinkFor pkgs.pkgsCross.musl64;
 
-        nativelink-is-executable-test = pkgs.callPackage ./tools/nativelink-is-executable-test.nix {inherit nativelink;};
+        nativelink-is-executable-test = pkgs.callPackage ./tools/nativelink-is-executable-test.nix {
+          inherit nativelink;
+        };
 
         generate-toolchains = pkgs.callPackage ./tools/generate-toolchains.nix {};
 
-        build-chromium-tests =
-          pkgs.writeShellScriptBin
-          "build-chromium-tests"
-          ./deploy/chromium-example/build_chromium_tests.sh;
+        build-chromium-tests = pkgs.writeShellScriptBin "build-chromium-tests" ./deploy/chromium-example/build_chromium_tests.sh;
 
         docs = pkgs.callPackage ./tools/docs.nix {rust = pkgs.lre.stable-rust;};
 
@@ -243,12 +258,21 @@
 
         nativelinkWorkerInitFor = archImage: archPackages: arch:
           pkgs.callPackage ./tools/nativelink-worker-init.nix {
-            inherit buildImage self arch archPackages;
+            inherit
+              buildImage
+              self
+              arch
+              archPackages
+              ;
             nativelink-image = archImage;
           };
 
-        nativelink-init-for-x64 = nativelinkWorkerInitFor nativelink-image-for-x64 pkgs.pkgsCross.musl64 "amd64";
-        nativelink-init-for-aarch64 = nativelinkWorkerInitFor nativelink-image-for-aarch64 pkgs.pkgsCross.aarch64-multiplatform-musl "arm64";
+        nativelink-init-for-x64 =
+          nativelinkWorkerInitFor nativelink-image-for-x64 pkgs.pkgsCross.musl64
+          "amd64";
+        nativelink-init-for-aarch64 =
+          nativelinkWorkerInitFor nativelink-image-for-aarch64 pkgs.pkgsCross.aarch64-multiplatform-musl
+          "arm64";
 
         nativelink-worker-init =
           if pkgs.stdenv.isx86_64
@@ -339,7 +363,8 @@
             "--ignore-filename-regex '.*(genproto|vendor-cargo-deps|crates).*'"
           ];
         in
-          (nightlyCraneLibFor p).mkCargoDerivation (coverageArgs
+          (nightlyCraneLibFor p).mkCargoDerivation (
+            coverageArgs
             // {
               # We build our own custom command so we can run with report for both html and text output
               # Mostly derived from the upstream cargoLlvmCov though
@@ -374,7 +399,8 @@
                 ln -s ${p.mongodb}/bin/mongod ''${MONGOD}
                 ''${MONGOD} --version
               '';
-            });
+            }
+          );
 
         nativelinkCoverageForHost = nativelinkCoverageFor pkgs;
       in rec {
@@ -396,6 +422,14 @@
             type = "app";
             program = "${nativelink}/bin/nativelink";
           };
+          book = {
+            type = "app";
+            program = "${pkgs.writeShellScript "book-serve" ''
+              cd "$(${pkgs.git}/bin/git rev-parse --show-toplevel)/book"
+              echo "NativeLink: The Missing Guide — http://localhost:3000"
+              exec ${pkgs.mdbook}/bin/mdbook serve --open --port 3000
+            ''}";
+          };
         };
         packages =
           rec {
@@ -413,8 +447,30 @@
               nativelink-x86_64-linux
               ;
 
+            # NativeLink: The Missing Guide — rendered as a static site
+            book = pkgs.stdenvNoCC.mkDerivation {
+              name = "nativelink-the-missing-guide";
+              src = ./book;
+              nativeBuildInputs = [pkgs.mdbook];
+              buildPhase = ''
+                runHook preBuild
+                mdbook build --dest-dir ./out
+                runHook postBuild
+              '';
+              installPhase = ''
+                runHook preInstall
+                cp -r ./out $out
+                runHook postInstall
+              '';
+            };
             # Used by the CI
-            inherit (pkgs.nativelink-tools) local-image-test publish-ghcr create-multi-arch-image regctl-ghcr-login;
+            inherit
+              (pkgs.nativelink-tools)
+              local-image-test
+              publish-ghcr
+              create-multi-arch-image
+              regctl-ghcr-login
+              ;
 
             default = nativelink;
 
@@ -429,27 +485,51 @@
             nativelink-worker-buck2-toolchain = buck2-toolchain;
             image = nativelink-image;
 
-            inherit (pkgs) buildstream buck2 mongodb wait4x bazelisk;
-            buildstream-with-nativelink-test = pkgs.callPackage integration_tests/buildstream/buildstream-with-nativelink-test.nix {
-              inherit nativelink buildstream;
-            };
-            mongo-with-nativelink-test = pkgs.callPackage integration_tests/mongo/mongo-with-nativelink-test.nix {
-              inherit nativelink mongodb wait4x bazelisk;
-            };
+            inherit
+              (pkgs)
+              buildstream
+              buck2
+              mongodb
+              wait4x
+              bazelisk
+              ;
+            buildstream-with-nativelink-test =
+              pkgs.callPackage integration_tests/buildstream/buildstream-with-nativelink-test.nix
+              {
+                inherit nativelink buildstream;
+              };
+            mongo-with-nativelink-test =
+              pkgs.callPackage integration_tests/mongo/mongo-with-nativelink-test.nix
+              {
+                inherit
+                  nativelink
+                  mongodb
+                  wait4x
+                  bazelisk
+                  ;
+              };
             rbe-toolchain-with-nativelink-test = pkgs.callPackage toolchain-examples/rbe-toolchain-test.nix {
               inherit nativelink bazelisk;
             };
-            buck2-with-nativelink-test = pkgs.callPackage integration_tests/buck2/buck2-with-nativelink-test.nix {
-              inherit nativelink buck2;
-            };
+            buck2-with-nativelink-test =
+              pkgs.callPackage integration_tests/buck2/buck2-with-nativelink-test.nix
+              {
+                inherit nativelink buck2;
+              };
             update-module-hashes = pkgs.callPackage tools/updaters/rewrite-module.nix {
-              python-with-requests = pkgs.python3.withPackages (ps:
-                with ps; [
-                  ps.requests
-                ]);
+              python-with-requests = pkgs.python3.withPackages (
+                ps:
+                  with ps; [
+                    ps.requests
+                  ]
+              );
             };
-            generate-bazel-rc = pkgs.callPackage tools/generate-bazel-rc/build.nix {craneLib = craneLibFor pkgs;};
-            generate-stores-config = pkgs.callPackage nativelink-config/generate-stores-config/build.nix {craneLib = craneLibFor pkgs;};
+            generate-bazel-rc = pkgs.callPackage tools/generate-bazel-rc/build.nix {
+              craneLib = craneLibFor pkgs;
+            };
+            generate-stores-config = pkgs.callPackage nativelink-config/generate-stores-config/build.nix {
+              craneLib = craneLibFor pkgs;
+            };
           }
           // (
             # It's not possible to crosscompile to darwin, not even between
@@ -552,6 +632,9 @@
               pkgs.go
               pkgs.kustomize
               pkgs.kubectx
+
+              # Documentation
+              pkgs.mdbook
 
               # Web
               pkgs.bun
