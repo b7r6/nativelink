@@ -173,6 +173,44 @@ pub struct FetchConfig {
     /// This store name referenced here may be reused multiple times.
     #[serde(deserialize_with = "convert_string_with_shellexpand")]
     pub fetch_store: StoreRefName,
+
+    /// Optional OCI toolchain configuration. When set, `FetchDirectory`
+    /// requests with `oci://` URIs will pull the OCI image, project it into
+    /// an REAPI Directory tree, upload blobs to the CAS store, and return the
+    /// root Directory digest. See the Standard OCI Toolchain Specification §6.
+    #[serde(default)]
+    pub oci: Option<OciFetchConfig>,
+}
+
+/// Configuration for OCI toolchain image fetching via the Remote Asset API.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciFetchConfig {
+    /// The CAS store to upload projected file blobs and Directory protos into.
+    /// Typically the same store used by the execution service. If omitted,
+    /// uses `fetch_store`.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub cas_store: Option<StoreRefName>,
+
+    /// Whether to check for existing blobs before uploading (dedup via
+    /// `FindMissingBlobs`-equivalent `has_many()`). Default: true.
+    #[serde(default = "default_true")]
+    pub dedup_check: bool,
+
+    /// Digest function for the REAPI projection.
+    /// Must match what the execution service expects. Default: "BLAKE3".
+    #[serde(default = "default_oci_digest_function")]
+    pub digest_function: String,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_oci_digest_function() -> String {
+    "BLAKE3".to_string()
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

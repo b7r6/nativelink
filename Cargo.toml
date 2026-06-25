@@ -5,6 +5,22 @@ exclude = [
   "nativelink-test/fuzz",
   "tools/generate-bazel-rc",
 ]
+members = [
+  ".",
+  "nativelink-config",
+  "nativelink-error",
+  "nativelink-macro",
+  "nativelink-metric",
+  "nativelink-metric/nativelink-metric-macro-derive",
+  "nativelink-oci",
+  "nativelink-proto",
+  "nativelink-redis-tester",
+  "nativelink-scheduler",
+  "nativelink-service",
+  "nativelink-store",
+  "nativelink-util",
+  "nativelink-worker",
+]
 resolver = "2"
 
 [package]
