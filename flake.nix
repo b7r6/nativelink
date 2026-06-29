@@ -157,8 +157,9 @@
               ];
             nativeBuildInputs =
               [
-                p.bashNonInteractive
-              ] # needed for some command tests
+                p.bashNonInteractive # needed for some command tests
+                pkgs.cmake # libz-ng-sys (via zlib-ng) builds its C lib with cmake
+              ]
               ++ (
                 if isLinuxBuild
                 then [pkgs.mold]
