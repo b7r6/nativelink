@@ -83,6 +83,52 @@ pub fn require_explicit_digest_function() -> bool {
     *REQUIRE_EXPLICIT_DIGEST_FUNCTION.get_or_init(|| false)
 }
 
+/// Resolve the digest function from an optional ByteStream resource-name
+/// segment, honoring strict mode.
+///
+/// REAPI carries the digest function for ByteStream as a path segment
+/// (`.../blobs/{digest_function}/{hash}/{size}`), not as a proto int field, so
+/// an omitted segment is the ByteStream analogue of `digest_function == 0` on
+/// the structured RPCs. Resolving it through this function (rather than
+/// defaulting directly) ensures `require_explicit_digest_function` covers
+/// ByteStream too: an omitted segment is rejected in strict mode and defaulted
+/// (with the same one-time warning as the i32 path) otherwise. A present
+/// segment is parsed normally and an unknown value is rejected regardless of
+/// mode.
+pub fn digest_hasher_from_resource_name_segment(
+    segment: Option<&str>,
+) -> Result<DigestHasherFunc, Error> {
+    match segment {
+        Some(name) => DigestHasherFunc::try_from(name),
+        None => {
+            if require_explicit_digest_function() {
+                return Err(make_input_err!(
+                    "digest_function is required but the ByteStream resource name \
+                     omitted it (e.g. '.../blobs/{{hash}}/{{size}}' with no \
+                     '{{digest_function}}' segment). Clients MUST address blobs \
+                     under '.../blobs/{{digest_function}}/{{hash}}/{{size}}'. Set \
+                     global.require_explicit_digest_function to false to restore \
+                     the legacy defaulting behavior."
+                ));
+            }
+            if !WARNED_UNSET_DIGEST_FUNCTION.swap(true, Ordering::Relaxed) {
+                let default_fn = default_digest_hasher_func();
+                warn!(
+                    default_digest_function = %default_fn,
+                    "Received ByteStream request with no digest_function segment in \
+                     the resource name; defaulting to {default_fn}. This can cause \
+                     silent corruption if the client is using a different digest \
+                     function (e.g. BLAKE3 client with SHA256 server default). Set \
+                     global.require_explicit_digest_function = true to reject such \
+                     requests, or ensure all clients address blobs under \
+                     '.../blobs/{{digest_function}}/{{hash}}/{{size}}'.",
+                );
+            }
+            Ok(default_digest_hasher_func())
+        }
+    }
+}
+
 /// Supported digest hash functions.
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum DigestHasherFunc {

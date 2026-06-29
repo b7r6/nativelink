@@ -45,7 +45,7 @@ use nativelink_util::buf_channel::{
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::{
-    DigestHasherFunc, default_digest_hasher_func, make_ctx_for_hash_func,
+    digest_hasher_from_resource_name_segment, make_ctx_for_hash_func,
 };
 use nativelink_util::proto_stream_utils::WriteRequestStreamWrapper;
 use nativelink_util::resource_info::ResourceInfo;
@@ -1020,10 +1020,8 @@ impl ByteStream for ByteStreamServer {
             return Ok(Response::new(stream));
         }
 
-        let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(default_digest_hasher_func()),
-            DigestHasherFunc::try_from,
-        )?;
+        let digest_function =
+            digest_hasher_from_resource_name_segment(resource_info.digest_function.as_deref())?;
 
         let resp = self
             .inner_read(instance, digest, read_request)
@@ -1111,14 +1109,9 @@ impl ByteStream for ByteStreamServer {
             return resp;
         }
 
-        let digest_function = stream
-            .resource_info
-            .digest_function
-            .as_deref()
-            .map_or_else(
-                || Ok(default_digest_hasher_func()),
-                DigestHasherFunc::try_from,
-            )?;
+        let digest_function = digest_hasher_from_resource_name_segment(
+            stream.resource_info.digest_function.as_deref(),
+        )?;
 
         // Check if store supports direct oneshot updates (bypasses channel overhead).
         // Use fast-path only when:

@@ -339,7 +339,7 @@ impl ExecutionServer {
                  UNKNOWN/0). The server cannot safely default the digest function \
                  for execution because it determines how output Directory trees \
                  are hashed. Clients MUST set this field to the digest function \
-                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=14)."
+                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=9)."
             ));
         }
 
@@ -516,7 +516,7 @@ impl Execution for ExecutionServer {
                  UNKNOWN/0). The server cannot safely default the digest function \
                  for execution because it determines how output Directory trees \
                  are hashed. Clients MUST set this field to the digest function \
-                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=14).",
+                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=9).",
             ));
         }
         let result = self
