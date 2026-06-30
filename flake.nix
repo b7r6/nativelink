@@ -3,7 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:sensenet-ai/nixpkgs";
-    flake-parts.url = "github:hercules-ci/flake-parts";
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+      # Global pin: flake-parts pulls its own nixpkgs-lib (nix-community/
+      # nixpkgs.lib) by default; force it onto our single sensenet-ai/nixpkgs
+      # so no other nixpkgs revision enters the closure.
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
