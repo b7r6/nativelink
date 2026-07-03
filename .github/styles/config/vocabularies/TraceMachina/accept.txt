@@ -348,6 +348,8 @@ misconfiguration
 misrouting
 mtimes
 musl
+narinfo
+netrc
 nixpkgs
 plaintext
 preload
@@ -362,6 +364,8 @@ Seccomp
 soname
 soname_len
 substitutability
+[Ss]ubstituter
+[Ss]ubstituters
 subtree
 subtrees
 superset
