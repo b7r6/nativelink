@@ -24,13 +24,18 @@
 //! - the path-info store is a `MemoryStore` wrapped in
 //!   `CompletenessCheckingStore` referencing the NAR store, so a
 //!   `narinfo` whose NAR is missing is invisible to clients.
+//!
+//! Phase 2 extends the coverage to bearer/netrc token auth
+//! (`read_token_files`/`write_token_files`), `.ls` listings, build logs
+//! under `log/{drvBasename}`, and zstd-compressed serving
+//! (`serve_compression = "zstd"`), all against the same store wiring.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode, header};
 use bytes::Bytes;
 use http_body_util::BodyExt;
 use nativelink_config::cas_server::{NixCacheConfig, WithInstanceName};
@@ -78,6 +83,33 @@ const CLIENT_SECRET_KEY: &str = "test-client-1:1ZNgkOBfktY+KpNRdPjnmm/P5c4Fqb4Pm
 /// The exact `nix-cache-info` document for the default configuration
 /// (`store_dir` "/nix/store", `want_mass_query` true, `priority` 40).
 const NIX_CACHE_INFO_BODY: &str = "StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 40\n";
+
+/// Write token used by the auth tests; the server reads it from a
+/// one-token file referenced by `write_token_files`.
+const WRITE_TOKEN: &str = "nlwrite-51a09be2c47d";
+
+/// Read token used by the auth tests, via `read_token_files`.
+const READ_TOKEN: &str = "nlread-9f3e7d10c216";
+
+/// The netrc-style `Authorization` value nix sends for [`WRITE_TOKEN`]
+/// after a Basic challenge: `Basic base64("ignored:<token>")`. Hardcoded
+/// because base64 is not a dev-dependency of this crate; generated with:
+///
+/// ```text
+/// $ printf 'ignored:nlwrite-51a09be2c47d' | base64
+/// ```
+const WRITE_TOKEN_BASIC: &str = "Basic aWdub3JlZDpubHdyaXRlLTUxYTA5YmUyYzQ3ZA==";
+
+/// The Basic form of a token that matches nothing:
+///
+/// ```text
+/// $ printf 'ignored:not-the-write-token' | base64
+/// ```
+const WRONG_TOKEN_BASIC: &str = "Basic aWdub3JlZDpub3QtdGhlLXdyaXRlLXRva2Vu";
+
+/// The first four bytes of every zstd frame (RFC 8878): the magic number
+/// `0xFD2FB528`, little-endian on the wire.
+const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
 
 /// Decompressed payload of [`GZIP_NAR_BLOB_HEX`]. NAR bodies are opaque
 /// to the service, so this does not need real NAR framing.
@@ -156,18 +188,26 @@ impl CacheFixture {
     /// A `NixCacheConfig` with everything serde-defaulted except the
     /// store references and the signing key.
     fn config(&self, read_only: bool) -> NixCacheConfig {
-        let mut config: NixCacheConfig = serde_json5::from_str(&format!(
+        let mut config = self.config_with_extra("");
+        config.read_only = read_only;
+        config
+    }
+
+    /// Like [`Self::config`], with `extra_json5` spliced verbatim into
+    /// the config object — the hook for the phase-2 knobs (token files,
+    /// `serve_compression`, ...) without disturbing the base fixture.
+    fn config_with_extra(&self, extra_json5: &str) -> NixCacheConfig {
+        serde_json5::from_str(&format!(
             r#"{{
                 cas_store: "{NAR_STORE_NAME}",
                 path_info_store: "{PATH_INFO_STORE_NAME}",
                 alias_store: "{ALIAS_STORE_NAME}",
                 signing_key_files: ["{}"],
+                {extra_json5}
             }}"#,
             self.signing_key_path.display()
         ))
-        .expect("NixCacheConfig json5 parses");
-        config.read_only = read_only;
-        config
+        .expect("NixCacheConfig json5 parses")
     }
 
     /// Builds a `NixCacheServer` for one instance and returns its mount
@@ -176,10 +216,20 @@ impl CacheFixture {
     /// `NixCacheServer::routers()`. Tests drive the root router with
     /// full-path URIs (`{mount}/...`).
     fn server(&self, instance_name: &str, read_only: bool) -> (String, Router) {
+        self.server_with_config(instance_name, self.config(read_only))
+    }
+
+    /// [`Self::server`] with extra JSON5 config fields; see
+    /// [`Self::config_with_extra`].
+    fn server_with_extra(&self, instance_name: &str, extra_json5: &str) -> (String, Router) {
+        self.server_with_config(instance_name, self.config_with_extra(extra_json5))
+    }
+
+    fn server_with_config(&self, instance_name: &str, config: NixCacheConfig) -> (String, Router) {
         let server = NixCacheServer::new(
             &[WithInstanceName {
                 instance_name: instance_name.to_string(),
-                config: self.config(read_only),
+                config,
             }],
             &self.store_manager,
         )
@@ -235,6 +285,43 @@ fn range_request(uri: &str, range: &str) -> Request<Body> {
         .header(header::RANGE, range)
         .body(Body::empty())
         .expect("valid ranged GET request")
+}
+
+/// Writes a one-token file — the format `read_token_files` and
+/// `write_token_files` reference — into the temp dir and returns its
+/// path. Like real token files, it ends with a trailing newline.
+fn token_file(tag: &str, token: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "nix_cache_server_test-{}-{tag}.token",
+        std::process::id()
+    ));
+    std::fs::write(&path, format!("{token}\n")).expect("write token file");
+    path
+}
+
+fn bearer(token: &str) -> String {
+    format!("Bearer {token}")
+}
+
+/// Attaches an `Authorization` header to a request.
+fn authed(mut request: Request<Body>, authorization: &str) -> Request<Body> {
+    request.headers_mut().insert(
+        header::AUTHORIZATION,
+        HeaderValue::from_str(authorization).expect("Authorization value is ASCII"),
+    );
+    request
+}
+
+/// PUTs `payload` at `uri` with the given `Authorization` value and
+/// returns the response status.
+async fn put_with_auth(
+    router: &Router,
+    uri: &str,
+    payload: &[u8],
+    authorization: &str,
+) -> StatusCode {
+    let (status, _, _) = call(router, authed(put_request(uri, payload), authorization)).await;
+    status
 }
 
 fn header_text(headers: &HeaderMap, name: &HeaderName) -> String {
@@ -906,5 +993,553 @@ async fn traversal_and_garbage_names_are_client_errors_without_writes() -> Resul
     assert_eq!(fixture.nar_memory.len_for_test(), 0);
     assert_eq!(fixture.path_info_memory.len_for_test(), 0);
     assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn write_tokens_gate_puts_with_bearer_and_basic() -> Result<(), Error> {
+    let fixture = CacheFixture::new("write-auth");
+    let write_token_path = token_file("write-auth", WRITE_TOKEN);
+    let (mount, router) = fixture.server_with_extra(
+        "main",
+        &format!(r#"write_token_files: ["{}"],"#, write_token_path.display()),
+    );
+
+    let payload = b"nar payload behind write auth";
+    let store_path = test_store_path("write-auth-seed", "guarded-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    let nar_uri = format!("{mount}/nar/{}", client_nar_basename(payload));
+
+    // Only write tokens are configured, so reads stay anonymous.
+    let (status, _, _) = call(&router, get_request(&format!("{mount}/nix-cache-info"))).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "anonymous read with write-only auth"
+    );
+
+    // Anonymous PUT: 401 challenging for Basic credentials (nix only
+    // sends netrc credentials after a Basic challenge).
+    let (status, headers, _) = call(&router, put_request(&nar_uri, payload)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "anonymous PUT");
+    assert!(
+        header_text(&headers, &header::WWW_AUTHENTICATE).starts_with("Basic"),
+        "401 must challenge with WWW-Authenticate: Basic"
+    );
+
+    // Wrong tokens: 401 in both the Bearer and the Basic form.
+    for authorization in ["Bearer not-the-write-token", WRONG_TOKEN_BASIC] {
+        assert_eq!(
+            put_with_auth(&router, &nar_uri, payload, authorization).await,
+            StatusCode::UNAUTHORIZED,
+            "PUT with '{authorization}'"
+        );
+    }
+    // None of the rejected PUTs may have written anything.
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    assert_eq!(fixture.alias_memory.len_for_test(), 0);
+
+    // The Bearer form and the netrc Basic form both restore normal
+    // behavior: the usual NAR-then-narinfo flow succeeds end to end.
+    assert_eq!(
+        put_with_auth(&router, &nar_uri, payload, &bearer(WRITE_TOKEN)).await,
+        StatusCode::CREATED,
+        "PUT nar with the Bearer write token"
+    );
+    let path_hash = store_path_hash(&store_path);
+    assert_eq!(
+        put_with_auth(
+            &router,
+            &format!("{mount}/{path_hash}.narinfo"),
+            info.render().as_bytes(),
+            WRITE_TOKEN_BASIC,
+        )
+        .await,
+        StatusCode::CREATED,
+        "PUT narinfo with the Basic write token"
+    );
+    let served = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served.store_path, store_path);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn read_tokens_gate_reads_including_cache_info() -> Result<(), Error> {
+    let fixture = CacheFixture::new("read-auth");
+    let read_token_path = token_file("read-auth-read", READ_TOKEN);
+    let write_token_path = token_file("read-auth-write", WRITE_TOKEN);
+    let (mount, router) = fixture.server_with_extra(
+        "main",
+        &format!(
+            r#"read_token_files: ["{}"], write_token_files: ["{}"],"#,
+            read_token_path.display(),
+            write_token_path.display()
+        ),
+    );
+
+    // Publish one path with the write token.
+    let payload = b"nar payload behind read auth";
+    let store_path = test_store_path("read-auth-seed", "private-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    let nar_uri = format!("{mount}/nar/{}", client_nar_basename(payload));
+    assert_eq!(
+        put_with_auth(&router, &nar_uri, payload, &bearer(WRITE_TOKEN)).await,
+        StatusCode::CREATED
+    );
+    let path_hash = store_path_hash(&store_path);
+    let narinfo_uri = format!("{mount}/{path_hash}.narinfo");
+    let put_status = put_with_auth(
+        &router,
+        &narinfo_uri,
+        info.render().as_bytes(),
+        &bearer(WRITE_TOKEN),
+    )
+    .await;
+    assert_eq!(put_status, StatusCode::CREATED);
+
+    // Every anonymous read is 401, including nix-cache-info.
+    let cache_info_uri = format!("{mount}/nix-cache-info");
+    for request in [
+        get_request(&cache_info_uri),
+        get_request(&narinfo_uri),
+        head_request(&narinfo_uri),
+        get_request(&nar_uri),
+    ] {
+        let uri = request.uri().clone();
+        let (status, _, _) = call(&router, request).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "anonymous {uri}");
+    }
+
+    // Both the read token and the write token open every read.
+    for authorization in [bearer(READ_TOKEN), bearer(WRITE_TOKEN)] {
+        for uri in [&cache_info_uri, &narinfo_uri, &nar_uri] {
+            let (status, _, _) = call(&router, authed(get_request(uri), &authorization)).await;
+            assert_eq!(status, StatusCode::OK, "GET {uri} with '{authorization}'");
+        }
+        let (status, _, _) =
+            call(&router, authed(head_request(&narinfo_uri), &authorization)).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "HEAD narinfo with '{authorization}'"
+        );
+    }
+
+    // A read token opens reads only: it must not authorize writes.
+    let other_payload = b"bytes a read token may not push";
+    let put_status = put_with_auth(
+        &router,
+        &format!("{mount}/nar/{}", client_nar_basename(other_payload)),
+        other_payload,
+        &bearer(READ_TOKEN),
+    )
+    .await;
+    assert_eq!(
+        put_status,
+        StatusCode::UNAUTHORIZED,
+        "PUT with a read token"
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn read_only_wins_over_valid_write_token() -> Result<(), Error> {
+    let fixture = CacheFixture::new("ro-auth");
+    let write_token_path = token_file("ro-auth", WRITE_TOKEN);
+    let (mount, router) = fixture.server_with_extra(
+        "mirror",
+        &format!(
+            r#"read_only: true, write_token_files: ["{}"],"#,
+            write_token_path.display()
+        ),
+    );
+
+    let payload = b"bytes no token can push to a read-only mount";
+    let nar_uri = format!("{mount}/nar/{}", client_nar_basename(payload));
+    for authorization in [bearer(WRITE_TOKEN), WRITE_TOKEN_BASIC.to_string()] {
+        assert_eq!(
+            put_with_auth(&router, &nar_uri, payload, &authorization).await,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "read_only must win over a valid write token ('{authorization}')"
+        );
+    }
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn ls_round_trip_unknown_and_oversized() -> Result<(), Error> {
+    /// A miniature but structurally plausible NAR listing document.
+    const LS_DOC: &[u8] = br#"{"root":{"type":"regular","size":123,"narOffset":168},"version":1}"#;
+    let fixture = CacheFixture::new("ls-round-trip");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = b"nar payload whose listing gets uploaded";
+    let store_path = test_store_path("ls-seed", "listed-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    publish(&router, &mount, &info, payload).await;
+
+    let path_hash = store_path_hash(&store_path);
+    let ls_uri = format!("{mount}/{path_hash}.ls");
+    let (status, _, body) = call(&router, put_request(&ls_uri, LS_DOC)).await;
+    assert!(
+        status.is_success(),
+        "PUT {path_hash}.ls: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    // Served back verbatim as JSON.
+    let (status, headers, body) = call(&router, get_request(&ls_uri)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_TYPE),
+        "application/json"
+    );
+    assert_eq!(body.as_ref(), LS_DOC);
+
+    // Shared-contract storage location: the listing lives in the alias
+    // store under the slash-free key `ls:{storePathHash}`.
+    let ls_key = format!("ls:{path_hash}");
+    assert!(
+        fixture
+            .alias_memory
+            .has(StoreKey::new_str(&ls_key))
+            .await?
+            .is_some(),
+        "listing must be recorded under '{ls_key}'"
+    );
+
+    // A listing that was never uploaded is a clean 404.
+    let unknown_path = test_store_path("ls-unknown-seed", "nolisting-1.0");
+    let unknown_hash = store_path_hash(&unknown_path);
+    let (status, _, _) = call(&router, get_request(&format!("{mount}/{unknown_hash}.ls"))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // One byte past the 8 MiB listing limit: 413, and nothing written.
+    let alias_len = fixture.alias_memory.len_for_test();
+    let path_info_len = fixture.path_info_memory.len_for_test();
+    let nar_len = fixture.nar_memory.len_for_test();
+    let oversized = vec![b'{'; 8 * 1024 * 1024 + 1];
+    let (status, _, _) = call(
+        &router,
+        put_request(&format!("{mount}/{unknown_hash}.ls"), &oversized),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "oversized .ls PUT");
+    assert_eq!(fixture.alias_memory.len_for_test(), alias_len);
+    assert_eq!(fixture.path_info_memory.len_for_test(), path_info_len);
+    assert_eq!(fixture.nar_memory.len_for_test(), nar_len);
+    let (status, _, _) = call(&router, get_request(&format!("{mount}/{unknown_hash}.ls"))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "rejected .ls must not serve");
+    Ok(())
+}
+
+#[nativelink_test]
+async fn log_put_get_round_trip() -> Result<(), Error> {
+    const LOG_BODY: &[u8] = b"these 2 derivations will be built:\nbuilding app-3.4...\ndone\n";
+    let fixture = CacheFixture::new("log-round-trip");
+    let (mount, router) = fixture.server("main", false);
+
+    let drv_path = test_store_path("log-seed", "app-3.4.drv");
+    let drv = store_path_basename(&drv_path);
+    let log_uri = format!("{mount}/log/{drv}");
+    let (status, _, body) = call(&router, put_request(&log_uri, LOG_BODY)).await;
+    assert!(
+        status.is_success(),
+        "PUT log/{drv}: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let (status, headers, body) = call(&router, get_request(&log_uri)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_TYPE),
+        "text/plain; charset=utf-8"
+    );
+    assert_eq!(body.as_ref(), LOG_BODY);
+
+    // Shared-contract storage location: the log lives in the alias store
+    // under the slash-free key `log:{drvBasename}`.
+    let log_key = format!("log:{drv}");
+    assert!(
+        fixture
+            .alias_memory
+            .has(StoreKey::new_str(&log_key))
+            .await?
+            .is_some(),
+        "log must be recorded under '{log_key}'"
+    );
+
+    // A log that was never uploaded is a clean 404.
+    let other_path = test_store_path("log-unknown-seed", "other-1.0.drv");
+    let other_uri = format!("{mount}/log/{}", store_path_basename(&other_path));
+    let (status, _, _) = call(&router, get_request(&other_uri)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn log_content_encoding_br_is_replayed_verbatim() -> Result<(), Error> {
+    // Not real brotli: the server must treat the body as opaque and
+    // replay it byte for byte with the same Content-Encoding.
+    const BR_BODY: &[u8] = b"\x0b\x02\x80pretend-brotli log bytes, stored verbatim\x03";
+    let fixture = CacheFixture::new("log-br");
+    let (mount, router) = fixture.server("main", false);
+
+    let drv_path = test_store_path("log-br-seed", "compressed-log-1.0.drv");
+    let drv = store_path_basename(&drv_path);
+    let log_uri = format!("{mount}/log/{drv}");
+    let mut request = put_request(&log_uri, BR_BODY);
+    request
+        .headers_mut()
+        .insert(header::CONTENT_ENCODING, HeaderValue::from_static("br"));
+    let (status, _, body) = call(&router, request).await;
+    assert!(
+        status.is_success(),
+        "PUT br log: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let (status, headers, body) = call(&router, get_request(&log_uri)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_text(&headers, &header::CONTENT_ENCODING), "br");
+    assert_eq!(
+        body.as_ref(),
+        BR_BODY,
+        "still-compressed bytes must replay verbatim"
+    );
+
+    // Shared-contract storage location of the encoding: the alias store
+    // holds the slash-free key `log-enc:{drvBasename}`.
+    let enc_key = format!("log-enc:{drv}");
+    assert!(
+        fixture
+            .alias_memory
+            .has(StoreKey::new_str(&enc_key))
+            .await?
+            .is_some(),
+        "log encoding must be recorded under '{enc_key}'"
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn log_bad_names_are_client_errors_without_writes() -> Result<(), Error> {
+    let fixture = CacheFixture::new("log-bad-names");
+    let (mount, router) = fixture.server("main", false);
+
+    let bad_uris = [
+        format!("{mount}/log/.."),
+        format!("{mount}/log/..%2F..%2Fetc%2Fpasswd"),
+        format!("{mount}/log/a%2Fb.drv"),
+        format!("{mount}/log/"),
+    ];
+    for uri in &bad_uris {
+        let (status, _, _) = call(&router, put_request(uri, b"log bytes")).await;
+        assert!(
+            status.is_client_error(),
+            "PUT {uri} must be 4xx, got {status}"
+        );
+        let (status, _, _) = call(&router, get_request(uri)).await;
+        assert!(
+            status.is_client_error(),
+            "GET {uri} must be 4xx, got {status}"
+        );
+    }
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    assert_eq!(fixture.path_info_memory.len_for_test(), 0);
+    assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn zstd_instance_serves_compressed_nar() -> Result<(), Error> {
+    let fixture = CacheFixture::new("zstd-serve");
+    let (mount, router) = fixture.server_with_extra("zstd", r#"serve_compression: "zstd","#);
+
+    let payload = b"nativelink nix-cache zstd fixture line 0123456789\n".repeat(64);
+    let store_path = test_store_path("zstd-seed", "compressed-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(&payload)),
+        &payload,
+    );
+    publish(&router, &mount, &info, &payload).await;
+
+    // The narinfo advertises the compressed file under its canonical
+    // `.nar.zst` name; NarHash/NarSize still describe the uncompressed
+    // NAR.
+    let served = get_narinfo(&router, &mount, store_path_hash(&store_path)).await;
+    assert_eq!(served.compression, "zstd");
+    let file_hash = served.file_hash.expect("FileHash line present");
+    let file_size = served.file_size.expect("FileSize line present");
+    assert_eq!(
+        served.url,
+        format!(
+            "nar/{}",
+            nar_url::canonical_nar_zst_name(&file_hash, file_size)
+        )
+    );
+    assert_eq!(served.nar_hash, sha256(&payload));
+    assert_eq!(served.nar_size, payload.len() as u64);
+
+    // The advertised URL serves exactly the bytes FileHash/FileSize
+    // describe.
+    let zst_uri = format!("{mount}/{}", served.url);
+    let (status, headers, blob) = call(&router, get_request(&zst_uri)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_LENGTH),
+        file_size.to_string()
+    );
+    assert_eq!(blob.len() as u64, file_size);
+    assert_eq!(sha256(&blob), file_hash);
+
+    // No zstd decoder is available as a dev-dependency, so prove the
+    // blob is a genuine, distinct zstd rendition instead: it starts with
+    // the zstd frame magic, it is smaller than the (highly compressible)
+    // payload, and the uncompressed canonical URL still serves the
+    // original bytes untouched.
+    assert_eq!(blob[..4], ZSTD_MAGIC, "zstd frame magic");
+    assert!(
+        blob.len() < payload.len(),
+        "compressible payload must shrink: {} vs {}",
+        blob.len(),
+        payload.len()
+    );
+    let canonical = nar_url::canonical_nar_name(&sha256(&payload), payload.len() as u64);
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload.as_slice());
+
+    // A Range request on the `.nar.zst` URL returns the exact slice.
+    let (status, headers, slice) = call(&router, range_request(&zst_uri, "bytes=4-9")).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_RANGE),
+        format!("bytes 4-9/{file_size}")
+    );
+    assert_eq!(slice.as_ref(), &blob[4..=9]);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn zstd_narinfo_signatures_survive_compression() -> Result<(), Error> {
+    let fixture = CacheFixture::new("zstd-sigs");
+    let (mount, router) = fixture.server_with_extra("zstd", r#"serve_compression: "zstd","#);
+
+    let payload = b"nativelink nix-cache zstd signature fixture 0123456789\n".repeat(64);
+    let store_path = test_store_path("zstd-sig-seed", "signed-1.0");
+    let mut info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(&payload)),
+        &payload,
+    );
+    let client_key = NixSigningKey::from_secret_string(CLIENT_SECRET_KEY).expect("client key");
+    let client_sig = client_key.sign(&info.fingerprint());
+    info.sigs = vec![client_sig.clone()];
+    publish(&router, &mount, &info, &payload).await;
+
+    let served = get_narinfo(&router, &mount, store_path_hash(&store_path)).await;
+    assert_eq!(served.compression, "zstd");
+
+    // The URL/Compression rewrite must not break signatures: the
+    // fingerprint covers only the uncompressed NAR identity, so it is
+    // unchanged, the client Sig is preserved verbatim, and the server
+    // Sig verifies over the served document's fingerprint.
+    assert_eq!(served.fingerprint(), info.fingerprint());
+    assert!(
+        served.sigs.contains(&client_sig),
+        "client Sig line must be preserved, got: {}",
+        served.sigs.join(" | ")
+    );
+    let server_key = NixSigningKey::from_secret_string(SERVER_SECRET_KEY).expect("server key");
+    let public_key = NixPublicKey::from_string(&server_key.public_key_string()).expect("pub key");
+    let server_sig = served
+        .sigs
+        .iter()
+        .find(|sig: &&String| sig.starts_with("test-int-1:"))
+        .expect("server Sig line present");
+    assert!(
+        public_key.verify(&served.fingerprint(), server_sig),
+        "server signature must verify over the served fingerprint"
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn zstd_blob_eviction_falls_back_and_nar_eviction_hides_narinfo() -> Result<(), Error> {
+    let fixture = CacheFixture::new("zstd-evict");
+    let (mount, router) = fixture.server_with_extra("zstd", r#"serve_compression: "zstd","#);
+
+    let payload = b"nativelink nix-cache zstd eviction fixture 0123456789\n".repeat(64);
+    let store_path = test_store_path("zstd-evict-seed", "degradable-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(&payload)),
+        &payload,
+    );
+    publish(&router, &mount, &info, &payload).await;
+
+    let path_hash = store_path_hash(&store_path);
+    let served = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served.compression, "zstd");
+    let file_hash = served.file_hash.expect("FileHash line present");
+    let file_size = served.file_size.expect("FileSize line present");
+    let zst_uri = format!("{mount}/{}", served.url);
+
+    // Evict ONLY the compressed blob out from under the record.
+    let removed = fixture
+        .nar_memory
+        .remove_entry(DigestInfo::new(file_hash, file_size).into())
+        .await;
+    assert!(removed, "zst blob must exist before eviction");
+
+    // The handler degrades gracefully: the narinfo still 200s and falls
+    // back to the uncompressed canonical URL. Completeness keys on the
+    // uncompressed NAR only, so losing the zst blob must not 404 it.
+    let degraded = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(degraded.compression, "none");
+    let canonical = nar_url::canonical_nar_name(&sha256(&payload), payload.len() as u64);
+    assert_eq!(degraded.url, format!("nar/{canonical}"));
+    let (status, _, _) = call(
+        &router,
+        head_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "HEAD narinfo after zst eviction");
+    // The fallback URL serves the original bytes; the evicted zst URL
+    // is an honest 404.
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload.as_slice());
+    let (status, _, _) = call(&router, get_request(&zst_uri)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "evicted zst URL");
+
+    // Evicting the UNCOMPRESSED NAR hides the narinfo entirely.
+    let removed = fixture
+        .nar_memory
+        .remove_entry(DigestInfo::new(sha256(&payload), payload.len() as u64).into())
+        .await;
+    assert!(removed, "uncompressed NAR must exist before eviction");
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "narinfo after NAR eviction");
     Ok(())
 }

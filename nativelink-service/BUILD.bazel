@@ -37,6 +37,7 @@ rust_library(
         "//nativelink-util",
         "@crates//:async-compression",
         "@crates//:axum",
+        "@crates//:base64",
         "@crates//:bytes",
         "@crates//:futures",
         "@crates//:http-body-util",

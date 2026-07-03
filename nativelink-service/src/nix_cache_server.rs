@@ -15,18 +15,23 @@
 //! The Nix binary-cache (substituter) HTTP service.
 //!
 //! Serves the Nix HTTP binary-cache protocol (`nix-cache-info`,
-//! `<hash>.narinfo`, and `nar/<name>` endpoints) directly from `NativeLink`
-//! stores, so `nix` clients can list a `NativeLink` deployment in their
-//! `substituters` and `nix copy` can push to it.
+//! `<hash>.narinfo`, `<hash>.ls`, `nar/<name>`, and `log/<drv>` endpoints)
+//! directly from `NativeLink` stores, so `nix` clients can list a
+//! `NativeLink` deployment in their `substituters` and `nix copy` can push
+//! to it.
 //!
 //! Store layout (see `nativelink-config/examples/nix_cache.json5`):
 //!
 //! - `cas_store`: digest-keyed uncompressed NAR blobs under
-//!   `DigestInfo(sha256(nar), nar_size)`.
+//!   `DigestInfo(sha256(nar), nar_size)`, plus — when `serve_compression`
+//!   is `zstd` — transcoded `.nar.zst` blobs under
+//!   `DigestInfo(sha256(zstd(nar)), zstd_size)`.
 //! - `path_info_store`: string-keyed `narinfo` records under the
 //!   32-character nix32 store-path hash.
 //! - `alias_store`: string-keyed map from client-chosen NAR URL basenames
-//!   to the `(digest, size)` of the NAR blob in `cas_store`.
+//!   to the `(digest, size)` of the NAR blob in `cas_store`, plus the
+//!   auxiliary documents: NAR listings under `ls:{hash}` and build logs
+//!   under `log:{drv}` / `log-enc:{drv}`.
 
 use core::pin::Pin;
 use core::task::{Context as TaskContext, Poll};
@@ -34,21 +39,30 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use async_compression::tokio::bufread::{BzDecoder, GzipDecoder, XzDecoder, ZstdDecoder};
+use async_compression::Level;
+use async_compression::tokio::bufread::{
+    BzDecoder, GzipDecoder, XzDecoder, ZstdDecoder, ZstdEncoder,
+};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path as UrlPath, State};
-use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, RANGE};
+use axum::http::header::{
+    ACCEPT_RANGES, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE,
+    RANGE, WWW_AUTHENTICATE,
+};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use bytes::{Bytes, BytesMut};
 use futures::{Stream, StreamExt, TryStreamExt};
 use nativelink_config::cas_server::{NixCacheConfig, WithInstanceName};
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::MetricsComponent;
 use nativelink_nix::nar_url::{
-    GZIP_MAGIC, NarCodec, alias_key, canonical_nar_name, codec_for_name, format_alias, parse_alias,
+    GZIP_MAGIC, NarCodec, alias_key, canonical_nar_name, canonical_nar_zst_name, codec_for_name,
+    format_alias, listing_key, log_encoding_key, log_key, parse_alias, parse_canonical_any,
     parse_canonical_nar_name,
 };
 use nativelink_nix::narinfo::is_store_path_hash;
@@ -77,14 +91,33 @@ const NIX_CACHE_INFO_CONTENT_TYPE: &str = "text/x-nix-cache-info";
 const NARINFO_CONTENT_TYPE: &str = "text/x-nix-narinfo";
 /// Content type of NAR responses.
 const NAR_CONTENT_TYPE: &str = "application/x-nix-nar";
+/// Content type of `.ls` (NAR listing) responses.
+const LISTING_CONTENT_TYPE: &str = "application/json";
+/// Content type of build-log responses.
+const LOG_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 /// File extension of `narinfo` documents.
 const NARINFO_EXTENSION: &str = ".narinfo";
+/// File extension of NAR-listing documents.
+const LISTING_EXTENSION: &str = ".ls";
 /// Upper bound on an uploaded `narinfo` body. Real documents are a few
 /// hundred bytes; anything beyond this is rejected with `413`.
 const MAX_NARINFO_BODY_BYTES: usize = 1024 * 1024;
+/// Upper bound on an uploaded `.ls` (NAR listing) body; beyond it: `413`.
+const MAX_LISTING_BODY_BYTES: usize = 8 * 1024 * 1024;
+/// Upper bound on an uploaded build-log body; beyond it: `413`.
+const MAX_LOG_BODY_BYTES: usize = 32 * 1024 * 1024;
 /// Directory name under the system temp dir used when `spool_path` is not
 /// configured.
 const DEFAULT_SPOOL_DIR_NAME: &str = "nativelink-nix-spool";
+/// The `Compression`/`file_compression` name of the zstd codec.
+const ZSTD_COMPRESSION_NAME: &str = "zstd";
+/// Default zstd level when `serve_compression` is `"zstd"` and no
+/// `compression_level` is configured (zstd's own default).
+const DEFAULT_ZSTD_LEVEL: i32 = 3;
+/// The challenge attached to every `401`: nix/curl answer a `Basic`
+/// challenge from their netrc, and nix treats a `401` on a `narinfo`
+/// fetch as a clean miss — exactly the hiding a private cache wants.
+const WWW_AUTHENTICATE_CHALLENGE: &str = "Basic realm=\"nix-cache\"";
 
 /// Builds an [`opentelemetry`] context that pins the digest function to
 /// SHA256. This is the single choke point for digest-function hygiene:
@@ -143,6 +176,105 @@ fn text_response(status: StatusCode, body: &str) -> Response {
 fn narinfo_name_hash(file: &str) -> Option<&str> {
     let hash = file.strip_suffix(NARINFO_EXTENSION)?;
     is_store_path_hash(hash).then_some(hash)
+}
+
+/// Validates a `<32-char nix32 hash>.ls` request file name, returning the
+/// store-path hash. Anything else is not a listing route.
+fn listing_name_hash(file: &str) -> Option<&str> {
+    let hash = file.strip_suffix(LISTING_EXTENSION)?;
+    is_store_path_hash(hash).then_some(hash)
+}
+
+/// Validates a build-log `.drv` basename: non-empty, printable ASCII, no
+/// `/`, and no `..`. The axum capture is percent-decoded, so a crafted
+/// `%2F`/`%2E%2E` would otherwise smuggle separators into store keys.
+fn is_valid_log_name(drv: &str) -> bool {
+    !drv.is_empty() && !drv.contains("..") && drv.bytes().all(|b| b.is_ascii_graphic() && b != b'/')
+}
+
+/// Returns `sha256(data)`. Token comparisons happen in hashed space, so
+/// both sides of every comparison have the same length by construction.
+fn sha256_of(data: &[u8]) -> [u8; 32] {
+    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    hasher.update(data);
+    let digest = hasher.finalize_digest();
+    let hash: &[u8; 32] = digest.packed_hash();
+    *hash
+}
+
+/// Constant-time equality: after the length gate, every byte pair's XOR
+/// is folded into a single accumulator with `|=`, so the cost never
+/// depends on where (or whether) the slices differ. Callers compare
+/// sha256 digests, which makes the length gate vacuous.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut acc = 0_u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        acc |= x ^ y;
+    }
+    acc == 0
+}
+
+/// Whether a presented token hash matches any candidate hash. Every
+/// candidate is compared — no early exit — via [`constant_time_eq`].
+fn token_matches_any(presented: &[u8; 32], candidates: &[[u8; 32]]) -> bool {
+    let mut found = false;
+    for candidate in candidates {
+        found |= constant_time_eq(presented, candidate);
+    }
+    found
+}
+
+/// Extracts the presented token from the `Authorization` header:
+/// `Bearer <token>`, or `Basic <base64(user:password)>` where the token
+/// is the PASSWORD and the username is ignored — the latter is how stock
+/// nix authenticates against a binary cache via `netrc`.
+fn extract_token(headers: &HeaderMap) -> Option<String> {
+    let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, rest) = value.trim().split_once(' ')?;
+    let rest = rest.trim();
+    if scheme.eq_ignore_ascii_case("bearer") {
+        return (!rest.is_empty()).then(|| rest.to_string());
+    }
+    if scheme.eq_ignore_ascii_case("basic") {
+        let decoded = BASE64.decode(rest).ok()?;
+        let text = String::from_utf8(decoded).ok()?;
+        let (_user, password) = text.split_once(':')?;
+        return Some(password.to_string());
+    }
+    None
+}
+
+/// Loads token files — each holds exactly ONE token, trimmed; multiple
+/// files enable rotation — failing fast on unreadable files or empty
+/// tokens, and returns the sha256 of each token (see [`sha256_of`]).
+fn load_token_hashes(files: &[String], what: &str) -> Result<Vec<[u8; 32]>, Error> {
+    let mut hashes = Vec::with_capacity(files.len());
+    for file in files {
+        let contents = std::fs::read_to_string(file)
+            .err_tip(|| format!("Failed to read Nix cache {what} token file '{file}'"))?;
+        let token = contents.trim();
+        if token.is_empty() {
+            return Err(make_input_err!(
+                "Nix cache {what} token file '{file}' holds no token"
+            ));
+        }
+        hashes.push(sha256_of(token.as_bytes()));
+    }
+    Ok(hashes)
+}
+
+/// The `401` served for missing or invalid tokens, carrying the `Basic`
+/// challenge from [`WWW_AUTHENTICATE_CHALLENGE`].
+fn unauthorized_response() -> Response {
+    let mut response = empty_response(StatusCode::UNAUTHORIZED);
+    response.headers_mut().insert(
+        WWW_AUTHENTICATE,
+        HeaderValue::from_static(WWW_AUTHENTICATE_CHALLENGE),
+    );
+    response
 }
 
 /// A parsed `Range` request header, relative to a body of `total` bytes.
@@ -344,6 +476,18 @@ fn prepare_spool_dir(spool_dir: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// The compression this instance serves NARs with, parsed once at
+/// startup from the `serve_compression` config string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServeCompression {
+    /// Phase-1 behavior: serve the uncompressed NAR under its canonical
+    /// `.nar` name.
+    None,
+    /// Transcode once at `narinfo` upload time and serve the `.nar.zst`
+    /// artifact, falling back to the uncompressed NAR if it is evicted.
+    Zstd,
+}
+
 /// One configured Nix cache instance: resolved stores, identity, and
 /// counters. Shared with every request handler through the router state.
 #[derive(Debug, MetricsComponent)]
@@ -360,6 +504,13 @@ pub struct NixCacheInstance {
     want_mass_query: bool,
     read_only: bool,
     spool_dir: PathBuf,
+    /// sha256 of each configured read token; empty means anonymous reads.
+    read_token_hashes: Vec<[u8; 32]>,
+    /// sha256 of each configured write token; empty means writes are
+    /// gated only by `read_only`.
+    write_token_hashes: Vec<[u8; 32]>,
+    serve_compression: ServeCompression,
+    compression_level: i32,
 
     #[metric(help = "Number of narinfo GET requests")]
     narinfo_gets: CounterWithTime,
@@ -373,8 +524,14 @@ pub struct NixCacheInstance {
     nar_bytes_served: Counter,
     #[metric(help = "Number of uncompressed NAR bytes ingested into the CAS")]
     nar_bytes_ingested: Counter,
-    #[metric(help = "Number of rejected PUT requests (narinfo and NAR)")]
+    #[metric(help = "Number of listing (.ls) and build-log GET requests")]
+    aux_gets: CounterWithTime,
+    #[metric(help = "Number of accepted listing (.ls) and build-log PUT requests")]
+    aux_puts: CounterWithTime,
+    #[metric(help = "Number of rejected PUT requests (narinfo, NAR, listing, and log)")]
     rejected_puts: CounterWithTime,
+    #[metric(help = "Number of requests rejected with 401 for missing or invalid tokens")]
+    unauthorized_requests: CounterWithTime,
 }
 
 impl NixCacheInstance {
@@ -436,6 +593,19 @@ impl NixCacheInstance {
             )
         })?;
 
+        let read_token_hashes = load_token_hashes(&config.read_token_files, "read")?;
+        let write_token_hashes = load_token_hashes(&config.write_token_files, "write")?;
+
+        let serve_compression = match config.serve_compression.as_deref() {
+            None | Some("none") => ServeCompression::None,
+            Some(ZSTD_COMPRESSION_NAME) => ServeCompression::Zstd,
+            Some(other) => {
+                return Err(make_input_err!(
+                    "'serve_compression' must be \"none\" or \"zstd\", got '{other}'"
+                ));
+            }
+        };
+
         Ok(Self {
             instance_name: config.instance_name.clone(),
             mount_path,
@@ -448,14 +618,64 @@ impl NixCacheInstance {
             want_mass_query: config.want_mass_query,
             read_only: config.read_only,
             spool_dir,
+            read_token_hashes,
+            write_token_hashes,
+            serve_compression,
+            compression_level: config.compression_level.unwrap_or(DEFAULT_ZSTD_LEVEL),
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
             nar_puts: CounterWithTime::default(),
             nar_bytes_served: Counter::default(),
             nar_bytes_ingested: Counter::default(),
+            aux_gets: CounterWithTime::default(),
+            aux_puts: CounterWithTime::default(),
             rejected_puts: CounterWithTime::default(),
+            unauthorized_requests: CounterWithTime::default(),
         })
+    }
+
+    /// Gates reads. When `read_token_files` is configured, EVERY request
+    /// on the instance (including `nix-cache-info`) requires a valid
+    /// read OR write token; returns the `401` (with the `Basic`
+    /// challenge) to serve otherwise.
+    fn authorize_read(&self, headers: &HeaderMap) -> Option<Response> {
+        if self.read_token_hashes.is_empty() {
+            return None;
+        }
+        let presented = extract_token(headers).map(|token| sha256_of(token.as_bytes()));
+        let authorized = presented.is_some_and(|hash| {
+            token_matches_any(&hash, &self.read_token_hashes)
+                || token_matches_any(&hash, &self.write_token_hashes)
+        });
+        if authorized {
+            None
+        } else {
+            self.unauthorized_requests.inc();
+            Some(unauthorized_response())
+        }
+    }
+
+    /// Gates writes: read authorization first, then — when
+    /// `write_token_files` is configured — a valid write token (a read
+    /// token alone is not enough). `read_only` is checked separately by
+    /// the PUT handlers and wins over a valid write token.
+    fn authorize_write(&self, headers: &HeaderMap) -> Option<Response> {
+        if let Some(denied) = self.authorize_read(headers) {
+            return Some(denied);
+        }
+        if self.write_token_hashes.is_empty() {
+            return None;
+        }
+        let presented = extract_token(headers).map(|token| sha256_of(token.as_bytes()));
+        let authorized =
+            presented.is_some_and(|hash| token_matches_any(&hash, &self.write_token_hashes));
+        if authorized {
+            None
+        } else {
+            self.unauthorized_requests.inc();
+            Some(unauthorized_response())
+        }
     }
 
     /// Looks up an alias record for `url_basename`, returning the
@@ -565,6 +785,10 @@ impl NixCacheServer {
                     .route("/nix-cache-info", get(get_cache_info).put(put_cache_info))
                     .route("/nar/{name}", get(get_nar).head(head_nar).put(put_nar))
                     .route(
+                        "/log/{drv}",
+                        get(get_build_log).head(head_build_log).put(put_build_log),
+                    )
+                    .route(
                         "/{file}",
                         get(get_narinfo).head(head_narinfo).put(put_narinfo),
                     )
@@ -575,9 +799,15 @@ impl NixCacheServer {
     }
 }
 
-/// `GET /nix-cache-info`: always `200` — a `404` here bricks the client's
-/// store open.
-async fn get_cache_info(State(instance): State<Arc<NixCacheInstance>>) -> Response {
+/// `GET /nix-cache-info`: `200` (or `401` on a token-gated instance) —
+/// a `404` here bricks the client's store open.
+async fn get_cache_info(
+    State(instance): State<Arc<NixCacheInstance>>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
     let body = format!(
         "StoreDir: {}\nWantMassQuery: {}\nPriority: {}\n",
         instance.store_dir,
@@ -594,7 +824,14 @@ async fn get_cache_info(State(instance): State<Arc<NixCacheInstance>>) -> Respon
 
 /// `PUT /nix-cache-info`: `nix copy` uploads this file on first push;
 /// accept and discard (the served document always comes from config).
-async fn put_cache_info(State(instance): State<Arc<NixCacheInstance>>) -> Response {
+async fn put_cache_info(
+    State(instance): State<Arc<NixCacheInstance>>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = instance.authorize_write(&headers) {
+        instance.rejected_puts.inc();
+        return denied;
+    }
     if instance.read_only {
         instance.rejected_puts.inc();
         return text_response(StatusCode::METHOD_NOT_ALLOWED, "cache is read-only");
@@ -602,11 +839,20 @@ async fn put_cache_info(State(instance): State<Arc<NixCacheInstance>>) -> Respon
     empty_response(StatusCode::OK)
 }
 
-/// `HEAD /{hash}.narinfo`.
+/// `HEAD /{hash}.narinfo` and `HEAD /{hash}.ls`.
 async fn head_narinfo(
     State(instance): State<Arc<NixCacheInstance>>,
     UrlPath(file): UrlPath<String>,
+    headers: HeaderMap,
 ) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
+    if let Some(hash) = listing_name_hash(&file) {
+        return head_listing_inner(&instance, hash)
+            .await
+            .unwrap_or_else(|err| error_response("HEAD listing", &err));
+    }
     head_narinfo_inner(&instance, &file)
         .await
         .unwrap_or_else(|err| error_response("HEAD narinfo", &err))
@@ -628,11 +874,20 @@ async fn head_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<R
     }
 }
 
-/// `GET /{hash}.narinfo`.
+/// `GET /{hash}.narinfo` and `GET /{hash}.ls`.
 async fn get_narinfo(
     State(instance): State<Arc<NixCacheInstance>>,
     UrlPath(file): UrlPath<String>,
+    headers: HeaderMap,
 ) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
+    if let Some(hash) = listing_name_hash(&file) {
+        return get_listing_inner(&instance, hash)
+            .await
+            .unwrap_or_else(|err| error_response("GET listing", &err));
+    }
     get_narinfo_inner(&instance, &file)
         .await
         .unwrap_or_else(|err| error_response("GET narinfo", &err))
@@ -661,11 +916,30 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
             "Corrupt narinfo record for '{hash}': NAR hash is not 32 bytes"
         )
     })?;
-    // NARs are stored (and served) uncompressed under their canonical name.
-    let url = canonical_nar_name(&nar_sha256, path_info.nar_size);
-    let info = path_info
-        .to_nar_info(format!("nar/{url}"), "none".to_string())
-        .map_err(|err| make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}"))?;
+    // Prefer the transcoded zstd artifact when the record has one and its
+    // blob is still present; otherwise fall back to the uncompressed NAR
+    // under its canonical name (the phase-1 rendering). The ed25519
+    // fingerprint covers only path/NarHash/NarSize/references, so this
+    // URL/Compression switch never invalidates stored signatures.
+    let info =
+        if let Some((file_sha256, file_size)) = zstd_serving_fields(instance, &path_info).await? {
+            let url = canonical_nar_zst_name(&file_sha256, file_size);
+            let mut info = path_info
+                .to_nar_info(format!("nar/{url}"), ZSTD_COMPRESSION_NAME.to_string())
+                .map_err(|err| {
+                    make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
+                })?;
+            info.file_hash = Some(file_sha256);
+            info.file_size = Some(file_size);
+            info
+        } else {
+            let url = canonical_nar_name(&nar_sha256, path_info.nar_size);
+            path_info
+                .to_nar_info(format!("nar/{url}"), "none".to_string())
+                .map_err(|err| {
+                    make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
+                })?
+        };
     let rendered = info.render();
     let mut response = Response::new(Body::from(rendered));
     let headers = response.headers_mut();
@@ -673,12 +947,53 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
     Ok(response)
 }
 
-/// `PUT /{hash}.narinfo`.
+/// Returns the `(file_sha256, file_size)` a record's zstd artifact is
+/// served under, or `None` when the record carries no `file_*` trio or
+/// the compressed blob has been evicted. Eviction degrades gracefully to
+/// the uncompressed rendering — the reason `file_*` stays out of the
+/// record's `ActionResult` output files.
+async fn zstd_serving_fields(
+    instance: &NixCacheInstance,
+    path_info: &NixPathInfo,
+) -> Result<Option<([u8; 32], u64)>, Error> {
+    if path_info.file_compression != ZSTD_COMPRESSION_NAME || path_info.file_size == 0 {
+        return Ok(None);
+    }
+    // `decode_record` enforces the all-or-none file_* invariant; treat
+    // any residual shape surprise as "no compressed artifact" rather
+    // than failing the narinfo.
+    let Ok(file_sha256) = <[u8; 32]>::try_from(path_info.file_sha256.as_slice()) else {
+        return Ok(None);
+    };
+    let file_digest = DigestInfo::new(file_sha256, path_info.file_size);
+    let present = with_sha256_ctx(instance.cas_store.has(file_digest))
+        .await
+        .err_tip(|| "Checking transcoded NAR existence in cas_store")?;
+    Ok(present.map(|_| (file_sha256, path_info.file_size)))
+}
+
+/// `PUT /{hash}.narinfo` and `PUT /{hash}.ls`.
 async fn put_narinfo(
     State(instance): State<Arc<NixCacheInstance>>,
     UrlPath(file): UrlPath<String>,
+    headers: HeaderMap,
     body: Body,
 ) -> Response {
+    if let Some(denied) = instance.authorize_write(&headers) {
+        instance.rejected_puts.inc();
+        return denied;
+    }
+    if let Some(hash) = listing_name_hash(&file) {
+        let response = put_listing_inner(&instance, hash, body)
+            .await
+            .unwrap_or_else(|err| error_response("PUT listing", &err));
+        if response.status() == StatusCode::CREATED {
+            instance.aux_puts.inc();
+        } else {
+            instance.rejected_puts.inc();
+        }
+        return response;
+    }
     let response = put_narinfo_inner(&instance, &file, body)
         .await
         .unwrap_or_else(|err| error_response("PUT narinfo", &err));
@@ -774,6 +1089,18 @@ async fn put_narinfo_inner(
         .collect();
     path_info.signatures.extend(new_sigs);
 
+    // Transcode-on-ingest: with zstd serving, the compressed artifact and
+    // its real FileHash/FileSize are produced now — never on the fly — so
+    // GET stays a pure blob read. A transcode failure fails the whole PUT
+    // (500); no half-record is written.
+    if instance.serve_compression == ServeCompression::Zstd {
+        let (file_sha256, file_size) =
+            resolve_or_transcode_zstd(instance, hash, &path_info, digest).await?;
+        path_info.file_sha256 = file_sha256.to_vec();
+        path_info.file_size = file_size;
+        path_info.file_compression = ZSTD_COMPRESSION_NAME.to_string();
+    }
+
     let record = path_info
         .encode_record()
         .map_err(|err| make_err!(Code::Internal, "Failed to encode narinfo record: {err}"))?;
@@ -787,14 +1114,81 @@ async fn put_narinfo_inner(
     Ok(empty_response(StatusCode::CREATED))
 }
 
-/// Resolves a NAR request name to the `(sha256, size)` of the stored NAR:
-/// canonical names directly, anything else through the alias store.
+/// `HEAD /{hash}.ls` (dispatched from [`head_narinfo`]).
+async fn head_listing_inner(instance: &NixCacheInstance, hash: &str) -> Result<Response, Error> {
+    let found = with_sha256_ctx(
+        instance
+            .alias_store
+            .has(StoreKey::Str(Cow::Owned(listing_key(hash)))),
+    )
+    .await
+    .err_tip(|| "Checking NAR listing existence in alias_store")?;
+    if found.is_some() {
+        Ok(empty_response(StatusCode::OK))
+    } else {
+        Ok(empty_response(StatusCode::NOT_FOUND))
+    }
+}
+
+/// `GET /{hash}.ls` (dispatched from [`get_narinfo`]).
+async fn get_listing_inner(instance: &NixCacheInstance, hash: &str) -> Result<Response, Error> {
+    instance.aux_gets.inc();
+    // `Code::NotFound` propagates to a 404 through `error_response`.
+    let listing = with_sha256_ctx(instance.alias_store.get_part_unchunked(
+        StoreKey::Str(Cow::Owned(listing_key(hash))),
+        0,
+        None,
+    ))
+    .await
+    .err_tip(|| "Fetching NAR listing from alias_store")?;
+    let mut response = Response::new(Body::from(listing));
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_static(LISTING_CONTENT_TYPE));
+    Ok(response)
+}
+
+/// `PUT /{hash}.ls` (dispatched from [`put_narinfo`]). Stored verbatim:
+/// nix pushes listings (with `?write-nar-listing=1`) BEFORE the NAR, so
+/// there is deliberately no cross-check against path-info or CAS state.
+async fn put_listing_inner(
+    instance: &NixCacheInstance,
+    hash: &str,
+    body: Body,
+) -> Result<Response, Error> {
+    if instance.read_only {
+        return Ok(text_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "cache is read-only",
+        ));
+    }
+    let Some(body_bytes) = read_body_limited(body, MAX_LISTING_BODY_BYTES).await? else {
+        return Ok(text_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "listing body exceeds 8 MiB",
+        ));
+    };
+    with_sha256_ctx(
+        instance
+            .alias_store
+            .update_oneshot(StoreKey::Str(Cow::Owned(listing_key(hash))), body_bytes),
+    )
+    .await
+    .err_tip(|| "Storing NAR listing in alias_store")?;
+    Ok(empty_response(StatusCode::CREATED))
+}
+
+/// Resolves a NAR request name to the `(sha256, size)` of the stored
+/// blob: canonical names (`.nar` for the uncompressed NAR, `.nar.zst`
+/// for a transcoded artifact) directly, anything else through the alias
+/// store. Either way the digest addresses exactly the bytes the name
+/// promises.
 async fn resolve_nar_name(
     instance: &NixCacheInstance,
     name: &str,
 ) -> Result<Option<([u8; 32], u64)>, Error> {
-    if let Some(resolved) = parse_canonical_nar_name(name) {
-        return Ok(Some(resolved));
+    if let Some((sha256, size, _codec)) = parse_canonical_any(name) {
+        return Ok(Some((sha256, size)));
     }
     instance.lookup_alias(name).await
 }
@@ -803,7 +1197,11 @@ async fn resolve_nar_name(
 async fn head_nar(
     State(instance): State<Arc<NixCacheInstance>>,
     UrlPath(name): UrlPath<String>,
+    headers: HeaderMap,
 ) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
     head_nar_inner(&instance, &name)
         .await
         .unwrap_or_else(|err| error_response("HEAD nar", &err))
@@ -839,6 +1237,9 @@ async fn get_nar(
     UrlPath(name): UrlPath<String>,
     headers: HeaderMap,
 ) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
     get_nar_inner(&instance, &name, &headers)
         .await
         .unwrap_or_else(|err| error_response("GET nar", &err))
@@ -850,15 +1251,20 @@ async fn get_nar_inner(
     headers: &HeaderMap,
 ) -> Result<Response, Error> {
     instance.nar_gets.inc();
-    let resolved = if let Some(resolved) = parse_canonical_nar_name(name) {
-        Some(resolved)
+    let resolved = if let Some((sha256, size, _codec)) = parse_canonical_any(name) {
+        // Canonical names address the blob to serve directly: for `.nar`
+        // the uncompressed NAR, for `.nar.zst` the transcoded artifact.
+        // Both are plain digest-addressed blobs, so ranges, lengths, and
+        // streaming below are identical.
+        Some((sha256, size))
     } else if codec_for_name(name) == Some(NarCodec::None) {
         instance.lookup_alias(name).await?
     } else {
-        // We store uncompressed NAR bytes: serving them under a compressed
-        // alias name (e.g. `.nar.xz`) would corrupt a client that trusts
-        // the name. Nix substitution only ever uses OUR narinfo URLs,
-        // which are canonical, so nothing legitimate hits this path.
+        // We store uncompressed NAR bytes under aliases: serving them
+        // under a compressed alias name (e.g. `.nar.xz`) would corrupt a
+        // client that trusts the name. Nix substitution only ever uses
+        // OUR narinfo URLs, which are canonical, so nothing legitimate
+        // hits this path.
         None
     };
     let Some((nar_sha256, nar_size)) = resolved else {
@@ -922,6 +1328,10 @@ async fn put_nar(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
+    if let Some(denied) = instance.authorize_write(&headers) {
+        instance.rejected_puts.inc();
+        return denied;
+    }
     let response = put_nar_inner(&instance, &name, &headers, body)
         .await
         .unwrap_or_else(|err| error_response("PUT nar", &err));
@@ -1014,6 +1424,194 @@ async fn put_nar_inner(
     .await
     .err_tip(|| "Recording NAR alias")?;
     instance.nar_bytes_ingested.add(nar_size);
+    Ok(empty_response(StatusCode::CREATED))
+}
+
+/// Looks up the `Content-Encoding` recorded for a build log, or `None`
+/// for identity (no record, or the empty record written by an
+/// unencoded PUT to clear a stale value).
+async fn lookup_log_encoding(
+    instance: &NixCacheInstance,
+    drv: &str,
+) -> Result<Option<String>, Error> {
+    let lookup = with_sha256_ctx(instance.alias_store.get_part_unchunked(
+        StoreKey::Str(Cow::Owned(log_encoding_key(drv))),
+        0,
+        None,
+    ))
+    .await;
+    let raw = match lookup {
+        Ok(raw) => raw,
+        Err(err) if err.code == Code::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(err).err_tip(|| format!("Looking up build-log encoding for '{drv}'"));
+        }
+    };
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let value = core::str::from_utf8(&raw).map_err(|e| {
+        make_err!(
+            Code::Internal,
+            "Corrupt build-log encoding record for '{drv}': {e}"
+        )
+    })?;
+    Ok(Some(value.to_string()))
+}
+
+/// `HEAD /log/{drv}`.
+async fn head_build_log(
+    State(instance): State<Arc<NixCacheInstance>>,
+    UrlPath(drv): UrlPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
+    head_build_log_inner(&instance, &drv)
+        .await
+        .unwrap_or_else(|err| error_response("HEAD build log", &err))
+}
+
+async fn head_build_log_inner(instance: &NixCacheInstance, drv: &str) -> Result<Response, Error> {
+    if !is_valid_log_name(drv) {
+        return Ok(empty_response(StatusCode::NOT_FOUND));
+    }
+    let found = with_sha256_ctx(
+        instance
+            .alias_store
+            .has(StoreKey::Str(Cow::Owned(log_key(drv)))),
+    )
+    .await
+    .err_tip(|| "Checking build-log existence in alias_store")?;
+    if found.is_some() {
+        Ok(empty_response(StatusCode::OK))
+    } else {
+        Ok(empty_response(StatusCode::NOT_FOUND))
+    }
+}
+
+/// `GET /log/{drv}`.
+async fn get_build_log(
+    State(instance): State<Arc<NixCacheInstance>>,
+    UrlPath(drv): UrlPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = instance.authorize_read(&headers) {
+        return denied;
+    }
+    get_build_log_inner(&instance, &drv)
+        .await
+        .unwrap_or_else(|err| error_response("GET build log", &err))
+}
+
+async fn get_build_log_inner(instance: &NixCacheInstance, drv: &str) -> Result<Response, Error> {
+    instance.aux_gets.inc();
+    if !is_valid_log_name(drv) {
+        return Ok(empty_response(StatusCode::NOT_FOUND));
+    }
+    // `Code::NotFound` propagates to a 404 through `error_response`.
+    let log = with_sha256_ctx(instance.alias_store.get_part_unchunked(
+        StoreKey::Str(Cow::Owned(log_key(drv))),
+        0,
+        None,
+    ))
+    .await
+    .err_tip(|| "Fetching build log from alias_store")?;
+    let encoding = lookup_log_encoding(instance, drv).await?;
+    let mut response = Response::new(Body::from(log));
+    let response_headers = response.headers_mut();
+    response_headers.insert(CONTENT_TYPE, HeaderValue::from_static(LOG_CONTENT_TYPE));
+    // Replay the Content-Encoding the log was uploaded with (nix's
+    // `?log-compression=br` sets it). Every nix client sends
+    // `Accept-Encoding: br, zstd, gzip, ...`, so the replay is safe.
+    if let Some(encoding) = encoding {
+        response_headers.insert(
+            CONTENT_ENCODING,
+            HeaderValue::from_str(&encoding).map_err(|e| {
+                make_err!(
+                    Code::Internal,
+                    "Corrupt build-log encoding record for '{drv}': {e}"
+                )
+            })?,
+        );
+    }
+    Ok(response)
+}
+
+/// `PUT /log/{drv}`.
+async fn put_build_log(
+    State(instance): State<Arc<NixCacheInstance>>,
+    UrlPath(drv): UrlPath<String>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    if let Some(denied) = instance.authorize_write(&headers) {
+        instance.rejected_puts.inc();
+        return denied;
+    }
+    let response = put_build_log_inner(&instance, &drv, &headers, body)
+        .await
+        .unwrap_or_else(|err| error_response("PUT build log", &err));
+    if response.status() == StatusCode::CREATED {
+        instance.aux_puts.inc();
+    } else {
+        instance.rejected_puts.inc();
+    }
+    response
+}
+
+async fn put_build_log_inner(
+    instance: &NixCacheInstance,
+    drv: &str,
+    headers: &HeaderMap,
+    body: Body,
+) -> Result<Response, Error> {
+    if instance.read_only {
+        return Ok(text_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "cache is read-only",
+        ));
+    }
+    if !is_valid_log_name(drv) {
+        return Err(make_input_err!(
+            "invalid build-log name '{drv}': expected a printable, slash-free derivation basename"
+        ));
+    }
+    // nix's `?log-compression=br` uploads brotli bytes with a
+    // `Content-Encoding` header: keep the encoded bytes verbatim and
+    // remember the encoding for GET to replay.
+    let content_encoding = match headers.get(CONTENT_ENCODING) {
+        Some(value) => Some(
+            value
+                .to_str()
+                .map_err(|e| make_input_err!("Content-Encoding header is not ASCII: {e}"))?
+                .to_string(),
+        ),
+        None => None,
+    };
+    let Some(body_bytes) = read_body_limited(body, MAX_LOG_BODY_BYTES).await? else {
+        return Ok(text_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "build log exceeds 32 MiB",
+        ));
+    };
+    // The encoding record is written first (empty means identity, which
+    // also clears a stale encoding on overwrite), so a concurrent reader
+    // of a brand-new log never sees bytes without their encoding.
+    with_sha256_ctx(instance.alias_store.update_oneshot(
+        StoreKey::Str(Cow::Owned(log_encoding_key(drv))),
+        content_encoding.unwrap_or_default().into(),
+    ))
+    .await
+    .err_tip(|| "Storing build-log encoding in alias_store")?;
+    with_sha256_ctx(
+        instance
+            .alias_store
+            .update_oneshot(StoreKey::Str(Cow::Owned(log_key(drv))), body_bytes),
+    )
+    .await
+    .err_tip(|| "Storing build log in alias_store")?;
     Ok(empty_response(StatusCode::CREATED))
 }
 
@@ -1125,10 +1723,155 @@ where
     Ok((*nar_sha256_ref, nar_size))
 }
 
+/// Returns the `(file_sha256, file_size)` of the zstd artifact for the
+/// NAR at `nar_digest`, reusing the previous record's transcode when it
+/// still describes this exact NAR and its blob is still in the CAS, and
+/// transcoding once otherwise.
+async fn resolve_or_transcode_zstd(
+    instance: &NixCacheInstance,
+    hash: &str,
+    path_info: &NixPathInfo,
+    nar_digest: DigestInfo,
+) -> Result<([u8; 32], u64), Error> {
+    if let Some(reused) = reusable_zstd_fields(instance, hash, path_info).await? {
+        return Ok(reused);
+    }
+    transcode_nar_to_zstd(instance, nar_digest).await
+}
+
+/// Looks for a previous record of the same store path whose `file_*`
+/// trio can be reused: same uncompressed NAR, zstd compression, and the
+/// compressed blob still present in the CAS (if it was evicted, the
+/// caller re-transcodes so freshly pushed paths self-heal). A missing,
+/// corrupt, or mismatched previous record just means "transcode again";
+/// it never fails the PUT.
+async fn reusable_zstd_fields(
+    instance: &NixCacheInstance,
+    hash: &str,
+    path_info: &NixPathInfo,
+) -> Result<Option<([u8; 32], u64)>, Error> {
+    let lookup = with_sha256_ctx(instance.path_info_store.get_part_unchunked(
+        StoreKey::new_str(hash),
+        0,
+        None,
+    ))
+    .await;
+    let record = match lookup {
+        Ok(record) => record,
+        Err(err) if err.code == Code::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(err)
+                .err_tip(|| "Checking the previous narinfo record for a reusable transcode");
+        }
+    };
+    let Ok(previous) = NixPathInfo::decode_record(&record) else {
+        return Ok(None);
+    };
+    if previous.nar_sha256 != path_info.nar_sha256
+        || previous.nar_size != path_info.nar_size
+        || previous.file_compression != ZSTD_COMPRESSION_NAME
+        || previous.file_size == 0
+    {
+        return Ok(None);
+    }
+    let Ok(file_sha256) = <[u8; 32]>::try_from(previous.file_sha256.as_slice()) else {
+        return Ok(None);
+    };
+    let file_digest = DigestInfo::new(file_sha256, previous.file_size);
+    let present = with_sha256_ctx(instance.cas_store.has(file_digest))
+        .await
+        .err_tip(|| "Checking transcoded NAR existence in cas_store")?;
+    Ok(present.map(|_| (file_sha256, previous.file_size)))
+}
+
+/// Streams the uncompressed NAR at `nar_digest` out of the CAS through a
+/// zstd encoder at the instance's configured level, sha256-hashing and
+/// counting the COMPRESSED output while spooling it, then writes the
+/// compressed blob into the CAS under `DigestInfo(file_sha256,
+/// file_size)` and returns that pair. Spool files are removed on every
+/// path via [`SpoolFileGuard`].
+async fn transcode_nar_to_zstd(
+    instance: &NixCacheInstance,
+    nar_digest: DigestInfo,
+) -> Result<([u8; 32], u64), Error> {
+    let (tx, rx) = make_buf_channel_pair();
+    let ctx = sha256_hasher_ctx()?;
+    let cas_store = instance.cas_store.clone();
+    let read_task = spawn!(
+        "nix_cache_nar_transcode_read",
+        async move {
+            if let Err(err) = cas_store.get_part(nar_digest, tx, 0, None).await {
+                // Dropping `tx` without an EOF surfaces the failure as a
+                // read error in the encoder loop below.
+                warn!(
+                    ?err,
+                    ?nar_digest,
+                    "Failed streaming NAR from CAS for zstd transcode"
+                );
+            }
+        }
+        .with_context(ctx)
+    );
+    let reader = StreamReader::new(rx);
+    let mut encoder = ZstdEncoder::with_quality(reader, Level::Precise(instance.compression_level));
+
+    let spool_path = instance
+        .spool_dir
+        .join(format!("{}.nar.zst", Uuid::new_v4()));
+    let spool_guard = SpoolFileGuard::new(spool_path.clone());
+    let mut spool_file = fs::create_file(&spool_path)
+        .await
+        .err_tip(|| format!("Creating zstd spool file {}", spool_path.display()))?;
+
+    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    let mut chunk = BytesMut::with_capacity(fs::DEFAULT_READ_BUFF_SIZE);
+    loop {
+        chunk.clear();
+        // The input is our own CAS: any failure here is a server-side
+        // problem (500 through `error_response`), never a client error.
+        let read = encoder.read_buf(&mut chunk).await.map_err(|e| {
+            make_err!(
+                Code::Internal,
+                "Failed to zstd-transcode NAR {nar_digest:?}: {e}"
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&chunk);
+        spool_file
+            .write_all(&chunk)
+            .await
+            .err_tip(|| "Writing zstd-transcoded NAR to spool file")?;
+    }
+    spool_file
+        .flush()
+        .await
+        .err_tip(|| "Flushing zstd spool file")?;
+    drop(read_task);
+
+    let file_digest = hasher.finalize_digest();
+    let file_size = file_digest.size_bytes();
+    with_sha256_ctx(slow_update_store_with_file(
+        instance.cas_store.as_store_driver_pin(),
+        file_digest,
+        &mut spool_file,
+        UploadSizeInfo::ExactSize(file_size),
+    ))
+    .await
+    .err_tip(|| "Uploading zstd-transcoded NAR to cas_store")?;
+    drop(spool_file);
+    spool_guard.cleanup().await;
+
+    let file_sha256: &[u8; 32] = file_digest.packed_hash();
+    Ok((*file_sha256, file_size))
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
+    use base64::Engine as _;
     use bytes::Bytes;
     use nativelink_config::stores::MemorySpec;
     use nativelink_error::{Code, Error, make_err, make_input_err};
@@ -1139,10 +1882,12 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        Counter, CounterWithTime, DEFAULT_SPOOL_DIR_NAME, DigestHasher, DigestHasherFunc,
-        DigestInfo, NarCodec, NixCacheInstance, RangeRequest, StatusCode, Store, StoreLike,
-        bare_nar_digest_from_name, error_response, ingest_nar_spooled, is_valid_nar_upload_name,
-        narinfo_name_hash, parse_range, prepare_spool_dir, with_sha256_ctx,
+        Counter, CounterWithTime, DEFAULT_SPOOL_DIR_NAME, DEFAULT_ZSTD_LEVEL, DigestHasher,
+        DigestHasherFunc, DigestInfo, HeaderMap, HeaderValue, NarCodec, NixCacheInstance,
+        RangeRequest, ServeCompression, StatusCode, Store, StoreLike, bare_nar_digest_from_name,
+        constant_time_eq, error_response, extract_token, ingest_nar_spooled, is_valid_log_name,
+        is_valid_nar_upload_name, listing_name_hash, narinfo_name_hash, parse_range,
+        prepare_spool_dir, sha256_of, token_matches_any, transcode_nar_to_zstd, with_sha256_ctx,
     };
 
     fn test_instance() -> Arc<NixCacheInstance> {
@@ -1162,13 +1907,20 @@ mod tests {
             want_mass_query: true,
             read_only: false,
             spool_dir,
+            read_token_hashes: vec![],
+            write_token_hashes: vec![],
+            serve_compression: ServeCompression::None,
+            compression_level: DEFAULT_ZSTD_LEVEL,
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
             nar_puts: CounterWithTime::default(),
             nar_bytes_served: Counter::default(),
             nar_bytes_ingested: Counter::default(),
+            aux_gets: CounterWithTime::default(),
+            aux_puts: CounterWithTime::default(),
             rejected_puts: CounterWithTime::default(),
+            unauthorized_requests: CounterWithTime::default(),
         })
     }
 
@@ -1429,5 +2181,191 @@ mod tests {
             bare_nar_digest_from_name(&format!("{HELLO_NIX32}.nar.xz"), Some(123)),
             None
         );
+    }
+
+    fn auth_headers(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::AUTHORIZATION,
+            HeaderValue::from_str(value).expect("header value"),
+        );
+        headers
+    }
+
+    #[test]
+    fn constant_time_eq_gates_length_and_content() {
+        assert!(constant_time_eq(b"", b""));
+        assert!(constant_time_eq(b"same bytes", b"same bytes"));
+        // Same length, different content.
+        assert!(!constant_time_eq(b"same length!", b"same lengthX"));
+        // Length mismatch fails at the gate, including shared prefixes.
+        assert!(!constant_time_eq(b"short", b"a longer slice"));
+        assert!(!constant_time_eq(b"prefix", b"prefix-and-more"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn token_matches_any_compares_every_candidate() {
+        let a = sha256_of(b"token-a");
+        let b = sha256_of(b"token-b");
+        let c = sha256_of(b"token-c");
+        assert!(token_matches_any(&a, &[a]));
+        assert!(token_matches_any(&b, &[a, b, c]));
+        assert!(!token_matches_any(&sha256_of(b"other"), &[a, b, c]));
+        assert!(!token_matches_any(&a, &[]));
+    }
+
+    #[test]
+    fn extract_token_accepts_bearer_and_basic() {
+        assert_eq!(
+            extract_token(&auth_headers("Bearer sekrit")).as_deref(),
+            Some("sekrit")
+        );
+        // Scheme matching is case-insensitive; padding is trimmed.
+        assert_eq!(
+            extract_token(&auth_headers("bearer  sekrit ")).as_deref(),
+            Some("sekrit")
+        );
+        // Basic auth: the token is the PASSWORD and the username is
+        // ignored — this is how stock nix authenticates via netrc.
+        let basic = format!("Basic {}", super::BASE64.encode("ignored-user:sekrit"));
+        assert_eq!(
+            extract_token(&auth_headers(&basic)).as_deref(),
+            Some("sekrit")
+        );
+        // Passwords may contain ':' — only the first one splits.
+        let colons = format!("basic {}", super::BASE64.encode("u:pa:ss"));
+        assert_eq!(
+            extract_token(&auth_headers(&colons)).as_deref(),
+            Some("pa:ss")
+        );
+    }
+
+    #[test]
+    fn extract_token_rejects_garbage() {
+        assert_eq!(extract_token(&HeaderMap::new()), None);
+        for bad in [
+            "Bearer",                 // no token at all
+            "Bearer ",                // empty token
+            "Basic",                  // no payload
+            "Basic !!!not-base64!!!", // invalid base64
+            "Digest abc",             // unsupported scheme
+            "sekrit",                 // no scheme
+        ] {
+            assert_eq!(extract_token(&auth_headers(bad)), None, "for '{bad}'");
+        }
+        // A Basic payload without ':' has no password.
+        let no_colon = format!("Basic {}", super::BASE64.encode("just-a-user"));
+        assert_eq!(extract_token(&auth_headers(&no_colon)), None);
+        // A Basic payload that is not UTF-8.
+        let not_utf8 = format!("Basic {}", super::BASE64.encode([0xff, 0xfe, b':', 0xff]));
+        assert_eq!(extract_token(&auth_headers(&not_utf8)), None);
+    }
+
+    #[test]
+    fn log_names_must_be_printable_and_slash_free() {
+        for good in [
+            "q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv",
+            "x.drv",
+            "log-with_odd~chars!.drv",
+        ] {
+            assert!(is_valid_log_name(good), "for '{good}'");
+        }
+        for bad in [
+            "",
+            "a/b.drv",
+            "../escape.drv",
+            "a..b.drv",
+            "has space.drv",
+            "has\ttab.drv",
+            "non-ascii-\u{e9}.drv",
+        ] {
+            assert!(!is_valid_log_name(bad), "for '{bad}'");
+        }
+    }
+
+    #[test]
+    fn listing_name_hash_validates_shape() {
+        assert_eq!(
+            listing_name_hash("p4pclmv1gyja5kzc26npqpia1qqxrf0l.ls"),
+            Some("p4pclmv1gyja5kzc26npqpia1qqxrf0l")
+        );
+        // Wrong extension, wrong length, and non-nix32 characters.
+        assert_eq!(
+            listing_name_hash("p4pclmv1gyja5kzc26npqpia1qqxrf0l.narinfo"),
+            None
+        );
+        assert_eq!(
+            listing_name_hash("p4pclmv1gyja5kzc26npqpia1qqxrf0.ls"),
+            None
+        );
+        assert_eq!(
+            listing_name_hash("e4pclmv1gyja5kzc26npqpia1qqxrf0l.ls"),
+            None
+        );
+        assert_eq!(listing_name_hash(".ls"), None);
+    }
+
+    /// Transcode round trip: the compressed blob lands in the CAS under
+    /// `DigestInfo(sha256(zstd(nar)), zstd_size)` and decodes back to
+    /// the original NAR bytes; no spool files leak.
+    #[nativelink_test]
+    async fn transcode_produces_addressable_zstd_artifact() -> Result<(), Error> {
+        use async_compression::tokio::bufread::ZstdDecoder;
+        let instance = test_instance();
+        let payload = b"nar payload for the zstd transcode round trip ".repeat(64);
+        let nar_size = u64::try_from(payload.len()).expect("size fits in u64");
+        let nar_digest = DigestInfo::new(sha256_of(&payload), nar_size);
+        with_sha256_ctx(
+            instance
+                .cas_store
+                .update_oneshot(nar_digest, Bytes::from(payload.clone())),
+        )
+        .await
+        .expect("seed NAR");
+
+        let (file_sha256, file_size) = transcode_nar_to_zstd(&instance, nar_digest)
+            .await
+            .expect("transcode");
+        let stored = with_sha256_ctx(instance.cas_store.get_part_unchunked(
+            DigestInfo::new(file_sha256, file_size),
+            0,
+            None,
+        ))
+        .await
+        .expect("compressed blob readable");
+        assert_eq!(u64::try_from(stored.len()).expect("stored len"), file_size);
+        assert_eq!(sha256_of(&stored), file_sha256);
+
+        let mut decoder = ZstdDecoder::new(stored.as_ref());
+        let mut decoded = Vec::new();
+        decoder
+            .read_to_end(&mut decoded)
+            .await
+            .expect("zstd decodes");
+        assert_eq!(decoded, payload);
+        let leftovers = std::fs::read_dir(&instance.spool_dir)
+            .expect("read spool dir")
+            .count();
+        assert_eq!(leftovers, 0, "spool files leaked");
+        Ok(())
+    }
+
+    /// Transcoding a NAR that is not in the CAS must surface as a
+    /// server-side error (a 500 through the error mapping), never hang
+    /// or turn into a client error.
+    #[nativelink_test]
+    async fn transcode_of_missing_nar_is_internal_error() -> Result<(), Error> {
+        let instance = test_instance();
+        let missing = DigestInfo::new(sha256_of(b"never uploaded"), 42);
+        let err = transcode_nar_to_zstd(&instance, missing)
+            .await
+            .expect_err("missing NAR must fail");
+        assert_eq!(err.code, Code::Internal);
+        let leftovers = std::fs::read_dir(&instance.spool_dir)
+            .expect("read spool dir")
+            .count();
+        assert_eq!(leftovers, 0, "spool files leaked");
+        Ok(())
     }
 }
