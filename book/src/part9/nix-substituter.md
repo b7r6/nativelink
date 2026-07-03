@@ -1,0 +1,134 @@
+# The Nix Binary Cache Facade
+
+Attic-style Nix binary caches re-implement chunking, deduplication, tiering, and garbage collection — the exact machinery a serious CAS already has. NativeLink takes the opposite approach: the `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over store composition. Each NAR is a CAS blob, path metadata rides in REv2 `ActionResult` envelopes, and eviction, tiering, and verification come from the same store wrappers every other service uses.
+
+This is the mirror image of the [OCI → CAS Bridge](./oci-cas-bridge.md). The OCI bridge pulls foreign content *into* the CAS; the Nix facade serves CAS content *out* in a foreign protocol. It is also NativeLink's first config-declared plain-HTTP service: every other service on a listener speaks gRPC, while `nix_cache` mounts an HTTP router at a URL prefix (default `/nix/<instance_name>`) so stock `nix` clients can talk to it with nothing but a `substituters` entry.
+
+## Architecture
+
+```
+        nix client (nix copy, substitution)
+                     │  HTTP
+                     ▼
+   ┌──────────────────────────────────────────┐
+   │             nix_cache service              │
+   │  GET  /nix-cache-info                      │
+   │  GET|HEAD /<hash>.narinfo                  │
+   │  GET|HEAD /nar/<name>                      │
+   │  PUT  /<hash>.narinfo, /nar/<name>         │
+   └──────┬───────────────┬───────────────┬────┘
+          │               │               │
+          ▼               ▼               ▼
+   path_info_store     cas_store       alias_store
+   string-keyed by     digest-keyed    string-keyed
+   store-path hash,    NAR blobs,      URL name →
+   completeness_       verify{} ◄──────(digest, size)
+   checking{} ─────────┘
+```
+
+## The Data Model
+
+**Each NAR is an uncompressed CAS blob.** Every NAR is stored in its canonical uncompressed form under `DigestInfo(sha256(nar), nar_size)` — the same identity the `NarHash`/`NarSize` fields advertise. Uploads arrive compressed (default `nix copy` behavior) or raw; the service decompresses to the canonical form before storing (`nar_url::codec_for_name` maps `.nar`, `.nar.xz`, `.nar.zst`, `.nar.bz2`; bare `.nar` bodies get sniffed for the gzip magic bytes). Because the key is content-derived, the NAR store sits behind `verify{}` with both size and hash checks: a corrupt or truncated upload is rejected at write time instead of served to clients.
+
+**Path-info records are `ActionResult` envelopes.** The metadata for one store path — everything a `.narinfo` needs except the URL and compression — is a `NixPathInfo` message (`nativelink-nix/src/path_info.rs`) carried inside a standard REv2 `ActionResult`:
+
+```
+ActionResult {
+  output_files: [ OutputFile {
+    path: "out.nar",
+    digest: Digest { hash: hex(sha256(nar)), size_bytes: nar_size } } ],
+  exit_code: 0,
+  execution_metadata: ExecutedActionMetadata {
+    worker: "nativelink-nix-cache",
+    auxiliary_metadata: [ Any {
+      type_url: "…/nativelink.nix.NixPathInfo",
+      value: NixPathInfo { store_path, nar_sha256, nar_size,
+                           references, deriver, system, signatures, ca } } ] } }
+```
+
+The record lives in the path-info store under a string key: the 32-character nix32 store-path hash (the `<hash>` in `/nix/store/<hash>-<name>`). The envelope isn't ceremony — it's what makes `completeness_checking{}` work. That wrapper decodes `ActionResult` protos and confirms every referenced digest still exists in the CAS store before admitting the record. So when the NAR store evicts a blob, the corresponding `.narinfo` reads as absent and the client sees a 404 — a clean substitution miss, falling back to another cache or a local build. Garbage collection is not a bespoke sweep; it's eviction plus a completeness check, composed from wrappers that already exist.
+
+**The alias store maps client-chosen URLs to digests.** A client uploading with `nix copy` picks its own NAR URL — `nar/<filehash>.nar.xz`, or `nar/<nix32(narhash)>.nar` with `?compression=none` — and writes that URL into its `.narinfo`. Neither matches the canonical name the facade serves (`{nix32(nar_sha256)}-{nar_size}.nar`), so every upload records an alias: key `nar-alias:{basename}` (slash-free by construction), value `{lowercase hex}-{size}`. The alias store must **not** sit behind the `completeness_checking` wrapper used for path-info records: alias values are not `ActionResult` protos and would fail its decoding.
+
+One consequence worth noticing: the Nix signing fingerprint covers the store path, `NarHash`, `NarSize`, and references — *not* the URL or compression. The facade can therefore serve a re-generated `.narinfo` pointing at its canonical uncompressed NAR while preserving upstream signatures (say, `cache.nixos.org-1`) verbatim, appending its own `Sig` lines from `signing_key_files`.
+
+## Protocol Discipline
+
+The Nix client is unforgiving in specific, documented ways. Each rule below is load-bearing:
+
+| Rule | Why |
+|---|---|
+| `/nix-cache-info` always answers 200 | It's the existence probe. If it fails, the client writes off the whole cache, not one path. |
+| A miss is 404, never 5xx | On any other error status the client disables the cache for 60 seconds — one flaky lookup turns into a build-wide fallback. Absence must look like absence. |
+| `Compression` is always rendered | An absent field means `bzip2` to Nix. Serve a raw NAR without `Compression: none` and the client tries to bzip2-decompress it. |
+| `Content-Length` only from size-in-key | Store reads are streams with no trustworthy length. The canonical NAR name and the alias value both embed the size, so the header is exact when present and omitted otherwise — never guessed. |
+| `Accept-Ranges: bytes` only where `Range` is honored | Nix resumes interrupted downloads. Advertise ranges, then answer a `Range` request with 200, and the client appends a full body to a partial file — a corrupt NAR and a hard failure. |
+| No `Content-Encoding` on NAR responses | NAR compression is application data, described by `Compression`/`FileHash`/`FileSize`. Transport-level recoding changes the bytes those fields describe. |
+| `Name: value` with exactly colon-space | Nix reads each value starting at `colon + 2`. Any other separator shifts every value by a byte. |
+| One `Sig` line per key, lines accumulate | Multiple signatures are additive; signing with old and new keys at once is how rotation works while clients migrate `trusted-public-keys`. |
+
+## Configuration
+
+The runnable example is `nativelink-config/examples/nix_cache.json5`: a `verify`-wrapped fast/slow filesystem store for NAR blobs, a `completeness_checking`-wrapped memory store for path-info records, a plain memory store for aliases, and one service instance:
+
+```json5
+services: {
+  nix_cache: [{
+    instance_name: "main",              // cache root: /nix/main on this listener
+    cas_store: "NIX_NAR_STORE",
+    path_info_store: "NIX_PATH_INFO_STORE",
+    alias_store: "NIX_ALIAS_STORE",
+    store_dir: "/nix/store",            // must match the clients' store dir
+    priority: 40,                       // lower sorts earlier (cache.nixos.org is 40)
+    want_mass_query: true,
+    signing_key_files: [],              // nix key generate-secret output, one Sig per key
+    read_only: false,                   // true on public listeners: PUT returns 405
+  }],
+}
+```
+
+Store composition has sharp edges here because two of the three stores are string-keyed:
+
+- **Never wrap the path-info store in `existence_cache`.** It drops overwrites — a re-upload of the same store path with new signatures or references is silently ignored — and it rewrites string keys.
+- **Never wrap string-keyed stores in `verify` or `size_partitioning`.** Both parse keys as digests and reject string keys outright.
+- **Keep string keys slash-free.** Filesystem stores turn keys into file names; a `/` in a key is a path traversal. This is why alias keys are `nar-alias:{basename}` rather than the URL itself.
+- **Mind deduplication in the existence path.** `completeness_checking` turns every `.narinfo` GET into existence checks against the NAR store. If a `dedup` store sits in that path, each check fans out into an index read plus per-chunk probes — one metadata request amplified into dozens of store operations. Keep `dedup` out of the completeness-checked path, or accept the amplification knowingly.
+
+## Client Usage
+
+```bash
+# Upload a closure. Skipping client-side compression is fastest:
+# the server stores the canonical uncompressed NAR either way.
+nix copy --to 'http://cache.example.com:50071/nix/main?compression=none' ./result
+
+# Default upload compression is xz; the server decompresses on ingest.
+nix copy --to 'http://cache.example.com:50071/nix/main' ./result
+
+# Fetch explicitly, or let substitution find it during builds.
+nix copy --from 'http://cache.example.com:50071/nix/main' /nix/store/<hash>-<name>
+```
+
+In `nix.conf`, the cache is an ordinary entry:
+
+```
+substituters = http://cache.example.com:50071/nix/main https://cache.nixos.org
+trusted-public-keys = nix-cache.example.org-1:<base64> cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+netrc-file = /etc/nix/netrc   # basic-auth credentials for private caches
+```
+
+## Code Map
+
+| File | Purpose |
+|---|---|
+| `nativelink-nix/src/nixbase32.rs` | Nix's base32 alphabet: encode, decode, character validation |
+| `nativelink-nix/src/narinfo.rs` | `.narinfo` parse/render, signing fingerprint, store-path hash validation |
+| `nativelink-nix/src/signing.rs` | Nix-compatible ed25519 keys (`nix key generate-secret` format) |
+| `nativelink-nix/src/path_info.rs` | `NixPathInfo` ↔ `ActionResult` envelope, fingerprint, record encoding and decoding |
+| `nativelink-nix/src/nar_url.rs` | Canonical NAR names, alias keys, compression detection |
+| `nativelink-service/src/nix_cache_server.rs` | The HTTP service: routing, streaming, upload ingestion, signing |
+| `nativelink-service/tests/nix_cache_server_test.rs` | Integration suite: the protocol behavior spec as tests |
+| `nativelink-config/src/cas_server.rs` | `NixCacheConfig` schema and defaults |
+
+## What's Next
+
+Phase 2 and beyond: bearer-token authentication for public deployments; the `.ls` file-listing and build-log endpoints; and serving each NAR compressed with Zstandard, with a real `FileHash`/`FileSize` computed at compression time, rather than always serving `Compression: none`. The end state is builds-as-actions: realisation runs as an ordinary REv2 action with the SHA-256 digest function, so a worker's outputs land under exactly the CAS keys this facade serves — a `nix build` on the cluster populates the binary cache with no copy step at all.

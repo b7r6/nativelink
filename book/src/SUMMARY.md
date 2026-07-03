@@ -80,6 +80,7 @@
 
 - [The Standard OCI Toolchain](./part9/standard-oci-toolchain.md)
 - [The OCI → CAS Bridge](./part9/oci-cas-bridge.md)
+- [The Nix Binary Cache Facade](./part9/nix-substituter.md)
 
 ---
 
