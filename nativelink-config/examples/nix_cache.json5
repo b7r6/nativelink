@@ -134,7 +134,37 @@
             // spool_path: "/tmp/nativelink/nix-cache/spool",
 
             // Set true on public-facing listeners to reject PUT with 405.
+            // A valid write token does NOT override this.
             read_only: false,
+
+            // Token auth, off by default (anonymous reads, writes gated
+            // only by read_only). Each listed file holds exactly ONE
+            // token (surrounding whitespace is trimmed); listing several
+            // files enables rotation — any listed token is accepted.
+            // Clients send either "Authorization: Bearer <token>" or
+            // Basic auth where the token is the password and the
+            // username is ignored — that is how stock nix authenticates
+            // via netrc. When read_token_files is non-empty EVERY
+            // request (including nix-cache-info) needs a valid read or
+            // write token; failures get 401 with a Basic challenge,
+            // which nix treats as a clean narinfo miss, so private
+            // caches stay hidden. When write_token_files is non-empty,
+            // PUT additionally needs a valid write token.
+            // read_token_files: ["/etc/nativelink/nix-read.token"],
+            // write_token_files: ["/etc/nativelink/nix-write.token"],
+
+            // Serve zstd-compressed NARs: each NAR is transcoded once
+            // when its narinfo is uploaded, the compressed blob is
+            // stored in the NAR store under its own digest, and served
+            // narinfo documents advertise the .nar.zst URL with
+            // Compression: zstd plus real FileHash/FileSize lines. If
+            // the compressed blob is later evicted, serving falls back
+            // to the uncompressed NAR; stored signatures stay valid
+            // either way (the signed fingerprint covers only the
+            // uncompressed NAR). compression_level is the zstd level
+            // (default 3).
+            // serve_compression: "zstd",
+            // compression_level: 3,
           },
         ],
         health: {},

@@ -347,11 +347,65 @@ pub struct NixCacheConfig {
 
     /// When true, uploads are rejected: any `PUT` request returns
     /// `405 Method Not Allowed`. Set this on public-facing listeners so
-    /// only internal listeners can populate the cache.
+    /// only internal listeners can populate the cache. A valid write
+    /// token (see `write_token_files`) does NOT override this.
     ///
     /// Default: false
     #[serde(default)]
     pub read_only: bool,
+
+    /// Paths to read-token files. Each file holds exactly ONE token
+    /// (surrounding whitespace is trimmed); listing multiple files
+    /// enables rotation — any listed token is accepted. Files are read
+    /// at startup and unreadable files or empty tokens fail fast.
+    ///
+    /// When non-empty, EVERY request on this instance (including
+    /// `nix-cache-info`) requires a valid read or write token, presented
+    /// either as `Authorization: Bearer <token>` or as HTTP Basic auth
+    /// where the token is the PASSWORD and the username is ignored —
+    /// the latter is how stock nix authenticates via `netrc`. Requests
+    /// without a valid token get `401` with a `Basic` challenge; nix
+    /// treats a `401` on a `narinfo` fetch as a clean miss, so a private
+    /// cache stays hidden from unauthenticated clients.
+    ///
+    /// Default: [] (anonymous reads)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub read_token_files: Vec<String>,
+
+    /// Paths to write-token files, with the same one-token-per-file
+    /// semantics as `read_token_files`. When non-empty, every `PUT`
+    /// additionally requires a valid write token — a read token alone is
+    /// not enough. `read_only` still wins over a valid write token:
+    /// uploads then get `405`.
+    ///
+    /// Default: [] (writes gated only by `read_only`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub write_token_files: Vec<String>,
+
+    /// Compression this cache serves NARs with: unset or `"none"` serves
+    /// uncompressed NARs; `"zstd"` transcodes each NAR once when its
+    /// `narinfo` is uploaded — the uncompressed NAR is streamed out of
+    /// `cas_store` through a zstd encoder and the compressed result is
+    /// stored back into `cas_store` under its own digest, so served
+    /// `narinfo` documents advertise a `.nar.zst` URL with real
+    /// `FileHash`/`FileSize` lines. If the compressed blob is later
+    /// evicted, serving falls back to the uncompressed NAR. Stored
+    /// signatures stay valid either way: the signed fingerprint covers
+    /// only the uncompressed NAR, never the served URL or compression.
+    ///
+    /// Default: unset (serve uncompressed NARs)
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub serve_compression: Option<String>,
+
+    /// The zstd compression level used when `serve_compression` is
+    /// `"zstd"`; ignored otherwise.
+    ///
+    /// Default: 3
+    #[serde(
+        default,
+        deserialize_with = "convert_optional_numeric_with_shellexpand"
+    )]
+    pub compression_level: Option<i32>,
 }
 
 fn default_nix_store_dir() -> String {
@@ -1344,6 +1398,10 @@ mod tests {
         assert!(instance.signing_key_files.is_empty());
         assert_eq!(instance.spool_path, None);
         assert!(!instance.read_only);
+        assert!(instance.read_token_files.is_empty());
+        assert!(instance.write_token_files.is_empty());
+        assert_eq!(instance.serve_compression, None);
+        assert_eq!(instance.compression_level, None);
     }
 
     #[test]
@@ -1361,6 +1419,10 @@ mod tests {
                     want_mass_query: false,
                     signing_key_files: ["/etc/nix/keys/nix-cache.example.org-1.key"],
                     read_only: true,
+                    read_token_files: ["/etc/nativelink/nix-read.token"],
+                    write_token_files: ["/etc/nativelink/nix-write.token"],
+                    serve_compression: "zstd",
+                    compression_level: 19,
                 }],
             }"#,
         );
@@ -1382,6 +1444,16 @@ mod tests {
             vec!["/etc/nix/keys/nix-cache.example.org-1.key".to_string()]
         );
         assert!(instance.read_only);
+        assert_eq!(
+            instance.read_token_files,
+            vec!["/etc/nativelink/nix-read.token".to_string()]
+        );
+        assert_eq!(
+            instance.write_token_files,
+            vec!["/etc/nativelink/nix-write.token".to_string()]
+        );
+        assert_eq!(instance.serve_compression.as_deref(), Some("zstd"));
+        assert_eq!(instance.compression_level, Some(19));
     }
 
     #[test]
