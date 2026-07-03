@@ -122,7 +122,7 @@ impl OciToolchainClient {
     /// # Arguments
     ///
     /// * `image_ref` - OCI image reference (tag or digest)
-    /// * `cas_store` - NativeLink CAS store for blob upload
+    /// * `cas_store` - `NativeLink` CAS store for blob upload
     pub async fn import(&self, image_ref: &str, cas_store: &Store) -> Result<ImportResult, Error> {
         let image = ImageReference::parse(image_ref)?;
         info!(%image, "Starting OCI toolchain import");
@@ -149,7 +149,7 @@ impl OciToolchainClient {
         let decompressed_layers = self.pull_and_decompress_layers(&image, &manifest).await?;
 
         // Phase 3: Project into REAPI Directory tree
-        let layer_refs: Vec<&[u8]> = decompressed_layers.iter().map(|v| v.as_slice()).collect();
+        let layer_refs: Vec<&[u8]> = decompressed_layers.iter().map(Vec::as_slice).collect();
         let projection = project_layers(&layer_refs, self.config.digest_function, Some(&hints))?;
 
         info!(
@@ -347,7 +347,7 @@ struct UploadStats {
     bytes_uploaded: u64,
 }
 
-/// Convert a `DigestPair` (hash string + size) to NativeLink's `DigestInfo`.
+/// Convert a `DigestPair` (hash string + size) to `NativeLink`'s `DigestInfo`.
 fn digest_pair_to_info(pair: &DigestPair) -> Result<DigestInfo, Error> {
     DigestInfo::try_new(&pair.hash, pair.size_bytes as u64)
 }

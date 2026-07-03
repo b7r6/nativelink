@@ -14,12 +14,12 @@
 
 //! # nativelink-oci
 //!
-//! OCI toolchain bridge for NativeLink.
+//! OCI toolchain bridge for `NativeLink`.
 //!
 //! Implements the OCI→REAPI projection defined in the Standard OCI Toolchain
 //! Specification (§6): pulls an OCI image from a registry, unpacks its layers,
 //! re-hashes file content as BLAKE3, constructs REAPI `Directory` trees, and
-//! uploads the resulting blobs to a NativeLink CAS store.
+//! uploads the resulting blobs to a `NativeLink` CAS store.
 //!
 //! The output is a root `Directory` digest that can be merged into an action's
 //! `input_root_digest` for remote execution — making toolchains data in CAS

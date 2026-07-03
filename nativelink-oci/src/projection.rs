@@ -72,7 +72,7 @@ impl ProjectionDigestFunction {
     }
 }
 
-/// A content-addressed digest (hash + size_bytes).
+/// A content-addressed digest (hash + `size_bytes`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DigestPair {
     pub hash: String,
@@ -109,17 +109,17 @@ pub struct ProjectionResult {
 enum FsNode {
     File { content: Bytes, executable: bool },
     Symlink { target: String },
-    Directory { children: BTreeMap<String, FsNode> },
+    Directory { children: BTreeMap<String, Self> },
 }
 
 impl FsNode {
-    fn new_dir() -> Self {
+    const fn new_dir() -> Self {
         Self::Directory {
             children: BTreeMap::new(),
         }
     }
 
-    fn as_dir_mut(&mut self) -> Option<&mut BTreeMap<String, FsNode>> {
+    const fn as_dir_mut(&mut self) -> Option<&mut BTreeMap<String, Self>> {
         match self {
             Self::Directory { children } => Some(children),
             _ => None,
@@ -181,8 +181,10 @@ pub fn project_layers(
                     let mode = entry.header().mode().unwrap_or(0o644);
                     let executable = mode & 0o111 != 0;
 
-                    let mut content =
-                        Vec::with_capacity(entry.header().size().unwrap_or(0) as usize);
+                    // Capacity is only a hint; a size that does not fit in
+                    // usize (32-bit targets) just means no preallocation.
+                    let capacity = usize::try_from(entry.header().size().unwrap_or(0)).unwrap_or(0);
+                    let mut content = Vec::with_capacity(capacity);
                     entry.read_to_end(&mut content).map_err(|e| {
                         make_input_err!("Reading tar entry '{}': {e}", path.display())
                     })?;
@@ -296,19 +298,19 @@ pub fn project_layers(
     )?;
 
     // Verify against hints if provided (§6.5)
-    if let Some(hints) = hints {
-        if let Some(ref expected_root) = hints.reapi_root {
-            let actual = format!("{}/{}", root_digest.hash, root_digest.size_bytes);
-            if actual != *expected_root {
-                warn!(
-                    expected = %expected_root,
-                    actual = %actual,
-                    "REAPI root digest does not match hint annotation; \
-                     hint treated as absent per §6.5"
-                );
-            } else {
-                debug!(digest = %actual, "REAPI root digest matches hint");
-            }
+    if let Some(hints) = hints
+        && let Some(ref expected_root) = hints.reapi_root
+    {
+        let actual = format!("{}/{}", root_digest.hash, root_digest.size_bytes);
+        if actual == *expected_root {
+            debug!(digest = %actual, "REAPI root digest matches hint");
+        } else {
+            warn!(
+                expected = %expected_root,
+                actual = %actual,
+                "REAPI root digest does not match hint annotation; \
+                 hint treated as absent per §6.5"
+            );
         }
     }
 
@@ -423,7 +425,7 @@ fn lookup_file_content(root: &FsNode, path: &Path) -> Option<(Bytes, bool)> {
     }
 }
 
-/// Recursively build an REAPI Directory proto from an FsNode tree.
+/// Recursively build an REAPI Directory proto from an `FsNode` tree.
 ///
 /// Returns the Directory proto and its digest. Populates the blob maps for
 /// all files and child directories encountered.
@@ -845,6 +847,8 @@ mod tests {
 
     #[test]
     fn test_sha256_projection() {
+        use sha2::{Digest as _, Sha256};
+
         let content = b"sha256 test content";
         let tar_bytes = build_tar(&[(
             "test.bin",
@@ -857,7 +861,6 @@ mod tests {
         let result = project_layers(&[&tar_bytes], ProjectionDigestFunction::Sha256, None).unwrap();
 
         // Verify with sha2 crate
-        use sha2::{Digest as _, Sha256};
         let expected = hex::encode(Sha256::digest(content));
         assert_eq!(result.root.files[0].digest.as_ref().unwrap().hash, expected);
     }

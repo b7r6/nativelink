@@ -150,7 +150,7 @@ pub struct Descriptor {
     pub annotations: std::collections::HashMap<String, String>,
 }
 
-/// OCI image configuration (we only need diff_ids from rootfs).
+/// OCI image configuration (we only need `diff_ids` from rootfs).
 #[derive(Debug, Deserialize)]
 pub struct OciConfig {
     pub rootfs: RootFs,
@@ -194,7 +194,7 @@ impl ToolchainHints {
     }
 
     /// Returns true if this image carries Standard OCI Toolchain annotations.
-    pub fn is_conforming_toolchain(&self) -> bool {
+    pub const fn is_conforming_toolchain(&self) -> bool {
         self.layout_version.is_some()
     }
 }
@@ -307,7 +307,7 @@ impl RegistryClient {
         Ok((manifest, manifest_digest))
     }
 
-    /// Fetch the image config blob (contains diff_ids).
+    /// Fetch the image config blob (contains `diff_ids`).
     pub async fn fetch_config(
         &self,
         image: &ImageReference,
