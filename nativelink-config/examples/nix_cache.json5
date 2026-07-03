@@ -128,6 +128,11 @@
             // enables rotation while clients migrate trusted-public-keys.
             signing_key_files: [],
 
+            // Staging dir for decompressing compressed NAR uploads; created
+            // if missing and pruned of stale files at startup. Defaults to
+            // <system temp>/nativelink-nix-spool/<instance_name>.
+            // spool_path: "/tmp/nativelink/nix-cache/spool",
+
             // Set true on public-facing listeners to reject PUT with 405.
             read_only: false,
           },

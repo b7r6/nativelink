@@ -333,6 +333,18 @@ pub struct NixCacheConfig {
     #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
     pub signing_key_files: Vec<String>,
 
+    /// Staging directory for decompressing compressed NAR uploads
+    /// (`.nar.xz`, `.nar.zst`, `.nar.bz2` and gzip-sniffed `.nar`).
+    /// Compressed uploads are stream-decompressed into a temporary file
+    /// here before being written to `cas_store`, so the filesystem behind
+    /// it needs enough space for the largest uncompressed NAR in flight.
+    /// The directory is created if missing and pruned of stale files at
+    /// startup.
+    ///
+    /// Default: `<system temp>/nativelink-nix-spool/<instance_name>`
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub spool_path: Option<String>,
+
     /// When true, uploads are rejected: any `PUT` request returns
     /// `405 Method Not Allowed`. Set this on public-facing listeners so
     /// only internal listeners can populate the cache.
@@ -1330,6 +1342,7 @@ mod tests {
         assert_eq!(instance.priority, 40);
         assert!(instance.want_mass_query);
         assert!(instance.signing_key_files.is_empty());
+        assert_eq!(instance.spool_path, None);
         assert!(!instance.read_only);
     }
 
