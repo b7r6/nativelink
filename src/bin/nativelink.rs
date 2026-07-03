@@ -44,6 +44,7 @@ use nativelink_service::cas_server::CasServer;
 use nativelink_service::execution_server::ExecutionServer;
 use nativelink_service::fetch_server::FetchServer;
 use nativelink_service::health_server::HealthServer;
+use nativelink_service::nix_cache_server::NixCacheServer;
 use nativelink_service::push_server::PushServer;
 use nativelink_service::worker_api_server::WorkerApiServer;
 use nativelink_store::default_store_factory::store_factory;
@@ -436,6 +437,14 @@ async fn inner_main(
                     ),
                 ),
             );
+        }
+
+        if let Some(nix_cache_cfgs) = &services.nix_cache {
+            let nix_cache_server = NixCacheServer::new(nix_cache_cfgs, &store_manager)
+                .err_tip(|| "Could not create NixCache service")?;
+            for (prefix, router) in nix_cache_server.routers() {
+                svc = svc.nest_service(&prefix, router);
+            }
         }
 
         // This is the default service that executes if no other endpoint matches.

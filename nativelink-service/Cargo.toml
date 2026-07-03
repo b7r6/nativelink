@@ -10,12 +10,20 @@ version = "1.5.2"
 nativelink-config = { path = "../nativelink-config" }
 nativelink-error = { path = "../nativelink-error" }
 nativelink-metric = { path = "../nativelink-metric" }
+nativelink-nix = { path = "../nativelink-nix" }
 nativelink-oci = { path = "../nativelink-oci" }
 nativelink-proto = { path = "../nativelink-proto" }
 nativelink-scheduler = { path = "../nativelink-scheduler" }
 nativelink-store = { path = "../nativelink-store" }
 nativelink-util = { path = "../nativelink-util" }
 
+async-compression = { version = "0.4.25", default-features = false, features = [
+  "bzip2",
+  "gzip",
+  "tokio",
+  "xz",
+  "zstd",
+] }
 axum = { version = "0.8.3", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 futures = { version = "0.3.31", default-features = false }
@@ -44,6 +52,7 @@ tokio = { version = "1.52.2", features = [
 tokio-stream = { version = "0.1.17", features = [
   "fs",
 ], default-features = false }
+tokio-util = { version = "0.7.14", features = ["io"], default-features = false }
 tonic = { version = "0.14.0", features = [
   "gzip",
   "router",
