@@ -600,6 +600,13 @@
           "${bash}/bin"
           "${coreutils}/bin"
           "${gnused}/bin"
+
+          # libz-ng-sys (via zlib-ng) builds its C lib with cmake (which in
+          # turn drives make); the Cargo build gets these from
+          # `nativeBuildInputs`, but Bazel's `--incompatible_strict_action_env`
+          # build-script actions only see this PATH.
+          "${cmake}/bin"
+          "${gnumake}/bin"
         ];
         devShells.default = pkgs.mkShell {
           packages = let

@@ -1,4 +1,4 @@
-#!/nix/store/i7hwka78f6i34v4r211ynr6nnafcba7f-bash/bin/bash
+#!/nix/store/zh1ijdhb6gng1509b1zrilb6xlzx60j6-bash-5.3p9/bin/bash
 #
 # Copyright 2015 The Bazel Authors. All rights reserved.
 #
@@ -44,7 +44,7 @@ done
 # Set-up the environment
 
 # Call the C++ compiler
-/nix/store/5b69ajvn84dh0hyick8l3s0fl51kv776-customClang/bin/customClang "$@"
+/nix/store/n4rzbc1y6z5dj0wr884rmn85lz0dfi1l-customClang/bin/customClang "$@"
 
 # Generate an empty file if header processing succeeded.
 if [[ ${OUTPUT} == *.h.processed ]]; then
