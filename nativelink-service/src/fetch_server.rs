@@ -25,6 +25,7 @@ use nativelink_proto::build::bazel::remote::asset::v1::fetch_server::{
 use nativelink_proto::build::bazel::remote::asset::v1::{
     FetchBlobRequest, FetchBlobResponse, FetchDirectoryRequest, FetchDirectoryResponse,
 };
+use nativelink_proto::build::bazel::remote::execution::v2::digest_function::Value as ProtoDigestFunction;
 use nativelink_proto::google::rpc::Status as GoogleStatus;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::digest_hasher::{default_digest_hasher_func, make_ctx_for_hash_func};
@@ -39,7 +40,7 @@ use crate::remote_asset_proto::{RemoteAssetArtifact, RemoteAssetQuery};
 #[derive(Debug, Clone)]
 pub struct FetchStoreInfo {
     store: Store,
-    /// Optional CAS store for OCI toolchain imports (may differ from fetch_store).
+    /// Optional CAS store for OCI toolchain imports (may differ from `fetch_store`).
     oci_cas_store: Option<Store>,
     /// OCI import config (None if OCI is not configured for this instance).
     oci_config: Option<ImportConfig>,
@@ -237,7 +238,7 @@ impl FetchServer {
         }))
     }
 
-    /// Handle a FetchDirectory request for an OCI image URI.
+    /// Handle a `FetchDirectory` request for an OCI image URI.
     ///
     /// This implements the OCI→REAPI bridge per Standard OCI Toolchain Spec §6:
     /// pulls the image, projects layers into an REAPI Directory tree, uploads
@@ -283,16 +284,10 @@ impl FetchServer {
             "OCI toolchain imported successfully"
         );
 
-        // Map our digest function to the proto enum
+        // Map our digest function to the generated proto enum constants.
         let proto_digest_func: i32 = match oci_config.digest_function {
-            ProjectionDigestFunction::Blake3 => {
-                // BLAKE3 = 7 in the proto enum
-                7
-            }
-            ProjectionDigestFunction::Sha256 => {
-                // SHA256 = 1 in the proto enum
-                1
-            }
+            ProjectionDigestFunction::Blake3 => ProtoDigestFunction::Blake3.into(),
+            ProjectionDigestFunction::Sha256 => ProtoDigestFunction::Sha256.into(),
         };
 
         Ok(Response::new(FetchDirectoryResponse {

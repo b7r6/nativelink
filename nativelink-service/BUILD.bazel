@@ -28,6 +28,7 @@ rust_library(
         "//nativelink-config",
         "//nativelink-error",
         "//nativelink-metric",
+        "//nativelink-oci",
         "//nativelink-proto",
         "//nativelink-scheduler",
         "//nativelink-store",
