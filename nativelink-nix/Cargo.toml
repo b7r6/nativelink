@@ -9,11 +9,14 @@ version = "1.5.2"
 
 [dependencies]
 nativelink-error = { path = "../nativelink-error" }
+nativelink-proto = { path = "../nativelink-proto" }
 
 base64 = { version = "0.22.1", default-features = false, features = ["std"] }
 ed25519-dalek = { version = "2.2.0", default-features = false, features = [
   "std",
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
+prost = { version = "0.14.4", default-features = false }
+prost-types = { version = "0.14.4", default-features = false }
 
 [dev-dependencies]

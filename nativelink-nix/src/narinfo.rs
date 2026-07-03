@@ -235,6 +235,13 @@ pub fn parse(text: &str) -> Result<NarInfo, Error> {
     })
 }
 
+/// Returns true if `s` is a store-path hash: exactly 32 characters, all
+/// in the nix32 alphabet (the `<hash>` in `/nix/store/<hash>-<name>`).
+#[must_use]
+pub fn is_store_path_hash(s: &str) -> bool {
+    s.len() == 32 && s.bytes().all(nixbase32::is_valid_char)
+}
+
 /// Computes the exact byte string Nix signs for a store path, per
 /// `ValidPathInfo::fingerprint` in `src/libstore/path-info.cc` (lines
 /// 43-50 of Nix 2.34, empirically verified against `cache.nixos.org`
@@ -373,7 +380,7 @@ mod tests {
     use base64::engine::general_purpose::STANDARD as BASE64;
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-    use super::{NarInfo, fingerprint, parse};
+    use super::{NarInfo, fingerprint, is_store_path_hash, parse};
     use crate::nixbase32;
 
     /// The real cache.nixos.org narinfo quoted at the top of
@@ -881,6 +888,22 @@ mod tests {
         let reparsed = parse(&rendered).expect("re-parse");
         assert_eq!(reparsed, info);
         assert_eq!(reparsed.fingerprint(), fingerprint);
+    }
+
+    #[test]
+    fn is_store_path_hash_checks_length_and_alphabet() {
+        assert!(is_store_path_hash("bvkx110ylicifcgl0xiid5f100hx3ar7"));
+        assert!(is_store_path_hash("p4pclmv1gyja5kzc26npqpia1qqxrf0l"));
+        assert!(is_store_path_hash("00000000000000000000000000000000"));
+        // Wrong lengths: 31 and 33 characters.
+        assert!(!is_store_path_hash("bvkx110ylicifcgl0xiid5f100hx3ar"));
+        assert!(!is_store_path_hash("bvkx110ylicifcgl0xiid5f100hx3ar77"));
+        assert!(!is_store_path_hash(""));
+        // 'e', 'o', 'u', 't' and uppercase are outside the alphabet.
+        assert!(!is_store_path_hash("evkx110ylicifcgl0xiid5f100hx3ar7"));
+        assert!(!is_store_path_hash("BVKX110YLICIFCGL0XIID5F100HX3AR7"));
+        // Multi-byte characters must not pass on char count alone.
+        assert!(!is_store_path_hash("bvkx110ylicifcgl0xiid5f100hx3aré"));
     }
 
     #[test]

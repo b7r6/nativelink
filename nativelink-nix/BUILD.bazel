@@ -10,16 +10,21 @@ rust_library(
     name = "nativelink-nix",
     srcs = [
         "src/lib.rs",
+        "src/nar_url.rs",
         "src/narinfo.rs",
         "src/nixbase32.rs",
+        "src/path_info.rs",
         "src/signing.rs",
     ],
     visibility = ["//visibility:public"],
     deps = [
         "//nativelink-error",
+        "//nativelink-proto",
         "@crates//:base64",
         "@crates//:ed25519-dalek",
         "@crates//:hex",
+        "@crates//:prost",
+        "@crates//:prost-types",
     ],
 )
 
@@ -29,9 +34,12 @@ rust_test(
     crate = ":nativelink-nix",
     deps = [
         "//nativelink-error",
+        "//nativelink-proto",
         "@crates//:base64",
         "@crates//:ed25519-dalek",
         "@crates//:hex",
+        "@crates//:prost",
+        "@crates//:prost-types",
     ],
 )
 

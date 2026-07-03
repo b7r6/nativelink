@@ -1,0 +1,757 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! The [`NixPathInfo`] message — the durable record the Nix substituter
+//! facade keeps per store path — and its `ActionResult` envelope, which
+//! lets Nix path metadata live in an ordinary REAPI action cache.
+//!
+//! The message is defined directly with `#[derive(prost::Message)]`
+//! because protobuf regeneration (`bazel run
+//! nativelink-proto:update_protos`) is broken in this checkout; a
+//! `.proto` mirror of [`NixPathInfo`] should land under
+//! `nativelink-proto/com/github/trace_machina/nativelink/nix/` once that
+//! works again. Until then, the field tags declared here are the wire
+//! contract.
+//!
+//! Record shape (see [`NixPathInfo::encode_record`]): an `ActionResult`
+//! with exactly one output file named [`NAR_OUTPUT_FILE_NAME`] whose
+//! digest is the lowercase-hex NAR sha256 and NAR size, `exit_code` 0,
+//! and an `ExecutedActionMetadata` carrying the prost-encoded
+//! [`NixPathInfo`] as an `Any` under [`NIX_PATH_INFO_TYPE_URL`].
+
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use nativelink_error::{Error, ResultExt, make_input_err};
+use nativelink_proto::build::bazel::remote::execution::v2::{
+    ActionResult as ProtoActionResult, Digest, ExecutedActionMetadata, OutputFile,
+};
+use prost::Message;
+
+use crate::narinfo::{NarInfo, is_store_path_hash};
+
+/// The `Any.type_url` under which a prost-encoded [`NixPathInfo`] rides
+/// in the record's `ExecutedActionMetadata.auxiliary_metadata`.
+pub const NIX_PATH_INFO_TYPE_URL: &str =
+    "type.googleapis.com/com.github.trace_machina.nativelink.nix.NixPathInfo";
+
+/// The `path` of the record's single output file.
+pub const NAR_OUTPUT_FILE_NAME: &str = "out.nar";
+
+/// The `ExecutedActionMetadata.worker` value stamped on every record.
+pub const NIX_CACHE_WORKER_NAME: &str = "nativelink-nix-cache";
+
+/// Nix path metadata, independent of any particular NAR URL or
+/// compression: the intersection of a `.narinfo` document and Nix's
+/// `ValidPathInfo`.
+///
+/// Unlike [`NarInfo`], optional string fields here use the empty string
+/// for "absent" (protobuf semantics), and `references` are store-path
+/// basenames kept byte-lexicographically sorted.
+#[derive(Clone, PartialEq, Eq, prost::Message)]
+pub struct NixPathInfo {
+    /// Full store path, e.g. `/nix/store/<hash>-<name>`.
+    #[prost(string, tag = "1")]
+    pub store_path: String,
+    /// `sha256` of the uncompressed NAR; exactly 32 bytes.
+    #[prost(bytes = "vec", tag = "2")]
+    pub nar_sha256: Vec<u8>,
+    /// Size in bytes of the uncompressed NAR.
+    #[prost(uint64, tag = "3")]
+    pub nar_size: u64,
+    /// References as store-path basenames, byte-lexicographically sorted.
+    #[prost(string, repeated, tag = "4")]
+    pub references: Vec<String>,
+    /// Basename of the deriving `.drv`; empty means absent.
+    #[prost(string, tag = "5")]
+    pub deriver: String,
+    /// Platform string, e.g. `x86_64-linux`; empty means absent.
+    #[prost(string, tag = "6")]
+    pub system: String,
+    /// Signatures, verbatim `name:base64`.
+    #[prost(string, repeated, tag = "7")]
+    pub signatures: Vec<String>,
+    /// Content-address for fixed-output paths; empty means absent.
+    #[prost(string, tag = "8")]
+    pub ca: String,
+}
+
+/// Validates that `reference` is a plausible store-path basename:
+/// a 32-character nix32 hash, `-`, and a non-empty name free of `/` and
+/// whitespace.
+fn validate_reference(reference: &str) -> Result<(), Error> {
+    let (hash, rest) = reference.split_at_checked(32).ok_or_else(|| {
+        make_input_err!("reference '{reference}' is too short for a 32-character nix32 hash")
+    })?;
+    if !is_store_path_hash(hash) {
+        return Err(make_input_err!(
+            "reference '{reference}' does not start with a 32-character nix32 hash"
+        ));
+    }
+    let name = rest.strip_prefix('-').ok_or_else(|| {
+        make_input_err!("reference '{reference}' lacks a '-' after the 32-character hash")
+    })?;
+    if name.is_empty() {
+        return Err(make_input_err!("reference '{reference}' has an empty name"));
+    }
+    if name.contains('/') || name.chars().any(char::is_whitespace) {
+        return Err(make_input_err!(
+            "reference '{reference}' contains '/' or whitespace"
+        ));
+    }
+    Ok(())
+}
+
+/// Validates that `sig` has Nix's signature shape: a non-empty key name
+/// free of whitespace, `:`, and base64 that decodes to a 64-byte ed25519
+/// signature.
+fn validate_signature(sig: &str) -> Result<(), Error> {
+    let (name, sig_b64) = sig
+        .split_once(':')
+        .ok_or_else(|| make_input_err!("signature '{sig}' lacks a ':' separator"))?;
+    if name.is_empty() || name.chars().any(char::is_whitespace) {
+        return Err(make_input_err!(
+            "signature '{sig}' has an empty or whitespace key name"
+        ));
+    }
+    let sig_bytes = BASE64
+        .decode(sig_b64)
+        .map_err(|e| make_input_err!("signature '{sig}' has invalid base64: {e}"))?;
+    if sig_bytes.len() != 64 {
+        return Err(make_input_err!(
+            "signature '{sig}' decodes to {} bytes, expected a 64-byte ed25519 signature",
+            sig_bytes.len()
+        ));
+    }
+    Ok(())
+}
+
+impl NixPathInfo {
+    /// Returns `nar_sha256` as a fixed 32-byte digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidArgument` error if `nar_sha256` is not exactly
+    /// 32 bytes.
+    fn nar_hash(&self) -> Result<[u8; 32], Error> {
+        self.nar_sha256.as_slice().try_into().map_err(|_| {
+            make_input_err!(
+                "NixPathInfo nar_sha256 is {} bytes, expected 32",
+                self.nar_sha256.len()
+            )
+        })
+    }
+
+    /// Extracts the URL- and compression-independent metadata of a parsed
+    /// `.narinfo` document. References are sorted; `FileHash`/`FileSize`
+    /// (properties of one particular compressed NAR) are dropped.
+    #[must_use]
+    pub fn from_nar_info(info: &NarInfo) -> Self {
+        let mut references = info.references.clone();
+        references.sort_unstable();
+        Self {
+            store_path: info.store_path.clone(),
+            nar_sha256: info.nar_hash.to_vec(),
+            nar_size: info.nar_size,
+            references,
+            deriver: info.deriver.clone().unwrap_or_default(),
+            system: info.system.clone().unwrap_or_default(),
+            signatures: info.sigs.clone(),
+            ca: info.ca.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Builds a renderable [`NarInfo`] pointing at the NAR served under
+    /// `url` with `compression`, after validating this message's shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidArgument` error if `nar_sha256` is not 32
+    /// bytes, `nar_size` is zero, any reference is not a store-path
+    /// basename, or any signature is not `name:base64(64 bytes)`.
+    pub fn to_nar_info(&self, url: String, compression: String) -> Result<NarInfo, Error> {
+        let nar_hash = self
+            .nar_hash()
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        if self.nar_size == 0 {
+            return Err(make_input_err!(
+                "NixPathInfo for '{}' has a zero nar_size",
+                self.store_path
+            ));
+        }
+        for reference in &self.references {
+            validate_reference(reference)
+                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        }
+        for sig in &self.signatures {
+            validate_signature(sig)
+                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        }
+        Ok(NarInfo {
+            store_path: self.store_path.clone(),
+            url,
+            compression,
+            file_hash: None,
+            file_size: None,
+            nar_hash,
+            nar_size: self.nar_size,
+            references: self.references.clone(),
+            deriver: (!self.deriver.is_empty()).then(|| self.deriver.clone()),
+            system: (!self.system.is_empty()).then(|| self.system.clone()),
+            sigs: self.signatures.clone(),
+            ca: (!self.ca.is_empty()).then(|| self.ca.clone()),
+        })
+    }
+
+    /// The signing fingerprint of this path, per
+    /// [`crate::narinfo::fingerprint`]; reference basenames get the store
+    /// directory derived from `store_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidArgument` error if `nar_sha256` is not exactly
+    /// 32 bytes.
+    pub fn fingerprint(&self) -> Result<String, Error> {
+        let nar_hash = self
+            .nar_hash()
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        Ok(crate::narinfo::fingerprint(
+            &self.store_path,
+            &nar_hash,
+            self.nar_size,
+            &self.references,
+        ))
+    }
+
+    /// Wraps this message in its `ActionResult` record envelope and
+    /// prost-encodes it; [`Self::decode_record`] is the exact inverse.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidArgument` error if `nar_sha256` is not 32 bytes
+    /// or `nar_size` exceeds `i64::MAX` (the range of a `Digest`'s
+    /// `size_bytes`).
+    pub fn encode_record(&self) -> Result<Vec<u8>, Error> {
+        let nar_hash = self
+            .nar_hash()
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        let size_bytes = i64::try_from(self.nar_size).map_err(|e| {
+            make_input_err!(
+                "NixPathInfo nar_size {} does not fit in a Digest's i64 size_bytes: {e}",
+                self.nar_size
+            )
+        })?;
+        let record = ProtoActionResult {
+            output_files: vec![OutputFile {
+                path: NAR_OUTPUT_FILE_NAME.to_string(),
+                digest: Some(Digest {
+                    hash: hex::encode(nar_hash),
+                    size_bytes,
+                }),
+                ..Default::default()
+            }],
+            exit_code: 0,
+            execution_metadata: Some(ExecutedActionMetadata {
+                worker: NIX_CACHE_WORKER_NAME.to_string(),
+                auxiliary_metadata: vec![prost_types::Any {
+                    type_url: NIX_PATH_INFO_TYPE_URL.to_string(),
+                    value: self.encode_to_vec(),
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        Ok(record.encode_to_vec())
+    }
+
+    /// Decodes and validates an `ActionResult` record produced by
+    /// [`Self::encode_record`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a distinct `InvalidArgument` error for each shape
+    /// violation: undecodable `ActionResult`, nonzero exit code, not
+    /// exactly one output file, output file not named
+    /// [`NAR_OUTPUT_FILE_NAME`], missing digest, digest hash that is not
+    /// 64 lowercase hex characters, missing execution metadata, no
+    /// auxiliary metadata `Any` under [`NIX_PATH_INFO_TYPE_URL`],
+    /// undecodable [`NixPathInfo`], embedded `nar_sha256` that is not 32
+    /// bytes, or a digest hash/size that contradicts the embedded
+    /// message.
+    pub fn decode_record(bytes: &[u8]) -> Result<Self, Error> {
+        let record = ProtoActionResult::decode(bytes).map_err(|e| {
+            make_input_err!("nix path-info record is not a valid ActionResult: {e}")
+        })?;
+        if record.exit_code != 0 {
+            return Err(make_input_err!(
+                "nix path-info record has nonzero exit_code {}",
+                record.exit_code
+            ));
+        }
+        let [output_file] = record.output_files.as_slice() else {
+            return Err(make_input_err!(
+                "nix path-info record has {} output files, expected exactly one",
+                record.output_files.len()
+            ));
+        };
+        if output_file.path != NAR_OUTPUT_FILE_NAME {
+            return Err(make_input_err!(
+                "nix path-info record output file is named '{}', expected '{NAR_OUTPUT_FILE_NAME}'",
+                output_file.path
+            ));
+        }
+        let digest = output_file.digest.as_ref().ok_or_else(|| {
+            make_input_err!("nix path-info record output file is missing its digest")
+        })?;
+        if digest.hash.len() != 64
+            || !digest
+                .hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(make_input_err!(
+                "nix path-info record digest hash '{}' is not 64 lowercase hex characters",
+                digest.hash
+            ));
+        }
+        let metadata = record
+            .execution_metadata
+            .as_ref()
+            .ok_or_else(|| make_input_err!("nix path-info record is missing execution_metadata"))?;
+        let any = metadata
+            .auxiliary_metadata
+            .iter()
+            .find(|any| any.type_url == NIX_PATH_INFO_TYPE_URL)
+            .ok_or_else(|| {
+                make_input_err!(
+                    "nix path-info record has no auxiliary_metadata with type_url '{NIX_PATH_INFO_TYPE_URL}'"
+                )
+            })?;
+        let info = Self::decode(any.value.as_slice()).map_err(|e| {
+            make_input_err!(
+                "nix path-info record auxiliary_metadata is not a valid NixPathInfo: {e}"
+            )
+        })?;
+        let nar_hash = info
+            .nar_hash()
+            .err_tip(|| "in the NixPathInfo embedded in a nix path-info record")?;
+        let expected_hash = hex::encode(nar_hash);
+        if digest.hash != expected_hash {
+            return Err(make_input_err!(
+                "nix path-info record digest hash '{}' does not match the embedded nar_sha256 '{expected_hash}'",
+                digest.hash
+            ));
+        }
+        if u64::try_from(digest.size_bytes).ok() != Some(info.nar_size) {
+            return Err(make_input_err!(
+                "nix path-info record digest size {} does not match the embedded nar_size {}",
+                digest.size_bytes,
+                info.nar_size
+            ));
+        }
+        Ok(info)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nativelink_proto::build::bazel::remote::execution::v2::{
+        ActionResult as ProtoActionResult, OutputFile,
+    };
+    use prost::Message;
+
+    use super::{NAR_OUTPUT_FILE_NAME, NIX_CACHE_WORKER_NAME, NIX_PATH_INFO_TYPE_URL, NixPathInfo};
+    use crate::narinfo::parse;
+
+    /// The same REAL `nix copy` capture (nix 2.34.7) used as
+    /// `NIX_CLI_NARINFO` in the `narinfo` module's tests; see there for
+    /// provenance.
+    const NIX_CLI_NARINFO: &str = concat!(
+        "StorePath: /nix/store/bvkx110ylicifcgl0xiid5f100hx3ar7-nix-2.34.7\n",
+        "URL: nar/11by0lzb61psglb8810552qb8v569x7y8q9gcj9p1dadpv9q0jqw.nar.xz\n",
+        "Compression: xz\n",
+        "FileHash: sha256:11by0lzb61psglb8810552qb8v569x7y8q9gcj9p1dadpv9q0jqw\n",
+        "FileSize: 772\n",
+        "NarHash: sha256:1ip47yiybcjh26ijapy13qzg8mzvypr2qci2ixx5jkm3b76r0bk9\n",
+        "NarSize: 8848\n",
+        "References: 97zxp9j00zcjmkn3zv9karhwj86q7x5w-nix-nswrapper-2.34.7",
+        " hqwkw2nala59avjximpdmn1yi474n4h7-nix-2.34.7\n",
+        "Deriver: q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv\n",
+        "Sig: cache.nixos.org-1:RPgjMEzWvBICkTl8Usg+ppxnHbBNqCtp5iIy5FFPZzxn2reRAb3ffPwpP",
+        "zrARfK1NWO2g4nIQkfMyzsd2J0pAw==\n",
+    );
+
+    /// See `narinfo::tests::NIX_CLI_NARINFO` for the base16 conversion.
+    const NIX_CLI_NAR_HASH_HEX: &str =
+        "692e90cd59a34e597a8f22322cf2f5fb57f43e1ec15f25a31150b2e5a33fe4c6";
+
+    fn sample_info() -> NixPathInfo {
+        let info = parse(NIX_CLI_NARINFO).expect("parse fixture");
+        NixPathInfo::from_nar_info(&info)
+    }
+
+    fn sample_record() -> ProtoActionResult {
+        let bytes = sample_info().encode_record().expect("encode record");
+        ProtoActionResult::decode(bytes.as_slice()).expect("decode as ActionResult")
+    }
+
+    fn decode_err(record: &ProtoActionResult) -> String {
+        NixPathInfo::decode_record(record.encode_to_vec().as_slice())
+            .expect_err("expected shape violation")
+            .to_string()
+    }
+
+    #[test]
+    fn from_nar_info_maps_fields_and_sorts_references() {
+        let parsed = parse(NIX_CLI_NARINFO).expect("parse fixture");
+        let info = NixPathInfo::from_nar_info(&parsed);
+        assert_eq!(
+            info.store_path,
+            "/nix/store/bvkx110ylicifcgl0xiid5f100hx3ar7-nix-2.34.7"
+        );
+        assert_eq!(hex::encode(&info.nar_sha256), NIX_CLI_NAR_HASH_HEX);
+        assert_eq!(info.nar_size, 8848);
+        assert_eq!(
+            info.references,
+            vec![
+                "97zxp9j00zcjmkn3zv9karhwj86q7x5w-nix-nswrapper-2.34.7".to_string(),
+                "hqwkw2nala59avjximpdmn1yi474n4h7-nix-2.34.7".to_string(),
+            ]
+        );
+        assert_eq!(
+            info.deriver,
+            "q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"
+        );
+        assert_eq!(info.system, "");
+        assert_eq!(info.signatures.len(), 1);
+        assert_eq!(info.ca, "");
+
+        // References arrive sorted even if the source was not.
+        let mut reversed = parsed;
+        reversed.references.reverse();
+        assert_eq!(NixPathInfo::from_nar_info(&reversed), info);
+    }
+
+    #[test]
+    fn to_nar_info_render_parse_from_nar_info_is_a_fixed_point() {
+        let parsed = parse(NIX_CLI_NARINFO).expect("parse fixture");
+        let info = NixPathInfo::from_nar_info(&parsed);
+        let rebuilt = info
+            .to_nar_info(parsed.url.clone(), parsed.compression.clone())
+            .expect("to_nar_info");
+        // FileHash/FileSize are properties of one compressed NAR and are
+        // deliberately dropped; everything else survives.
+        assert_eq!(rebuilt.file_hash, None);
+        assert_eq!(rebuilt.file_size, None);
+        assert_eq!(rebuilt.store_path, parsed.store_path);
+        assert_eq!(rebuilt.references, parsed.references);
+        assert_eq!(rebuilt.deriver, parsed.deriver);
+        assert_eq!(rebuilt.sigs, parsed.sigs);
+        let reparsed = parse(&rebuilt.render()).expect("re-parse rendered narinfo");
+        assert_eq!(reparsed, rebuilt);
+        assert_eq!(NixPathInfo::from_nar_info(&reparsed), info);
+        // The fingerprint survives the round trip, so the original
+        // cache.nixos.org signature stays valid.
+        assert_eq!(
+            info.fingerprint().expect("fingerprint"),
+            parsed.fingerprint()
+        );
+        assert_eq!(reparsed.fingerprint(), parsed.fingerprint());
+    }
+
+    #[test]
+    fn to_nar_info_maps_empty_strings_to_absent_fields() {
+        let mut info = sample_info();
+        info.deriver = String::new();
+        info.system = "x86_64-linux".to_string();
+        info.ca = "fixed:sha256:0mdqa9w1p6cmli6976v4wi0sw9r4p5prkj7lzfd1877wk11c9c73".to_string();
+        let nar_info = info
+            .to_nar_info("nar/x.nar".to_string(), "none".to_string())
+            .expect("to_nar_info");
+        assert_eq!(nar_info.url, "nar/x.nar");
+        assert_eq!(nar_info.compression, "none");
+        assert_eq!(nar_info.deriver, None);
+        assert_eq!(nar_info.system.as_deref(), Some("x86_64-linux"));
+        assert_eq!(
+            nar_info.ca.as_deref(),
+            Some("fixed:sha256:0mdqa9w1p6cmli6976v4wi0sw9r4p5prkj7lzfd1877wk11c9c73")
+        );
+    }
+
+    #[test]
+    fn to_nar_info_rejects_bad_shapes() {
+        let assert_rejects = |mutate: &dyn Fn(&mut NixPathInfo), what: &str| {
+            let mut info = sample_info();
+            mutate(&mut info);
+            assert!(
+                info.to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                    .is_err(),
+                "expected rejection of {what}"
+            );
+        };
+        assert_rejects(&|i| i.nar_sha256.truncate(31), "31-byte nar_sha256");
+        assert_rejects(&|i| i.nar_sha256.push(0), "33-byte nar_sha256");
+        assert_rejects(&|i| i.nar_size = 0, "zero nar_size");
+        // References must be store-path basenames.
+        assert_rejects(
+            &|i| i.references.push("no-hash-prefix".to_string()),
+            "short reference",
+        );
+        assert_rejects(
+            &|i| {
+                i.references
+                    .push("evkx110ylicifcgl0xiid5f100hx3ar7-x".to_string());
+            },
+            "reference hash outside the nix32 alphabet",
+        );
+        assert_rejects(
+            &|i| {
+                i.references
+                    .push("bvkx110ylicifcgl0xiid5f100hx3ar7x".to_string());
+            },
+            "reference without '-' after the hash",
+        );
+        assert_rejects(
+            &|i| {
+                i.references
+                    .push("bvkx110ylicifcgl0xiid5f100hx3ar7-".to_string());
+            },
+            "reference with an empty name",
+        );
+        assert_rejects(
+            &|i| {
+                i.references
+                    .push("bvkx110ylicifcgl0xiid5f100hx3ar7-a/b".to_string());
+            },
+            "reference containing '/'",
+        );
+        assert_rejects(
+            &|i| {
+                i.references
+                    .push("bvkx110ylicifcgl0xiid5f100hx3ar7-a b".to_string());
+            },
+            "reference containing whitespace",
+        );
+        // Signatures must be name:base64(64 bytes).
+        assert_rejects(
+            &|i| i.signatures.push("no-colon".to_string()),
+            "signature without ':'",
+        );
+        assert_rejects(
+            &|i| i.signatures.push(":RPgjMEzWvBICkTl8Usg+cQ==".to_string()),
+            "signature with an empty key name",
+        );
+        assert_rejects(
+            &|i| {
+                i.signatures
+                    .push("bad name:RPgjMEzWvBICkTl8Usg+cQ==".to_string());
+            },
+            "signature with whitespace in the key name",
+        );
+        assert_rejects(
+            &|i| i.signatures.push("key-1:!!!not-base64!!!".to_string()),
+            "signature with invalid base64",
+        );
+        assert_rejects(
+            &|i| i.signatures.push("key-1:aGVsbG8=".to_string()),
+            "signature that is not 64 bytes",
+        );
+    }
+
+    #[test]
+    fn fingerprint_matches_narinfo_and_rejects_bad_hash() {
+        let parsed = parse(NIX_CLI_NARINFO).expect("parse fixture");
+        let info = NixPathInfo::from_nar_info(&parsed);
+        assert_eq!(
+            info.fingerprint().expect("fingerprint"),
+            parsed.fingerprint()
+        );
+        let mut broken = info;
+        broken.nar_sha256.truncate(31);
+        assert!(broken.fingerprint().is_err());
+    }
+
+    #[test]
+    fn record_round_trips() {
+        let info = sample_info();
+        let bytes = info.encode_record().expect("encode record");
+        let decoded = NixPathInfo::decode_record(&bytes).expect("decode record");
+        assert_eq!(decoded, info);
+    }
+
+    #[test]
+    fn record_envelope_has_the_documented_shape() {
+        let record = sample_record();
+        assert_eq!(record.exit_code, 0);
+        let [output_file] = record.output_files.as_slice() else {
+            panic!("expected exactly one output file");
+        };
+        assert_eq!(output_file.path, NAR_OUTPUT_FILE_NAME);
+        let digest = output_file.digest.as_ref().expect("digest present");
+        assert_eq!(digest.hash, NIX_CLI_NAR_HASH_HEX);
+        assert_eq!(digest.size_bytes, 8848);
+        let metadata = record
+            .execution_metadata
+            .as_ref()
+            .expect("metadata present");
+        assert_eq!(metadata.worker, NIX_CACHE_WORKER_NAME);
+        assert_eq!(metadata.auxiliary_metadata.len(), 1);
+        assert_eq!(
+            metadata.auxiliary_metadata[0].type_url,
+            NIX_PATH_INFO_TYPE_URL
+        );
+    }
+
+    #[test]
+    fn encode_record_rejects_bad_hash_and_oversized_nar() {
+        let mut info = sample_info();
+        info.nar_sha256.truncate(31);
+        assert!(info.encode_record().is_err());
+        let mut oversized = sample_info();
+        oversized.nar_size = u64::MAX;
+        assert!(oversized.encode_record().is_err());
+    }
+
+    #[test]
+    fn decode_record_rejects_undecodable_bytes() {
+        // 0xff is field 31 with wire type 7, which does not exist.
+        let err = NixPathInfo::decode_record(&[0xff])
+            .expect_err("garbage bytes")
+            .to_string();
+        assert!(err.contains("not a valid ActionResult"), "got: {err}");
+    }
+
+    #[test]
+    fn decode_record_rejects_nonzero_exit_code() {
+        let mut record = sample_record();
+        record.exit_code = 1;
+        assert!(decode_err(&record).contains("nonzero exit_code"));
+    }
+
+    #[test]
+    fn decode_record_rejects_wrong_output_file_count() {
+        let mut record = sample_record();
+        let extra = record.output_files[0].clone();
+        record.output_files.push(extra);
+        assert!(decode_err(&record).contains("expected exactly one"));
+        record.output_files.clear();
+        assert!(decode_err(&record).contains("expected exactly one"));
+    }
+
+    #[test]
+    fn decode_record_rejects_misnamed_output_file() {
+        let mut record = sample_record();
+        record.output_files[0].path = "out.tar".to_string();
+        assert!(decode_err(&record).contains("expected 'out.nar'"));
+    }
+
+    #[test]
+    fn decode_record_rejects_missing_digest() {
+        let mut record = sample_record();
+        record.output_files[0].digest = None;
+        assert!(decode_err(&record).contains("missing its digest"));
+    }
+
+    #[test]
+    fn decode_record_rejects_non_lowercase_hex_digest() {
+        let assert_bad_hash = |hash: &str| {
+            let mut record = sample_record();
+            let digest = record.output_files[0].digest.as_mut().expect("digest");
+            digest.hash = hash.to_string();
+            assert!(
+                decode_err(&record).contains("not 64 lowercase hex"),
+                "for hash '{hash}'"
+            );
+        };
+        assert_bad_hash(&NIX_CLI_NAR_HASH_HEX.to_uppercase());
+        assert_bad_hash(&NIX_CLI_NAR_HASH_HEX[..63]);
+        assert_bad_hash(&format!("{NIX_CLI_NAR_HASH_HEX}aa"));
+        assert_bad_hash(&format!("g{}", &NIX_CLI_NAR_HASH_HEX[1..]));
+        assert_bad_hash("");
+    }
+
+    #[test]
+    fn decode_record_rejects_missing_execution_metadata() {
+        let mut record = sample_record();
+        record.execution_metadata = None;
+        assert!(decode_err(&record).contains("missing execution_metadata"));
+    }
+
+    #[test]
+    fn decode_record_rejects_missing_or_foreign_auxiliary_metadata() {
+        let mut record = sample_record();
+        record
+            .execution_metadata
+            .as_mut()
+            .expect("metadata")
+            .auxiliary_metadata[0]
+            .type_url = "type.googleapis.com/something.else.Entirely".to_string();
+        assert!(decode_err(&record).contains("no auxiliary_metadata with type_url"));
+        record
+            .execution_metadata
+            .as_mut()
+            .expect("metadata")
+            .auxiliary_metadata
+            .clear();
+        assert!(decode_err(&record).contains("no auxiliary_metadata with type_url"));
+    }
+
+    #[test]
+    fn decode_record_rejects_undecodable_embedded_message() {
+        let mut record = sample_record();
+        let metadata = record.execution_metadata.as_mut().expect("metadata");
+        metadata.auxiliary_metadata[0].value = vec![0xff];
+        assert!(decode_err(&record).contains("not a valid NixPathInfo"));
+    }
+
+    #[test]
+    fn decode_record_rejects_embedded_hash_of_wrong_length() {
+        let mut inner = sample_info();
+        inner.nar_sha256.truncate(31);
+        let mut record = sample_record();
+        let metadata = record.execution_metadata.as_mut().expect("metadata");
+        metadata.auxiliary_metadata[0].value = inner.encode_to_vec();
+        assert!(decode_err(&record).contains("expected 32"));
+    }
+
+    #[test]
+    fn decode_record_rejects_digest_hash_mismatch() {
+        let mut record = sample_record();
+        let digest = record.output_files[0].digest.as_mut().expect("digest");
+        digest.hash = digest.hash.replace('6', "7");
+        assert!(decode_err(&record).contains("does not match the embedded nar_sha256"));
+    }
+
+    #[test]
+    fn decode_record_rejects_digest_size_mismatch() {
+        let mut record = sample_record();
+        let digest = record.output_files[0].digest.as_mut().expect("digest");
+        digest.size_bytes += 1;
+        assert!(decode_err(&record).contains("does not match the embedded nar_size"));
+        let negative = record.output_files[0].digest.as_mut().expect("digest");
+        negative.size_bytes = -1;
+        assert!(decode_err(&record).contains("does not match the embedded nar_size"));
+    }
+
+    #[test]
+    fn decode_record_ignores_extra_output_file_fields() {
+        // is_executable and node_properties are irrelevant to the shape
+        // checks; only path/digest matter.
+        let mut record = sample_record();
+        let OutputFile { is_executable, .. } = &mut record.output_files[0];
+        *is_executable = true;
+        let decoded =
+            NixPathInfo::decode_record(record.encode_to_vec().as_slice()).expect("decode record");
+        assert_eq!(decoded, sample_info());
+    }
+}

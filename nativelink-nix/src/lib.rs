@@ -23,6 +23,8 @@
 //! `NativeLink` stores, mirroring how `nativelink-oci` bridges OCI content
 //! into the CAS.
 
+pub mod nar_url;
 pub mod narinfo;
 pub mod nixbase32;
+pub mod path_info;
 pub mod signing;
