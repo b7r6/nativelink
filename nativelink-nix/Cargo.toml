@@ -1,0 +1,19 @@
+#:schema ../tools/cargo-with-detailed-deps.json
+lints.workspace = true
+
+[package]
+description = "Nix binary-cache protocol primitives for NativeLink — nixbase32, narinfo, ed25519 signing"
+edition = "2024"
+name = "nativelink-nix"
+version = "1.5.2"
+
+[dependencies]
+nativelink-error = { path = "../nativelink-error" }
+
+base64 = { version = "0.22.1", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "2.2.0", default-features = false, features = [
+  "std",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]

@@ -12,6 +12,7 @@ members = [
   "nativelink-macro",
   "nativelink-metric",
   "nativelink-metric/nativelink-metric-macro-derive",
+  "nativelink-nix",
   "nativelink-oci",
   "nativelink-proto",
   "nativelink-redis-tester",

@@ -3172,6 +3172,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nativelink-nix"
+version = "1.5.2"
+dependencies = [
+ "base64 0.22.1",
+ "ed25519-dalek",
+ "hex",
+ "nativelink-error",
+]
+
+[[package]]
 name = "nativelink-oci"
 version = "1.5.2"
 dependencies = [
