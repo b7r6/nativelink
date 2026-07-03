@@ -1,0 +1,139 @@
+// Nix binary-cache (substituter) service backed by local storage only.
+//
+// This serves the Nix HTTP binary-cache protocol (nix-cache-info, *.narinfo
+// and nar/* endpoints) from NativeLink stores, so `nix` clients can point
+// their `substituters` at http://localhost:50071/nix/main.
+//
+// Store composition rules for this service:
+//
+//  * NAR store (`cas_store`): digest-keyed; every uncompressed NAR blob is
+//    stored under DigestInfo(sha256(nar), nar_size). Wrapped in `verify`
+//    with both verify_size and verify_hash enabled so corrupt or truncated
+//    NAR uploads are rejected at write time instead of being served back.
+//
+//  * Path-info store (`path_info_store`): string-keyed by the 32-character
+//    nixbase32 store-path hash (the `<hash>` in /nix/store/<hash>-<name>).
+//    Wrapped in `completeness_checking` referencing the NAR store so a
+//    narinfo whose NAR has been evicted 404s instead of advertising a NAR
+//    that can no longer be served — the client then falls back to another
+//    substituter or builds locally.
+//    Do NOT wrap this store in `existence_cache`: it drops overwrites
+//    (re-uploads of the same store path would be silently ignored) and it
+//    rewrites string keys. Do NOT wrap it in `verify` or
+//    `size_partitioning` either — both reject string keys.
+//
+//  * Alias store (`alias_store`): a small string-keyed map from
+//    client-chosen NAR URL names to the (digest, size) of the NAR blob in
+//    the NAR store, so uploads are served back under the exact URL the
+//    client chose. It must NOT sit behind the completeness_checking
+//    wrapper used for the path-info store: alias records are not narinfo
+//    records and would fail its decoding.
+{
+  stores: [
+    {
+      name: "NIX_NAR_STORE",
+      verify: {
+        // NARs are content-addressed by sha256(nar)/nar_size, so both
+        // checks apply cleanly (unlike an AC store).
+        verify_size: true,
+        verify_hash: true,
+        backend: {
+          fast_slow: {
+            fast: {
+              filesystem: {
+                content_path: "/tmp/nativelink/nix-cache/nar-fast/content_path",
+                temp_path: "/tmp/nativelink/nix-cache/nar-fast/temp_path",
+                eviction_policy: {
+                  // 1gb of hot NARs.
+                  max_bytes: 1000000000,
+                },
+              },
+            },
+            slow: {
+              filesystem: {
+                content_path: "/tmp/nativelink/nix-cache/nar-slow/content_path",
+                temp_path: "/tmp/nativelink/nix-cache/nar-slow/temp_path",
+                eviction_policy: {
+                  // 50gb of NARs total.
+                  max_bytes: 50000000000,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      name: "NIX_PATH_INFO_STORE",
+      completeness_checking: {
+        backend: {
+          memory: {
+            eviction_policy: {
+              // narinfo records are tiny; 100mb holds a lot of them.
+              max_bytes: 100000000,
+            },
+          },
+        },
+
+        // Confirm the NAR still exists before handing out its narinfo.
+        cas_store: {
+          ref_store: {
+            name: "NIX_NAR_STORE",
+          },
+        },
+      },
+    },
+    {
+      name: "NIX_ALIAS_STORE",
+      memory: {
+        eviction_policy: {
+          max_bytes: 100000000,
+        },
+      },
+    },
+  ],
+  servers: [
+    {
+      name: "nix_cache",
+      listener: {
+        http: {
+          socket_address: "0.0.0.0:50071",
+        },
+      },
+      services: {
+        nix_cache: [
+          {
+            instance_name: "main",
+            cas_store: "NIX_NAR_STORE",
+            path_info_store: "NIX_PATH_INFO_STORE",
+            alias_store: "NIX_ALIAS_STORE",
+
+            // Mount prefix on this listener; defaults to "/nix/<instance_name>",
+            // so the cache root is http://localhost:50071/nix/main and clients
+            // probe http://localhost:50071/nix/main/nix-cache-info.
+            // path: "/nix/main",
+            // Served as StoreDir in nix-cache-info; must match the clients'
+            // store dir or they will refuse to substitute from this cache.
+            store_dir: "/nix/store",
+
+            // Lower sorts earlier among substituters (cache.nixos.org is 40).
+            priority: 40,
+
+            // Allow clients to batch-query this cache for whole closures.
+            want_mass_query: true,
+
+            // Paths to secret keys generated with:
+            //   nix key generate-secret --key-name nix-cache.example.org-1
+            // Each key adds one Sig line per narinfo; listing multiple keys
+            // enables rotation while clients migrate trusted-public-keys.
+            signing_key_files: [],
+
+            // Set true on public-facing listeners to reject PUT with 405.
+            read_only: false,
+          },
+        ],
+        health: {},
+      },
+    },
+  ],
+}

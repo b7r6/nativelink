@@ -205,7 +205,7 @@ pub struct OciFetchConfig {
     pub digest_function: String,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -226,6 +226,128 @@ pub struct PushConfig {
     /// it is only possible to read from the Action Cache.
     #[serde(default)]
     pub read_only: bool,
+}
+
+/// Configuration for a Nix binary-cache (substituter) service. This serves
+/// the Nix HTTP binary-cache protocol (`nix-cache-info`, `*.narinfo` and
+/// `nar/*` endpoints) directly from `NativeLink` stores, so `nix` clients
+/// can list a `NativeLink` deployment in their `substituters`.
+///
+/// Note: This is currently schema-only; the service implementation lands
+/// in a follow-up phase and the binary does not yet consume this config.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct NixCacheConfig {
+    /// The store name referenced in the `stores` map in the main config.
+    /// This store holds the uncompressed NAR blobs and is digest-keyed:
+    /// each NAR is stored under `DigestInfo(sha256(nar), nar_size)`, so any
+    /// content-addressed CAS store works here. It is strongly recommended
+    /// to wrap this store in `verify` with both `verify_size` and
+    /// `verify_hash` enabled so corrupt or truncated NAR uploads are
+    /// rejected at write time instead of being served to clients.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// This store holds one record per Nix store path and is string-keyed
+    /// (NOT digest-keyed): records live under the 32-character `nixbase32`
+    /// store-path hash — the `<hash>` in `/nix/store/<hash>-<name>`.
+    ///
+    /// It is recommended to wrap this store in `completeness_checking`
+    /// with its `cas_store` referencing the NAR store above, so a
+    /// `narinfo` whose NAR has been evicted returns 404 instead of
+    /// advertising a NAR that can no longer be served.
+    ///
+    /// Never wrap this store in `existence_cache`: it drops overwrites
+    /// (later uploads of the same store path would be silently ignored)
+    /// and it rewrites string keys. Never wrap it in `verify` or
+    /// `size_partitioning` either — both reject string keys.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub path_info_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// This is a small string-keyed store mapping client-chosen NAR URL
+    /// names (the `url` field a client wrote into an uploaded `narinfo`)
+    /// to the `(digest, size)` of the NAR blob in `cas_store`, so uploads
+    /// are served back under the exact URL the client chose.
+    ///
+    /// This store must NOT sit behind the `completeness_checking` wrapper
+    /// used for `path_info_store`: alias records are not `narinfo`
+    /// records and would fail its decoding.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub alias_store: StoreRefName,
+
+    /// URL prefix under which this instance is mounted on the listener.
+    /// If the path is "/nix/main" and your domain is "example.com", the
+    /// cache root is <http://example.com/nix/main> and clients probe
+    /// <http://example.com/nix/main/nix-cache-info>.
+    ///
+    /// Default: "/nix/<`instance_name`>"
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub path: Option<String>,
+
+    /// The Nix store directory this cache serves paths for, advertised to
+    /// clients via the `StoreDir` field of `nix-cache-info`. Clients
+    /// refuse to substitute from a cache whose store dir differs from
+    /// their own, so this must match the store dir of the Nix clients —
+    /// almost always "/nix/store".
+    ///
+    /// Default: "/nix/store"
+    #[serde(
+        default = "default_nix_store_dir",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub store_dir: String,
+
+    /// Priority advertised via the `Priority` field of `nix-cache-info`.
+    /// When a client has several substituters configured, lower values
+    /// sort earlier, so a lower number makes this cache preferred. The
+    /// official `cache.nixos.org` uses 40.
+    ///
+    /// Default: 40
+    #[serde(
+        default = "default_nix_priority",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub priority: u32,
+
+    /// Value of the `WantMassQuery` field of `nix-cache-info`. When true,
+    /// clients are told it is acceptable to batch-query this cache for
+    /// many store paths at once, for example when computing which parts
+    /// of a large closure can be substituted.
+    ///
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub want_mass_query: bool,
+
+    /// Paths to secret signing keys in the format produced by
+    /// `nix key generate-secret --key-name <name>` — a single line of
+    /// `<name>:<base64 ed25519 keypair>`. Every served `narinfo` gets one
+    /// `Sig` line per key, so listing multiple keys enables key rotation:
+    /// sign with both the old and the new key while clients migrate their
+    /// `trusted-public-keys`.
+    ///
+    /// Default: [] (`narinfo` responses are unsigned; clients then need
+    /// to trust the cache some other way, such as `require-sigs = false`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub signing_key_files: Vec<String>,
+
+    /// When true, uploads are rejected: any `PUT` request returns
+    /// `405 Method Not Allowed`. Set this on public-facing listeners so
+    /// only internal listeners can populate the cache.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub read_only: bool,
+}
+
+fn default_nix_store_dir() -> String {
+    "/nix/store".to_string()
+}
+
+const fn default_nix_priority() -> u32 {
+    40
 }
 
 // From https://github.com/serde-rs/serde/issues/818#issuecomment-287438544
@@ -440,6 +562,16 @@ pub struct ServicesConfig {
         deserialize_with = "super::backcompat::opt_vec_with_instance_name"
     )]
     pub push: Option<Vec<WithInstanceName<PushConfig>>>,
+
+    /// The Nix binary-cache (substituter) services. Each entry mounts a
+    /// Nix HTTP binary-cache endpoint on this listener that serves
+    /// `nix-cache-info`, `narinfo` records and NAR blobs from the
+    /// referenced stores.
+    #[serde(
+        default,
+        deserialize_with = "super::backcompat::opt_vec_with_instance_name"
+    )]
+    pub nix_cache: Option<Vec<WithInstanceName<NixCacheConfig>>>,
 
     /// This is the service used for workers to connect and communicate
     /// through.
@@ -1107,5 +1239,277 @@ impl CasConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ----------------------------------------------------------------------
+    // Golden vectors, generated with the local `nix` CLI (nix (Nix) 2.34.7).
+    // Each vector documents a wire/key format that the `NixCacheConfig` doc
+    // comments promise, with the exact command used to produce it.
+    // ----------------------------------------------------------------------
+
+    /// Deterministic store path (reproducible on any machine), generated
+    /// with:
+    /// ```sh
+    /// nix eval --raw --expr \
+    ///   '"${builtins.toFile "example.txt" "nativelink nix-cache golden vector\n"}"'
+    /// ```
+    const GOLDEN_STORE_PATH: &str = "/nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt";
+
+    /// `sha256(nar)` of the NAR serialization of `GOLDEN_STORE_PATH` (the
+    /// hash half of the `DigestInfo` key in `cas_store`), generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt | sha256sum
+    /// ```
+    const GOLDEN_NAR_SHA256_HEX: &str =
+        "877a42f22e7f9e476abe1c8db48828dc26b1916d92cedfc15e77324978d7488e";
+
+    /// Same NAR hash in `nixbase32`, as it appears in a `narinfo`
+    /// `NarHash: sha256:<...>` line, generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt > example.nar
+    /// nix hash file --type sha256 --base32 example.nar
+    /// ```
+    const GOLDEN_NAR_SHA256_NIXBASE32: &str =
+        "13j8sxw4jckpbv0xzkljdn8v29nw524b938wprm4g7kz5vr44yl7";
+
+    /// `nar_size` in bytes of the same NAR (the size half of the
+    /// `DigestInfo` key in `cas_store`), generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt | wc -c
+    /// ```
+    const GOLDEN_NAR_SIZE: u64 = 152;
+
+    /// Contents of a file suitable for `signing_key_files`. Key generation
+    /// is random, so this output was generated once and frozen here, with:
+    /// ```sh
+    /// nix key generate-secret --key-name nix-cache.example.org-1
+    /// ```
+    const GOLDEN_SIGNING_SECRET_KEY: &str = "nix-cache.example.org-1:+Qh4p1yd65B2kXerqAgjiK3ioUqruN8poSHRBjH4EvRnz/8zr0GPu1kjKaIeOTbHznDkpLxTsUL1LONeOtGSHQ==";
+
+    /// Matching public key for clients' `trusted-public-keys`, generated
+    /// from the frozen secret key above with:
+    /// ```sh
+    /// nix key convert-secret-to-public < nix-cache.example.org-1.key
+    /// ```
+    const GOLDEN_SIGNING_PUBLIC_KEY: &str =
+        "nix-cache.example.org-1:Z8//M69Bj7tZIymiHjk2x85w5KS8U7FC9SzjXjrRkh0=";
+
+    /// The `nixbase32` alphabet: base32 without `e`, `o`, `u` and `t`.
+    const NIXBASE32_ALPHABET: &str = "0123456789abcdfghijklmnpqrsvwxyz";
+
+    fn parse_services(json5: &str) -> ServicesConfig {
+        serde_json5::from_str(json5).expect("valid ServicesConfig json5")
+    }
+
+    #[test]
+    fn nix_cache_minimal_config_applies_defaults() {
+        let services = parse_services(
+            r#"{
+                nix_cache: [{
+                    instance_name: "main",
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                }],
+            }"#,
+        );
+        let nix_cache = services.nix_cache.expect("nix_cache service is configured");
+        assert_eq!(nix_cache.len(), 1);
+        let instance = &nix_cache[0];
+        assert_eq!(instance.instance_name, "main");
+        assert_eq!(instance.cas_store, "NIX_NAR_STORE");
+        assert_eq!(instance.path_info_store, "NIX_PATH_INFO_STORE");
+        assert_eq!(instance.alias_store, "NIX_ALIAS_STORE");
+        assert_eq!(instance.path, None);
+        assert_eq!(instance.store_dir, "/nix/store");
+        assert_eq!(instance.priority, 40);
+        assert!(instance.want_mass_query);
+        assert!(instance.signing_key_files.is_empty());
+        assert!(!instance.read_only);
+    }
+
+    #[test]
+    fn nix_cache_full_config_round_trips() {
+        let services = parse_services(
+            r#"{
+                nix_cache: [{
+                    instance_name: "public",
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                    path: "/nix/public",
+                    store_dir: "/nix/store",
+                    priority: 30,
+                    want_mass_query: false,
+                    signing_key_files: ["/etc/nix/keys/nix-cache.example.org-1.key"],
+                    read_only: true,
+                }],
+            }"#,
+        );
+        let serialized =
+            serde_json::to_string(&services).expect("ServicesConfig serializes to JSON");
+        let reparsed: ServicesConfig =
+            serde_json5::from_str(&serialized).expect("serialized ServicesConfig reparses");
+        let instance = &reparsed.nix_cache.expect("nix_cache survives round trip")[0];
+        assert_eq!(instance.instance_name, "public");
+        assert_eq!(instance.cas_store, "NIX_NAR_STORE");
+        assert_eq!(instance.path_info_store, "NIX_PATH_INFO_STORE");
+        assert_eq!(instance.alias_store, "NIX_ALIAS_STORE");
+        assert_eq!(instance.path.as_deref(), Some("/nix/public"));
+        assert_eq!(instance.store_dir, "/nix/store");
+        assert_eq!(instance.priority, 30);
+        assert!(!instance.want_mass_query);
+        assert_eq!(
+            instance.signing_key_files,
+            vec!["/etc/nix/keys/nix-cache.example.org-1.key".to_string()]
+        );
+        assert!(instance.read_only);
+    }
+
+    #[test]
+    fn nix_cache_rejects_unknown_fields() {
+        // Direct deserialization honors `deny_unknown_fields`.
+        let result: Result<NixCacheConfig, _> = serde_json5::from_str(
+            r#"{
+                cas_store: "NIX_NAR_STORE",
+                path_info_store: "NIX_PATH_INFO_STORE",
+                alias_store: "NIX_ALIAS_STORE",
+                narinfo_compression: "xz",
+            }"#,
+        );
+        assert!(result.is_err(), "unknown fields must be rejected");
+
+        // Through `ServicesConfig` the entries pass through
+        // `WithInstanceName`'s `#[serde(flatten)]`, which swallows
+        // `deny_unknown_fields` (a serde limitation). Pin `nix_cache` to
+        // whatever the existing `cas` service does there, so the two never
+        // drift apart if serde changes behavior.
+        let nix_cache_via_services: Result<ServicesConfig, _> = serde_json5::from_str(
+            r#"{
+                nix_cache: [{
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                    narinfo_compression: "xz",
+                }],
+            }"#,
+        );
+        let cas_via_services: Result<ServicesConfig, _> =
+            serde_json5::from_str(r#"{ cas: [{ cas_store: "X", narinfo_compression: "xz" }] }"#);
+        assert_eq!(
+            nix_cache_via_services.is_err(),
+            cas_via_services.is_err(),
+            "nix_cache unknown-field handling must match the cas service"
+        );
+    }
+
+    #[test]
+    fn nix_cache_missing_store_ref_is_rejected() {
+        let result: Result<ServicesConfig, _> = serde_json5::from_str(
+            r#"{
+                nix_cache: [{
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                }],
+            }"#,
+        );
+        assert!(result.is_err(), "alias_store is required");
+    }
+
+    #[test]
+    fn nix_cache_accepts_legacy_map_format() {
+        // The `nix_cache` field uses the same backcompat deserializer as
+        // `cas`/`ac`/`fetch`, so the deprecated map-of-instance-name format
+        // must keep parsing.
+        let services = parse_services(
+            r#"{
+                nix_cache: {
+                    "main": {
+                        cas_store: "NIX_NAR_STORE",
+                        path_info_store: "NIX_PATH_INFO_STORE",
+                        alias_store: "NIX_ALIAS_STORE",
+                    },
+                },
+            }"#,
+        );
+        let nix_cache = services.nix_cache.expect("nix_cache service is configured");
+        assert_eq!(nix_cache.len(), 1);
+        assert_eq!(nix_cache[0].instance_name, "main");
+        assert_eq!(nix_cache[0].cas_store, "NIX_NAR_STORE");
+    }
+
+    #[test]
+    fn golden_store_path_matches_default_store_dir() {
+        // `store_dir` defaults to the same value `nix eval --raw --expr
+        // 'builtins.storeDir'` reports on a stock installation.
+        let store_dir = default_nix_store_dir();
+        assert_eq!(store_dir, "/nix/store");
+        let base_name = GOLDEN_STORE_PATH
+            .strip_prefix("/nix/store/")
+            .expect("golden store path lives under the default store dir");
+        // `path_info_store` keys are the 32-character nixbase32 hash before
+        // the first `-` of the store path base name.
+        let (hash, name) = base_name
+            .split_once('-')
+            .expect("store path base name is <hash>-<name>");
+        assert_eq!(hash.len(), 32);
+        assert!(hash.chars().all(|c| NIXBASE32_ALPHABET.contains(c)));
+        assert_eq!(name, "example.txt");
+    }
+
+    #[test]
+    fn golden_nar_digest_key_shape() {
+        // `cas_store` keys are `DigestInfo(sha256(nar), nar_size)`: a
+        // 64-hex-character sha256 plus the byte size of the NAR.
+        assert_eq!(GOLDEN_NAR_SHA256_HEX.len(), 64);
+        assert!(
+            GOLDEN_NAR_SHA256_HEX
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
+        // The `narinfo` rendering of the same 32-byte hash is 52 nixbase32
+        // characters (ceil(256 / 5)).
+        assert_eq!(GOLDEN_NAR_SHA256_NIXBASE32.len(), 52);
+        assert!(
+            GOLDEN_NAR_SHA256_NIXBASE32
+                .chars()
+                .all(|c| NIXBASE32_ALPHABET.contains(c))
+        );
+        // As the pair appears in the narinfo served for this NAR.
+        assert_eq!(
+            format!("NarHash: sha256:{GOLDEN_NAR_SHA256_NIXBASE32}"),
+            "NarHash: sha256:13j8sxw4jckpbv0xzkljdn8v29nw524b938wprm4g7kz5vr44yl7"
+        );
+        assert_eq!(format!("NarSize: {GOLDEN_NAR_SIZE}"), "NarSize: 152");
+    }
+
+    #[test]
+    fn golden_signing_key_file_format() {
+        // Files listed in `signing_key_files` hold `<name>:<base64 keypair>`
+        // where the keypair is the 64-byte ed25519 secret||public
+        // concatenation (88 base64 characters). The derived public key is
+        // 32 bytes (44 base64 characters) under the same name.
+        let (secret_name, secret_b64) = GOLDEN_SIGNING_SECRET_KEY
+            .split_once(':')
+            .expect("secret key is <name>:<base64>");
+        let (public_name, public_b64) = GOLDEN_SIGNING_PUBLIC_KEY
+            .split_once(':')
+            .expect("public key is <name>:<base64>");
+        assert_eq!(secret_name, "nix-cache.example.org-1");
+        assert_eq!(secret_name, public_name);
+        assert_eq!(secret_b64.len(), 88);
+        assert!(secret_b64.ends_with("=="));
+        assert_eq!(public_b64.len(), 44);
+        assert!(public_b64.ends_with('='));
+        // The public key is embedded in the tail of the secret keypair:
+        // base64 of bytes[32..64] re-encodes to the public key's base64.
+        // (Byte-level check lands with the service implementation; here we
+        // pin the textual formats the config doc comments promise.)
+        assert_ne!(secret_b64, public_b64);
     }
 }
