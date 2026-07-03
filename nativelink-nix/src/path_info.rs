@@ -58,6 +58,15 @@ pub const NIX_CACHE_WORKER_NAME: &str = "nativelink-nix-cache";
 /// Unlike [`NarInfo`], optional string fields here use the empty string
 /// for "absent" (protobuf semantics), and `references` are store-path
 /// basenames kept byte-lexicographically sorted.
+///
+/// The optional `file_*` trio (tags 9–11) describes the *compressed*
+/// artifact at the served URL — `FileHash`/`FileSize` in `.narinfo`
+/// terms — and is all-absent or all-present (see the field docs).
+/// The compressed file is deliberately NOT part of the record's
+/// `ActionResult` output files: action-cache completeness must key on
+/// the uncompressed NAR only, so eviction of the compressed blob
+/// degrades gracefully at the handler level (fall back to serving the
+/// uncompressed NAR) instead of 404ing the narinfo at the store level.
 #[derive(Clone, PartialEq, Eq, prost::Message)]
 pub struct NixPathInfo {
     /// Full store path, e.g. `/nix/store/<hash>-<name>`.
@@ -84,6 +93,18 @@ pub struct NixPathInfo {
     /// Content-address for fixed-output paths; empty means absent.
     #[prost(string, tag = "8")]
     pub ca: String,
+    /// `sha256` of the COMPRESSED file at the served URL; empty (absent)
+    /// or exactly 32 bytes. Absent or present together with `file_size`
+    /// and `file_compression`.
+    #[prost(bytes = "vec", tag = "9")]
+    pub file_sha256: Vec<u8>,
+    /// Size in bytes of the compressed file; 0 when absent.
+    #[prost(uint64, tag = "10")]
+    pub file_size: u64,
+    /// Compression codec of the compressed file (`zstd` for now); empty
+    /// when absent.
+    #[prost(string, tag = "11")]
+    pub file_compression: String,
 }
 
 /// Validates that `reference` is a plausible store-path basename:
@@ -152,9 +173,53 @@ impl NixPathInfo {
         })
     }
 
+    /// Validates the all-or-none invariant of the `file_*` trio: either
+    /// all three are absent (empty hash, zero size, empty compression)
+    /// or all three are present with a 32-byte `file_sha256`, a nonzero
+    /// `file_size`, and a non-empty `file_compression`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a distinct `InvalidArgument` error for each violation:
+    /// `file_size`/`file_compression` present without `file_sha256`, a
+    /// `file_sha256` that is not exactly 32 bytes, a `file_sha256`
+    /// without a `file_size`, or a `file_sha256` without a
+    /// `file_compression`.
+    fn validate_file_fields(&self) -> Result<(), Error> {
+        let has_hash = !self.file_sha256.is_empty();
+        let has_size = self.file_size != 0;
+        let has_compression = !self.file_compression.is_empty();
+        if !has_hash && !has_size && !has_compression {
+            return Ok(());
+        }
+        if !has_hash {
+            return Err(make_input_err!(
+                "NixPathInfo has a file_size or file_compression but an empty file_sha256; the file_* fields are all-or-none"
+            ));
+        }
+        if self.file_sha256.len() != 32 {
+            return Err(make_input_err!(
+                "NixPathInfo file_sha256 is {} bytes, expected 32",
+                self.file_sha256.len()
+            ));
+        }
+        if !has_size {
+            return Err(make_input_err!(
+                "NixPathInfo has a file_sha256 but a zero file_size; the file_* fields are all-or-none"
+            ));
+        }
+        if !has_compression {
+            return Err(make_input_err!(
+                "NixPathInfo has a file_sha256 but an empty file_compression; the file_* fields are all-or-none"
+            ));
+        }
+        Ok(())
+    }
+
     /// Extracts the URL- and compression-independent metadata of a parsed
     /// `.narinfo` document. References are sorted; `FileHash`/`FileSize`
-    /// (properties of one particular compressed NAR) are dropped.
+    /// (properties of the *upstream's* compressed NAR, not ours) are
+    /// dropped, so the `file_*` trio starts out absent.
     #[must_use]
     pub fn from_nar_info(info: &NarInfo) -> Self {
         let mut references = info.references.clone();
@@ -168,6 +233,9 @@ impl NixPathInfo {
             system: info.system.clone().unwrap_or_default(),
             signatures: info.sigs.clone(),
             ca: info.ca.clone().unwrap_or_default(),
+            file_sha256: Vec::new(),
+            file_size: 0,
+            file_compression: String::new(),
         }
     }
 
@@ -178,7 +246,9 @@ impl NixPathInfo {
     ///
     /// Returns an `InvalidArgument` error if `nar_sha256` is not 32
     /// bytes, `nar_size` is zero, any reference is not a store-path
-    /// basename, or any signature is not `name:base64(64 bytes)`.
+    /// basename, any signature is not `name:base64(64 bytes)`, or the
+    /// `file_*` trio violates its all-or-none invariant (see
+    /// [`Self::validate_file_fields`]).
     pub fn to_nar_info(&self, url: String, compression: String) -> Result<NarInfo, Error> {
         let nar_hash = self
             .nar_hash()
@@ -189,6 +259,8 @@ impl NixPathInfo {
                 self.store_path
             ));
         }
+        self.validate_file_fields()
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         for reference in &self.references {
             validate_reference(reference)
                 .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
@@ -236,14 +308,22 @@ impl NixPathInfo {
     /// Wraps this message in its `ActionResult` record envelope and
     /// prost-encodes it; [`Self::decode_record`] is the exact inverse.
     ///
+    /// The record's single output file is always the uncompressed NAR;
+    /// the `file_*` trio rides only inside the embedded message, so a
+    /// record's action-cache completeness never depends on the
+    /// compressed blob.
+    ///
     /// # Errors
     ///
-    /// Returns an `InvalidArgument` error if `nar_sha256` is not 32 bytes
-    /// or `nar_size` exceeds `i64::MAX` (the range of a `Digest`'s
-    /// `size_bytes`).
+    /// Returns an `InvalidArgument` error if `nar_sha256` is not 32
+    /// bytes, `nar_size` exceeds `i64::MAX` (the range of a `Digest`'s
+    /// `size_bytes`), or the `file_*` trio violates its all-or-none
+    /// invariant (see [`Self::validate_file_fields`]).
     pub fn encode_record(&self) -> Result<Vec<u8>, Error> {
         let nar_hash = self
             .nar_hash()
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        self.validate_file_fields()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         let size_bytes = i64::try_from(self.nar_size).map_err(|e| {
             make_input_err!(
@@ -286,8 +366,12 @@ impl NixPathInfo {
     /// 64 lowercase hex characters, missing execution metadata, no
     /// auxiliary metadata `Any` under [`NIX_PATH_INFO_TYPE_URL`],
     /// undecodable [`NixPathInfo`], embedded `nar_sha256` that is not 32
-    /// bytes, or a digest hash/size that contradicts the embedded
-    /// message.
+    /// bytes, an embedded `file_*` trio that violates its all-or-none
+    /// invariant (see [`Self::validate_file_fields`]), or a digest
+    /// hash/size that contradicts the embedded message.
+    ///
+    /// Phase-1 records (encoded before the `file_*` fields existed)
+    /// decode fine: prost defaults leave the trio all-absent.
     pub fn decode_record(bytes: &[u8]) -> Result<Self, Error> {
         let record = ProtoActionResult::decode(bytes).map_err(|e| {
             make_input_err!("nix path-info record is not a valid ActionResult: {e}")
@@ -345,6 +429,8 @@ impl NixPathInfo {
         let nar_hash = info
             .nar_hash()
             .err_tip(|| "in the NixPathInfo embedded in a nix path-info record")?;
+        info.validate_file_fields()
+            .err_tip(|| "in the NixPathInfo embedded in a nix path-info record")?;
         let expected_hash = hex::encode(nar_hash);
         if digest.hash != expected_hash {
             return Err(make_input_err!(
@@ -398,6 +484,19 @@ mod tests {
     fn sample_info() -> NixPathInfo {
         let info = parse(NIX_CLI_NARINFO).expect("parse fixture");
         NixPathInfo::from_nar_info(&info)
+    }
+
+    /// The fixture with the `file_*` trio present, as if the facade had
+    /// recompressed the NAR to zstd. The hash is sha256("hello") — any
+    /// 32-byte value works; validation only checks the length.
+    fn sample_info_with_file_fields() -> NixPathInfo {
+        let mut info = sample_info();
+        info.file_sha256 =
+            hex::decode("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+                .expect("valid hex");
+        info.file_size = 772;
+        info.file_compression = "zstd".to_string();
+        info
     }
 
     fn sample_record() -> ProtoActionResult {
@@ -741,6 +840,159 @@ mod tests {
         let negative = record.output_files[0].digest.as_mut().expect("digest");
         negative.size_bytes = -1;
         assert!(decode_err(&record).contains("does not match the embedded nar_size"));
+    }
+
+    /// A mirror of the phase-1 `NixPathInfo` (tags 1–8 only), used to
+    /// prove that records encoded before the `file_*` fields existed
+    /// still decode.
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct Phase1NixPathInfo {
+        #[prost(string, tag = "1")]
+        store_path: String,
+        #[prost(bytes = "vec", tag = "2")]
+        nar_sha256: Vec<u8>,
+        #[prost(uint64, tag = "3")]
+        nar_size: u64,
+        #[prost(string, repeated, tag = "4")]
+        references: Vec<String>,
+        #[prost(string, tag = "5")]
+        deriver: String,
+        #[prost(string, tag = "6")]
+        system: String,
+        #[prost(string, repeated, tag = "7")]
+        signatures: Vec<String>,
+        #[prost(string, tag = "8")]
+        ca: String,
+    }
+
+    /// A mutation that breaks the `file_*` trio, paired with a fragment
+    /// of the expected error message.
+    type FileFieldViolation = (fn(&mut NixPathInfo), &'static str);
+
+    /// Re-embeds `inner` (already prost-encoded) into the fixture's
+    /// otherwise-valid record envelope and decodes it.
+    fn decode_with_embedded(inner: Vec<u8>) -> Result<NixPathInfo, String> {
+        let mut record = sample_record();
+        let metadata = record.execution_metadata.as_mut().expect("metadata");
+        metadata.auxiliary_metadata[0].value = inner;
+        NixPathInfo::decode_record(record.encode_to_vec().as_slice()).map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn file_fields_absent_record_round_trips_with_empty_trio() {
+        let info = sample_info();
+        assert!(info.file_sha256.is_empty());
+        assert_eq!(info.file_size, 0);
+        assert!(info.file_compression.is_empty());
+        let bytes = info.encode_record().expect("encode record");
+        let decoded = NixPathInfo::decode_record(&bytes).expect("decode record");
+        assert_eq!(decoded, info);
+        assert!(decoded.file_sha256.is_empty());
+        assert_eq!(decoded.file_size, 0);
+        assert!(decoded.file_compression.is_empty());
+    }
+
+    #[test]
+    fn file_fields_present_record_round_trips() {
+        let info = sample_info_with_file_fields();
+        let bytes = info.encode_record().expect("encode record");
+        let decoded = NixPathInfo::decode_record(&bytes).expect("decode record");
+        assert_eq!(decoded, info);
+        assert_eq!(decoded.file_size, 772);
+        assert_eq!(decoded.file_compression, "zstd");
+        // The trio never joins the output files: the envelope still has
+        // exactly one output file, keyed on the uncompressed NAR.
+        let record = ProtoActionResult::decode(bytes.as_slice()).expect("decode as ActionResult");
+        let [output_file] = record.output_files.as_slice() else {
+            panic!("expected exactly one output file");
+        };
+        assert_eq!(output_file.path, NAR_OUTPUT_FILE_NAME);
+        let digest = output_file.digest.as_ref().expect("digest present");
+        assert_eq!(digest.hash, NIX_CLI_NAR_HASH_HEX);
+        assert_eq!(digest.size_bytes, 8848);
+        // to_nar_info accepts the valid trio too.
+        assert!(
+            info.to_nar_info("nar/x.nar.zst".to_string(), "zstd".to_string())
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn file_fields_all_or_none_violations_are_rejected_everywhere() {
+        let violations: [FileFieldViolation; 6] = [
+            (
+                |i| i.file_sha256.truncate(31),
+                "file_sha256 is 31 bytes, expected 32",
+            ),
+            (
+                |i| i.file_sha256.push(0),
+                "file_sha256 is 33 bytes, expected 32",
+            ),
+            (|i| i.file_size = 0, "a zero file_size"),
+            (
+                |i| i.file_compression = String::new(),
+                "an empty file_compression",
+            ),
+            (
+                |i| {
+                    i.file_sha256 = Vec::new();
+                    i.file_size = 0;
+                },
+                "an empty file_sha256",
+            ),
+            (
+                |i| {
+                    i.file_sha256 = Vec::new();
+                    i.file_compression = String::new();
+                },
+                "an empty file_sha256",
+            ),
+        ];
+        for (mutate, expected) in violations {
+            let mut info = sample_info_with_file_fields();
+            mutate(&mut info);
+            // encode_record path.
+            let encode_msg = info
+                .encode_record()
+                .expect_err("encode_record accepted a file_* violation")
+                .to_string();
+            assert!(encode_msg.contains(expected), "got: {encode_msg}");
+            // to_nar_info path.
+            let nar_info_msg = info
+                .to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                .expect_err("to_nar_info accepted a file_* violation")
+                .to_string();
+            assert!(nar_info_msg.contains(expected), "got: {nar_info_msg}");
+            // decode_record path: prost happily encodes the bad message,
+            // so smuggle it into an otherwise-valid envelope.
+            let decode_msg = decode_with_embedded(info.encode_to_vec())
+                .expect_err("decode_record accepted a file_* violation");
+            assert!(decode_msg.contains(expected), "got: {decode_msg}");
+        }
+    }
+
+    #[test]
+    fn phase1_record_without_file_fields_decodes_with_empty_trio() {
+        let full = sample_info();
+        let phase1 = Phase1NixPathInfo {
+            store_path: full.store_path.clone(),
+            nar_sha256: full.nar_sha256.clone(),
+            nar_size: full.nar_size,
+            references: full.references.clone(),
+            deriver: full.deriver.clone(),
+            system: full.system.clone(),
+            signatures: full.signatures.clone(),
+            ca: full.ca.clone(),
+        };
+        let decoded = decode_with_embedded(phase1.encode_to_vec()).expect("decode phase-1 record");
+        assert_eq!(decoded, full);
+        assert!(decoded.file_sha256.is_empty());
+        assert_eq!(decoded.file_size, 0);
+        assert!(decoded.file_compression.is_empty());
+        // And byte-for-byte: a message with the trio absent encodes
+        // identically to its phase-1 form, so phase-2 writers do not
+        // perturb phase-1 readers either.
+        assert_eq!(phase1.encode_to_vec(), full.encode_to_vec());
     }
 
     #[test]

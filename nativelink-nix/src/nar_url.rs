@@ -13,9 +13,10 @@
 // limitations under the License.
 
 //! Pure helpers for NAR URL names: compression-codec selection by file
-//! extension, the canonical `{nix32(hash)}-{size}.nar` object name used
-//! for CAS-backed NARs, and the alias-key scheme that maps arbitrary
-//! upstream NAR URL basenames onto canonical names.
+//! extension, the canonical `{nix32(hash)}-{size}.nar` (and `.nar.zst`)
+//! object names used for CAS-backed NARs, the alias-key scheme that maps
+//! arbitrary upstream NAR URL basenames onto canonical names, and the
+//! auxiliary-metadata keys for listings and build logs.
 
 use nativelink_error::{Error, make_input_err};
 
@@ -73,14 +74,21 @@ pub fn canonical_nar_name(nar_sha256: &[u8; 32], nar_size: u64) -> String {
     format!("{}-{nar_size}.nar", nixbase32::encode(nar_sha256))
 }
 
-/// Parses a name produced by [`canonical_nar_name`].
-///
-/// Returns `None` unless `name` is exactly 52 nix32 characters, `-`, a
-/// canonical decimal `u64` (no leading zeros, no sign, in range), and
-/// `.nar` — i.e. unless `canonical_nar_name` reproduces `name` exactly.
+/// Formats the canonical name for a zstd-compressed NAR:
+/// `{nix32(file_sha256)}-{file_size}.nar.zst`, where `file_sha256` and
+/// `file_size` describe the COMPRESSED bytes (matching the `file_*`
+/// fields of [`crate::path_info::NixPathInfo`]).
 #[must_use]
-pub fn parse_canonical_nar_name(name: &str) -> Option<([u8; 32], u64)> {
-    let stem = name.strip_suffix(".nar")?;
+pub fn canonical_nar_zst_name(file_sha256: &[u8; 32], file_size: u64) -> String {
+    format!("{}-{file_size}.nar.zst", nixbase32::encode(file_sha256))
+}
+
+/// Parses the `{nix32}-{size}` stem shared by [`canonical_nar_name`] and
+/// [`canonical_nar_zst_name`].
+///
+/// Returns `None` unless `stem` is exactly 52 nix32 characters, `-`, and
+/// a canonical decimal `u64` (no leading zeros, no sign, in range).
+fn parse_canonical_stem(stem: &str) -> Option<([u8; 32], u64)> {
     let (hash_str, size_part) = stem.split_at_checked(52)?;
     let size_str = size_part.strip_prefix('-')?;
     if size_str.is_empty() || !size_str.bytes().all(|b| b.is_ascii_digit()) {
@@ -90,11 +98,41 @@ pub fn parse_canonical_nar_name(name: &str) -> Option<([u8; 32], u64)> {
     if size_str.len() > 1 && size_str.starts_with('0') {
         return None;
     }
-    let nar_size = size_str.parse::<u64>().ok()?;
+    let size = size_str.parse::<u64>().ok()?;
     // `decode` also rejects nonzero padding bits in the leading
     // character, so accepted hashes re-encode to `hash_str` exactly.
-    let nar_sha256: [u8; 32] = nixbase32::decode(hash_str).ok()?.try_into().ok()?;
-    Some((nar_sha256, nar_size))
+    let sha256: [u8; 32] = nixbase32::decode(hash_str).ok()?.try_into().ok()?;
+    Some((sha256, size))
+}
+
+/// Parses a name produced by [`canonical_nar_name`].
+///
+/// Returns `None` unless `name` is exactly 52 nix32 characters, `-`, a
+/// canonical decimal `u64` (no leading zeros, no sign, in range), and
+/// `.nar` — i.e. unless `canonical_nar_name` reproduces `name` exactly.
+#[must_use]
+pub fn parse_canonical_nar_name(name: &str) -> Option<([u8; 32], u64)> {
+    parse_canonical_stem(name.strip_suffix(".nar")?)
+}
+
+/// Parses a canonical NAR name of either form: a
+/// [`canonical_nar_name`] maps to [`NarCodec::None`] and a
+/// [`canonical_nar_zst_name`] to [`NarCodec::Zstd`].
+///
+/// The stem is held to the same strictness as
+/// [`parse_canonical_nar_name`]: exactly 52 nix32 characters, `-`, and a
+/// canonical decimal `u64`. For `.nar` names the pair is
+/// `(nar_sha256, nar_size)` of the uncompressed NAR; for `.nar.zst`
+/// names it is `(file_sha256, file_size)` of the compressed bytes.
+#[must_use]
+pub fn parse_canonical_any(name: &str) -> Option<([u8; 32], u64, NarCodec)> {
+    let (stem, codec) = if let Some(stem) = name.strip_suffix(".nar.zst") {
+        (stem, NarCodec::Zstd)
+    } else {
+        (name.strip_suffix(".nar")?, NarCodec::None)
+    };
+    let (sha256, size) = parse_canonical_stem(stem)?;
+    Some((sha256, size, codec))
 }
 
 /// Builds the store key under which the alias for an upstream NAR URL
@@ -155,11 +193,50 @@ pub fn parse_alias(s: &str) -> Result<([u8; 32], u64), Error> {
     Ok((nar_sha256, nar_size))
 }
 
+/// Builds the auxiliary-metadata store key under which the directory
+/// listing (`.ls`) for a store path lives: `ls:{storePathHash}`, where
+/// `store_path_hash` is the 32-character nix32 store-path hash.
+///
+/// Only the final `/`-separated segment of `store_path_hash` is used, so
+/// the returned key never contains a `/`.
+#[must_use]
+pub fn listing_key(store_path_hash: &str) -> String {
+    let hash = store_path_hash
+        .rsplit('/')
+        .next()
+        .unwrap_or(store_path_hash);
+    format!("ls:{hash}")
+}
+
+/// Builds the auxiliary-metadata store key under which the build log for
+/// a derivation lives: `log:{drvBasename}`, where `drv_basename` is the
+/// `.drv` store-path basename (as served under `log/{drvBasename}`).
+///
+/// Only the final `/`-separated segment of `drv_basename` is used, so
+/// the returned key never contains a `/`.
+#[must_use]
+pub fn log_key(drv_basename: &str) -> String {
+    let basename = drv_basename.rsplit('/').next().unwrap_or(drv_basename);
+    format!("log:{basename}")
+}
+
+/// Builds the auxiliary-metadata store key under which the content
+/// encoding of a stored build log lives: `log-enc:{drvBasename}`.
+///
+/// Only the final `/`-separated segment of `drv_basename` is used, so
+/// the returned key never contains a `/`.
+#[must_use]
+pub fn log_encoding_key(drv_basename: &str) -> String {
+    let basename = drv_basename.rsplit('/').next().unwrap_or(drv_basename);
+    format!("log-enc:{basename}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        GZIP_MAGIC, NarCodec, alias_key, canonical_nar_name, codec_for_name, format_alias,
-        parse_alias, parse_canonical_nar_name,
+        GZIP_MAGIC, NarCodec, alias_key, canonical_nar_name, canonical_nar_zst_name,
+        codec_for_name, format_alias, listing_key, log_encoding_key, log_key, parse_alias,
+        parse_canonical_any, parse_canonical_nar_name,
     };
 
     /// sha256("hello"); its nix32 form is a golden vector from the
@@ -260,6 +337,86 @@ mod tests {
     }
 
     #[test]
+    fn canonical_nar_zst_name_round_trips_via_parse_canonical_any() {
+        for size in [1_u64, 42, 206_104, u64::MAX] {
+            let name = canonical_nar_zst_name(&hello_hash(), size);
+            assert_eq!(name, format!("{HELLO_NIX32}-{size}.nar.zst"));
+            assert_eq!(
+                parse_canonical_any(&name),
+                Some((hello_hash(), size, NarCodec::Zstd))
+            );
+            // A .nar.zst name is not an uncompressed canonical name.
+            assert_eq!(parse_canonical_nar_name(&name), None);
+        }
+        // Zero is a canonical decimal with no leading zeros.
+        assert_eq!(
+            parse_canonical_any(&canonical_nar_zst_name(&hello_hash(), 0)),
+            Some((hello_hash(), 0, NarCodec::Zstd))
+        );
+    }
+
+    #[test]
+    fn parse_canonical_any_accepts_both_forms() {
+        let plain = canonical_nar_name(&hello_hash(), 42);
+        assert_eq!(
+            parse_canonical_any(&plain),
+            Some((hello_hash(), 42, NarCodec::None))
+        );
+        let zst = canonical_nar_zst_name(&hello_hash(), 42);
+        assert_eq!(
+            parse_canonical_any(&zst),
+            Some((hello_hash(), 42, NarCodec::Zstd))
+        );
+        // It stays in lockstep with parse_canonical_nar_name on .nar.
+        assert_eq!(parse_canonical_nar_name(&plain), Some((hello_hash(), 42)));
+    }
+
+    #[test]
+    fn parse_canonical_any_rejects_malformed_names() {
+        let hash51 = &HELLO_NIX32[..51];
+        let hash53 = format!("{HELLO_NIX32}0");
+        let bad_alphabet = format!("e{}", &HELLO_NIX32[1..]);
+        for bad in [
+            // Extensions in the wrong order or unsupported.
+            format!("{HELLO_NIX32}-42.zst.nar"),
+            format!("{HELLO_NIX32}-42.zst"),
+            format!("{HELLO_NIX32}-42.nar.xz"),
+            format!("{HELLO_NIX32}-42.nar.zst.zst"),
+            format!("{HELLO_NIX32}-42.nar.zstd"),
+            // 51- and 53-character hashes, in both forms.
+            format!("{hash51}-42.nar"),
+            format!("{hash51}-42.nar.zst"),
+            format!("{hash53}-42.nar"),
+            format!("{hash53}-42.nar.zst"),
+            // 'e' is outside the nix32 alphabet.
+            format!("{bad_alphabet}-42.nar.zst"),
+            // Leading zeros / sign / non-decimal sizes.
+            format!("{HELLO_NIX32}-042.nar"),
+            format!("{HELLO_NIX32}-042.nar.zst"),
+            format!("{HELLO_NIX32}-00.nar.zst"),
+            format!("{HELLO_NIX32}-+42.nar.zst"),
+            format!("{HELLO_NIX32}--42.nar.zst"),
+            format!("{HELLO_NIX32}-4x2.nar.zst"),
+            format!("{HELLO_NIX32}-.nar.zst"),
+            // u64::MAX + 1 does not fit.
+            format!("{HELLO_NIX32}-18446744073709551616.nar.zst"),
+            // Missing '-' or missing extension.
+            format!("{HELLO_NIX32}42.nar.zst"),
+            format!("{HELLO_NIX32}-42"),
+            String::new(),
+        ] {
+            assert_eq!(parse_canonical_any(&bad), None, "for '{bad}'");
+        }
+        // Nonzero padding bits in the leading nix32 character are
+        // rejected in the .nar.zst form too.
+        let bad_padding = format!("z{}", &HELLO_NIX32[1..]);
+        assert_eq!(
+            parse_canonical_any(&format!("{bad_padding}-42.nar.zst")),
+            None
+        );
+    }
+
+    #[test]
     fn alias_key_is_prefixed_and_slash_free() {
         assert_eq!(alias_key("abc.nar.xz"), "nar-alias:abc.nar.xz");
         // Only the final path segment is used, so keys never contain '/'.
@@ -277,6 +434,36 @@ mod tests {
             let (hash, parsed_size) = parse_alias(&alias).expect("parse alias");
             assert_eq!(hash, hello_hash());
             assert_eq!(parsed_size, size);
+        }
+    }
+
+    #[test]
+    fn auxiliary_metadata_keys_have_the_documented_shapes() {
+        assert_eq!(
+            listing_key("bvkx110ylicifcgl0xiid5f100hx3ar7"),
+            "ls:bvkx110ylicifcgl0xiid5f100hx3ar7"
+        );
+        assert_eq!(
+            log_key("q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"),
+            "log:q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"
+        );
+        assert_eq!(
+            log_encoding_key("q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"),
+            "log-enc:q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"
+        );
+    }
+
+    #[test]
+    fn auxiliary_metadata_keys_are_slash_free() {
+        // Only the final path segment is used, so keys never contain '/'.
+        assert_eq!(
+            log_key("log/q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"),
+            "log:q0hpd8s75g1h17yr8zqp1yf8sc9g4gp2-nix-2.34.7.drv"
+        );
+        for pathy in ["a/b/c", "/leading", "trailing/", ""] {
+            assert!(!listing_key(pathy).contains('/'), "for '{pathy}'");
+            assert!(!log_key(pathy).contains('/'), "for '{pathy}'");
+            assert!(!log_encoding_key(pathy).contains('/'), "for '{pathy}'");
         }
     }
 
