@@ -379,6 +379,33 @@ The `private` server consists of a `listener` object and a `services` object. Th
   }
 ```
 
+### Nix Binary Cache Service
+
+The optional `nix_cache` service serves the Nix HTTP binary-cache
+(substituter) protocol so `nix` clients can push and pull store paths.
+It mounts an HTTP router at `path` (default `/nix/<instance_name>`) on the
+**same** public listener as the gRPC services, so it coexists with a full
+remote-execution/cache deployment on one port. Its `cas_store` (NAR blobs,
+digest-keyed by `sha256`) may reuse the same store as the gRPC CAS; its
+`path_info_store` and `alias_store` are string-keyed and must be separate
+stores (see the field docs on `NixCacheConfig`).
+
+```json5
+"nix_cache": [{
+  "instance_name": "main",
+  "cas_store": "NIX_NAR_STORE",         // may reuse the gRPC CAS store
+  "path_info_store": "NIX_PATH_INFO_STORE",
+  "alias_store": "NIX_ALIAS_STORE",
+  "store_dir": "/nix/store",
+  "priority": 40,
+  "signing_key_files": ["/etc/nativelink/nix-cache.key"], // [] = unsigned
+}]
+```
+
+For a complete, tested deployment that adds a Nix cache to the full RBE
+stack on one listener, see
+[basic_cas_with_nix.json5](basic_cas_with_nix.json5).
+
 </details>
 
 <details>

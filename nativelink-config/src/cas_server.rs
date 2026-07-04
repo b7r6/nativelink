@@ -233,8 +233,13 @@ pub struct PushConfig {
 /// `nar/*` endpoints) directly from `NativeLink` stores, so `nix` clients
 /// can list a `NativeLink` deployment in their `substituters`.
 ///
-/// Note: This is currently schema-only; the service implementation lands
-/// in a follow-up phase and the binary does not yet consume this config.
+/// The service mounts an HTTP router at `path` (default `/nix/<instance>`)
+/// on the same listener as the gRPC services, so it coexists with a full
+/// remote-execution stack on one port. Its `cas_store` (NAR blobs, keyed
+/// by `DigestInfo(sha256(nar), nar_size)`) may reuse the same content-
+/// addressed store as the gRPC CAS; `path_info_store` and `alias_store`
+/// are string-keyed and must be separate stores (see their field docs).
+/// See `examples/basic_cas_with_nix.json5` for a combined deployment.
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
