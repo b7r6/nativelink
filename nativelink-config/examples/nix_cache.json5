@@ -165,6 +165,33 @@
             // (default 3).
             // serve_compression: "zstd",
             // compression_level: 3,
+
+            // Hardening limits (all optional; defaults shown). They are
+            // deliberately generous so legitimate large-closure pushes and
+            // normal parallel substitution are never affected.
+            //
+            // Cap on the decompressed size of a single ingested NAR. A
+            // compressed upload is stream-decompressed into the spool dir;
+            // without a cap a tiny .nar.zst could expand to tens of GiB and
+            // fill the disk. A declared size over the cap is refused with
+            // 413 before the body is read; a stream that grows past it is
+            // aborted with 413 mid-flight. Size it to the spool filesystem.
+            // max_nar_size_bytes: 34359738368, // 32 GiB
+
+            // Max concurrent NAR GET response bodies streamed at once.
+            // Requests over this get a retryable 503 instead of ballooning
+            // memory with many slow readers.
+            // max_concurrent_nar_streams: 256,
+
+            // Max concurrent zstd transcodes (serve_compression: "zstd").
+            // Concurrent PUTs for the same NAR are additionally coalesced
+            // into a single transcode.
+            // max_concurrent_transcodes: 8,
+
+            // Idle timeout (seconds) on a NAR upload body: a stall past
+            // this is aborted with 408 and its spool file released. Resets
+            // on every received chunk, so slow-but-steady uploads survive.
+            // nar_upload_idle_timeout_s: 60,
           },
         ],
         health: {},

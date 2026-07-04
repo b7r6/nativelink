@@ -406,6 +406,70 @@ pub struct NixCacheConfig {
         deserialize_with = "convert_optional_numeric_with_shellexpand"
     )]
     pub compression_level: Option<i32>,
+
+    /// Maximum size in bytes of a single uncompressed NAR the cache will
+    /// ingest. Compressed uploads (`.nar.xz`/`.nar.zst`/`.nar.bz2` and
+    /// gzip-sniffed `.nar`) are stream-decompressed into the spool
+    /// directory; without a cap a small crafted upload could decompress to
+    /// arbitrarily many bytes and fill the spool disk (a decompression
+    /// bomb). A declared size (the `Content-Length` of a direct upload, or
+    /// the size embedded in a canonical NAR name) over this limit is
+    /// rejected with `413` before the body is read, and a decompressed
+    /// stream that grows past it is aborted with `413` mid-flight (the
+    /// partial spool file is deleted).
+    ///
+    /// The default is deliberately generous so legitimate large closures
+    /// still push; size it to the spool filesystem's capacity.
+    ///
+    /// Default: 34359738368 (32 GiB)
+    #[serde(
+        default = "default_max_nar_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_nar_size_bytes: u64,
+
+    /// Maximum number of NAR GET response bodies streamed concurrently from
+    /// this instance. Each in-flight stream holds a producer task plus a
+    /// small buffer, so without a ceiling many slow readers grow aggregate
+    /// memory without bound. Requests over the limit get a retryable `503`
+    /// rather than committing a `200` and buffering.
+    ///
+    /// The default is high enough that normal parallel substitution is
+    /// never throttled.
+    ///
+    /// Default: 256
+    #[serde(
+        default = "default_max_concurrent_nar_streams",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_nar_streams: usize,
+
+    /// Maximum number of zstd NAR transcodes running concurrently when
+    /// `serve_compression` is `"zstd"`. A transcode streams a whole NAR
+    /// through a zstd encoder and spools the output, so unbounded fan-out
+    /// of narinfo PUTs would balloon CPU and temp disk. Concurrent PUTs for
+    /// the SAME NAR are additionally coalesced into a single transcode.
+    ///
+    /// Default: 8
+    #[serde(
+        default = "default_max_concurrent_transcodes",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_transcodes: usize,
+
+    /// Idle timeout, in seconds, on a NAR upload body: if no new bytes
+    /// arrive within this window the upload is aborted with `408` and its
+    /// spool file and file descriptor are released, so a stalled or
+    /// slowloris-style client cannot pin resources indefinitely. The timer
+    /// resets on every received chunk, so a legitimately slow but steady
+    /// upload over a slow link is never killed.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_nar_upload_idle_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub nar_upload_idle_timeout_s: u64,
 }
 
 fn default_nix_store_dir() -> String {
@@ -414,6 +478,22 @@ fn default_nix_store_dir() -> String {
 
 const fn default_nix_priority() -> u32 {
     40
+}
+
+const fn default_max_nar_size_bytes() -> u64 {
+    32 * 1024 * 1024 * 1024 // 32 GiB
+}
+
+const fn default_max_concurrent_nar_streams() -> usize {
+    256
+}
+
+const fn default_max_concurrent_transcodes() -> usize {
+    8
+}
+
+const fn default_nar_upload_idle_timeout_s() -> u64 {
+    60
 }
 
 // From https://github.com/serde-rs/serde/issues/818#issuecomment-287438544
@@ -1402,6 +1482,12 @@ mod tests {
         assert!(instance.write_token_files.is_empty());
         assert_eq!(instance.serve_compression, None);
         assert_eq!(instance.compression_level, None);
+        // Hardening limits default generously so real workloads are
+        // unaffected.
+        assert_eq!(instance.max_nar_size_bytes, 32 * 1024 * 1024 * 1024);
+        assert_eq!(instance.max_concurrent_nar_streams, 256);
+        assert_eq!(instance.max_concurrent_transcodes, 8);
+        assert_eq!(instance.nar_upload_idle_timeout_s, 60);
     }
 
     #[test]
@@ -1423,6 +1509,10 @@ mod tests {
                     write_token_files: ["/etc/nativelink/nix-write.token"],
                     serve_compression: "zstd",
                     compression_level: 19,
+                    max_nar_size_bytes: "8GB",
+                    max_concurrent_nar_streams: 512,
+                    max_concurrent_transcodes: 4,
+                    nar_upload_idle_timeout_s: 120,
                 }],
             }"#,
         );
@@ -1454,6 +1544,12 @@ mod tests {
         );
         assert_eq!(instance.serve_compression.as_deref(), Some("zstd"));
         assert_eq!(instance.compression_level, Some(19));
+        // The data-size deserializer accepts "8GB"; the rest are plain
+        // numerics that survive the JSON round trip.
+        assert_eq!(instance.max_nar_size_bytes, 8_000_000_000);
+        assert_eq!(instance.max_concurrent_nar_streams, 512);
+        assert_eq!(instance.max_concurrent_transcodes, 4);
+        assert_eq!(instance.nar_upload_idle_timeout_s, 120);
     }
 
     #[test]
