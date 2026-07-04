@@ -1800,6 +1800,46 @@ async fn detect_same_key_different_contents() -> Result<(), Error> {
     Ok(())
 }
 
+/// Regression: two zero-length files must be detected as duplicates without
+/// panicking. `check_duplicate_files` previously iterated
+/// `(0..file_length - 1)`, which computes `0u64 - 1` and panics ("attempt to
+/// subtract with overflow") under the dev/test profile's overflow checks when
+/// `file_length == 0`. This is reached whenever an empty record (e.g. an
+/// identity-encoded build log or an empty `.ls` listing) is re-uploaded into a
+/// filesystem-backed store and compared against the existing zero-length entry.
+#[nativelink_test]
+async fn detect_duplicate_upload_zero_length() -> Result<(), Error> {
+    let content_path = make_temp_path("content_path");
+    let temp_path = make_temp_path("temp_path");
+    // A size-0 digest whose hash is NOT the canonical empty-bytes hash, so the
+    // store persists a real zero-length backing file rather than taking the
+    // zero-digest short-circuit (mirrors nix's string-keyed empty records).
+    let digest = DigestInfo::try_new(HASH1, 0)?;
+    let store = Box::pin(
+        FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
+            content_path,
+            temp_path,
+            ..Default::default()
+        })
+        .await?,
+    );
+    store.update_oneshot(digest, Bytes::new()).await?;
+
+    let key = &StoreKey::Digest(digest);
+    let temp_key = make_temp_key(key);
+    // A freshly-opened temp file is zero-length, matching the existing entry.
+    let (entry, _temp_file, _temp_full_path) = store.make_temp_file(temp_key).await?;
+
+    assert!(
+        check_duplicate_files(&store.get_evicting_map(), key, &Arc::new(entry)).await?,
+        "Two zero-length files must be detected as duplicates"
+    );
+    assert!(logs_contain(
+        "Identical files, so don't need to edit, skipping emplace"
+    ));
+    Ok(())
+}
+
 /// Map/disk divergence (map says present, file is gone) must surface as a
 /// recoverable warn and remove the stale entry — not a fatal error.
 #[nativelink_test]
