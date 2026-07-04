@@ -25,7 +25,7 @@ use clap::Parser;
 use futures::FutureExt;
 use futures::future::{BoxFuture, Either, OptionFuture, TryFutureExt, try_join_all};
 use hyper::StatusCode;
-use hyper_util::rt::tokio::TokioIo;
+use hyper_util::rt::tokio::{TokioIo, TokioTimer};
 use hyper_util::server::conn::auto;
 use hyper_util::service::TowerToHyperService;
 use mimalloc::MiMalloc;
@@ -79,7 +79,7 @@ use tokio_rustls::rustls::server::WebPkiClientVerifier;
 use tokio_rustls::rustls::{RootCertStore, ServerConfig as TlsServerConfig};
 use tonic::codec::CompressionEncoding;
 use tonic::service::Routes;
-use tracing::{error, error_span, info, trace_span, warn};
+use tracing::{debug, error, error_span, info, trace_span, warn};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -97,6 +97,54 @@ const DEFAULT_MAX_QUEUE_EVENTS: usize = 0x0001_0000;
 /// Broadcast Channel Capacity
 /// Note: The actual capacity may be greater than the provided capacity.
 const BROADCAST_CAPACITY: usize = 1;
+
+/// HTTP/1 header-read timeout. hyper ships a 30s default for this
+/// slowloris defense, but it is silently disabled unless a timer is
+/// installed on the connection builder — which configuring only HTTP/2
+/// options otherwise skips. Restore hyper's own default explicitly.
+const HTTP1_HEADER_READ_TIMEOUT_SECS: u64 = 30;
+
+/// Classifies a served-connection error as client-caused — a disconnect,
+/// idle/read timeout, or a malformed/oversized request — versus a genuine
+/// server-side fault. Client-caused wire and parse errors are
+/// attacker-cheap to trigger, so they are logged at `debug!` rather than
+/// `error!` to avoid unbounded ERROR-log amplification. The hyper error is
+/// often wrapped, so the whole source chain is inspected.
+fn is_client_connection_error(err: &(dyn std::error::Error + 'static)) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(source) = current {
+        if let Some(hyper_err) = source.downcast_ref::<hyper::Error>() {
+            if hyper_err.is_parse()
+                || hyper_err.is_parse_too_large()
+                || hyper_err.is_parse_status()
+                || hyper_err.is_incomplete_message()
+                || hyper_err.is_canceled()
+                || hyper_err.is_body_write_aborted()
+                || hyper_err.is_timeout()
+            {
+                return true;
+            }
+            // Do NOT return here: an I/O-kind hyper error (the common
+            // mid-stream `ConnectionReset`/`BrokenPipe` client abort) matches
+            // none of the predicates above but carries the real cause as its
+            // `io::Error` source, classified by the branch below on the next
+            // hop of the chain.
+        } else if let Some(io_err) = source.downcast_ref::<std::io::Error>()
+            && matches!(
+                io_err.kind(),
+                ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::BrokenPipe
+                    | ErrorKind::UnexpectedEof
+                    | ErrorKind::TimedOut
+            )
+        {
+            return true;
+        }
+        current = source.source();
+    }
+    false
+}
 
 fn install_default_rustls_crypto_provider() {
     drop(tokio_rustls::rustls::crypto::ring::default_provider().install_default());
@@ -602,6 +650,13 @@ async fn inner_main(
         if let Some(value) = http_config.experimental_http2_max_header_list_size {
             http.http2().max_header_list_size(value);
         }
+        // Restore hyper's HTTP/1 header-read timeout (its own 30s default),
+        // which stays disabled unless a timer is installed — configuring
+        // only the HTTP/2 knobs above otherwise drops this slowloris
+        // defense on the HTTP/1 side of the auto (h1/h2) listener.
+        http.http1()
+            .timer(TokioTimer::new())
+            .header_read_timeout(Duration::from_secs(HTTP1_HEADER_READ_TIMEOUT_SECS));
         info!("Ready, listening on {socket_addr}",);
         root_futures.push(Box::pin(async move {
             loop {
@@ -645,11 +700,24 @@ async fn inner_main(
                                         };
 
                                         if let Err(err) = serve_connection.await {
-                                            error!(
-                                                target: "nativelink::services",
-                                                ?err,
-                                                "Failed running service"
-                                            );
+                                            // Client-caused disconnects, parse
+                                            // errors, and idle timeouts are
+                                            // attacker-cheap; log them at debug
+                                            // to avoid ERROR-log amplification,
+                                            // and keep error! for real faults.
+                                            if is_client_connection_error(err.as_ref()) {
+                                                debug!(
+                                                    target: "nativelink::services",
+                                                    ?err,
+                                                    "Client connection closed"
+                                                );
+                                            } else {
+                                                error!(
+                                                    target: "nativelink::services",
+                                                    ?err,
+                                                    "Failed running service"
+                                                );
+                                            }
                                         }
                                     }),
                                     target: "nativelink::services",

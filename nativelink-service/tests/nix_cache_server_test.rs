@@ -1543,3 +1543,148 @@ async fn zstd_blob_eviction_falls_back_and_nar_eviction_hides_narinfo() -> Resul
     assert_eq!(status, StatusCode::NOT_FOUND, "narinfo after NAR eviction");
     Ok(())
 }
+
+/// A NAR upload whose DECLARED size (Content-Length) already exceeds
+/// `max_nar_size_bytes` is fast-failed with `413` before the body is read,
+/// and nothing is written.
+#[nativelink_test]
+async fn oversized_declared_nar_upload_is_rejected() -> Result<(), Error> {
+    let fixture = CacheFixture::new("oversized-declared");
+    let (mount, router) = fixture.server_with_extra("main", "max_nar_size_bytes: 100,");
+
+    let payload = vec![b'x'; 200]; // 200 bytes, cap is 100
+    let basename = client_nar_basename(&payload);
+    let (status, _, _) = call(
+        &router,
+        put_request(&format!("{mount}/nar/{basename}"), &payload),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "declared size over the cap must 413"
+    );
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// A NAR upload with no Content-Length (chunked) whose bytes grow past
+/// `max_nar_size_bytes` while spooling is aborted with `413` by the
+/// running cap, and nothing is written.
+#[nativelink_test]
+async fn chunked_nar_over_cap_is_rejected() -> Result<(), Error> {
+    let fixture = CacheFixture::new("chunked-over-cap");
+    let (mount, router) = fixture.server_with_extra("main", "max_nar_size_bytes: 100,");
+
+    let payload = vec![b'x'; 500];
+    let basename = client_nar_basename(&payload);
+    // No Content-Length header, so this takes the spooled path guarded by
+    // the running decompression cap.
+    let request = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("{mount}/nar/{basename}"))
+        .body(Body::from(Bytes::from(payload)))
+        .expect("valid PUT request");
+    let (status, _, _) = call(&router, request).await;
+    assert_eq!(
+        status,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "a body past the running cap must 413"
+    );
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// A narinfo with a malformed reference is rejected at PUT with `400`
+/// (not stored), closing the PUT/GET validation asymmetry: previously it
+/// was accepted (201) and then 500'd forever on GET.
+#[nativelink_test]
+async fn narinfo_with_malformed_reference_is_rejected_at_put() -> Result<(), Error> {
+    let fixture = CacheFixture::new("malformed-reference");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = b"nar payload for the malformed-reference narinfo";
+    let store_path = test_store_path("malformed-ref-seed", "app-1.0");
+    let mut info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    put_nar(&router, &mount, payload).await;
+    // A valid-length hash, but a NUL byte in the reference name.
+    info.references = vec!["00000000000000000000000000000000-na\0me".to_string()];
+
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::BAD_REQUEST,
+        "a malformed reference must be rejected at PUT"
+    );
+    // Nothing persisted, so a GET is a clean 404 rather than a permanent
+    // 500 — the symmetry the fix guarantees.
+    let path_hash = store_path_hash(&store_path);
+    let (get_status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(get_status, StatusCode::NOT_FOUND);
+    assert_eq!(fixture.path_info_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// A narinfo whose `StorePath` name carries a NUL byte is rejected at PUT
+/// with `400` and never stored.
+#[nativelink_test]
+async fn nul_byte_in_store_path_name_is_rejected() -> Result<(), Error> {
+    let fixture = CacheFixture::new("nul-store-path-name");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = b"nar payload for the NUL store-path-name case";
+    put_nar(&router, &mount, payload).await;
+    let hash = "00000000000000000000000000000000";
+    let store_path = format!("/nix/store/{hash}-na\0me");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+
+    let (status, _, _) = call(
+        &router,
+        put_request(&format!("{mount}/{hash}.narinfo"), info.render().as_bytes()),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "a NUL in the store-path name must 400"
+    );
+    let (get_status, _, _) = call(&router, get_request(&format!("{mount}/{hash}.narinfo"))).await;
+    assert_eq!(get_status, StatusCode::NOT_FOUND);
+    assert_eq!(fixture.path_info_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// An over-long build-log name is a clean `4xx` (`400` on PUT, `404` on
+/// GET) rather than a `500` from an oversized filesystem key.
+#[nativelink_test]
+async fn long_log_name_is_client_error() -> Result<(), Error> {
+    let fixture = CacheFixture::new("long-log-name");
+    let (mount, router) = fixture.server("main", false);
+
+    let long = "a".repeat(300);
+    let uri = format!("{mount}/log/{long}");
+    let (put_status, _, _) = call(&router, put_request(&uri, b"log bytes")).await;
+    assert_eq!(
+        put_status,
+        StatusCode::BAD_REQUEST,
+        "over-long log name must 400 on PUT"
+    );
+    let (get_status, _, _) = call(&router, get_request(&uri)).await;
+    assert!(
+        get_status.is_client_error(),
+        "over-long log name must be 4xx on GET, got {get_status}"
+    );
+    assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}

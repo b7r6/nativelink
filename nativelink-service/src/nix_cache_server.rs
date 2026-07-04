@@ -35,9 +35,11 @@
 
 use core::pin::Pin;
 use core::task::{Context as TaskContext, Poll};
+use core::time::Duration;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use async_compression::Level;
 use async_compression::tokio::bufread::{
@@ -81,8 +83,10 @@ use nativelink_util::task::JoinHandleDropGuard;
 use nativelink_util::{fs, spawn};
 use opentelemetry::context::{Context as OtelContext, FutureExt};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::time::timeout;
 use tokio_util::io::StreamReader;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 /// Content type of `nix-cache-info` responses.
@@ -106,6 +110,12 @@ const MAX_NARINFO_BODY_BYTES: usize = 1024 * 1024;
 const MAX_LISTING_BODY_BYTES: usize = 8 * 1024 * 1024;
 /// Upper bound on an uploaded build-log body; beyond it: `413`.
 const MAX_LOG_BODY_BYTES: usize = 32 * 1024 * 1024;
+/// Upper bound on a build-log `.drv` basename length. Nix store-path names
+/// are at most 211 bytes; capping here keeps the derived filesystem keys
+/// (`log:{drv}` / `log-enc:{drv}`, small prefixes) inside every real
+/// filesystem's per-name limit, so an over-long name is a clean `400`
+/// instead of a rename `ENAMETOOLONG` surfaced as `500`.
+const MAX_LOG_NAME_LEN: usize = 240;
 /// Directory name under the system temp dir used when `spool_path` is not
 /// configured.
 const DEFAULT_SPOOL_DIR_NAME: &str = "nativelink-nix-spool";
@@ -147,7 +157,22 @@ where
 fn error_response(context: &'static str, err: &Error) -> Response {
     match err.code {
         Code::NotFound => empty_response(StatusCode::NOT_FOUND),
-        Code::InvalidArgument => text_response(StatusCode::BAD_REQUEST, &err.to_string()),
+        // Client-caused statuses return a concise, stable message and keep
+        // the full error — store-layer breadcrumbs, internal digests, and
+        // the `Error { .. }` Debug wrapper — in the server log instead of
+        // echoing it into the response body.
+        Code::InvalidArgument => {
+            debug!(?err, context, "Nix cache client error");
+            text_response(StatusCode::BAD_REQUEST, "bad request")
+        }
+        Code::ResourceExhausted => {
+            debug!(?err, context, "Nix cache payload too large");
+            text_response(StatusCode::PAYLOAD_TOO_LARGE, "payload too large")
+        }
+        Code::DeadlineExceeded => {
+            debug!(?err, context, "Nix cache request timed out");
+            text_response(StatusCode::REQUEST_TIMEOUT, "request timeout")
+        }
         _ => {
             error!(?err, context, "Nix cache request failed");
             text_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error")
@@ -185,11 +210,16 @@ fn listing_name_hash(file: &str) -> Option<&str> {
     is_store_path_hash(hash).then_some(hash)
 }
 
-/// Validates a build-log `.drv` basename: non-empty, printable ASCII, no
-/// `/`, and no `..`. The axum capture is percent-decoded, so a crafted
-/// `%2F`/`%2E%2E` would otherwise smuggle separators into store keys.
+/// Validates a build-log `.drv` basename: non-empty, at most
+/// [`MAX_LOG_NAME_LEN`] bytes, printable ASCII, no `/`, and no `..`. The
+/// axum capture is percent-decoded, so a crafted `%2F`/`%2E%2E` would
+/// otherwise smuggle separators into store keys, and an unbounded length
+/// would overflow the derived filesystem key.
 fn is_valid_log_name(drv: &str) -> bool {
-    !drv.is_empty() && !drv.contains("..") && drv.bytes().all(|b| b.is_ascii_graphic() && b != b'/')
+    !drv.is_empty()
+        && drv.len() <= MAX_LOG_NAME_LEN
+        && !drv.contains("..")
+        && drv.bytes().all(|b| b.is_ascii_graphic() && b != b'/')
 }
 
 /// Returns `sha256(data)`. Token comparisons happen in hashed space, so
@@ -381,14 +411,29 @@ fn bare_nar_digest_from_name(name: &str, content_length: Option<u64>) -> Option<
     Some((nar_sha256, content_length?))
 }
 
+/// Returns the 32-byte digest a bare `{52 nix32}.nar` name commits to in
+/// its stem, or `None` for any other name (a canonical
+/// `{hash}-{size}.nar`, a compressed name, ...). Unlike
+/// [`bare_nar_digest_from_name`] this needs no `Content-Length` and never
+/// matches canonical or compressed names, so it isolates exactly the
+/// bare-identity case where the stem must equal `sha256(content)`.
+fn bare_nar_stem_sha256(name: &str) -> Option<[u8; 32]> {
+    let stem = name.strip_suffix(".nar")?;
+    if stem.len() != 52 {
+        return None;
+    }
+    nixbase32::decode(stem).ok()?.try_into().ok()
+}
+
 /// Reads a request body to completion, buffering at most `limit` bytes.
 /// Returns `None` when the body exceeds the limit.
 async fn read_body_limited(body: Body, limit: usize) -> Result<Option<Bytes>, Error> {
     let mut stream = body.into_data_stream();
     let mut buffer = BytesMut::new();
     while let Some(chunk) = stream.next().await {
-        let chunk =
-            chunk.map_err(|e| make_err!(Code::Unavailable, "Failed to read request body: {e}"))?;
+        // A truncated or malformed client body is a client error (400),
+        // not a backend failure (500).
+        let chunk = chunk.map_err(|e| make_input_err!("Failed to read request body: {e}"))?;
         if buffer.len() + chunk.len() > limit {
             return Ok(None);
         }
@@ -410,6 +455,11 @@ async fn read_body_limited(body: Body, limit: usize) -> Result<Option<Bytes>, Er
 struct NarBodyStream {
     rx: DropCloserReadHalf,
     _task: JoinHandleDropGuard<()>,
+    /// Held for the body's entire lifetime so the concurrent-NAR-stream
+    /// permit is released only once the response body is fully drained or
+    /// the client disconnects (which drops this stream and aborts the
+    /// producer task).
+    _permit: OwnedSemaphorePermit,
 }
 
 impl Stream for NarBodyStream {
@@ -488,6 +538,21 @@ enum ServeCompression {
     Zstd,
 }
 
+/// The result of a NAR-to-zstd transcode: `(sha256(zstd(nar)), zstd_size)`.
+type TranscodeResult = Result<([u8; 32], u64), Error>;
+
+/// A single in-flight zstd transcode that concurrent narinfo PUTs for the
+/// same NAR coalesce onto: the leader runs the transcode, stores the
+/// result, and wakes every follower waiting on `notify`. Keyed on the NAR
+/// digest, so N distinct store paths that serialize to one NAR trigger
+/// exactly one transcode instead of N.
+#[derive(Debug)]
+struct TranscodeInflight {
+    /// Set once by the leader before `notify.notify_waiters()`.
+    result: StdMutex<Option<TranscodeResult>>,
+    notify: Notify,
+}
+
 /// One configured Nix cache instance: resolved stores, identity, and
 /// counters. Shared with every request handler through the router state.
 #[derive(Debug, MetricsComponent)]
@@ -511,6 +576,21 @@ pub struct NixCacheInstance {
     write_token_hashes: Vec<[u8; 32]>,
     serve_compression: ServeCompression,
     compression_level: i32,
+    /// Cap on the decompressed size of a single ingested NAR (see the
+    /// `max_nar_size_bytes` config field); bounds the spool a compressed
+    /// upload can write.
+    max_nar_size_bytes: u64,
+    /// Idle timeout on a NAR upload body; a stall past this is aborted with
+    /// `408` and the spool file/descriptor released.
+    nar_upload_idle_timeout: Duration,
+    /// Bounds concurrent NAR GET response streams; see
+    /// [`Self::acquire_nar_stream_permit`].
+    nar_stream_semaphore: Arc<Semaphore>,
+    /// Bounds concurrent zstd transcodes.
+    transcode_semaphore: Arc<Semaphore>,
+    /// Coalesces concurrent transcodes of the same NAR into one, keyed on
+    /// the NAR digest.
+    transcode_inflight: StdMutex<HashMap<DigestInfo, Arc<TranscodeInflight>>>,
 
     #[metric(help = "Number of narinfo GET requests")]
     narinfo_gets: CounterWithTime,
@@ -606,6 +686,11 @@ impl NixCacheInstance {
             }
         };
 
+        // Clamp the concurrency ceilings to at least one permit: a zero
+        // would deadlock every stream/transcode, a self-inflicted DoS.
+        let max_concurrent_nar_streams = config.max_concurrent_nar_streams.max(1);
+        let max_concurrent_transcodes = config.max_concurrent_transcodes.max(1);
+
         Ok(Self {
             instance_name: config.instance_name.clone(),
             mount_path,
@@ -622,6 +707,11 @@ impl NixCacheInstance {
             write_token_hashes,
             serve_compression,
             compression_level: config.compression_level.unwrap_or(DEFAULT_ZSTD_LEVEL),
+            max_nar_size_bytes: config.max_nar_size_bytes,
+            nar_upload_idle_timeout: Duration::from_secs(config.nar_upload_idle_timeout_s),
+            nar_stream_semaphore: Arc::new(Semaphore::new(max_concurrent_nar_streams)),
+            transcode_semaphore: Arc::new(Semaphore::new(max_concurrent_transcodes)),
+            transcode_inflight: StdMutex::new(HashMap::new()),
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
@@ -711,14 +801,27 @@ impl NixCacheInstance {
         }
     }
 
+    /// Tries to reserve one of the bounded concurrent-NAR-stream permits,
+    /// returning `None` when the instance is already at
+    /// `max_concurrent_nar_streams` in-flight bodies. The permit is moved
+    /// into the response body via [`Self::stream_nar`] and released only
+    /// when that body is fully drained or dropped.
+    fn acquire_nar_stream_permit(&self) -> Option<OwnedSemaphorePermit> {
+        Arc::clone(&self.nar_stream_semaphore)
+            .try_acquire_owned()
+            .ok()
+    }
+
     /// Spawns a task that streams `digest` from the CAS into a response
     /// body without buffering the whole NAR. See [`NarBodyStream`] for the
-    /// EOF/abort semantics.
+    /// EOF/abort semantics. `permit` bounds the number of simultaneous
+    /// streams and lives for the body's lifetime.
     fn stream_nar(
         &self,
         digest: DigestInfo,
         offset: u64,
         length: Option<u64>,
+        permit: OwnedSemaphorePermit,
     ) -> Result<Body, Error> {
         let (tx, rx) = make_buf_channel_pair();
         let ctx = sha256_hasher_ctx()?;
@@ -734,8 +837,22 @@ impl NixCacheInstance {
             }
             .with_context(ctx)
         );
-        Ok(Body::from_stream(NarBodyStream { rx, _task: task }))
+        Ok(Body::from_stream(NarBodyStream {
+            rx,
+            _task: task,
+            _permit: permit,
+        }))
     }
+}
+
+/// The retryable `503` served when the instance is at its
+/// `max_concurrent_nar_streams` ceiling: a bounded, non-hanging refusal
+/// rather than committing a `200` and buffering unboundedly.
+fn too_many_streams_response() -> Response {
+    text_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "too many concurrent NAR streams",
+    )
 }
 
 /// The Nix binary-cache HTTP service: one router per configured instance.
@@ -1101,9 +1218,14 @@ async fn put_narinfo_inner(
         path_info.file_compression = ZSTD_COMPRESSION_NAME.to_string();
     }
 
+    // `encode_record` runs the same reference/signature/store-path checks
+    // `to_nar_info` runs on GET, so a record that could never be rendered
+    // is rejected here as a client error (400) instead of being stored and
+    // then 500ing forever on GET. Preserve its `InvalidArgument` code
+    // rather than masking it as an internal error.
     let record = path_info
         .encode_record()
-        .map_err(|err| make_err!(Code::Internal, "Failed to encode narinfo record: {err}"))?;
+        .err_tip(|| "Encoding narinfo record for storage")?;
     with_sha256_ctx(
         instance
             .path_info_store
@@ -1292,7 +1414,10 @@ async fn get_nar_inner(
             Ok(response)
         }
         RangeRequest::Full => {
-            let body = instance.stream_nar(digest, 0, None)?;
+            let Some(permit) = instance.acquire_nar_stream_permit() else {
+                return Ok(too_many_streams_response());
+            };
+            let body = instance.stream_nar(digest, 0, None, permit)?;
             instance.nar_bytes_served.add(nar_size);
             let mut response = Response::new(body);
             let response_headers = response.headers_mut();
@@ -1302,8 +1427,11 @@ async fn get_nar_inner(
             Ok(response)
         }
         RangeRequest::Range { start, end } => {
+            let Some(permit) = instance.acquire_nar_stream_permit() else {
+                return Ok(too_many_streams_response());
+            };
             let length = end - start + 1;
-            let body = instance.stream_nar(digest, start, Some(length))?;
+            let body = instance.stream_nar(digest, start, Some(length), permit)?;
             instance.nar_bytes_served.add(length);
             let mut response = Response::new(body);
             *response.status_mut() = StatusCode::PARTIAL_CONTENT;
@@ -1367,6 +1495,23 @@ async fn put_nar_inner(
         ));
     }
     let content_length = content_length_of(headers);
+    // Fast-fail before reading any body bytes when a declared size already
+    // exceeds the cap: the uncompressed size embedded in a canonical
+    // `{hash}-{size}.nar` name, or otherwise the wire `Content-Length` (an
+    // upload that is already over the cap on the wire is over it
+    // decompressed too, since compression only shrinks).
+    let declared_size = bare_nar_digest_from_name(name, content_length)
+        .map(|(_, size)| size)
+        .or(content_length);
+    if let Some(size) = declared_size
+        && size > instance.max_nar_size_bytes
+    {
+        return Err(make_err!(
+            Code::ResourceExhausted,
+            "declared NAR size {size} exceeds the {}-byte limit",
+            instance.max_nar_size_bytes
+        ));
+    }
     let mut data_stream = body.into_data_stream();
 
     // Nix's uploader maps BOTH gzip and identity compression to a bare
@@ -1383,10 +1528,7 @@ async fn put_nar_inner(
                     }
                 }
                 Some(Err(err)) => {
-                    return Err(make_err!(
-                        Code::Unavailable,
-                        "Failed to read NAR upload body: {err}"
-                    ));
+                    return Err(make_input_err!("Failed to read NAR upload body: {err}"));
                 }
                 None => break,
             }
@@ -1412,7 +1554,23 @@ async fn put_nar_inner(
         ingest_nar_direct(instance, digest_sha256, digest_size, full_stream).await?;
         (digest_sha256, digest_size)
     } else {
-        ingest_nar_spooled(instance, codec, full_stream).await?
+        let (nar_sha256, nar_size) = ingest_nar_spooled(instance, codec, full_stream).await?;
+        // Defense in depth: a bare `{52 nix32}.nar` name commits to
+        // sha256(content) in its stem. The direct path enforces that via
+        // the `verify{}` wrapper; the spooled path (reached when the body
+        // is chunked, so there is no Content-Length) must enforce it too.
+        // Scoped to the identity codec only: a gzip-sniffed or
+        // `.nar.xz`/`.nar.zst`/`.nar.bz2` stem is the COMPRESSED file hash
+        // and intentionally differs from the decompressed NAR digest.
+        if codec == NarCodec::None
+            && let Some(expected) = bare_nar_stem_sha256(name)
+            && expected != nar_sha256
+        {
+            return Err(make_input_err!(
+                "bare NAR name stem does not match the uploaded content hash"
+            ));
+        }
+        (nar_sha256, nar_size)
     };
 
     // Only record the alias after the CAS write succeeded: an alias's
@@ -1627,6 +1785,7 @@ where
     S: Stream<Item = Result<Bytes, axum::Error>> + Send + Unpin,
 {
     let digest = DigestInfo::new(nar_sha256, nar_size);
+    let idle_timeout = instance.nar_upload_idle_timeout;
     let (mut tx, rx) = make_buf_channel_pair();
     let update_fut = with_sha256_ctx(instance.cas_store.update(
         digest,
@@ -1634,9 +1793,21 @@ where
         UploadSizeInfo::ExactSize(nar_size),
     ));
     let pump_fut = async move {
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk
-                .map_err(|e| make_err!(Code::Unavailable, "Failed to read NAR upload body: {e}"))?;
+        loop {
+            // Bound each body read by the idle timeout so a stalled client
+            // cannot pin the upload (and the CAS write half) indefinitely.
+            let next = timeout(idle_timeout, stream.next()).await.map_err(|_| {
+                make_err!(
+                    Code::DeadlineExceeded,
+                    "NAR upload stalled for more than {}s",
+                    idle_timeout.as_secs()
+                )
+            })?;
+            let Some(chunk) = next else { break };
+            // A truncated/aborted client body is a client error (400), not
+            // a backend failure (500) — matching the spooled path.
+            let chunk =
+                chunk.map_err(|e| make_input_err!("Failed to read NAR upload body: {e}"))?;
             if chunk.is_empty() {
                 continue;
             }
@@ -1682,18 +1853,39 @@ where
         .await
         .err_tip(|| format!("Creating NAR spool file {}", spool_path.display()))?;
 
+    let max_nar_size = instance.max_nar_size_bytes;
+    let idle_timeout = instance.nar_upload_idle_timeout;
     let mut hasher = DigestHasherFunc::Sha256.hasher();
     let mut chunk = BytesMut::with_capacity(fs::DEFAULT_READ_BUFF_SIZE);
+    let mut written: u64 = 0;
     loop {
         chunk.clear();
-        // Decompression failures are client-data problems (400), not
-        // internal errors.
-        let read = decoder
-            .read_buf(&mut chunk)
+        // A stalled/slowloris upload must not pin the spool file and its
+        // descriptor forever: bound each read by the idle timeout, which
+        // resets on every chunk actually received.
+        let read = timeout(idle_timeout, decoder.read_buf(&mut chunk))
             .await
+            .map_err(|_| {
+                make_err!(
+                    Code::DeadlineExceeded,
+                    "NAR upload stalled for more than {}s",
+                    idle_timeout.as_secs()
+                )
+            })?
+            // Decompression failures are client-data problems (400), not
+            // internal errors.
             .map_err(|e| make_input_err!("Failed to decompress NAR upload: {e}"))?;
         if read == 0 {
             break;
+        }
+        // Abort a decompression bomb before the spool can exceed the cap:
+        // the SpoolFileGuard deletes the partial file on this error return.
+        written = written.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if written > max_nar_size {
+            return Err(make_err!(
+                Code::ResourceExhausted,
+                "uploaded NAR decompresses past the {max_nar_size}-byte limit"
+            ));
         }
         hasher.update(&chunk);
         spool_file
@@ -1736,7 +1928,81 @@ async fn resolve_or_transcode_zstd(
     if let Some(reused) = reusable_zstd_fields(instance, hash, path_info).await? {
         return Ok(reused);
     }
-    transcode_nar_to_zstd(instance, nar_digest).await
+
+    // Coalesce concurrent transcodes of the SAME NAR: exactly one PUT
+    // becomes the leader and transcodes; the rest await its result. This
+    // kills the transcode storm and the redundant re-encode of one NAR
+    // shared by many distinct store paths (whose store-path hashes differ,
+    // so the reuse fast path above never finds them).
+    let (slot, is_leader) = {
+        let mut inflight = instance
+            .transcode_inflight
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(existing) = inflight.get(&nar_digest) {
+            (Arc::clone(existing), false)
+        } else {
+            let slot = Arc::new(TranscodeInflight {
+                result: StdMutex::new(None),
+                notify: Notify::new(),
+            });
+            inflight.insert(nar_digest, Arc::clone(&slot));
+            (slot, true)
+        }
+    };
+
+    if is_leader {
+        // Bound concurrent CPU/spool-heavy transcodes; queue (do not
+        // load-shed) when saturated so a burst of distinct NARs is
+        // serialized rather than rejected.
+        let result = match Arc::clone(&instance.transcode_semaphore)
+            .acquire_owned()
+            .await
+        {
+            Ok(_permit) => transcode_nar_to_zstd(instance, nar_digest).await,
+            Err(err) => Err(make_err!(
+                Code::Internal,
+                "transcode semaphore closed: {err}"
+            )),
+        };
+        // Publish the result and wake every follower BEFORE removing the
+        // slot, so a follower already holding this slot always observes it.
+        {
+            let mut cell = slot
+                .result
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *cell = Some(result.clone());
+        }
+        slot.notify.notify_waiters();
+        instance
+            .transcode_inflight
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&nar_digest);
+        result
+    } else {
+        // Follower: register the waiter (`enable`) BEFORE reading the
+        // result cell so a publish that races with the read is never
+        // missed, then re-check after each wake.
+        loop {
+            let notified = slot.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            // Clone the result out of the guard into an owned value so the
+            // lock is released before the `if let` (avoids holding it across
+            // the branch / the await below).
+            let maybe_result = slot
+                .result
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            if let Some(result) = maybe_result {
+                return result;
+            }
+            notified.await;
+        }
+    }
 }
 
 /// Looks for a previous record of the same store path whose `file_*`
@@ -1823,8 +2089,10 @@ async fn transcode_nar_to_zstd(
         .await
         .err_tip(|| format!("Creating zstd spool file {}", spool_path.display()))?;
 
+    let max_nar_size = instance.max_nar_size_bytes;
     let mut hasher = DigestHasherFunc::Sha256.hasher();
     let mut chunk = BytesMut::with_capacity(fs::DEFAULT_READ_BUFF_SIZE);
+    let mut written: u64 = 0;
     loop {
         chunk.clear();
         // The input is our own CAS: any failure here is a server-side
@@ -1837,6 +2105,16 @@ async fn transcode_nar_to_zstd(
         })?;
         if read == 0 {
             break;
+        }
+        // Defense in depth: the input NAR is already capped at ingest and
+        // compression only shrinks, so this never trips for real data, but
+        // it bounds the spool against any pathological encoder blow-up.
+        written = written.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if written > max_nar_size {
+            return Err(make_err!(
+                Code::ResourceExhausted,
+                "zstd-transcoded NAR exceeds the {max_nar_size}-byte limit"
+            ));
         }
         hasher.update(&chunk);
         spool_file
@@ -1884,13 +2162,22 @@ mod tests {
     use super::{
         Counter, CounterWithTime, DEFAULT_SPOOL_DIR_NAME, DEFAULT_ZSTD_LEVEL, DigestHasher,
         DigestHasherFunc, DigestInfo, HeaderMap, HeaderValue, NarCodec, NixCacheInstance,
-        RangeRequest, ServeCompression, StatusCode, Store, StoreLike, bare_nar_digest_from_name,
-        constant_time_eq, error_response, extract_token, ingest_nar_spooled, is_valid_log_name,
+        NixPathInfo, RangeRequest, ServeCompression, StatusCode, Store, StoreLike,
+        bare_nar_digest_from_name, bare_nar_stem_sha256, constant_time_eq, error_response,
+        extract_token, ingest_nar_direct, ingest_nar_spooled, is_valid_log_name,
         is_valid_nar_upload_name, listing_name_hash, narinfo_name_hash, parse_range,
-        prepare_spool_dir, sha256_of, token_matches_any, transcode_nar_to_zstd, with_sha256_ctx,
+        prepare_spool_dir, resolve_or_transcode_zstd, sha256_of, token_matches_any,
+        transcode_nar_to_zstd, with_sha256_ctx,
     };
 
     fn test_instance() -> Arc<NixCacheInstance> {
+        build_test_instance(32 * 1024 * 1024 * 1024, 256)
+    }
+
+    fn build_test_instance(
+        max_nar_size_bytes: u64,
+        max_nar_streams: usize,
+    ) -> Arc<NixCacheInstance> {
         let spool_dir = std::env::temp_dir()
             .join(DEFAULT_SPOOL_DIR_NAME)
             .join(format!("unit-test-{}", Uuid::new_v4()));
@@ -1911,6 +2198,11 @@ mod tests {
             write_token_hashes: vec![],
             serve_compression: ServeCompression::None,
             compression_level: DEFAULT_ZSTD_LEVEL,
+            max_nar_size_bytes,
+            nar_upload_idle_timeout: core::time::Duration::from_secs(60),
+            nar_stream_semaphore: Arc::new(tokio::sync::Semaphore::new(max_nar_streams)),
+            transcode_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
+            transcode_inflight: std::sync::Mutex::new(std::collections::HashMap::new()),
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
@@ -2095,6 +2387,15 @@ mod tests {
         assert_eq!(
             error_response("test", &make_err!(Code::Unavailable, "backend down")).status(),
             StatusCode::INTERNAL_SERVER_ERROR
+        );
+        // Resource-exhaustion and deadline map to client statuses.
+        assert_eq!(
+            error_response("test", &make_err!(Code::ResourceExhausted, "too big")).status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(
+            error_response("test", &make_err!(Code::DeadlineExceeded, "stalled")).status(),
+            StatusCode::REQUEST_TIMEOUT
         );
     }
 
@@ -2282,6 +2583,10 @@ mod tests {
         ] {
             assert!(!is_valid_log_name(bad), "for '{bad}'");
         }
+        // An unbounded name would overflow the derived filesystem key
+        // (`log-enc:{drv}`), so lengths past the cap are rejected.
+        assert!(is_valid_log_name(&"a".repeat(240)));
+        assert!(!is_valid_log_name(&"a".repeat(241)));
     }
 
     #[test]
@@ -2366,6 +2671,150 @@ mod tests {
             .expect("read spool dir")
             .count();
         assert_eq!(leftovers, 0, "spool files leaked");
+        Ok(())
+    }
+
+    /// A truncated/aborted client body on the direct (Content-Length)
+    /// upload path is a client error (400 via `InvalidArgument`), matching
+    /// the spooled path — not a `500`.
+    #[nativelink_test]
+    async fn direct_ingest_maps_body_error_to_client_error() -> Result<(), Error> {
+        let instance = test_instance();
+        let payload = b"partial nar bytes before the stream errors";
+        let digest = sha256_of(payload);
+        // Yields some bytes, then errors mid-stream (a truncated body).
+        let err_item: Result<Bytes, axum::Error> = Err(axum::Error::new(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "peer went away",
+        )));
+        let stream = futures::stream::iter(vec![Ok(Bytes::copy_from_slice(payload)), err_item]);
+        // Declare a larger size so the write is genuinely incomplete.
+        let err = ingest_nar_direct(&instance, digest, 4096, stream)
+            .await
+            .expect_err("truncated body must fail");
+        assert_eq!(
+            err.code,
+            Code::InvalidArgument,
+            "a client-caused truncated body must be a client error"
+        );
+        Ok(())
+    }
+
+    /// A decompressed NAR that grows past `max_nar_size_bytes` must abort
+    /// as `ResourceExhausted` (413), for every codec, without leaking the
+    /// partial spool file.
+    #[nativelink_test]
+    async fn spooled_ingest_enforces_max_nar_size() -> Result<(), Error> {
+        let instance = build_test_instance(64, 256);
+        let payload = b"decompression bomb payload byte ".repeat(256);
+        for codec in [
+            NarCodec::None,
+            NarCodec::Gzip,
+            NarCodec::Xz,
+            NarCodec::Zstd,
+            NarCodec::Bzip2,
+        ] {
+            let compressed = compress(codec, &payload).await;
+            let stream = futures::stream::iter([Ok::<_, axum::Error>(Bytes::from(compressed))]);
+            let err = ingest_nar_spooled(&instance, codec, stream)
+                .await
+                .expect_err("cap must abort the ingest");
+            assert_eq!(err.code, Code::ResourceExhausted, "for {codec:?}");
+        }
+        let leftovers = std::fs::read_dir(&instance.spool_dir)
+            .expect("read spool dir")
+            .count();
+        assert_eq!(leftovers, 0, "spool files leaked");
+        Ok(())
+    }
+
+    /// The concurrent-NAR-stream ceiling refuses new streams once the
+    /// permits are exhausted, and a released permit is reusable.
+    #[test]
+    fn acquire_nar_stream_permit_bounds_concurrency() {
+        let instance = build_test_instance(1024, 2);
+        let p1 = instance.acquire_nar_stream_permit().expect("first permit");
+        let p2 = instance.acquire_nar_stream_permit().expect("second permit");
+        assert!(
+            instance.acquire_nar_stream_permit().is_none(),
+            "a third concurrent stream must be refused at the ceiling"
+        );
+        drop(p1);
+        assert!(
+            instance.acquire_nar_stream_permit().is_some(),
+            "a freed permit is reusable"
+        );
+        drop(p2);
+    }
+
+    #[test]
+    fn bare_nar_stem_sha256_matches_only_bare_identity_names() {
+        const HELLO_NIX32: &str = "094qif9n4cq4fdg459qzbhg1c6wywawwaaivx0k0x8xhbyx4vwic";
+        const HELLO_HEX: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let hello: [u8; 32] = hex::decode(HELLO_HEX)
+            .expect("hex")
+            .try_into()
+            .expect("32 bytes");
+        assert_eq!(
+            bare_nar_stem_sha256(&format!("{HELLO_NIX32}.nar")),
+            Some(hello)
+        );
+        // Canonical, compressed, and non-hash-shaped names never match.
+        assert_eq!(bare_nar_stem_sha256(&format!("{HELLO_NIX32}-42.nar")), None);
+        assert_eq!(bare_nar_stem_sha256(&format!("{HELLO_NIX32}.nar.xz")), None);
+        assert_eq!(bare_nar_stem_sha256("random.nar"), None);
+    }
+
+    /// Concurrent narinfo PUTs for the SAME NAR under DISTINCT store-path
+    /// hashes coalesce into one transcode via the single-flight map and
+    /// must agree on the (content-addressed) result; the in-flight map is
+    /// drained afterward.
+    #[nativelink_test]
+    async fn transcode_single_flights_concurrent_puts_for_one_nar() -> Result<(), Error> {
+        let instance = build_test_instance(32 * 1024 * 1024 * 1024, 256);
+        let payload = b"single-flight transcode payload 0123456789 ".repeat(64);
+        let nar_size = u64::try_from(payload.len()).expect("size fits in u64");
+        let nar_digest = DigestInfo::new(sha256_of(&payload), nar_size);
+        with_sha256_ctx(
+            instance
+                .cas_store
+                .update_oneshot(nar_digest, Bytes::from(payload.clone())),
+        )
+        .await
+        .expect("seed NAR");
+
+        let path_info = NixPathInfo {
+            nar_sha256: sha256_of(&payload).to_vec(),
+            nar_size,
+            ..Default::default()
+        };
+        let (a, b) = tokio::join!(
+            resolve_or_transcode_zstd(
+                &instance,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                &path_info,
+                nar_digest,
+            ),
+            resolve_or_transcode_zstd(
+                &instance,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                &path_info,
+                nar_digest,
+            ),
+        );
+        assert_eq!(
+            a.expect("transcode a"),
+            b.expect("transcode b"),
+            "concurrent transcodes of one NAR must agree"
+        );
+        assert!(
+            instance
+                .transcode_inflight
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_empty(),
+            "the in-flight map must be drained after completion"
+        );
         Ok(())
     }
 }
