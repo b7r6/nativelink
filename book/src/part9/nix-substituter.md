@@ -74,11 +74,15 @@ Private caches gate on static tokens: `read_token_files` and `write_token_files`
 
 The alias store doubles as the home for auxiliary documents, always under slash-free string keys. `nix copy --to '…?write-nar-listing=1'` uploads a JSON file listing to `PUT /<hash>.ls`, stored verbatim under `ls:{hash}` — deliberately with no cross-check against path-info or CAS state, because nix pushes the listing *before* the NAR. `nix store copy-log` uploads build logs to `PUT /log/<drv>`, keyed by the full `.drv` name under `log:{drv}`. Logs are the one place transport encoding matters: with `?log-compression=br` nix uploads pre-compressed bytes under a `Content-Encoding: br` header, so the facade stores the body verbatim, records the encoding under `log-enc:{drv}`, and replays it on GET. Every nix client sends `Accept-Encoding: br, zstd, gzip, …`, so `nix log` decodes transparently and the server never re-encodes a log.
 
-## Compressed NAR Serving
+## Compression and Round-Trip Fidelity
 
-`serve_compression: "zstd"` moves compression to ingest, never to the request path. When a narinfo is uploaded, the uncompressed NAR streams out of the CAS through a zstd encoder (`compression_level`, default 3); the compressed output is hashed and counted while it spools, then stored back into `cas_store` under its own digest. The served narinfo then advertises `nar/{nix32(file_sha256)}-{file_size}.nar.zst`, `Compression: zstd`, and a real `FileHash`/`FileSize` — measured at ingest, never guessed. A re-upload of the same path reuses the earlier compressed blob when it still matches and is still present. Stored signatures survive throughout: the fingerprint covers the uncompressed NAR, never the URL or the compression.
+By default (`preserve_upload_compression: true`) the facade serves back exactly what a client pushed. A `nix copy --to` upload arrives compressed (`xz` by default) or raw; the facade stores the canonical *uncompressed* NAR — for deduplication, completeness, and sharing with the gRPC CAS — *and* the client's original compressed blob under its own digest. The served narinfo then advertises the original `Compression`, `FileHash`, `FileSize`, and URL, so a client that pushed a path can pull it back from its own cached narinfo. This is the round-trip behavior of `attic`, `harmonia`, and `nix-serve`. Setting `preserve_upload_compression: false` stores only the uncompressed form and serves `Compression: none`, trading that fidelity for the storage of the second blob.
 
-The compressed digest stays *out* of the record's `output_files` on purpose. Completeness must key on the uncompressed NAR alone: losing a `.nar.zst` blob to eviction is recoverable, so the narinfo handler checks for it per request and falls back to the phase-1 uncompressed rendering — a slower download, not a substitution miss. Listing it in `output_files` would let `completeness_checking` 404 the whole narinfo over derived data the facade can serve around (and a later re-upload of the path regenerates the compressed blob, so it self-heals).
+Independently, `serve_compression: "zstd"` re-encodes *uncompressed* uploads on ingest: the NAR streams out of the CAS through a zstd encoder (`compression_level`, default 3), and the compressed blob is stored under its own digest with a real `FileHash`/`FileSize` measured at ingest, never guessed.
+
+The served narinfo chooses its advertised form by precedence — a preserved original, else a zstd re-encoding, else the canonical uncompressed NAR — each guarded by the blob still being present. Stored signatures survive every rendering: the fingerprint covers the uncompressed NAR — its hash, size, and references — never the URL or the compression.
+
+The compressed digest, preserved or re-encoded, stays *out* of the record's `output_files` on purpose. Completeness must key on the uncompressed NAR alone: losing a compressed blob to eviction is recoverable, so the narinfo handler checks for it per request and falls back to the uncompressed rendering — a slower download, not a substitution miss. Listing it in `output_files` would let `completeness_checking` 404 the whole narinfo over derived data the facade can serve around (and a later re-upload of the path regenerates the blob, so it self-heals).
 
 ## Configuration
 
@@ -98,6 +102,7 @@ services: {
     read_only: false,                   // true on public listeners: PUT returns 405
     read_token_files: [],               // each file holds ONE token; Bearer or netrc password
     write_token_files: [],              // PUTs additionally need one of these
+    preserve_upload_compression: true,  // serve pushed compression back verbatim (default)
     serve_compression: "zstd",          // omit (or "none") to serve uncompressed NARs
     compression_level: 3,               // zstd level used at ingest
   }],
@@ -114,12 +119,12 @@ Store composition has sharp edges here because two of the three stores are strin
 ## Client Usage
 
 ```bash
-# Upload a closure. Skipping client-side compression is fastest:
-# the server stores the canonical uncompressed NAR either way.
-nix copy --to 'http://cache.example.com:50071/nix/main?compression=none' ./result
-
-# Default upload compression is xz; the server decompresses on ingest.
+# Upload a closure. Default compression is xz; the facade serves the
+# compressed blob back verbatim and also stores the uncompressed NAR.
 nix copy --to 'http://cache.example.com:50071/nix/main' ./result
+
+# Or push uncompressed, which is fastest to ingest.
+nix copy --to 'http://cache.example.com:50071/nix/main?compression=none' ./result
 
 # Fetch explicitly, or let substitution find it during builds.
 nix copy --from 'http://cache.example.com:50071/nix/main' /nix/store/<hash>-<name>
@@ -132,6 +137,16 @@ substituters = http://cache.example.com:50071/nix/main https://cache.nixos.org
 trusted-public-keys = nix-cache.example.org-1:<base64> cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 netrc-file = /etc/nix/netrc   # on token-gated caches the token is the password
 ```
+
+## Deploying Alongside Remote Execution
+
+`nix_cache` is an ordinary service entry: it mounts an HTTP router at `/nix/<instance_name>` on the same listener as the gRPC CAS, AC, and execution services, so one `NativeLink` process can be both a remote-execution endpoint and a Nix cache on one port. Its `cas_store` may reuse the same content-addressed store the gRPC CAS uses — Nix `sha256` NAR blobs and Bazel `blake3` blobs coexist in it, because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. The `path_info_store` and `alias_store` are string-keyed and must be separate stores.
+
+`nativelink-config/examples/basic_cas_with_nix.json5` is a full remote-execution stack — CAS, AC, execution, capabilities, bytestream, a scheduler, and a worker — with a `nix_cache` service added to the same public listener, its NAR store a `verify`-wrapped reference to the shared CAS. The worker still references the raw fast/slow store rather than the `verify` wrapper, because a worker's `cas_fast_slow_store` must be a `FastSlowStore`.
+
+## Validating Configuration
+
+`nativelink --check <config>` parses a configuration and resolves every store and scheduler reference — catching a mistyped `cas_store` or `scheduler` name that would otherwise only fail at boot — then exits without binding a socket, connecting to a backend, or creating any store directory. It prints a one-line summary on success and names each unresolved reference on failure, with an exit code a continuous-integration gate can read.
 
 ## Code Map
 
