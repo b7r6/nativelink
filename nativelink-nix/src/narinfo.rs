@@ -242,6 +242,25 @@ pub fn is_store_path_hash(s: &str) -> bool {
     s.len() == 32 && s.bytes().all(nixbase32::is_valid_char)
 }
 
+/// Returns true if `name` is a valid store-path name component — the
+/// `<name>` in `/nix/store/<hash>-<name>` and the tail of every
+/// reference — per Nix's `checkName` (`src/libstore/path.cc`):
+/// non-empty, at most 211 bytes, every byte in `[0-9a-zA-Z+._?=-]`, and
+/// not starting with `.` (which would allow `.`/`..`).
+///
+/// This is stricter than a bare `/`-and-whitespace check: it rejects NUL
+/// and every other control or out-of-charset byte, so a crafted narinfo
+/// cannot smuggle them into a stored/served store path or reference.
+#[must_use]
+pub fn is_valid_store_path_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 211
+        && !name.starts_with('.')
+        && name.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.' | b'_' | b'?' | b'=')
+        })
+}
+
 /// Computes the exact byte string Nix signs for a store path, per
 /// `ValidPathInfo::fingerprint` in `src/libstore/path-info.cc` (lines
 /// 43-50 of Nix 2.34, empirically verified against `cache.nixos.org`
@@ -380,7 +399,7 @@ mod tests {
     use base64::engine::general_purpose::STANDARD as BASE64;
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-    use super::{NarInfo, fingerprint, is_store_path_hash, parse};
+    use super::{NarInfo, fingerprint, is_store_path_hash, is_valid_store_path_name, parse};
     use crate::nixbase32;
 
     /// The real cache.nixos.org narinfo quoted at the top of
@@ -904,6 +923,37 @@ mod tests {
         assert!(!is_store_path_hash("BVKX110YLICIFCGL0XIID5F100HX3AR7"));
         // Multi-byte characters must not pass on char count alone.
         assert!(!is_store_path_hash("bvkx110ylicifcgl0xiid5f100hx3aré"));
+    }
+
+    #[test]
+    fn is_valid_store_path_name_matches_nix_check_name() {
+        for good in [
+            "nix-2.34.7",
+            "hello-2.10",
+            "publicsuffix-list-0-unstable-2026-03-26",
+            "glibc-2.40-66",
+            "app-3.4.drv",
+            "a",
+            "with+plus_and?query=eq",
+        ] {
+            assert!(is_valid_store_path_name(good), "for '{good}'");
+        }
+        for bad in [
+            "",            // empty
+            ".hidden",     // leading dot
+            "..",          // leading dot (and traversal)
+            "na\0me",      // NUL byte
+            "has space",   // whitespace
+            "has/slash",   // path separator
+            "tab\tinside", // control byte
+            "star*",       // out-of-charset
+            "unïcode",     // non-ascii
+        ] {
+            assert!(!is_valid_store_path_name(bad), "for '{bad}'");
+        }
+        // 211 bytes is allowed; 212 is not.
+        assert!(is_valid_store_path_name(&"a".repeat(211)));
+        assert!(!is_valid_store_path_name(&"a".repeat(212)));
     }
 
     #[test]

@@ -38,7 +38,7 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
 };
 use prost::Message;
 
-use crate::narinfo::{NarInfo, is_store_path_hash};
+use crate::narinfo::{NarInfo, is_store_path_hash, is_valid_store_path_name};
 
 /// The `Any.type_url` under which a prost-encoded [`NixPathInfo`] rides
 /// in the record's `ExecutedActionMetadata.auxiliary_metadata`.
@@ -122,12 +122,39 @@ fn validate_reference(reference: &str) -> Result<(), Error> {
     let name = rest.strip_prefix('-').ok_or_else(|| {
         make_input_err!("reference '{reference}' lacks a '-' after the 32-character hash")
     })?;
-    if name.is_empty() {
-        return Err(make_input_err!("reference '{reference}' has an empty name"));
-    }
-    if name.contains('/') || name.chars().any(char::is_whitespace) {
+    // Nix's `checkName`: rejects empty names, NUL and every other control
+    // or out-of-charset byte, `/`, whitespace, and a leading `.`.
+    if !is_valid_store_path_name(name) {
         return Err(make_input_err!(
-            "reference '{reference}' contains '/' or whitespace"
+            "reference '{reference}' has an invalid store-path name '{name}'"
+        ));
+    }
+    Ok(())
+}
+
+/// Validates that `store_path`'s basename is
+/// `<32-char nix32 hash>-<name>` with a valid
+/// [`is_valid_store_path_name`] name component. This rejects NUL and
+/// other out-of-charset bytes in the name a `.narinfo` `StorePath` line
+/// might otherwise smuggle through.
+fn validate_store_path(store_path: &str) -> Result<(), Error> {
+    let basename = store_path.rsplit('/').next().unwrap_or(store_path);
+    let (hash, rest) = basename.split_at_checked(32).ok_or_else(|| {
+        make_input_err!(
+            "store path '{store_path}' basename is too short for a 32-character nix32 hash"
+        )
+    })?;
+    if !is_store_path_hash(hash) {
+        return Err(make_input_err!(
+            "store path '{store_path}' does not start with a 32-character nix32 hash"
+        ));
+    }
+    let name = rest.strip_prefix('-').ok_or_else(|| {
+        make_input_err!("store path '{store_path}' lacks a '-' after the 32-character hash")
+    })?;
+    if !is_valid_store_path_name(name) {
+        return Err(make_input_err!(
+            "store path '{store_path}' has an invalid name '{name}'"
         ));
     }
     Ok(())
@@ -216,6 +243,29 @@ impl NixPathInfo {
         Ok(())
     }
 
+    /// Validates the store path, every reference, and every signature —
+    /// the single choke point shared by [`Self::to_nar_info`] (the render
+    /// path) and [`Self::encode_record`] (the persist path), so a record
+    /// that cannot be rendered can never be stored in the first place.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidArgument` error if the store-path name, any
+    /// reference, or any signature is malformed.
+    fn validate_store_path_references_and_signatures(&self) -> Result<(), Error> {
+        validate_store_path(&self.store_path)
+            .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        for reference in &self.references {
+            validate_reference(reference)
+                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        }
+        for sig in &self.signatures {
+            validate_signature(sig)
+                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        }
+        Ok(())
+    }
+
     /// Extracts the URL- and compression-independent metadata of a parsed
     /// `.narinfo` document. References are sorted; `FileHash`/`FileSize`
     /// (properties of the *upstream's* compressed NAR, not ours) are
@@ -261,14 +311,7 @@ impl NixPathInfo {
         }
         self.validate_file_fields()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
-        for reference in &self.references {
-            validate_reference(reference)
-                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
-        }
-        for sig in &self.signatures {
-            validate_signature(sig)
-                .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
-        }
+        self.validate_store_path_references_and_signatures()?;
         Ok(NarInfo {
             store_path: self.store_path.clone(),
             url,
@@ -325,6 +368,10 @@ impl NixPathInfo {
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         self.validate_file_fields()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        // Same reference/signature/store-path checks `to_nar_info` runs, so
+        // an unrenderable record is rejected at PUT (400) instead of being
+        // stored and then 500ing forever on GET.
+        self.validate_store_path_references_and_signatures()?;
         let size_bytes = i64::try_from(self.nar_size).map_err(|e| {
             make_input_err!(
                 "NixPathInfo nar_size {} does not fit in a Digest's i64 size_bytes: {e}",
@@ -719,6 +766,60 @@ mod tests {
         let mut oversized = sample_info();
         oversized.nar_size = u64::MAX;
         assert!(oversized.encode_record().is_err());
+    }
+
+    #[test]
+    fn encode_record_and_to_nar_info_reject_the_same_shapes() {
+        // Every mutation that makes `to_nar_info` fail must ALSO make
+        // `encode_record` fail, so an unrenderable record can never be
+        // persisted (the PUT/GET validation-asymmetry fix).
+        let cases: [FileFieldViolation; 6] = [
+            (
+                |i| i.references.push("no-hash-prefix".to_string()),
+                "short reference",
+            ),
+            (
+                |i| {
+                    i.references
+                        .push("bvkx110ylicifcgl0xiid5f100hx3ar7-a/b".to_string());
+                },
+                "reference with '/'",
+            ),
+            (
+                // NUL byte in an otherwise valid-length reference name.
+                |i| {
+                    i.references
+                        .push("bvkx110ylicifcgl0xiid5f100hx3ar7-na\0me".to_string());
+                },
+                "reference with NUL",
+            ),
+            (
+                |i| i.signatures.push("no-colon".to_string()),
+                "signature without ':'",
+            ),
+            (
+                |i| i.signatures.push("key-1:aGVsbG8=".to_string()),
+                "signature that is not 64 bytes",
+            ),
+            (
+                // NUL byte in the store-path name.
+                |i| i.store_path = "/nix/store/bvkx110ylicifcgl0xiid5f100hx3ar7-na\0me".to_string(),
+                "store path with NUL in name",
+            ),
+        ];
+        for (mutate, what) in cases {
+            let mut info = sample_info();
+            mutate(&mut info);
+            assert!(
+                info.encode_record().is_err(),
+                "encode_record must reject {what}"
+            );
+            assert!(
+                info.to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                    .is_err(),
+                "to_nar_info must reject {what}"
+            );
+        }
     }
 
     #[test]
