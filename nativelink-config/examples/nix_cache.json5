@@ -166,6 +166,21 @@
             // serve_compression: "zstd",
             // compression_level: 3,
 
+            // Round-trip compression fidelity (default true). A compressed
+            // NAR upload (.nar.xz/.nar.zst/.nar.bz2 — xz is nix's default)
+            // keeps its ORIGINAL bytes as a CAS blob served verbatim under
+            // the client's URL, and the served narinfo advertises the
+            // original Compression/FileHash/FileSize, so a client can pull
+            // a just-pushed path straight back within the narinfo TTL
+            // (matching attic/harmonia/nix-serve). Set false to instead
+            // decompress every upload to the canonical uncompressed NAR
+            // and serve Compression: none, saving ~0.3x storage but 404ing
+            // the client's cached compressed URL on a warm pull. With
+            // serve_compression: "zstd" a preserved original wins over
+            // transcoding (the client's codec is served, saving CPU; only
+            // Compression: none pushes are transcoded).
+            // preserve_upload_compression: true,
+
             // Hardening limits (all optional; defaults shown). They are
             // deliberately generous so legitimate large-closure pushes and
             // normal parallel substitution are never affected.

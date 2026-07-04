@@ -407,6 +407,32 @@ pub struct NixCacheConfig {
     )]
     pub compression_level: Option<i32>,
 
+    /// Round-trip compression fidelity. When true (the default), a
+    /// compressed NAR upload (`.nar.xz`/`.nar.zst`/`.nar.bz2`, the codec
+    /// nix's `nix copy` picks — `xz` by default) has its ORIGINAL bytes
+    /// stored as a CAS blob and served verbatim under the client's URL,
+    /// and the served `narinfo` advertises the original
+    /// compression/`FileHash`/`FileSize`. A client that pushed a path can
+    /// then pull it straight back within the narinfo TTL (the URL it
+    /// cached still resolves), matching attic/harmonia/nix-serve. When
+    /// false, compressed uploads are decompressed to the canonical
+    /// uncompressed NAR and served as `Compression: none`, saving roughly
+    /// the compressed blob's storage (~0.3x of the NAR) at the cost of
+    /// that warm-pull round trip.
+    ///
+    /// Interaction with `serve_compression = "zstd"`: a preserved original
+    /// takes precedence over transcoding, so a compressed push is served
+    /// back in the CLIENT's original codec (no re-encode, saving CPU) and
+    /// only `Compression: none` pushes are transcoded to zstd. If a
+    /// preserved compressed blob is later evicted, serving degrades
+    /// gracefully to the uncompressed NAR (`Compression: none`); the
+    /// signed fingerprint covers only the uncompressed NAR, so stored
+    /// signatures stay valid across every rendering.
+    ///
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub preserve_upload_compression: bool,
+
     /// Maximum size in bytes of a single uncompressed NAR the cache will
     /// ingest. Compressed uploads (`.nar.xz`/`.nar.zst`/`.nar.bz2` and
     /// gzip-sniffed `.nar`) are stream-decompressed into the spool

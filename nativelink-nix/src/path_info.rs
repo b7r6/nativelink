@@ -61,7 +61,10 @@ pub const NIX_CACHE_WORKER_NAME: &str = "nativelink-nix-cache";
 ///
 /// The optional `file_*` trio (tags 9–11) describes the *compressed*
 /// artifact at the served URL — `FileHash`/`FileSize` in `.narinfo`
-/// terms — and is all-absent or all-present (see the field docs).
+/// terms — and is all-absent or all-present (see the field docs). The
+/// optional `file_url` (tag 12) is the exact URL a preserved ORIGINAL
+/// upload is served under (empty means "derive the canonical name"); it
+/// may be set only when the trio is set.
 /// The compressed file is deliberately NOT part of the record's
 /// `ActionResult` output files: action-cache completeness must key on
 /// the uncompressed NAR only, so eviction of the compressed blob
@@ -105,6 +108,13 @@ pub struct NixPathInfo {
     /// when absent.
     #[prost(string, tag = "11")]
     pub file_compression: String,
+    /// The exact URL a preserved ORIGINAL compressed upload is served
+    /// under (`nar/{clientFileHash}.nar.{ext}`, the verbatim `url` from
+    /// the client's `.narinfo`). Empty means "derive the canonical name
+    /// from the `file_*` trio". May be non-empty only when the `file_*`
+    /// trio is present. Old records (no tag 12) decode with this empty.
+    #[prost(string, tag = "12")]
+    pub file_url: String,
 }
 
 /// Validates that `reference` is a plausible store-path basename:
@@ -203,20 +213,26 @@ impl NixPathInfo {
     /// Validates the all-or-none invariant of the `file_*` trio: either
     /// all three are absent (empty hash, zero size, empty compression)
     /// or all three are present with a 32-byte `file_sha256`, a nonzero
-    /// `file_size`, and a non-empty `file_compression`.
+    /// `file_size`, and a non-empty `file_compression`. `file_url` is an
+    /// optional adjunct that may be set only when the trio is present.
     ///
     /// # Errors
     ///
     /// Returns a distinct `InvalidArgument` error for each violation:
-    /// `file_size`/`file_compression` present without `file_sha256`, a
-    /// `file_sha256` that is not exactly 32 bytes, a `file_sha256`
-    /// without a `file_size`, or a `file_sha256` without a
-    /// `file_compression`.
+    /// a `file_url` set without the trio, `file_size`/`file_compression`
+    /// present without `file_sha256`, a `file_sha256` that is not exactly
+    /// 32 bytes, a `file_sha256` without a `file_size`, or a `file_sha256`
+    /// without a `file_compression`.
     fn validate_file_fields(&self) -> Result<(), Error> {
         let has_hash = !self.file_sha256.is_empty();
         let has_size = self.file_size != 0;
         let has_compression = !self.file_compression.is_empty();
         if !has_hash && !has_size && !has_compression {
+            if !self.file_url.is_empty() {
+                return Err(make_input_err!(
+                    "NixPathInfo has a file_url but no file_sha256/file_size/file_compression; file_url requires the file_* trio"
+                ));
+            }
             return Ok(());
         }
         if !has_hash {
@@ -286,6 +302,7 @@ impl NixPathInfo {
             file_sha256: Vec::new(),
             file_size: 0,
             file_compression: String::new(),
+            file_url: String::new(),
         }
     }
 
@@ -417,8 +434,9 @@ impl NixPathInfo {
     /// invariant (see [`Self::validate_file_fields`]), or a digest
     /// hash/size that contradicts the embedded message.
     ///
-    /// Phase-1 records (encoded before the `file_*` fields existed)
-    /// decode fine: prost defaults leave the trio all-absent.
+    /// Older records (encoded before the `file_*` fields or `file_url`
+    /// existed) decode fine: prost defaults leave the trio all-absent and
+    /// `file_url` empty.
     pub fn decode_record(bytes: &[u8]) -> Result<Self, Error> {
         let record = ProtoActionResult::decode(bytes).map_err(|e| {
             make_input_err!("nix path-info record is not a valid ActionResult: {e}")
@@ -1016,6 +1034,68 @@ mod tests {
             info.to_nar_info("nar/x.nar.zst".to_string(), "zstd".to_string())
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn file_url_round_trips_with_the_trio_present() {
+        let mut info = sample_info_with_file_fields();
+        info.file_compression = "xz".to_string();
+        info.file_url =
+            "nar/11by0lzb61psglb8810552qb8v569x7y8q9gcj9p1dadpv9q0jqw.nar.xz".to_string();
+        let bytes = info.encode_record().expect("encode record");
+        let decoded = NixPathInfo::decode_record(&bytes).expect("decode record");
+        assert_eq!(decoded, info);
+        assert_eq!(
+            decoded.file_url,
+            "nar/11by0lzb61psglb8810552qb8v569x7y8q9gcj9p1dadpv9q0jqw.nar.xz"
+        );
+        // A preserved-original record renders under its exact client URL.
+        let rendered = info
+            .to_nar_info(info.file_url.clone(), info.file_compression.clone())
+            .expect("to_nar_info");
+        assert_eq!(rendered.url, info.file_url);
+        assert_eq!(rendered.compression, "xz");
+    }
+
+    #[test]
+    fn file_url_without_the_trio_is_rejected_everywhere() {
+        // A file_url with no file_* trio violates the all-or-none rule on
+        // every path that runs `validate_file_fields`.
+        let mut info = sample_info();
+        info.file_url = "nar/deadbeef.nar.xz".to_string();
+        let encode_msg = info
+            .encode_record()
+            .expect_err("encode_record accepted a stray file_url")
+            .to_string();
+        assert!(
+            encode_msg.contains("file_url requires"),
+            "got: {encode_msg}"
+        );
+        let nar_info_msg = info
+            .to_nar_info("nar/x.nar".to_string(), "none".to_string())
+            .expect_err("to_nar_info accepted a stray file_url")
+            .to_string();
+        assert!(
+            nar_info_msg.contains("file_url requires"),
+            "got: {nar_info_msg}"
+        );
+        let decode_msg = decode_with_embedded(info.encode_to_vec())
+            .expect_err("decode_record accepted a stray file_url");
+        assert!(
+            decode_msg.contains("file_url requires"),
+            "got: {decode_msg}"
+        );
+    }
+
+    #[test]
+    fn record_without_file_url_decodes_with_empty_url() {
+        // The trio-present fixture leaves file_url empty; it must survive a
+        // round trip empty (the "derive the canonical name" sentinel).
+        let info = sample_info_with_file_fields();
+        assert!(info.file_url.is_empty());
+        let bytes = info.encode_record().expect("encode record");
+        let decoded = NixPathInfo::decode_record(&bytes).expect("decode record");
+        assert!(decoded.file_url.is_empty());
     }
 
     #[test]

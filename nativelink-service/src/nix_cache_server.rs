@@ -425,6 +425,47 @@ fn bare_nar_stem_sha256(name: &str) -> Option<[u8; 32]> {
     nixbase32::decode(stem).ok()?.try_into().ok()
 }
 
+/// Derives the `(sha256, size)` of the ORIGINAL compressed blob a
+/// `.nar.{ext}` upload names, for preserving it verbatim.
+///
+/// The 52-nix32 stem hash is `sha256(compressed bytes)` — the client's
+/// `FileHash`, which nix names the compressed NAR after. The size is the
+/// name's `-{size}` when present (a canonical compressed name), else the
+/// request `Content-Length`. Returns `None` when the size is unknown (a
+/// bare name with no `Content-Length`), so the caller falls back to the
+/// non-preserving spooled path rather than buffering to learn it.
+fn compressed_upload_digest(
+    name: &str,
+    name_codec: NarCodec,
+    content_length: Option<u64>,
+) -> Option<([u8; 32], u64)> {
+    let ext = match name_codec {
+        NarCodec::Xz => ".nar.xz",
+        NarCodec::Zstd => ".nar.zst",
+        NarCodec::Bzip2 => ".nar.bz2",
+        NarCodec::None | NarCodec::Gzip => return None,
+    };
+    let stem = name.strip_suffix(ext)?;
+    let (hash_part, size) = match stem.split_once('-') {
+        Some((hash_part, size_str)) => {
+            // Canonical decimal only: no empty, no leading zeros, in range.
+            if size_str.is_empty()
+                || !size_str.bytes().all(|b| b.is_ascii_digit())
+                || (size_str.len() > 1 && size_str.starts_with('0'))
+            {
+                return None;
+            }
+            (hash_part, size_str.parse::<u64>().ok()?)
+        }
+        None => (stem, content_length?),
+    };
+    if hash_part.len() != 52 {
+        return None;
+    }
+    let sha256: [u8; 32] = nixbase32::decode(hash_part).ok()?.try_into().ok()?;
+    Some((sha256, size))
+}
+
 /// Reads a request body to completion, buffering at most `limit` bytes.
 /// Returns `None` when the body exceeds the limit.
 async fn read_body_limited(body: Body, limit: usize) -> Result<Option<Bytes>, Error> {
@@ -576,6 +617,11 @@ pub struct NixCacheInstance {
     write_token_hashes: Vec<[u8; 32]>,
     serve_compression: ServeCompression,
     compression_level: i32,
+    /// When true, a compressed NAR upload's original bytes are preserved
+    /// as a CAS blob and served verbatim under the client's URL (see
+    /// `preserve_upload_compression` in the config); when false, uploads
+    /// are decompressed to the canonical uncompressed NAR.
+    preserve_upload_compression: bool,
     /// Cap on the decompressed size of a single ingested NAR (see the
     /// `max_nar_size_bytes` config field); bounds the spool a compressed
     /// upload can write.
@@ -707,6 +753,7 @@ impl NixCacheInstance {
             write_token_hashes,
             serve_compression,
             compression_level: config.compression_level.unwrap_or(DEFAULT_ZSTD_LEVEL),
+            preserve_upload_compression: config.preserve_upload_compression,
             max_nar_size_bytes: config.max_nar_size_bytes,
             nar_upload_idle_timeout: Duration::from_secs(config.nar_upload_idle_timeout_s),
             nar_stream_semaphore: Arc::new(Semaphore::new(max_concurrent_nar_streams)),
@@ -1033,30 +1080,45 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
             "Corrupt narinfo record for '{hash}': NAR hash is not 32 bytes"
         )
     })?;
-    // Prefer the transcoded zstd artifact when the record has one and its
-    // blob is still present; otherwise fall back to the uncompressed NAR
-    // under its canonical name (the phase-1 rendering). The ed25519
-    // fingerprint covers only path/NarHash/NarSize/references, so this
-    // URL/Compression switch never invalidates stored signatures.
-    let info =
-        if let Some((file_sha256, file_size)) = zstd_serving_fields(instance, &path_info).await? {
-            let url = canonical_nar_zst_name(&file_sha256, file_size);
-            let mut info = path_info
-                .to_nar_info(format!("nar/{url}"), ZSTD_COMPRESSION_NAME.to_string())
-                .map_err(|err| {
-                    make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
-                })?;
-            info.file_hash = Some(file_sha256);
-            info.file_size = Some(file_size);
-            info
-        } else {
-            let url = canonical_nar_name(&nar_sha256, path_info.nar_size);
-            path_info
-                .to_nar_info(format!("nar/{url}"), "none".to_string())
-                .map_err(|err| {
-                    make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
-                })?
-        };
+    // Choose the served URL/Compression/FileHash/FileSize by precedence,
+    // each guarded by "the referenced blob still exists in CAS" (else fall
+    // through). The ed25519 fingerprint covers only path/NarHash/NarSize/
+    // references, so this URL/Compression switch never invalidates stored
+    // signatures.
+    //   1. A preserved ORIGINAL compressed push: advertise the client's
+    //      verbatim URL and its original codec/FileHash/FileSize — an exact
+    //      round trip of the push.
+    //   2. A zstd transcode (phase 2): the canonical `.nar.zst` URL.
+    //   3. The canonical uncompressed NAR: `Compression: none`, no
+    //      FileHash/FileSize.
+    let info = if let Some((file_sha256, file_size, compression, url)) =
+        preserved_original_serving_fields(instance, &path_info).await?
+    {
+        let mut info = path_info.to_nar_info(url, compression).map_err(|err| {
+            make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
+        })?;
+        info.file_hash = Some(file_sha256);
+        info.file_size = Some(file_size);
+        info
+    } else if let Some((file_sha256, file_size)) = zstd_serving_fields(instance, &path_info).await?
+    {
+        let url = canonical_nar_zst_name(&file_sha256, file_size);
+        let mut info = path_info
+            .to_nar_info(format!("nar/{url}"), ZSTD_COMPRESSION_NAME.to_string())
+            .map_err(|err| {
+                make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
+            })?;
+        info.file_hash = Some(file_sha256);
+        info.file_size = Some(file_size);
+        info
+    } else {
+        let url = canonical_nar_name(&nar_sha256, path_info.nar_size);
+        path_info
+            .to_nar_info(format!("nar/{url}"), "none".to_string())
+            .map_err(|err| {
+                make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}")
+            })?
+    };
     let rendered = info.render();
     let mut response = Response::new(Body::from(rendered));
     let headers = response.headers_mut();
@@ -1087,6 +1149,70 @@ async fn zstd_serving_fields(
         .await
         .err_tip(|| "Checking transcoded NAR existence in cas_store")?;
     Ok(present.map(|_| (file_sha256, path_info.file_size)))
+}
+
+/// Returns the `(FileHash, FileSize)` of a preserved ORIGINAL compressed
+/// upload at narinfo-PUT time: the client's `FileHash`/`FileSize` when
+/// both are present and the compressed blob is still in the CAS. Returns
+/// `None` when the client sent no compressed file fields, or the blob is
+/// absent (preserve was off when the NAR was PUT, or it was later
+/// evicted) — the caller then falls back to canonical or zstd serving.
+async fn preserved_compressed_fields(
+    instance: &NixCacheInstance,
+    info: &narinfo::NarInfo,
+) -> Result<Option<([u8; 32], u64)>, Error> {
+    let (Some(file_sha256), Some(file_size)) = (info.file_hash, info.file_size) else {
+        return Ok(None);
+    };
+    if file_size == 0 {
+        return Ok(None);
+    }
+    let file_digest = DigestInfo::new(file_sha256, file_size);
+    let present = with_sha256_ctx(instance.cas_store.has(file_digest))
+        .await
+        .err_tip(|| "Checking preserved compressed NAR existence in cas_store")?;
+    Ok(present.map(|_| (file_sha256, file_size)))
+}
+
+/// Returns the `(file_sha256, file_size, compression, url)` a record's
+/// preserved ORIGINAL compressed artifact is served under (narinfo-GET
+/// case 1), or `None` when the record carries no preserved original or its
+/// blob has been evicted.
+///
+/// A preserved original is distinguished from a zstd transcode by a
+/// non-empty `file_url` (the verbatim client URL) and a `file_compression`
+/// that is not `zstd`: a preserved zstd push is served by the canonical
+/// zstd path ([`zstd_serving_fields`]) instead, so both the client's
+/// zstd URL (via the alias) and the canonical `.nar.zst` name resolve.
+/// Eviction of the compressed blob degrades gracefully to the uncompressed
+/// rendering — the reason `file_*` stays out of the record's
+/// `ActionResult` output files.
+async fn preserved_original_serving_fields(
+    instance: &NixCacheInstance,
+    path_info: &NixPathInfo,
+) -> Result<Option<([u8; 32], u64, String, String)>, Error> {
+    if path_info.file_url.is_empty()
+        || path_info.file_size == 0
+        || path_info.file_compression.is_empty()
+        || path_info.file_compression == ZSTD_COMPRESSION_NAME
+    {
+        return Ok(None);
+    }
+    let Ok(file_sha256) = <[u8; 32]>::try_from(path_info.file_sha256.as_slice()) else {
+        return Ok(None);
+    };
+    let file_digest = DigestInfo::new(file_sha256, path_info.file_size);
+    let present = with_sha256_ctx(instance.cas_store.has(file_digest))
+        .await
+        .err_tip(|| "Checking preserved compressed NAR existence in cas_store")?;
+    Ok(present.map(|_| {
+        (
+            file_sha256,
+            path_info.file_size,
+            path_info.file_compression.clone(),
+            path_info.file_url.clone(),
+        )
+    }))
 }
 
 /// `PUT /{hash}.narinfo` and `PUT /{hash}.ls`.
@@ -1154,29 +1280,13 @@ async fn put_narinfo_inner(
         ));
     }
 
-    // Resolve the NAR digest from the URL the client wrote into the
-    // narinfo: either a canonical name, or an alias recorded when the NAR
-    // was uploaded.
-    let url_basename = info.url.rsplit('/').next().unwrap_or(info.url.as_str());
-    let (nar_sha256, nar_size) = match parse_canonical_nar_name(url_basename) {
-        Some(resolved) => resolved,
-        None => match instance.lookup_alias(url_basename).await? {
-            Some(resolved) => resolved,
-            None => {
-                return Ok(text_response(
-                    StatusCode::CONFLICT,
-                    "NAR must be uploaded before its narinfo",
-                ));
-            }
-        },
-    };
-    if nar_sha256 != info.nar_hash || nar_size != info.nar_size {
-        return Err(make_input_err!(
-            "narinfo NarHash/NarSize do not match the previously uploaded NAR at '{}'",
-            info.url
-        ));
-    }
-    let digest = DigestInfo::new(nar_sha256, nar_size);
+    // The canonical uncompressed NAR is always keyed by its NarHash/
+    // NarSize. Verify it directly rather than resolving the narinfo's URL
+    // through the alias: with `preserve_upload_compression` the alias now
+    // points at the client's ORIGINAL (possibly compressed) blob, so it is
+    // no longer a NarHash oracle. Action-cache completeness keys on this
+    // uncompressed NAR, so a narinfo whose NAR was never uploaded is a 409.
+    let digest = DigestInfo::new(info.nar_hash, info.nar_size);
     let nar_present = with_sha256_ctx(instance.cas_store.has(digest))
         .await
         .err_tip(|| "Checking NAR existence in cas_store")?;
@@ -1206,11 +1316,32 @@ async fn put_narinfo_inner(
         .collect();
     path_info.signatures.extend(new_sigs);
 
-    // Transcode-on-ingest: with zstd serving, the compressed artifact and
-    // its real FileHash/FileSize are produced now — never on the fly — so
-    // GET stays a pure blob read. A transcode failure fails the whole PUT
-    // (500); no half-record is written.
-    if instance.serve_compression == ServeCompression::Zstd {
+    // Choose the served compressed artifact, in precedence order.
+    //
+    // 1. A preserved ORIGINAL: the client pushed a compressed NAR
+    //    (`Compression != none` with `FileHash`/`FileSize`) and, with
+    //    preserve on, its blob is still in the CAS. Record the original
+    //    compression, FileHash/FileSize, and the exact client URL so a GET
+    //    round-trips the push byte-for-byte. This takes precedence over
+    //    zstd transcoding: the client's own codec is served and the
+    //    re-encode is skipped.
+    // 2. Otherwise, on a zstd instance, transcode the uncompressed NAR to
+    //    zstd on ingest so GET stays a pure blob read.
+    //
+    // Either way a transcode/lookup failure fails the whole PUT; no
+    // half-record is written. `file_url` stays empty for the zstd path
+    // (its URL is derived canonically on GET) and for the plain path.
+    let preserved = if instance.preserve_upload_compression && info.compression != "none" {
+        preserved_compressed_fields(instance, &info).await?
+    } else {
+        None
+    };
+    if let Some((file_sha256, file_size)) = preserved {
+        path_info.file_sha256 = file_sha256.to_vec();
+        path_info.file_size = file_size;
+        path_info.file_compression = info.compression.clone();
+        path_info.file_url = info.url.clone();
+    } else if instance.serve_compression == ServeCompression::Zstd {
         let (file_sha256, file_size) =
             resolve_or_transcode_zstd(instance, hash, &path_info, digest).await?;
         path_info.file_sha256 = file_sha256.to_vec();
@@ -1373,23 +1504,17 @@ async fn get_nar_inner(
     headers: &HeaderMap,
 ) -> Result<Response, Error> {
     instance.nar_gets.inc();
-    let resolved = if let Some((sha256, size, _codec)) = parse_canonical_any(name) {
-        // Canonical names address the blob to serve directly: for `.nar`
-        // the uncompressed NAR, for `.nar.zst` the transcoded artifact.
-        // Both are plain digest-addressed blobs, so ranges, lengths, and
-        // streaming below are identical.
-        Some((sha256, size))
-    } else if codec_for_name(name) == Some(NarCodec::None) {
-        instance.lookup_alias(name).await?
-    } else {
-        // We store uncompressed NAR bytes under aliases: serving them
-        // under a compressed alias name (e.g. `.nar.xz`) would corrupt a
-        // client that trusts the name. Nix substitution only ever uses
-        // OUR narinfo URLs, which are canonical, so nothing legitimate
-        // hits this path.
-        None
-    };
-    let Some((nar_sha256, nar_size)) = resolved else {
+    // Resolve exactly as HEAD does (see `resolve_nar_name`): canonical
+    // names address the blob directly (`.nar` = uncompressed NAR,
+    // `.nar.zst` = transcoded artifact), and any other name goes through
+    // the alias store. A compressed alias name (`.nar.xz`, ...) resolves
+    // to the ORIGINAL compressed blob preserved at upload time
+    // (`preserve_upload_compression`), so serving its bytes verbatim under
+    // that name is correct — this is what makes a client's warm pull of
+    // its own `.nar.xz` URL resolve instead of 404ing. Either way the
+    // digest addresses exactly the bytes the name promises, so the range,
+    // length, and streaming below are identical.
+    let Some((nar_sha256, nar_size)) = resolve_nar_name(instance, name).await? else {
         return Ok(empty_response(StatusCode::NOT_FOUND));
     };
     let digest = DigestInfo::new(nar_sha256, nar_size);
@@ -1544,7 +1669,46 @@ async fn put_nar_inner(
     };
     let full_stream = futures::stream::iter(prefix_chunks.into_iter().map(Ok)).chain(data_stream);
 
-    let (nar_sha256, nar_size) = if codec == NarCodec::None
+    // Preserve the client's ORIGINAL compressed bytes when configured and
+    // the upload carries an explicit compressed extension. Gzip-sniffed
+    // bare `.nar` uploads are deliberately excluded: their name promises
+    // `.nar` (uncompressed), so serving the gzip bytes back under it would
+    // corrupt a client, and gzip is not a codec nix produces anyway.
+    let preserved_digest = if instance.preserve_upload_compression
+        && matches!(name_codec, NarCodec::Xz | NarCodec::Zstd | NarCodec::Bzip2)
+    {
+        compressed_upload_digest(name, name_codec, content_length)
+    } else {
+        None
+    };
+    if let Some((_, comp_size)) = preserved_digest
+        && comp_size > instance.max_nar_size_bytes
+    {
+        return Err(make_err!(
+            Code::ResourceExhausted,
+            "declared compressed NAR size {comp_size} exceeds the {}-byte limit",
+            instance.max_nar_size_bytes
+        ));
+    }
+
+    // `nar_sha256`/`nar_size` always name the canonical UNCOMPRESSED NAR;
+    // `preserved` is `Some(compressed digest)` only when the client's
+    // original compressed blob was stored too.
+    let (nar_sha256, nar_size, preserved) = if let Some((file_sha256, file_size)) = preserved_digest
+    {
+        // Store the original compressed bytes verbatim — the `verify{}`
+        // wrapper validates sha256(compressed) == the name hash — then
+        // decompress that blob into the canonical uncompressed NAR.
+        // Storing the compressed blob is 1:1 with the wire bytes, so it
+        // adds no amplification; the decompression-bomb cap still applies
+        // to the DECOMPRESSED output inside `decompress_cas_blob`.
+        ingest_nar_direct(instance, file_sha256, file_size, full_stream)
+            .await
+            .err_tip(|| "Storing the original compressed NAR blob")?;
+        let comp_digest = DigestInfo::new(file_sha256, file_size);
+        let (nar_sha256, nar_size) = decompress_cas_blob(instance, comp_digest, codec).await?;
+        (nar_sha256, nar_size, Some((file_sha256, file_size)))
+    } else if codec == NarCodec::None
         && let Some((digest_sha256, digest_size)) = bare_nar_digest_from_name(name, content_length)
     {
         // Fast path: the digest is known before the body is read, so the
@@ -1552,7 +1716,7 @@ async fn put_nar_inner(
         // wrapper recomputes sha256 in-stream and rejects mismatches at
         // EOF. No spool file involved.
         ingest_nar_direct(instance, digest_sha256, digest_size, full_stream).await?;
-        (digest_sha256, digest_size)
+        (digest_sha256, digest_size, None)
     } else {
         let (nar_sha256, nar_size) = ingest_nar_spooled(instance, codec, full_stream).await?;
         // Defense in depth: a bare `{52 nix32}.nar` name commits to
@@ -1570,17 +1734,28 @@ async fn put_nar_inner(
                 "bare NAR name stem does not match the uploaded content hash"
             ));
         }
-        (nar_sha256, nar_size)
+        (nar_sha256, nar_size, None)
     };
 
-    // Only record the alias after the CAS write succeeded: an alias's
-    // existence implies its NAR is (or was) present.
-    with_sha256_ctx(instance.alias_store.update_oneshot(
-        StoreKey::Str(Cow::Owned(alias_key(name))),
-        format_alias(&nar_sha256, nar_size).into(),
-    ))
-    .await
-    .err_tip(|| "Recording NAR alias")?;
+    // Record the alias only after the CAS write(s) succeeded (an alias's
+    // existence implies its target blob is, or was, present):
+    // - a `.nar` name (bare identity or gzip-sniffed) aliases to the
+    //   UNCOMPRESSED NAR, so a client's bare `nar/{hash}.nar` warm pull
+    //   resolves;
+    // - a preserved compressed name aliases to the ORIGINAL COMPRESSED
+    //   blob, so the client's `nar/{hash}.nar.{ext}` warm pull resolves;
+    // - a compressed name that was NOT preserved gets no alias — it would
+    //   be a dead pointer to the uncompressed NAR under a compressed name,
+    //   and the served narinfo advertises the canonical `.nar` instead.
+    if name_codec == NarCodec::None || preserved.is_some() {
+        let (alias_sha256, alias_size) = preserved.unwrap_or((nar_sha256, nar_size));
+        with_sha256_ctx(instance.alias_store.update_oneshot(
+            StoreKey::Str(Cow::Owned(alias_key(name))),
+            format_alias(&alias_sha256, alias_size).into(),
+        ))
+        .await
+        .err_tip(|| "Recording NAR alias")?;
+    }
     instance.nar_bytes_ingested.add(nar_size);
     Ok(empty_response(StatusCode::CREATED))
 }
@@ -1915,6 +2090,111 @@ where
     Ok((*nar_sha256_ref, nar_size))
 }
 
+/// Streams the compressed blob at `comp_digest` out of the CAS through the
+/// matching decoder, sha256-hashing and counting the DECOMPRESSED output
+/// while spooling it, then writes the canonical uncompressed NAR into the
+/// CAS under `DigestInfo(nar_sha256, nar_size)` and returns that pair.
+///
+/// Used by the `preserve_upload_compression` ingest path after the
+/// client's original compressed blob has been stored: the uncompressed
+/// NAR is what the record's `ActionResult` (and therefore action-cache
+/// completeness) keys on. The decompressed size is capped at
+/// `max_nar_size_bytes` — the same decompression-bomb guard the spooled
+/// path enforces — and spool files are removed on every path via
+/// [`SpoolFileGuard`]. The compressed bytes are client-supplied, so a
+/// decode failure is a client-data error (400), matching
+/// [`ingest_nar_spooled`].
+async fn decompress_cas_blob(
+    instance: &NixCacheInstance,
+    comp_digest: DigestInfo,
+    codec: NarCodec,
+) -> Result<([u8; 32], u64), Error> {
+    let (tx, rx) = make_buf_channel_pair();
+    let ctx = sha256_hasher_ctx()?;
+    let cas_store = instance.cas_store.clone();
+    let read_task = spawn!(
+        "nix_cache_nar_decompress_read",
+        async move {
+            if let Err(err) = cas_store.get_part(comp_digest, tx, 0, None).await {
+                // Dropping `tx` without an EOF surfaces the failure as a
+                // read error in the decoder loop below.
+                warn!(
+                    ?err,
+                    ?comp_digest,
+                    "Failed streaming compressed NAR from CAS for decompression"
+                );
+            }
+        }
+        .with_context(ctx)
+    );
+    let reader = StreamReader::new(rx);
+    let mut decoder: Box<dyn AsyncRead + Send + Unpin> = match codec {
+        NarCodec::None => Box::new(reader),
+        NarCodec::Gzip => Box::new(GzipDecoder::new(reader)),
+        NarCodec::Xz => Box::new(XzDecoder::new(reader)),
+        NarCodec::Zstd => Box::new(ZstdDecoder::new(reader)),
+        NarCodec::Bzip2 => Box::new(BzDecoder::new(reader)),
+    };
+
+    let spool_path = instance.spool_dir.join(format!("{}.nar", Uuid::new_v4()));
+    let spool_guard = SpoolFileGuard::new(spool_path.clone());
+    let mut spool_file = fs::create_file(&spool_path)
+        .await
+        .err_tip(|| format!("Creating NAR spool file {}", spool_path.display()))?;
+
+    let max_nar_size = instance.max_nar_size_bytes;
+    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    let mut chunk = BytesMut::with_capacity(fs::DEFAULT_READ_BUFF_SIZE);
+    let mut written: u64 = 0;
+    loop {
+        chunk.clear();
+        // Decompression failures are client-data problems (400): the
+        // compressed bytes came from the client's upload.
+        let read = decoder
+            .read_buf(&mut chunk)
+            .await
+            .map_err(|e| make_input_err!("Failed to decompress preserved NAR upload: {e}"))?;
+        if read == 0 {
+            break;
+        }
+        // Abort a decompression bomb before the spool can exceed the cap:
+        // the SpoolFileGuard deletes the partial file on this error return.
+        written = written.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if written > max_nar_size {
+            return Err(make_err!(
+                Code::ResourceExhausted,
+                "uploaded NAR decompresses past the {max_nar_size}-byte limit"
+            ));
+        }
+        hasher.update(&chunk);
+        spool_file
+            .write_all(&chunk)
+            .await
+            .err_tip(|| "Writing decompressed NAR to spool file")?;
+    }
+    spool_file
+        .flush()
+        .await
+        .err_tip(|| "Flushing NAR spool file")?;
+    drop(read_task);
+
+    let digest = hasher.finalize_digest();
+    let nar_size = digest.size_bytes();
+    with_sha256_ctx(slow_update_store_with_file(
+        instance.cas_store.as_store_driver_pin(),
+        digest,
+        &mut spool_file,
+        UploadSizeInfo::ExactSize(nar_size),
+    ))
+    .await
+    .err_tip(|| "Uploading decompressed NAR to cas_store")?;
+    drop(spool_file);
+    spool_guard.cleanup().await;
+
+    let nar_sha256_ref: &[u8; 32] = digest.packed_hash();
+    Ok((*nar_sha256_ref, nar_size))
+}
+
 /// Returns the `(file_sha256, file_size)` of the zstd artifact for the
 /// NAR at `nar_digest`, reusing the previous record's transcode when it
 /// still describes this exact NAR and its blob is still in the CAS, and
@@ -2198,6 +2478,7 @@ mod tests {
             write_token_hashes: vec![],
             serve_compression: ServeCompression::None,
             compression_level: DEFAULT_ZSTD_LEVEL,
+            preserve_upload_compression: true,
             max_nar_size_bytes,
             nar_upload_idle_timeout: core::time::Duration::from_secs(60),
             nar_stream_semaphore: Arc::new(tokio::sync::Semaphore::new(max_nar_streams)),

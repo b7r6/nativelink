@@ -131,6 +131,28 @@ const GZIP_NAR_BLOB_HEX: &str = concat!(
     "b60553000000"
 );
 
+/// One 93-byte unit of the xz round-trip fixture's decompressed payload;
+/// the fixture NAR is this repeated four times (372 bytes). NAR bodies are
+/// opaque to the service, so this need not be real NAR framing.
+const XZ_NAR_PAYLOAD_UNIT: &[u8] =
+    b"nativelink nix-cache xz round-trip fixture: not a real NAR, deterministic payload 0123456789 ";
+
+/// An xz blob whose decompressed bytes are [`XZ_NAR_PAYLOAD_UNIT`] repeated
+/// four times. Hardcoded because `xz`/`liblzma` is not a dev-dependency of
+/// this crate. Generated locally (xz 5.8.3) with:
+///
+/// ```text
+/// $ printf '<XZ_NAR_PAYLOAD_UNIT * 4>' | xz -9 -e -c | xxd -p | tr -d '\n'
+/// ```
+const XZ_NAR_BLOB_HEX: &str = concat!(
+    "fd377a585a000004e6d6b44604c068f40221011c0000000000000000dd3a4ad7",
+    "e0017300605d0037184aef3f626b21bed045fb84015d5a29c73889ea84539fdc",
+    "2701dd07cf5f9ff6d023a1e79d754ddbad2e405b2c97157b2176e63779f6871a",
+    "5cd9831f279f6a23e8da37f624703b2981e06c2cd1cfcfc33b63c9333c281807",
+    "99b2ccb5e0000000982658240112729500018401f40200003dfe9471b1c467fb",
+    "020000000004595a"
+);
+
 /// One self-contained store/server fixture. Every test builds its own,
 /// so tests can run concurrently and assert exact store contents.
 struct CacheFixture {
@@ -385,6 +407,39 @@ fn client_nar_basename(payload: &[u8]) -> String {
     format!("{}.nar", nixbase32::encode(&sha256(payload)))
 }
 
+/// The basename a real `nix copy --to ...?compression=xz` client PUTs a
+/// compressed NAR under: `{nix32(sha256(compressed))}.nar.{ext}` — the
+/// hash is of the COMPRESSED bytes (nix's `FileHash`).
+fn client_compressed_basename(compressed: &[u8], ext: &str) -> String {
+    format!("{}.nar.{ext}", nixbase32::encode(&sha256(compressed)))
+}
+
+/// The `narinfo` a well-behaved client uploads for a COMPRESSED NAR:
+/// `FileHash`/`FileSize` describe the compressed bytes at `url`, while
+/// `NarHash`/`NarSize` describe the uncompressed NAR (`payload`).
+fn compressed_narinfo_for(
+    store_path: &str,
+    url: String,
+    compression: &str,
+    compressed: &[u8],
+    payload: &[u8],
+) -> NarInfo {
+    NarInfo {
+        store_path: store_path.to_string(),
+        url,
+        compression: compression.to_string(),
+        file_hash: Some(sha256(compressed)),
+        file_size: Some(compressed.len() as u64),
+        nar_hash: sha256(payload),
+        nar_size: payload.len() as u64,
+        references: vec![],
+        deriver: None,
+        system: None,
+        sigs: vec![],
+        ca: None,
+    }
+}
+
 /// Uploads `payload` as a bare `.nar` under the client-chosen basename
 /// and asserts the 201. Returns the basename.
 async fn put_nar(router: &Router, mount: &str, payload: &[u8]) -> String {
@@ -392,6 +447,24 @@ async fn put_nar(router: &Router, mount: &str, payload: &[u8]) -> String {
     let (status, _, body) = call(
         router,
         put_request(&format!("{mount}/nar/{basename}"), payload),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "PUT nar/{basename}: {}",
+        String::from_utf8_lossy(&body)
+    );
+    basename
+}
+
+/// Uploads `compressed` as a `.nar.{ext}` under the client-chosen
+/// compressed basename and asserts the 201. Returns the basename.
+async fn put_compressed_nar(router: &Router, mount: &str, compressed: &[u8], ext: &str) -> String {
+    let basename = client_compressed_basename(compressed, ext);
+    let (status, _, body) = call(
+        router,
+        put_request(&format!("{mount}/nar/{basename}"), compressed),
     )
     .await;
     assert_eq!(
@@ -541,10 +614,13 @@ async fn put_narinfo_with_mismatched_nar_hash_is_rejected() -> Result<(), Error>
     let store_path = test_store_path("mismatch-seed", "liar-1.0");
     let info = narinfo_for_payload(&store_path, format!("nar/{basename}"), other_payload);
 
+    // The narinfo is validated against the uncompressed NAR keyed by its
+    // own NarHash/NarSize (no longer via the URL alias), so a NarHash whose
+    // NAR was never uploaded is a 409 ("upload the NAR first"), not a 400.
     assert_eq!(
         put_narinfo(&router, &mount, &info).await,
-        StatusCode::BAD_REQUEST,
-        "narinfo whose NarHash mismatches the uploaded NAR must 400"
+        StatusCode::CONFLICT,
+        "narinfo whose NarHash names an un-uploaded NAR must 409"
     );
     assert_eq!(fixture.path_info_memory.len_for_test(), 0);
     Ok(())
@@ -1686,5 +1762,261 @@ async fn long_log_name_is_client_error() -> Result<(), Error> {
         "over-long log name must be 4xx on GET, got {get_status}"
     );
     assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// With `preserve_upload_compression` on (the default), a compressed
+/// (`.nar.xz`) push is served back byte-for-byte under the client's exact
+/// URL, and the served narinfo advertises the ORIGINAL compression plus
+/// `FileHash`/`FileSize` of the compressed blob (the attic-parity warm
+/// pull). The uncompressed canonical URL still serves the decompressed
+/// NAR.
+#[nativelink_test]
+async fn preserved_compressed_push_round_trips_original_bytes() -> Result<(), Error> {
+    let fixture = CacheFixture::new("preserve-xz");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = XZ_NAR_PAYLOAD_UNIT.repeat(4);
+    let xz_blob = hex::decode(XZ_NAR_BLOB_HEX).expect("xz fixture hex decodes");
+    assert!(
+        xz_blob.len() < payload.len(),
+        "fixture must actually compress: {} vs {}",
+        xz_blob.len(),
+        payload.len()
+    );
+
+    // The client PUTs the compressed NAR under nar/{fileHash}.nar.xz.
+    let basename = put_compressed_nar(&router, &mount, &xz_blob, "xz").await;
+    let store_path = test_store_path("preserve-xz-seed", "compressed-1.0");
+    let info = compressed_narinfo_for(
+        &store_path,
+        format!("nar/{basename}"),
+        "xz",
+        &xz_blob,
+        &payload,
+    );
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::CREATED,
+        "PUT compressed narinfo"
+    );
+
+    // (b) The served narinfo advertises the original compression, the
+    // client URL, and the compressed blob's FileHash/FileSize; NarHash/
+    // NarSize still describe the uncompressed NAR.
+    let served = get_narinfo(&router, &mount, store_path_hash(&store_path)).await;
+    assert_eq!(served.compression, "xz");
+    assert_eq!(served.url, format!("nar/{basename}"));
+    assert_eq!(served.file_hash, Some(sha256(&xz_blob)));
+    assert_eq!(served.file_size, Some(xz_blob.len() as u64));
+    assert_eq!(served.nar_hash, sha256(&payload));
+    assert_eq!(served.nar_size, payload.len() as u64);
+
+    // (a) GET the client's exact URL returns byte-identical original bytes.
+    let (status, headers, body) =
+        call(&router, get_request(&format!("{mount}/nar/{basename}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_TYPE),
+        "application/x-nix-nar"
+    );
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_LENGTH),
+        xz_blob.len().to_string()
+    );
+    assert_eq!(
+        body.as_ref(),
+        xz_blob.as_slice(),
+        "original xz bytes verbatim"
+    );
+
+    // The uncompressed canonical URL still serves the decompressed NAR.
+    let canonical = nar_url::canonical_nar_name(&sha256(&payload), payload.len() as u64);
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload.as_slice());
+    Ok(())
+}
+
+/// A Range request on the preserved compressed URL returns a 206 with the
+/// exact slice of the compressed blob.
+#[nativelink_test]
+async fn range_on_preserved_compressed_url_is_partial() -> Result<(), Error> {
+    let fixture = CacheFixture::new("preserve-range");
+    let (mount, router) = fixture.server("main", false);
+
+    let xz_blob = hex::decode(XZ_NAR_BLOB_HEX).expect("xz fixture hex decodes");
+    let basename = put_compressed_nar(&router, &mount, &xz_blob, "xz").await;
+    let uri = format!("{mount}/nar/{basename}");
+
+    let (status, headers, slice) = call(&router, range_request(&uri, "bytes=4-9")).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        header_text(&headers, &header::CONTENT_RANGE),
+        format!("bytes 4-9/{}", xz_blob.len())
+    );
+    assert_eq!(slice.as_ref(), &xz_blob[4..=9]);
+    Ok(())
+}
+
+/// With `preserve_upload_compression = false`, a compressed push is
+/// decompressed to the canonical uncompressed NAR and served as
+/// `Compression: none` (the pre-preserve behavior); the client's
+/// compressed URL 404s (no preserved blob, no alias).
+#[nativelink_test]
+async fn preserve_off_compressed_push_serves_canonical_none() -> Result<(), Error> {
+    let fixture = CacheFixture::new("preserve-off");
+    let (mount, router) = fixture.server_with_extra("main", "preserve_upload_compression: false,");
+
+    let payload = XZ_NAR_PAYLOAD_UNIT.repeat(4);
+    let xz_blob = hex::decode(XZ_NAR_BLOB_HEX).expect("xz fixture hex decodes");
+
+    let basename = put_compressed_nar(&router, &mount, &xz_blob, "xz").await;
+    let store_path = test_store_path("preserve-off-seed", "compressed-1.0");
+    let info = compressed_narinfo_for(
+        &store_path,
+        format!("nar/{basename}"),
+        "xz",
+        &xz_blob,
+        &payload,
+    );
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::CREATED
+    );
+
+    // The served narinfo is canonical `none` (old behavior): no FileHash/
+    // FileSize, canonical `.nar` URL.
+    let served = get_narinfo(&router, &mount, store_path_hash(&store_path)).await;
+    assert_eq!(served.compression, "none");
+    assert_eq!(served.file_hash, None);
+    assert_eq!(served.file_size, None);
+    let canonical = nar_url::canonical_nar_name(&sha256(&payload), payload.len() as u64);
+    assert_eq!(served.url, format!("nar/{canonical}"));
+
+    // The client's compressed URL 404s; the canonical URL serves the
+    // decompressed bytes.
+    let (status, _, _) = call(&router, get_request(&format!("{mount}/nar/{basename}"))).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "compressed URL with preserve off"
+    );
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload.as_slice());
+    Ok(())
+}
+
+/// Evicting ONLY the preserved compressed blob degrades the narinfo
+/// gracefully to `Compression: none` (still 200 — completeness keys on the
+/// uncompressed NAR, which is intact); evicting the uncompressed NAR then
+/// hides the narinfo entirely (404).
+#[nativelink_test]
+async fn preserved_blob_eviction_falls_back_and_nar_eviction_hides_narinfo() -> Result<(), Error> {
+    let fixture = CacheFixture::new("preserve-evict");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = XZ_NAR_PAYLOAD_UNIT.repeat(4);
+    let xz_blob = hex::decode(XZ_NAR_BLOB_HEX).expect("xz fixture hex decodes");
+    let basename = put_compressed_nar(&router, &mount, &xz_blob, "xz").await;
+    let store_path = test_store_path("preserve-evict-seed", "degradable-1.0");
+    let info = compressed_narinfo_for(
+        &store_path,
+        format!("nar/{basename}"),
+        "xz",
+        &xz_blob,
+        &payload,
+    );
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::CREATED
+    );
+
+    let path_hash = store_path_hash(&store_path);
+    let served = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served.compression, "xz");
+
+    // Evict ONLY the compressed blob out from under the record.
+    let removed = fixture
+        .nar_memory
+        .remove_entry(DigestInfo::new(sha256(&xz_blob), xz_blob.len() as u64).into())
+        .await;
+    assert!(removed, "compressed blob must exist before eviction");
+
+    // The narinfo still 200s and falls back to the uncompressed canonical
+    // URL; losing the compressed blob must not 404 it.
+    let degraded = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(degraded.compression, "none");
+    assert_eq!(degraded.file_hash, None);
+    let canonical = nar_url::canonical_nar_name(&sha256(&payload), payload.len() as u64);
+    assert_eq!(degraded.url, format!("nar/{canonical}"));
+    let (status, _, _) = call(
+        &router,
+        head_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "HEAD narinfo after compressed eviction"
+    );
+    // The evicted compressed URL is an honest 404; the fallback URL serves.
+    let (status, _, _) = call(&router, get_request(&format!("{mount}/nar/{basename}"))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "evicted compressed URL");
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload.as_slice());
+
+    // Evicting the UNCOMPRESSED NAR hides the narinfo entirely.
+    let removed = fixture
+        .nar_memory
+        .remove_entry(DigestInfo::new(sha256(&payload), payload.len() as u64).into())
+        .await;
+    assert!(removed, "uncompressed NAR must exist before eviction");
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "narinfo after NAR eviction");
+    Ok(())
+}
+
+/// On a `serve_compression = "zstd"` instance, a preserved original takes
+/// precedence over transcoding: a compressed (`.nar.xz`) push is served
+/// back in the client's ORIGINAL codec (no zstd re-encode), while
+/// `Compression: none` pushes are still transcoded (covered by
+/// `zstd_instance_serves_compressed_nar`).
+#[nativelink_test]
+async fn zstd_instance_preserves_original_codec_over_transcoding() -> Result<(), Error> {
+    let fixture = CacheFixture::new("zstd-preserve");
+    let (mount, router) = fixture.server_with_extra("zstd", r#"serve_compression: "zstd","#);
+
+    let payload = XZ_NAR_PAYLOAD_UNIT.repeat(4);
+    let xz_blob = hex::decode(XZ_NAR_BLOB_HEX).expect("xz fixture hex decodes");
+    let basename = put_compressed_nar(&router, &mount, &xz_blob, "xz").await;
+    let store_path = test_store_path("zstd-preserve-seed", "compressed-1.0");
+    let info = compressed_narinfo_for(
+        &store_path,
+        format!("nar/{basename}"),
+        "xz",
+        &xz_blob,
+        &payload,
+    );
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::CREATED
+    );
+
+    // The served narinfo advertises xz (the client's codec), NOT zstd, and
+    // the client's URL serves the original xz bytes verbatim.
+    let served = get_narinfo(&router, &mount, store_path_hash(&store_path)).await;
+    assert_eq!(served.compression, "xz");
+    assert_eq!(served.url, format!("nar/{basename}"));
+    assert_eq!(served.file_hash, Some(sha256(&xz_blob)));
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{basename}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), xz_blob.as_slice());
     Ok(())
 }
