@@ -44,6 +44,32 @@ services: {
 
 If you omit `--remote_instance_name`, the NativeLink config should use `instance_name: ""` (empty string).
 
+## Validate the Config First
+
+Before you point Bazel at a server, validate the server config offline. The fork
+adds a `--check` flag that loads and validates the config, then exits without
+binding a socket, connecting to a backend, or creating any store directories
+(`src/bin/nativelink.rs:844-867`):
+
+```bash
+nativelink --check /etc/nativelink/config.json5
+# OK: /etc/nativelink/config.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+```
+
+`--check` catches two classes of error and exits non-zero on either:
+
+- **Schema errors.** Every config struct is `deny_unknown_fields`, so a misspelled
+  or removed key fails at load time instead of being silently ignored. A stray
+  `client_auth_optional` in a `tls` block, for example, aborts with
+  `unknown field 'client_auth_optional', expected one of 'cert_file', 'key_file',
+  'client_ca_file', 'client_crl_file'`.
+- **Dangling references.** `validate_references` (`src/bin/nativelink.rs:851`)
+  rejects a service that names a `cas_store`, `ac_store`, or `scheduler` that no
+  store or scheduler block defines.
+
+Run it in CI on every config change. The full field reference is in the
+[Configuration Reference](../appendix/config-reference.md).
+
 ## Platform Configuration
 
 For remote execution, you need to tell Bazel what platform the remote workers provide:
@@ -72,6 +98,41 @@ build --host_platform=//platforms:linux_x86_64
 
 The `exec_properties` map becomes the action's platform properties in the `Execute` RPC. These must match the scheduler's `supported_platform_properties` configuration.
 
+## Digest Function
+
+The fork's own `.bazelrc` selects BLAKE3 as the content hash (`.bazelrc:16`):
+
+```bash
+startup --digest_function=blake3
+```
+
+`--digest_function` is a Bazel *startup* flag, not a `build` flag — it changes how
+the Bazel server addresses every blob, so it has to be set before that server
+starts. NativeLink's Capabilities service advertises both SHA256 and BLAKE3
+(`capabilities_server.rs:116-127`), so either works; BLAKE3 is much faster than the
+SHA256 default.
+
+The catch: if a client omits the digest function, REAPI carries it as the proto
+default `0` (`UNKNOWN`), and a server that silently defaults can hash a BLAKE3
+client's Directory trees as SHA256 — corrupting results with no error. The fork
+closes this hole with `require_explicit_digest_function` on the global config
+(`cas_server.rs:1328-1341`), the server-side counterpart to the client's explicit
+`--digest_function=blake3`:
+
+```json5
+global: {
+  require_explicit_digest_function: true
+}
+```
+
+With it set, the server rejects any request that leaves `digest_function` unset
+(`digest_hasher.rs:214-224`), including ByteStream resource names that omit the
+`{digest_function}` path segment (`digest_hasher.rs:98-113`). The Execute RPC
+enforces this regardless — `ExecuteRequest.digest_function` must be explicitly set
+(`execution_server.rs:336`). Turn it on for any deployment that runs BLAKE3
+clients; it defaults to `false` for backwards compatibility. See the
+[Configuration Reference](../appendix/config-reference.md) for the global block.
+
 ## NativeLink Integration Tests
 
 The repository includes a complete test of Bazel remote execution and caching:
@@ -93,18 +154,36 @@ build:self_execute --remote_default_exec_properties=cpu_count=1
 
 ### With LRE
 
+Local Remote Execution (LRE) generates a Bazel toolchain from the same Nix
+closure the workers run, so a locally-built action and a remotely-executed one
+resolve to byte-identical toolchains — the precondition for cross-machine cache
+hits. Import the generated flags:
+
 ```bash
-# Import generated LRE config (created by nix develop shell hook)
+# Import generated LRE config (created by the nix develop shell hook)
 try-import %workspace%/lre.bazelrc
 ```
 
-The generated `lre.bazelrc` adds:
+The generated `lre.bazelrc` wires up **both** the C++ (`lre-cc`) and Rust
+(`lre-rs`) toolchains — LRE is not C++-only:
+
 ```bash
-build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
-build --define=EXECUTOR=remote
-build --extra_execution_platforms=@local-remote-execution//generated-cc/config:platform
-build --extra_toolchains=@local-remote-execution//generated-cc/config:cc-toolchain
+build:linux --define=EXECUTOR=remote
+build:linux --extra_execution_platforms=@local-remote-execution//rust/platforms:x86_64-unknown-linux-gnu,@local-remote-execution//rust/platforms:x86_64-unknown-linux-musl,@local-remote-execution//generated-cc/config:platform
+build:linux --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build:linux --extra_toolchains=@local-remote-execution//generated-cc/config:cc-toolchain
+build:linux --extra_toolchains=@local-remote-execution//rust:rust-x86_64-linux
+build:linux --extra_toolchains=@local-remote-execution//rust:rustfmt-x86_64-linux
+build:linux --platforms=@local-remote-execution//rust/platforms:x86_64-unknown-linux-musl
 ```
+
+The `:linux` config prefix comes from `lre.prefix = "linux"` in the NativeLink
+flake (`flake.nix:572-575`); a downstream flake that leaves the prefix empty gets
+bare `build --...` lines that apply to every build with no `--config`. The C++
+toolchain is `x86_64-linux` only, while the Rust toolchain is multi-platform
+(`aarch64`/`x86_64` × `linux-gnu`/`linux-musl`, plus Darwin). For the full
+derivation — image tags, `container-image` versus `lre-rs` platform properties,
+and the Nix flake wiring — see [LRE on Nix](../part8/lre-nix.md).
 
 ### With zig-cc
 
@@ -131,7 +210,15 @@ build --experimental_remote_cache_compression
 build --experimental_remote_cache_compression_threshold=100
 ```
 
-Compresses blobs before transfer. NativeLink supports this via the Capabilities service (advertises `zstd` compressor support). Reduces bandwidth significantly for text-heavy artifacts.
+These flags ask Bazel to transfer blobs with the REAPI compressed-blobs encoding.
+**NativeLink does not implement it.** The Capabilities service advertises an empty
+compressor list — `supported_compressors: vec![]` and
+`supported_batch_update_compressors: vec![]` (`capabilities_server.rs:134-135`) —
+and batch reads always answer with the `Identity` compressor
+(`cas_server.rs:228`). A REAPI-conformant client checks `supported_compressors`
+before compressing, so these flags do not negotiate compression against
+NativeLink; treat them as a no-op here. For bandwidth, reach for
+`--remote_download_minimal` (below) — a far bigger win regardless.
 
 ### Remote Output Mode
 
@@ -182,12 +269,19 @@ listener: {
     tls: {
       cert_file: "/certs/server.crt",
       key_file: "/certs/server.key",
-      client_ca_file: "/certs/ca.crt",  // for mTLS
-      client_auth_optional: false
+      client_ca_file: "/certs/ca.crt",   // presence turns on mTLS
+      client_crl_file: "/certs/crl.pem"  // optional revocation list
     }
   }
 }
 ```
+
+`TlsConfig` is `deny_unknown_fields` and has exactly four keys — `cert_file`,
+`key_file`, `client_ca_file`, and `client_crl_file` (`cas_server.rs:778-796`).
+There is **no** `client_auth_optional` toggle: mTLS is on whenever `client_ca_file`
+is set and off otherwise, and `client_crl_file` names an optional certificate
+revocation list. Any other key is a hard startup error — `client_auth_optional:
+false` aborts loading — so run `nativelink --check` after editing.
 
 ## Common Issues
 
@@ -201,7 +295,10 @@ The AC returned a result referencing CAS blobs that no longer exist (evicted). S
 ### "DEADLINE_EXCEEDED" on Execute
 
 The action exceeded its timeout. Check:
-- `max_action_timeout` in worker config
+- `max_action_timeout_s` in the worker config (`LocalWorkerConfig`,
+  `cas_server.rs:1124`; accepts the alias `max_action_timeout`, default 20 minutes,
+  `local_worker.rs:74`). The worker rejects any action whose requested timeout
+  exceeds this cap with `InvalidArgument` (`running_actions_manager.rs:2905`).
 - `--remote_timeout` in Bazel flags (default: 600s)
 - The action itself (is it actually hanging?)
 

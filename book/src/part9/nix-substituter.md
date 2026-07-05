@@ -109,7 +109,7 @@ services: {
 }
 ```
 
-Store composition has sharp edges here because two of the three stores are string-keyed:
+Store composition has sharp edges here because two of the three stores are string-keyed. [Store Composition](../part3/store-composition.md) covers the wrapper stack in general; these are the edges specific to `nix_cache`:
 
 - **Never wrap the path-info store in `existence_cache`.** It drops overwrites — a re-upload of the same store path with new signatures or references is silently ignored — and it rewrites string keys.
 - **Never wrap string-keyed stores in `verify` or `size_partitioning`.** Both parse keys as digests and reject string keys outright.
@@ -141,6 +141,8 @@ netrc-file = /etc/nix/netrc   # on token-gated caches the token is the password
 ## Deploying Alongside Remote Execution
 
 `nix_cache` is an ordinary service entry: it mounts an HTTP router at `/nix/<instance_name>` on the same listener as the gRPC CAS, AC, and execution services, so one `NativeLink` process can be both a remote-execution endpoint and a Nix cache on one port. Its `cas_store` may reuse the same content-addressed store the gRPC CAS uses — Nix `sha256` NAR blobs and Bazel `blake3` blobs coexist in it, because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. The `path_info_store` and `alias_store` are string-keyed and must be separate stores.
+
+On a single machine this collapses to one process on one port — the [Single Node](../part7/single-node.md) deployment adds exactly this service to its public listener. And the closure most worth serving is often the toolchain itself: the Nix store paths [Local Remote Execution with Nix](../part8/lre-nix.md) pins — the `PATH`/`CC`/`RUST` lines in `lre.bazelrc`, generated as [Nix and LRE](../part5/nix-lre.md) describes — are exactly what this facade serves, so `nix develop` on a laptop or CI runner realizes the identical toolchain straight out of the cluster instead of rebuilding it.
 
 `nativelink-config/examples/basic_cas_with_nix.json5` is a full remote-execution stack — CAS, AC, execution, capabilities, bytestream, a scheduler, and a worker — with a `nix_cache` service added to the same public listener, its NAR store a `verify`-wrapped reference to the shared CAS. The worker still references the raw fast/slow store rather than the `verify` wrapper, because a worker's `cas_fast_slow_store` must be a `FastSlowStore`.
 

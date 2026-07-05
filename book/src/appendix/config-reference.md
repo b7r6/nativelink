@@ -314,7 +314,7 @@ See [The Store Catalog](../part3/store-catalog.md) for detailed usage of each. C
 
 ## SchedulerSpec Variants
 
-Config keys are the `snake_case` form of the variant name (`SchedulerSpec`, `schedulers.rs:30`).
+See [Appendix B: Scheduler Catalog](./scheduler-catalog.md) for the field-by-field reference for each variant. Config keys are the `snake_case` form of the variant name (`SchedulerSpec`, `schedulers.rs:30`).
 
 | Variant | Config Key | Description |
 |---------|-----------|-------------|

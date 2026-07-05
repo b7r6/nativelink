@@ -4,7 +4,24 @@ Your cache hit rate is 12%. It should be 95%. Something is different between the
 
 ## The Debugging Process
 
-Cache misses happen for exactly one reason: the action hash on machine A differs from the action hash on machine B. The action hash is `hash(Command, InputRootDigest, Platform)`. So something in the command, the inputs, or the platform is different.
+Once the server config is sound ([Step 0](#step-0-rule-out-a-broken-config)), cache misses happen for essentially one reason: the action digest on machine A differs from the action digest on machine B. The action digest is the hash of the `Action` proto — conceptually `hash(Command, InputRootDigest, Platform)` — so something in the command, the inputs, or the platform is different. One subtlety hides behind that formula: the *hash function itself* is part of the cache identity, so two clients hashing identical content with different functions diverge just as surely (see [Cause: Digest-function divergence](#cause-digest-function-divergence)).
+
+## Step 0: Rule Out a Broken Config
+
+Before you diff action digests across machines, confirm the server config itself is not the cause. A dangling store reference, a stale field name, or an unintended digest-function default can degrade or silently disable caching without any obvious error at the client. Run the offline checker first:
+
+```console
+$ nativelink --check nativelink.json5
+OK: nativelink.json5 — 2 stores, 0 schedulers, 1 servers, all references resolve
+```
+
+`--check` parses every block, enforces `deny_unknown_fields`, and resolves every store reference offline — without binding a socket, connecting to a backend, or creating any store directories (`src/bin/nativelink.rs:850-876`). It catches the config-level causes of "misses" that no amount of action-hash diffing will explain:
+
+- **A dangling store reference.** An `ac_store` or `cas_store` that names a store which does not exist fails the reference check, and the service never serves that cache.
+- **A stale or misspelled field.** Every config struct is `deny_unknown_fields`, so `cache_metric` (missing the trailing `s`) or a renamed key is a hard error, not a silently-ignored no-op.
+- **A digest-function default you did not intend.** `global.require_explicit_digest_function` and `global.default_digest_hash_function` decide how the server treats requests that omit the digest function — the single most common cause of a whole fleet missing the cache (see [Cause: Digest-function divergence](#cause-digest-function-divergence)).
+
+If `--check` prints `FAIL` and an error, fix that before touching anything else: the "cache miss" is a configuration bug, not a hermeticity bug.
 
 ## Step 1: Identify the Diverging Action
 
@@ -76,6 +93,26 @@ The `Platform` in the action includes `exec_properties` / platform properties. I
 
 ## Step 3: Common Root Causes and Fixes
 
+### Cause: Digest-function divergence
+
+**Symptom:** Two clients build the *same* action from the *same* inputs and never share a cache entry. Neither one is "wrong" — each hits the cache against its own prior builds, but never against the other's.
+
+**Diagnosis:** The two clients hash with different digest functions. An action's cache identity is not just its content — it is `(instance_name, digest_function, action_digest)`. The `action_digest` is the hash of the `Action` proto, and BLAKE3 and SHA256 produce completely different hashes of the same bytes. REAPI even namespaces blob addresses by function (`.../blobs/{digest_function}/{hash}/{size}`), so a BLAKE3 client and a SHA256 client occupy disjoint address spaces. Same action, different function, different key, guaranteed miss. This is orthogonal to the three content axes in Step 2: nothing in the command, the inputs, or the platform changed — only the hash function did.
+
+The insidious variant is a client that omits `digest_function` entirely (sends the proto default `0` / `UNKNOWN`). By default the server silently substitutes `global.default_digest_hash_function` (`SHA256` unless you changed it, `nativelink-config/src/cas_server.rs:1316`) and warns exactly once (`nativelink-util/src/digest_hasher.rs:226-236`). So a BLAKE3 client that forgets to set the field has its outputs hashed as SHA256, its `Directory` trees addressed under the wrong function, and cache entries no correctly-configured BLAKE3 client will ever match — or, worse, silently corrupt results.
+
+**Fix:** Standardize on one digest function across every client and the execution service, and set it explicitly on every request. Then make the divergence impossible to reintroduce silently by turning on strict mode in the `global` block:
+
+```json5
+{
+  global: {
+    require_explicit_digest_function: true,
+  },
+}
+```
+
+With `require_explicit_digest_function: true`, a request that omits the digest function is rejected outright instead of silently defaulting — `digest_function is required but was not set (received UNKNOWN/0)` (`nativelink-util/src/digest_hasher.rs:217-223`) — and the ByteStream path enforces the same on the resource-name segment (`digest_hasher.rs:104-112`). That converts a silent, fleet-wide cache miss into a loud error at the first offending request. `Execute` requests are stricter still: they reject `digest_function == 0` unconditionally, independent of the flag (`nativelink-service/src/execution_server.rs:513-520`), because the worker uses that function to hash every output `Directory` tree and a mismatch corrupts results (`SHA256=1`, `BLAKE3=9`).
+
 ### Cause: Host toolchain leaking into action hash
 
 **Symptom:** Different machines produce different action hashes for the same source.
@@ -129,11 +166,14 @@ bazel build //target --execution_log_json_file=/tmp/exec_a.json
 # Build on machine B:
 bazel build //target --execution_log_json_file=/tmp/exec_b.json
 
-# Verify action hashes match:
-jq '.[] | .actionKey' /tmp/exec_a.json | sort > /tmp/keys_a
-jq '.[] | .actionKey' /tmp/exec_b.json | sort > /tmp/keys_b
+# Verify action digests match. The JSON execution log is a *stream* of
+# SpawnExec objects (one per spawn), not a top-level array — so apply the
+# filter directly, with no `.[]`. Each SpawnExec carries a `digest` object
+# ({ hash, sizeBytes, hashFunctionName }); the action's identity is its hash:
+jq -r '.digest.hash' /tmp/exec_a.json | sort > /tmp/keys_a
+jq -r '.digest.hash' /tmp/exec_b.json | sort > /tmp/keys_b
 diff /tmp/keys_a /tmp/keys_b
-# Should be empty (all keys match)
+# Should be empty (all digests match)
 ```
 
 For Buck2, compare `buck2 aquery` output:
@@ -153,15 +193,20 @@ Target hit rates:
 - **80-95%:** Good. Remaining misses are likely cold cache (first build) or genuinely changed inputs.
 - **> 95%:** Excellent. You have a well-configured hermetic build.
 
-If you're using NativeLink's `cache_metrics` store wrapper, hit/miss rates are exported as metrics:
+If you're using NativeLink's `cache_metrics` store wrapper, hit/miss rates are emitted as low-cardinality OpenTelemetry cache-operation metrics for the wrapped store. The wrapper takes two required fields — `cache_type`, a low-cardinality label so the metrics can be told apart (for example `cas` or `ac`), and `backend`, the store to wrap (`CacheMetricsSpec`, `nativelink-config/src/stores.rs:622-628`, `deny_unknown_fields`):
 
 ```json5
 {
   name: "AC_WITH_METRICS",
   cache_metrics: {
-    backend: { ref_store: { name: "AC_STORE" } }
-  }
+    cache_type: "ac",
+    backend: { ref_store: { name: "AC_STORE" } },
+  },
 }
 ```
 
-These metrics appear in your Prometheus/Grafana dashboard (see the Observability chapter).
+`cache_type` is not optional: omit it and the config fails to parse with `missing field 'cache_type'` before the server ever starts (catch it with `nativelink --check`). The wrapper is opt-in — a store you do not wrap pays none of its hot-path timing cost (`stores.rs:53-58`). These metrics appear in your Prometheus/Grafana dashboard (see the Observability chapter).
+
+## See Also
+
+For symptom-first entries keyed to the exact error text a client reports — "0% cache hit rate", "Cache hits return NOT_FOUND for output blobs", and "Stale cache results (wrong output)" — see the Cache Issues section of [Appendix C: Troubleshooting](../appendix/troubleshooting.md). It cross-references back to the diagnostic process here.

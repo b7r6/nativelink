@@ -1,6 +1,6 @@
 # Hermetic Toolchains Without Nix
 
-If you don't want Nix and you don't want containers, there's a third path: download the toolchain as a build dependency and include it in the action's input tree. This is what zig-cc, `rules_rust`, `toolchains_llvm`, and similar Bazel toolchain rules do.
+If you don't want Nix and you don't want containers, there's a third path: download the toolchain as a build dependency and include it in the action's input tree. This is what zig-cc, `rules_rs`, `toolchains_llvm`, and similar Bazel toolchain rules do.
 
 ## The Idea
 
@@ -41,7 +41,7 @@ Properties:
 - **Performance:** Optimized for binary size, not compilation speed. Slower than native LLVM.
 - **Download size:** Small (~100MB).
 
-zig-cc is the gold standard for hermetic C/C++ compilation without containers or Nix. It works on every host platform and targets every common target.
+zig-cc is the gold standard for hermetic C/C++ compilation without containers or Nix. The example [`.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/.bazelrc) registers toolchains spanning Linux (glibc 2.28/2.31 and musl, on amd64 and arm64), Windows (amd64/arm64), macOS (amd64/arm64), and `wasip1` WebAssembly — every common host and target from a single statically-linked SDK.
 
 ### toolchains_llvm (Non-Hermetic LLVM)
 
@@ -74,7 +74,9 @@ The non-hermeticity is the critical issue. If your worker has a different glibc 
 
 Use this only when all workers are known-identical (same OS image, same packages).
 
-### rules_rust
+### rules_rs
+
+The fork provisions Rust through `rules_rs`, not mainstream `rules_rust`. `rules_rs` wraps `rules_rust` and drives toolchain download through its own module extension, fetching `rustc`, `cargo`, and the standard library by hash.
 
 ```python
 # MODULE.bazel
@@ -101,7 +103,7 @@ build:java --tool_java_runtime_version=remotejdk_21
 
 **Source:** [`toolchain-examples/.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/.bazelrc)
 
-Java's `remotejdk` provisions download a JDK by hash and use it for all Java actions. This is fully hermetic (the JDK is in the input tree) and works well with remote execution.
+Java's `remotejdk` runtime versions download a JDK by hash and use it for all Java actions. This is fully hermetic (the JDK is in the input tree) and works well with remote execution.
 
 ## Testing Toolchains Against NativeLink
 
@@ -126,7 +128,7 @@ Not all "downloaded" toolchains are equally hermetic:
 | Toolchain | Static Binary | No Host Deps | Cache Safe |
 |-----------|:---:|:---:|:---:|
 | zig-cc | Yes | Yes | Yes |
-| rules_rust | Mostly | Mostly | Mostly |
+| rules_rs | Mostly | Mostly | Mostly |
 | remotejdk | Yes | Yes | Yes |
 | toolchains_llvm | No | No | Only with identical hosts |
 | rules_go | Yes | Yes | Yes |
@@ -139,10 +141,12 @@ The key question: **does the toolchain binary depend on anything from the host?*
 These approaches aren't mutually exclusive. A common production setup:
 
 - **Nix/LRE** for the C/C++ toolchain (where hermeticity is hardest)
-- **rules_rust** for Rust (self-contained enough to be hermetic without Nix)
+- **rules_rs** for Rust (self-contained enough to be hermetic without Nix)
 - **Container** for integration tests (need specific system services)
 
 Each language/action type uses whichever approach gives the best correctness/complexity tradeoff.
+
+The fork adds a fourth content-addressed toolchain path: the [OCI → CAS bridge](../part9/oci-cas-bridge.md) projects OCI toolchain images into REAPI `Directory` trees in the CAS, so a hermetic cross-compiler can ship as content-addressed image layers that workers fetch on demand — the same Merkle-hashed-input principle as zig-cc, applied to whole container-packaged toolchains.
 
 ## Buck2 Considerations
 

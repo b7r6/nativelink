@@ -28,7 +28,7 @@ If two actions have the same cache key, the protocol assumes they're identical a
 ```json5
 // Scheduler config
 supported_platform_properties: {
-  "container-image": "priority"  // passed through, not matched
+  "container-image": "priority"  // value passed to the worker, not compared
 }
 ```
 
@@ -39,25 +39,33 @@ container-image = docker://registry.example.com/toolchain@sha256:a1b2c3...
 
 **Why it works:** The digest is content-addressed. Same digest = same image = same toolchain. Different digest = different action hash = cache miss.
 
-**Why priority, not exact:** You don't want to restrict which workers accept the action — any worker that supports containers can run any image. The property tells the worker *what to run*, not *whether it can run*.
+**Why priority, not exact:** `priority` hands the value to the worker without comparing it, so any container worker can run any image. But `priority` is not "match anything" — the scheduler still requires the worker to *advertise* the `container-image` key before it is eligible (`platform_properties.rs:70-75,116-117`; `worker_capability_index.rs:184-193`). This is exactly why LRE worker configs publish `container-image` with an empty value: they advertise the key so `priority`-typed actions match, without pinning a value (`integration_tests/buildstream/buildstream_cas.json5:102`). If you want a property that never restricts matching — eligible even on workers that do not advertise the key at all — that is `ignore`, not `priority` (see [The Matching Algorithm](#the-matching-algorithm-in-detail)).
 
-### Pattern 2: Nix Store Path (LRE)
+### Pattern 2: Nix-Derived Image Tag (LRE)
 
-```json5
-// Scheduler config
-supported_platform_properties: {
-  "lre-cc": "exact"   // or "priority" depending on deployment
+Local Remote Execution does *not* ship a Nix store path as a platform property value. It folds the Nix closure hash into the `container-image` **tag** and reuses Pattern 1. The generated C/C++ platform:
+
+```python
+# local-remote-execution/generated-cc/config/BUILD (generated)
+exec_properties = {
+    "container-image": "docker://lre-cc:zms5771rx1yqb4wd6qbj5f9sb2paq75k",
+    "OSFamily": "Linux",
 }
 ```
 
-Client sets:
-```
-lre-cc = /nix/store/zms5771rx1yqb4wd6qbj5f9sb2paq75k-clang-17.0.6
+The Rust toolchain does the same against a published worker image:
+
+```python
+# local-remote-execution/rust/platforms/BUILD.bazel (generated)
+exec_properties = {
+    # tag is from nix eval .#packages.x86_64-linux.nativelink-worker-lre-rs.imageTag
+    "container-image": "ghcr.io/tracemachina/nativelink-worker-lre-rs:1hvvyzz0z4rs6d9arlnxc05pxz8qz7zj",
+}
 ```
 
-**Why it works:** The Nix store path is derived from the derivation content. Same derivation = same path. Different derivation = different path = different action hash.
+**Why it works:** the tag *is* the Nix closure hash (`imageTag`). Change any toolchain derivation and the closure hash changes, the tag changes, the `container-image` value changes, and the action hash changes. Identity is structural, not conventional — the same guarantee as Pattern 1, sourced from a Nix closure instead of a registry digest. See [Nix and LRE](./nix-lre.md) for how the tag is generated.
 
-**exact vs priority:** Use `exact` when you have multiple worker pools with different Nix closures and you want to match actions to the right pool. Use `priority` when all workers have the same Nix closure.
+**What `lre-cc` / `lre-rs` actually are:** they are Nix package and worker-image names, and — separately — optional scheduler *pool markers*. A scheduler may declare `"lre-rs": "priority"` and workers advertise the key with an empty value to route Rust actions to Rust-capable workers (`deployment-examples/docker-compose/scheduler-multi-worker.json5:40`; `integration_tests/buildstream/buildstream_cas.json5:59,107`). They carry **no** toolchain identity; the toolchain digest lives in `container-image`. There is no `lre-cc = /nix/store/…clang` platform property anywhere in the codebase.
 
 ### Pattern 3: Version String (Hermetic Downloads)
 
@@ -93,6 +101,18 @@ cpu_count = 4
 
 **Why it works:** Actions land on workers in the specified pool. Pools are configured identically. But identity is still by convention — there's no structural guarantee that all workers in a pool have the same toolchain.
 
+## Structural Identity: Toolchain in the Input Root
+
+Every pattern above expresses toolchain identity as a **platform property** — a string in the `Platform` proto that rides alongside the action. Even the content-addressed ones (Patterns 1 and 2) only *assert* which toolchain to use; the worker must independently already have that image or Nix closure. The property changes the cache key, but the last mile of correctness still rests on the worker actually running the toolchain the string names.
+
+The fork's OCI → CAS bridge closes that gap by making the toolchain part of the action's **inputs** rather than a claim about them. It projects an OCI toolchain image into CAS as a REAPI `Directory` tree and returns the tree's root digest; the caller merges that digest into the action's `input_root_digest`. The toolchain's exact bytes become nodes in the input Merkle DAG:
+
+- The action hash depends on the toolchain content **structurally** — the toolchain is hashed into the input root, not asserted beside it.
+- The worker materializes the toolchain from CAS like any other input; there is no "does this worker already have the right image installed?" trust gap.
+- Deduplication is automatic — identical toolchain blobs are shared across every action that references them.
+
+Platform properties still route the action to a capable worker; the input root guarantees the worker executes against the exact toolchain bytes the cache key was computed from. [The OCI → CAS Bridge](../part9/oci-cas-bridge.md) in Part IX covers the projection algorithm and the `input_root_digest` merge in full.
+
 ## Composing Properties
 
 Properties compose additively. An action can set multiple properties that together define the execution environment:
@@ -118,40 +138,60 @@ schedulers: [{
   name: "MAIN",
   property_modifier: {
     modifications: [
-      // Add a default ISA if client doesn't specify
+      // Add a default ISA if the client doesn't specify one.
       { add: { name: "ISA", value: "x86-64" } },
-      // Remove internal-only metadata
+      // Remove internal-only metadata.
       { remove: "internal-trace-id" },
-      // Resolve mutable tag to pinned digest
+      // Rename a client-facing key to the key workers advertise.
+      // `new_name` is required; the value carries over unchanged.
+      { replace: { name: "image", new_name: "container-image" } },
+      // Value-gated rewrite: only when the old value matches `value`,
+      // rename (here to the same key) and substitute `new_value`.
       { replace: { name: "container-image",
-                   value: "docker://toolchain@sha256:pinned" } }
+                   value: "docker://toolchain:legacy",
+                   new_name: "container-image",
+                   new_value: "docker://toolchain@sha256:pinned" } }
     ],
     scheduler: { simple: { /* ... */ } }
   }
 }]
 ```
 
+Read the `replace` fields carefully — they are not what the names suggest (`schedulers.rs:243-257`):
+
+- `name` — the property to look for. It is **removed** from the set first.
+- `value` — a *match filter*, not the replacement. If set, the rewrite fires only when the existing value equals it; otherwise the property is put back untouched. If omitted, any value matches.
+- `new_name` — **required.** The key to insert. To keep the same key, repeat it here.
+- `new_value` — optional. The value to insert; if omitted, the existing value carries over.
+
+So `replace` is a *rename-and-optionally-rewrite* operation gated on an optional value match (`property_modifier_scheduler.rs:111-131`). A bare `{ replace: { name, value } }` — a replacement without `new_name` — does not parse: `nativelink --check` rejects the config with a missing-field error naming `new_name`.
+
 Use cases:
 - **Default injection:** Clients that don't set `ISA` get it added automatically.
-- **Tag resolution:** Replace mutable image tags with pinned digests server-side (so clients don't need to know the current digest).
+- **Key renaming:** Map a client-facing property name onto the key the workers actually advertise.
 - **Property stripping:** Remove properties that are meaningful for caching but not for worker matching.
+
+One caution the names invite: modifications run in the scheduler, *after* the client has already hashed the `Platform` proto into the action. They change **which worker matches**, never the cache key. Do not use `replace` to "resolve" a mutable tag to a pinned digest expecting cache safety — the action hash still contains the pre-modification value, so two different pinned digests behind one tag collide on the same cache key. Content-address the value on the client instead (Patterns 1 and 2).
 
 ## The Matching Algorithm in Detail
 
 When the scheduler receives an action with platform properties, matching proceeds as follows:
 
-**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs)
+**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs) (`find_matching_workers`, lines 151-214) and [`nativelink-util/src/platform_properties.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/platform_properties.rs) (`is_satisfied_by`, lines 47-78)
 
 ```
-For each property in action.platform_properties:
-  match property_type:
-    Exact   → find workers where (name, value) matches exactly
-    Minimum → find workers where key exists, then verify value >= requested
-    Priority → skip (doesn't restrict matching)
-    Ignore  → skip (not even recorded)
+For each property the action requests:
+  Exact    → worker must advertise the key with the identical value
+  Minimum  → worker must advertise the key; its u64 value must be >= requested
+  Priority → worker must advertise the key (any value); value is NOT compared
+  Ignore   → always matches; the worker need not advertise the key at all
 
-Result = intersection of all worker sets from Exact/Minimum checks
+Result = the set of workers that satisfy every requested property
 ```
+
+The distinction between `Priority` and `Ignore` is the one most people get backwards. `Priority` still gates on **key presence** — a worker that does not advertise the key is filtered out; only the *value* comparison is skipped (`platform_properties.rs:116-117`, `worker_capability_index.rs:184-193`). `Ignore` is the truly permissive one: the action may request the key, but workers that lack it entirely remain eligible (`platform_properties.rs:49-50,121-123`). This is why the `InputRootAbsolutePath` property is typed `ignore` — clients set it, but no worker has to advertise it.
+
+`Minimum` is checked in two stages: the index returns workers that *have* the key, then the caller verifies `value >= requested` at match time, because a worker's available resources change as jobs are assigned (`worker_capability_index.rs:184-193`).
 
 If the result set is empty, the action stays queued until a matching worker appears (or times out). This is important for auto-scaling: if no worker matches, you may need to provision new workers with the right capabilities.
 

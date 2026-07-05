@@ -6,6 +6,7 @@
 
 # Part I: What This Is
 
+- [Why This Fork](./part1/why-this-fork.md)
 - [The 30-Second Model](./part1/thirty-seconds.md)
 - [NativeLink vs. Everything Else](./part1/vs-everything.md)
 - [Mental Model](./part1/mental-model.md)

@@ -78,6 +78,11 @@ supported_platform_properties: {
 4. For `minimum` properties: worker value must be >= requested value.
 5. Workers may have disconnected (timeout). Check `worker_timeout_s`.
 
+The `exact` / `minimum` / `priority` / `ignore` matching vocabulary is
+declared per scheduler under `supported_platform_properties` — for the
+field-by-field reference of each variant see
+[Appendix B: Scheduler Catalog](./scheduler-catalog.md).
+
 ### "FAILED_PRECONDITION: Missing inputs"
 
 **Cause:** Worker can't find input blobs in CAS.
@@ -257,7 +262,7 @@ function will look for the root `Directory` under a different hash.
 **Check:**
 1. Worker CPU/memory — is it saturated?
 2. Input fetch time — is the worker downloading large input trees?
-3. Directory cache enabled? (`experimental_directory_cache`)
+3. Directory cache enabled? (worker `directory_cache`, `cas_server.rs:1233`)
 4. Worker CAS has fast local tier? (filesystem, not just remote gRPC)
 
 ### High memory usage on scheduler

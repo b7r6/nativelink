@@ -70,12 +70,14 @@ The default setup for most build systems:
 
 The problem: your local GCC and the worker's GCC are different binaries. They produce different outputs. But neither is captured in the action hash — both are just "gcc" in PATH. The action hashes look the same, so you get cache "hits" that are actually wrong, or the system detects the mismatch and gives you misses.
 
-The fix is always one of the three approaches above. There is no fourth option. You either:
+The fix is one of the approaches above — each a different *mechanism* for the same principle: the toolchain must be captured in the action hash. You either:
 1. Content-address the toolchain (Nix)
 2. Pin it by container digest
 3. Include it in the action inputs
 
-Everything else is a variant of "hope the toolchains happen to match" — which works until it doesn't, silently.
+This fork adds a fourth mechanism: the **OCI → CAS bridge**. It projects an OCI toolchain image into CAS as a content-addressed REAPI `Directory` tree and merges the resulting root digest into the action's `input_root_digest` — content-addressed like Nix (approach 1), captured by inclusion like a hermetic toolchain (approach 3), but sourced from the OCI ecosystem rather than a Nix store or a Bazel/Buck2 fetch. It is not "hope they match"; the identity is structural. See [Part IX, The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
+
+What has no fourth version is the *principle*. Everything that is not one of these mechanisms is a variant of "hope the toolchains happen to match" — which works until it doesn't, silently.
 
 ## Choosing an Approach
 
@@ -89,4 +91,6 @@ Everything else is a variant of "hope the toolchains happen to match" — which 
 | Multi-language | Excellent | Good | Per-language |
 | Custom toolchains | Easy (Nix derivation) | Easy (Dockerfile) | Hard (custom rules) |
 
-The next three chapters detail each approach with real configurations, real code paths, and the actual files in this repository that implement them.
+Between Nix and containers sits a fourth mechanism this fork adds: [content-addressed OCI toolchains](../part9/oci-cas-bridge.md). It buys the structural correctness and local/remote parity of Nix (approach 1) while sourcing the toolchain from an ordinary OCI image, as the container approach does.
+
+The next three chapters detail each of these approaches with real configurations, real code paths, and the actual files in this repository that implement them; [Platform Properties as the Bridge](./platform-bridge.md) then shows how the platform layer wires any of them to workers, and Part IX documents the fork's fourth mechanism end to end. Every configuration in those chapters is real JSON5 you can validate offline with `nativelink --check`, the offline validation this fork adds, before you deploy it.

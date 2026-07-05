@@ -20,6 +20,8 @@ instance_name = main
 
 **Source:** [`integration_tests/buck2/.buckconfig`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/integration_tests/buck2/.buckconfig)
 
+The checked-in file is the local-test form — `localhost:50051` on every address with `tls = false` — because the integration test runs the server and client on one machine. The block above shows the production shape: a real hostname and `tls = true`.
+
 Key differences from Bazel:
 - **Single config file** (not CLI flags). Changes require editing `.buckconfig`.
 - **Separate addresses** for engine (execution), AC, and CAS. They can point to different servers (for multi-tier architectures) or the same server.
@@ -82,6 +84,8 @@ platforms = rule(attrs = {}, impl = _platforms)
 ```
 
 **Source:** [`integration_tests/buck2/platforms/defs.bzl`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/integration_tests/buck2/platforms/defs.bzl)
+
+The checked-in rule ships with an **empty** `remote_execution_properties = {}`: the integration test's worker advertises empty values for `OSFamily`, `container-image`, and `lre-rs` (`buck2_cas.json5:97-111`), so on a single host there is no toolchain to pin. The properties shown above are what you add once workers diverge and the toolchain has to be identified explicitly.
 
 Then register the platform:
 
@@ -219,6 +223,15 @@ A complete minimal config:
 
 Note the two server blocks: one public (port 50051) for Buck2 clients, one private (port 50061) for workers. This separation is important for security — the worker API should not be accessible to clients.
 
+Before you ship any of this, validate it offline. This fork adds `nativelink --check`, which parses the JSON5 against the same `deny_unknown_fields` config structs the server uses and resolves every store, scheduler, and worker reference — without binding a socket or touching the paths the config points at:
+
+```console
+$ nativelink --check buck2.json5
+OK: buck2.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+```
+
+The checked-in `integration_tests/buck2/buck2_cas.json5` passes the same check. A mistyped field name or a dangling `cas_store` reference fails it — cheaper to learn here than from a `NOT_FOUND` in production.
+
 ## Toolchain Approaches for Buck2
 
 ### Container-Based
@@ -237,16 +250,23 @@ remote_execution_properties = {
 
 ### Nix/LRE for Buck2
 
-LRE's generated Bazel configs don't directly apply to Buck2. But the principle is the same — use Nix store paths as platform property values:
+LRE's generated configs are Bazel `platform()` rules, so they don't drop into Buck2 unchanged — Buck2 wants `ExecutionPlatformInfo`. The pinning principle carries over, but not the way you might guess: LRE does **not** put Nix store paths in platform properties. It pins the toolchain with a single `container-image` property whose value is the Nix output hash of the worker image, and lets the worker's own Nix closure supply the actual binaries. When the toolchain changes, the tag changes, so the identity is content-addressed:
 
 ```python
 remote_execution_properties = {
-    "lre-cc": "/nix/store/abc123-clang-17/bin/clang",
-    "lre-rs": "/nix/store/def456-rust-1.75/bin/rustc",
+    # C++ toolchain — local-remote-execution/generated-cc/config/BUILD:43
+    "container-image": "docker://lre-cc:zms5771rx1yqb4wd6qbj5f9sb2paq75k",
+    "OSFamily": "Linux",
 }
 ```
 
-The worker must have these paths available (via Nix closure in its container image or directly on the host via Nix).
+The Rust toolchain uses the same shape with a `ghcr.io/tracemachina/nativelink-worker-lre-rs:<imageTag>` reference (`local-remote-execution/rust/platforms/BUILD.bazel:24-26`).
+
+NativeLink's own Buck2 integration test also carries an `lre-rs` key: the scheduler lists it as a `priority` property (`buck2_cas.json5:59`) — which `schedulers.rs:60` defines as informational pass-through, not a scheduling constraint — and the worker advertises it with an empty value (`buck2_cas.json5:107-111`). The real toolchain identity still travels in `container-image`; `lre-rs` is a routing hook to start matching on once you run more than one Rust toolchain. Either way the worker must have the toolchain on hand — baked into its container image as a Nix closure, or present on the host through Nix.
+
+### OCI → CAS Bridge (this fork)
+
+The container and Nix routes above both assume the worker *already has* the toolchain — a pre-pulled image, or a Nix closure on disk. This fork adds a third route: the [OCI → CAS bridge](../part9/oci-cas-bridge.md) projects an OCI toolchain image into a REAPI `Directory` tree in CAS, so the toolchain becomes a content-addressed action input the worker fetches on demand rather than infrastructure an operator pre-installs. The toolchain digest lands in the action's `input_root_digest`, which folds it into the action hash — the same structural correctness Nix/LRE buys, reachable without adopting Nix. See [Part IX](../part9/standard-oci-toolchain.md) for how a container toolchain becomes a first-class action input.
 
 ### Host Toolchain (Simplest)
 
@@ -275,19 +295,21 @@ No toolchain identity in the properties. This works when all workers are identic
 
 ## Running the Integration Test
 
-NativeLink's Buck2 integration test provides a complete reference:
+NativeLink's Buck2 integration test is a smoke test, not a benchmark. It proves the wiring works end to end and that the server logs no errors — nothing more:
 
 **Source:** [`integration_tests/buck2/buck2-with-nativelink-test.nix`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/integration_tests/buck2/buck2-with-nativelink-test.nix)
 
-This test:
-1. Starts NativeLink with the Buck2-specific config
-2. Runs `buck2 build //...` with remote execution enabled
-3. Verifies cache hits on subsequent builds
-4. Tests hybrid (local + remote) execution
+What it actually does (`buck2-with-nativelink-test.nix:17-54`):
+1. Starts NativeLink with `integration_tests/buck2/buck2_cas.json5`, teeing the server log to `nativelink.log`.
+2. Rewrites the test rules (`tests/defs.bzl`) to call Nix-provided `cat` and `diff` instead of whatever is on `PATH`, so the build is hermetic.
+3. Runs `buck2 build //...` **once**. The action graph in `tests/defs.bzl` chains five stages — some marked `local_only`, the rest left to run on remote execution — feeding outputs between them and ending in a `diff` verification stage, so a single build exercises both local and remote paths.
+4. Asserts the Buck2 output contains `BUILD SUCCEEDED`.
+5. Asserts the server log contains no `ERROR`.
 
-To run it locally (requires Nix):
+It does **not** re-run the build to measure cache hits, and it does **not** benchmark hybrid scheduling — those are properties you verify against your own workload. The Nix flake attribute is `buck2-with-nativelink-test` (`flake.nix:521`), and CI runs it with `nix run`:
+
 ```bash
-nix build .#buck2-integration-test
+nix run .#buck2-with-nativelink-test
 ```
 
 ## Common Issues (Buck2-Specific)

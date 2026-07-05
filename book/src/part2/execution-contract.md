@@ -14,7 +14,7 @@ Remote execution works because client and server agree on a contract. The contra
 
 ## What the Server Guarantees
 
-1. **Content integrity.** Blobs retrieved from CAS by digest are byte-for-byte identical to what was uploaded. If they're not, the hash wouldn't match.
+1. **Content integrity.** Blobs retrieved from CAS by digest are byte-for-byte identical to what was uploaded — if they weren't, the hash wouldn't match. That reasoning hides one premise: client and server must agree on *which* hash function the digest names. REAPI lets a client leave `digest_function` unset (0/`UNKNOWN`); a server that then defaults to the wrong algorithm — a BLAKE3 client against a SHA256 default — voids the guarantee, because the bytes are stored under a digest computed the wrong way and a `VerifyStore` re-hash can't catch it (it re-hashes with the same wrong default, `verify_store.rs:186`). This fork's `require_explicit_digest_function` shuts the hole by *rejecting* any request that leaves the digest function unset rather than guessing (`cas_server.rs:1341`, `digest_hasher.rs:217`); see the [configuration reference](../appendix/config-reference.md).
 
 2. **Execution isolation.** Each action runs in its own sandbox. Actions cannot observe each other's state. (The strength of this guarantee varies — NativeLink supports Linux namespaces for PID/IPC/mount isolation.)
 
@@ -40,11 +40,15 @@ Actions are independent. The protocol provides no mechanism for expressing "acti
 
 ### No output determinism verification
 
-The server trusts the worker. If a worker produces non-deterministic outputs, the AC caches whichever result was stored first. There is no built-in mechanism to detect or prevent this. (NativeLink's `VerifyStore` can be configured to re-hash outputs, catching corruption but not non-determinism.)
+The server trusts the worker. Two runs of the same non-deterministic action hash to *different* CAS output digests, so both land in the store as valid uploads under different keys; nothing compares them. There is no built-in mechanism to detect or prevent this.
+
+`VerifyStore` does not close this gap, and it is worth being precise about its scope. Wrapping a **CAS** store, it re-hashes each blob *on the write path* as the upload streams in and rejects any blob whose bytes don't match the digest the client claimed (`verify_store.rs:162`); reads pass straight through unverified (`verify_store.rs:222`). So it catches corruption and lying clients at ingest — never non-determinism, since two differing-but-correctly-hashed outputs are both honest uploads. It also guards the CAS, not the AC: `verify_size`/`verify_hash` are meant to be off for the action cache and on for CAS stores (`stores.rs:960`).
 
 ### No cache invalidation
 
-There is no `InvalidateAction` RPC. The AC is append-only by design. If you need to invalidate cached results (because of a toolchain bug, for example), you change the inputs (which changes the action hash) or you clear the entire AC.
+The `ActionCache` service exposes exactly two methods — `GetActionResult` and `UpdateActionResult` (`ac_server.rs:171`) — and no invalidation RPC: nothing that says "the result for this action is now wrong; stop serving it." That gap is real, but it is *not* because the AC is append-only. `UpdateActionResult` is last-writer-wins: `inner_update_action_result` serializes the `ActionResult` and calls `update_oneshot(action_digest, …)`, overwriting whatever entry was already keyed under that action digest (`ac_server.rs:121`). An entry can be *replaced*; what it cannot be is *invalidated* through the protocol.
+
+The distinction bites in practice. Overwriting only helps if something re-executes the action and writes a fresh result — but a client that gets a cache hit won't re-execute, so a stale entry (a toolchain bug, for example) keeps being served. To actually retire a cached result you change the inputs — which changes the action hash, so you are looking up a different key — or you clear the AC out of band (LRU/TTL eviction, or wiping the store). A read-only AC endpoint (`read_only: true`, `ac_server.rs:131`) removes even the overwrite path, pinning results until eviction.
 
 ## The Hermeticity Spectrum
 

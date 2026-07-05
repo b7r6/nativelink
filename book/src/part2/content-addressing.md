@@ -23,7 +23,15 @@ With content-addressing, the name *is* the content (or rather, a function of it)
 - **Staleness is impossible.** The content for a given hash never changes. There is nothing to invalidate.
 - **Races are impossible.** Two writers uploading the same content produce the same hash. The store is idempotent — writing the same bytes twice is a no-op.
 - **Deduplication is structural.** Same content = same hash = stored once. No dedup algorithm needed.
-- **Integrity is structural.** Verify the hash on read. If it matches, the content is correct. If it doesn't, the store is corrupt.
+- **Integrity is structural.** A blob's key *is* its hash, so anyone holding the bytes can re-derive the key and check it. NativeLink does exactly this — at *write* time, not read. The `VerifyStore` wrapper re-hashes every blob as it streams through `update` and rejects it before it reaches backing storage if the computed hash (`verify_store.rs:186`) or the declared size (`verify_store.rs:175`) disagrees with the digest; the read path, `get_part`, does no such check (`verify_store.rs:222`). A blob that lands in the CAS is correct by construction.
+
+## One Hash Function, Named Explicitly
+
+Content-addressing only holds if everyone agrees on *which* hash function computes the key. NativeLink supports exactly two — SHA256 and BLAKE3 — and nothing else; `DigestHasherFunc` has precisely those two variants (`digest_hasher.rs:132-135`). The two produce different keys for the same bytes, so a blob is only content-addressed *relative to a stated function*.
+
+Stock NativeLink treated an unset digest function as a silent default of SHA256. That is a quiet correctness hole. A BLAKE3 client that omits the field on an `ExecuteRequest` gets its output `Directory` trees hashed with SHA256 — producing digests it will never look up, and cross-hashing one client's Merkle tree under another client's algorithm. The bytes are intact; the *identity* is wrong, which is worse, because nothing reports corruption.
+
+The fork closes the hole on both ends. Execution refuses to guess: an `ExecuteRequest` whose `digest_function` arrives as `0` (`UNKNOWN`) is a hard input error, because the server uses that function to hash the worker's outputs and cannot safely default it (`execution_server.rs:336`). And the `require_explicit_digest_function` config flag (`cas_server.rs:1341`) extends the same strictness server-wide: when `true`, any request that omits the digest function is rejected rather than falling through to `default_digest_hash_function`. Leave it `false` for backwards compatibility; set it `true` on new deployments.
 
 ## Why This Matters for Build Caching
 
@@ -78,11 +86,13 @@ pub trait StoreLike: Send + Sync + Sized + Unpin + 'static {
 
 The key is always a digest. The value is always bytes. This uniformity is why stores compose — any implementation of `has`/`update`/`get_part` is interchangeable with any other. Fast/slow tiering, compression, deduplication — they're all just stores wrapping stores, passing digests down.
 
+Because a store only ever sees a digest and bytes, it is indifferent to *what* those bytes are: a Bazel action output and a Nix NAR are the same kind of object to it, so they coexist in one CAS — the fork's [Nix substituter](../part9/nix-substituter.md) serves NAR blobs straight out of the same store that backs Bazel remote caching, with no separate blob store required.
+
 ## The Cost
 
 Content-addressing is not free. The costs are:
 
-1. **Hashing overhead.** Every blob must be hashed on upload. SHA-256 is ~500MB/s on modern hardware. Blake3 is ~5GB/s. For build artifacts this is negligible compared to I/O.
+1. **Hashing overhead.** Every blob must be hashed on upload. SHA256 is ~500MB/s on modern hardware; BLAKE3 is ~5GB/s. For build artifacts this is negligible compared to I/O.
 
 2. **No in-place mutation.** You can't "update" a cached result. You can only insert new content under a new hash. This means cache eviction is your only size control mechanism (there's no "overwrite with newer version").
 

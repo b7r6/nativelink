@@ -1,5 +1,7 @@
 # The Standard OCI Toolchain
 
+Part IX is where the CAS earns a second job. Beyond backing remote execution, it becomes a bridge between foreign content-addressing worlds, and the two services in this part run that bridge in opposite directions. The [OCI → CAS Bridge](./oci-cas-bridge.md) pulls foreign content *into* the CAS: it turns toolchain images pulled from an OCI registry into REAPI `Directory` trees, so a toolchain becomes data a worker fetches on demand rather than infrastructure an operator pre-installs. The [Nix Substituter Facade](./nix-substituter.md) serves CAS content back *out* in a foreign protocol — the Nix HTTP binary-cache protocol, fronted directly over store composition instead of re-implemented alongside it. This chapter opens the part with the contract the import side leans on: the Standard OCI Toolchain, a content-addressed identity that toolchain producers and NativeLink consumers can implement independently and still interoperate.
+
 This chapter explains why a toolchain specification exists, what problem it solves for NativeLink operators, and what the integration agenda looks like. The full normative specification is in [Appendix F](../appendix/standard-oci-toolchain-spec.md).
 
 ## The Problem NativeLink Cannot Solve Alone

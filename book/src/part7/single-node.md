@@ -82,6 +82,14 @@ The simplest NativeLink deployment: one binary, one config file, all four roles 
 }
 ```
 
+Two listeners, one process: the public gRPC surface (CAS, AC, execution,
+capabilities, bytestream) on `0.0.0.0:50051`, and a loopback-only `worker_api`
+listener on `127.0.0.1:50061` that the in-process worker dials and that carries
+the `health` route. Every field above is defined in
+[Appendix A: Configuration Reference](../appendix/config-reference.md) — reach
+for it whenever you add a field, because `deny_unknown_fields` means a typo is a
+hard startup error, not a warning.
+
 ## Running It
 
 ### From Source (Cargo)
@@ -92,8 +100,11 @@ cargo run --release --bin nativelink -- nativelink-config.json5
 
 ### From Nix
 
+Run the fork's flake directly — this is the build that has `--check`, the
+OCI → CAS bridge, and the `nix_cache` substituter:
+
 ```bash
-nix run github:TraceMachina/nativelink -- nativelink-config.json5
+nix run github:straylight-prelude/straylight-nativelink -- nativelink-config.json5
 ```
 
 ### From Docker
@@ -104,15 +115,42 @@ docker run -v $(pwd)/nativelink-config.json5:/config.json5 \
   ghcr.io/tracemachina/nativelink:latest /config.json5
 ```
 
+The upstream `ghcr.io/tracemachina/nativelink` image is the vanilla server; it
+predates the fork's additions, so `--check`, the OCI → CAS bridge, and
+`nix_cache` are absent. For those, build the fork's own image with
+`nix build github:straylight-prelude/straylight-nativelink#nativelink-image` or
+run from source or Nix as above.
+
 ### Verify It's Running
 
-```bash
-# Health check
-grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
+Validate the config *before* you start anything. `nativelink --check` is fully
+offline: it parses the file, resolves every store and scheduler reference —
+catching a mistyped `cas_store` or `scheduler` name — then exits without binding
+a socket, connecting to a backend, or creating any store directory. Run it first,
+and wire it into CI (it exits non-zero on failure):
 
-# Or with curl (NativeLink serves HTTP health on the same port)
-curl http://localhost:50051/status
+```bash
+nativelink --check nativelink-config.json5
+# OK: nativelink-config.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
 ```
+
+Once the process is up, hit the health endpoint. NativeLink has **no gRPC health
+service** — there is no `grpc.health.v1.Health`. Health is a plain HTTP route that
+returns a JSON per-component report with `200 OK` when everything is healthy and
+`503 Service Unavailable` when any component reports `Failed` or `Timeout`
+(`health_server.rs:61`). It is mounted only on the server whose `services` block
+declares `health: {}` — in this config that's the `worker_api` listener on
+**port 50061**, not the public gRPC port 50051:
+
+```bash
+curl -i http://127.0.0.1:50061/status
+# HTTP/1.1 200 OK
+# content-type: application/json; charset=utf-8
+# [ ... per-component health report ... ]
+```
+
+The default path is `/status` (`HealthConfig`, `cas_server.rs:623`); set
+`health: { path: "/healthz" }` to change it.
 
 ## Connecting Clients
 
@@ -137,6 +175,16 @@ cas_address = 127.0.0.1:50051
 tls = false
 instance_name = main
 ```
+
+### As a Nix Binary Cache
+
+Because the CAS is content-addressed, this same single-node process can also
+serve as a Nix binary cache: add a `nix_cache` service to the public listener and
+Nix fetches store paths straight out of the CAS over HTTP. It is not a one-line
+add — the substituter needs three stores (a digest-keyed NAR store plus
+string-keyed `path_info_store` and `alias_store`), and the NAR store should sit
+behind `verify` — so the full recipe lives in its own chapter. See
+[The Nix Substituter Facade](../part9/nix-substituter.md).
 
 ## When to Use This
 
@@ -172,6 +220,7 @@ The minimal change from single-node to shared cache: replace the filesystem CAS 
     },
     slow: {
       experimental_cloud_object_store: {
+        provider: "aws",
         region: "us-east-1",
         bucket: "my-team-nativelink-cas",
         key_prefix: "cas/"
@@ -180,5 +229,11 @@ The minimal change from single-node to shared cache: replace the filesystem CAS 
   }
 }
 ```
+
+`provider` is required — it is the enum tag that selects the backend
+(`ExperimentalCloudObjectSpec`, `stores.rs:1071`): `aws`, `gcs`, `azure`,
+`ontap`, `r2`, or `oci`. Omit it and the store fails to parse; each provider then
+takes its own fields (`region`/`bucket` for `aws`, `account_name`/`container` for
+`azure`, and so on).
 
 Now multiple machines can share the CAS (each with their own local fast tier). This is the bridge between single-node and multi-worker — you get cache sharing without a distributed scheduler.

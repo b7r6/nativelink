@@ -18,6 +18,8 @@
 
 ## C
 
+**CacheLookupScheduler** — A scheduler *wrapper* (config key `cache_lookup`) that checks the Action Cache before dispatching; on a hit it returns the cached result without involving a worker, and on a miss it delegates to a nested `scheduler`. See [Appendix B: Scheduler Catalog](./scheduler-catalog.md).
+
 **CAS (Content-Addressable Storage)** — Storage where every blob is keyed by its content hash. The fundamental storage primitive in REAPI. See [Why Content-Addressing Works](../part2/content-addressing.md).
 
 **Container Image** — A filesystem tree plus metadata packaged per the OCI Image Spec, addressed by digest and distributed through a registry. In NativeLink a container image plays two roles: it can be the toolchain a worker runs actions inside (named via the `container-image` platform property, passed through as a `priority` property — see [Container-Based Toolchains](../part5/containers.md)), or, through the OCI → CAS bridge, the source that `FetchDirectory` projects into an REAPI `Directory` tree.
@@ -74,6 +76,8 @@
 
 **Namespace Isolation** — Linux kernel feature (`unshare()`) that isolates processes (PID namespace), filesystems (mount namespace), and IPC. Used by workers for action sandboxing.
 
+**Nix Substituter Facade (`nix_cache`)** — A fork-added service that fronts the Nix HTTP binary-cache protocol directly over NativeLink's store composition, so a stock `nix` client can list a NativeLink deployment as an ordinary `substituters` entry. It is the mirror image of the OCI → CAS bridge: where that bridge pulls foreign content *into* the CAS, the facade serves CAS content *out* in a foreign protocol. Unlike every other service — which speaks gRPC on the listener — `nix_cache` mounts a plain-HTTP router at `/nix/<instance_name>`, coexisting with the gRPC CAS, AC, and execution services on one port. It composes three stores (`NixCacheConfig`, `cas_server.rs:246`, `deny_unknown_fields`): a digest-keyed `cas_store` holding each NAR as an uncompressed CAS blob under `DigestInfo(sha256(nar), nar_size)`; a string-keyed `path_info_store` whose records are REv2 `ActionResult` envelopes carrying a `NixPathInfo` message (`nativelink-nix/src/path_info.rs`); and a string-keyed `alias_store` mapping client-chosen NAR URLs to `(digest, size)`. Because path-info records are `ActionResult` protos, wrapping `path_info_store` in `completeness_checking` makes garbage collection fall out of store composition — an evicted NAR turns its `.narinfo` into a clean 404 miss rather than a served-but-broken record. Implemented in `nativelink-service/src/nix_cache_server.rs`. See [The Nix Substituter Facade](../part9/nix-substituter.md).
+
 ## O
 
 **OCI (Open Container Initiative)** — The standards body and image format for container images. An OCI image is a manifest plus a config plus layer blobs, each addressed by a `sha256` digest. NativeLink's `nativelink-oci` crate pulls OCI images and projects them into REAPI `Directory` trees; it is a registry *client*, not a registry server. See [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
@@ -85,6 +89,8 @@
 ## P
 
 **Platform Properties** — Key-value string pairs that describe what an action needs (client-side) or what a worker provides (server-side). The bridge between actions and workers. See [Platform Properties](../part4/platform-properties.md).
+
+**PropertyModifierScheduler** — A scheduler *wrapper* (config key `property_modifier`) that rewrites platform properties — `add`, `remove`, or `replace`, applied in order — before forwarding to a nested `scheduler`. See [Appendix B: Scheduler Catalog](./scheduler-catalog.md).
 
 **PropertyType** — NativeLink's classification of platform properties: `minimum` (numeric, >=), `exact` (string equality), `priority` (informational), `ignore` (allowed but unchecked).
 
@@ -99,6 +105,8 @@
 ## S
 
 **Scheduler** — The component that receives Execute RPCs and dispatches actions to matching workers. Maintains the action queue and worker pool.
+
+**SimpleScheduler** — The primary *leaf* scheduler (config key `simple`) that owns the action queue, the connected-worker pool, and the capability index matching actions to workers via `supported_platform_properties`. It terminates any wrapper chain and is the only scheduler with the experimental Redis state backend. See [Appendix B: Scheduler Catalog](./scheduler-catalog.md).
 
 **Store** — NativeLink's fundamental abstraction. Any component that implements `has`/`update`/`get_part` for content-addressed blobs. See [The Store Trait](../part3/store-trait.md).
 

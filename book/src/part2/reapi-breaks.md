@@ -50,7 +50,7 @@ Part V of this book is entirely about these approaches. This fork adds a fourth:
 
 ## Gap 3: No Cache Invalidation
 
-There is no `InvalidateActionResult` RPC. Once a result is in the AC, it stays until evicted by LRU/TTL or the entire cache is cleared.
+There is no `InvalidateActionResult` RPC. `UpdateActionResult` can overwrite an entry (last-writer-wins), but a client that gets a cache hit never re-executes the action to produce a fresh result — so in practice a stale result stays until evicted by LRU/TTL or the entire cache is cleared.
 
 In practice, you need invalidation when:
 - A toolchain bug produced incorrect outputs
