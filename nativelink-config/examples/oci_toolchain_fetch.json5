@@ -1,0 +1,108 @@
+// OCI toolchain fetch service — pull an OCI/Docker image into the CAS as an
+// REAPI Directory tree via the Remote Asset API.
+//
+// This wires the Remote Asset `fetch` service with an `oci` sub-block
+// (nativelink-config FetchConfig + OciFetchConfig, cas_server.rs:171-206).
+// A FetchDirectory request whose URI starts with `oci://` or `docker://`
+// (fetch_server.rs:192) makes NativeLink pull the referenced image, project
+// its layers into a Directory tree, upload every file blob and Directory
+// proto into the CAS store, and return the root Directory digest, per the
+// Standard OCI Toolchain Specification §6.
+//
+// This is the OCI *registry client* (it PULLS images). It is NOT the same
+// thing as examples/oci_backend.json5, which is Oracle Cloud Infrastructure
+// object storage wired as a *store backend*. If you are looking for image
+// pulling, you are in the right file.
+//
+// Scope of the current client, so an operator is not surprised in
+// production:
+//   * Layers must be gzip-compressed; a zstd layer is rejected
+//     (oci_client.rs:356-363).
+//   * Registry access is anonymous, except registry-1.docker.io (Docker
+//     Hub) which gets an anonymous Bearer token (registry.rs:230-236).
+//     There is no credential field, so only public images pull today.
+//   * Multi-arch / manifest-list tags are not yet handled: the manifest
+//     parser expects a single image manifest and the Accept header omits
+//     the index media types (registry.rs:130-137, 277-278). Reference a
+//     single-platform image (or a digest that resolves to one).
+//   * Whiteouts (files a layer deletes) are rejected; conforming toolchain
+//     layers are additive (projection.rs:167-175).
+{
+  stores: [
+    {
+      // Content-addressed store the projected image blobs land in. This is
+      // the store `oci.cas_store` points at, so make it the SAME store the
+      // execution service reads from and imported toolchains are reachable
+      // by actions. Filesystem-backed here so blobs survive a restart.
+      name: "CAS_MAIN_STORE",
+      filesystem: {
+        content_path: "/tmp/nativelink/oci-toolchain/content_path-cas",
+        temp_path: "/tmp/nativelink/oci-toolchain/tmp_path-cas",
+        eviction_policy: {
+          // 10gb of image blobs.
+          max_bytes: 10000000000,
+        },
+      },
+    },
+  ],
+  servers: [
+    {
+      name: "public",
+      listener: {
+        http: {
+          socket_address: "0.0.0.0:50051",
+        },
+      },
+      services: {
+        // The Remote Asset "fetch" half. `fetch_store` is where cached
+        // remote-asset lookups are keyed; the `oci` sub-block turns on the
+        // OCI→REAPI bridge (fetch_server.rs:68-97). Without the `oci` block
+        // a FetchDirectory on an oci:// URI returns Unimplemented
+        // (fetch_server.rs:253-259).
+        fetch: [
+          {
+            instance_name: "main",
+            fetch_store: "CAS_MAIN_STORE",
+            oci: {
+              // Where projected file blobs and Directory protos are
+              // uploaded. Omit to reuse `fetch_store`; set it explicitly to
+              // the execution service's CAS so pulled toolchains are visible
+              // to actions.
+              cas_store: "CAS_MAIN_STORE",
+
+              // Skip re-uploading blobs already present in the CAS (a
+              // has_many() existence probe before upload). Default: true.
+              dedup_check: true,
+
+              // Digest function for the projected Directory tree. Must match
+              // what the execution service expects. Accepts "BLAKE3" (the
+              // default) or "SHA256" (fetch_server.rs:77-86).
+              digest_function: "BLAKE3",
+            },
+          },
+        ],
+
+        // Serve the projected tree back out over the standard REAPI CAS and
+        // ByteStream services, so a client or worker can read the imported
+        // blobs by digest. Both reuse the same CAS_MAIN_STORE the import
+        // wrote into.
+        cas: [
+          {
+            instance_name: "main",
+            cas_store: "CAS_MAIN_STORE",
+          },
+        ],
+        bytestream: [
+          {
+            instance_name: "main",
+            cas_store: "CAS_MAIN_STORE",
+          },
+        ],
+        health: {},
+      },
+    },
+  ],
+  global: {
+    max_open_files: 24576,
+  },
+}

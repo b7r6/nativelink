@@ -69,12 +69,14 @@ The OCI manifest digest (sha256) identifies the toolchain for distribution. The 
 
 ### How does the BLAKE3 fix relate?
 
-The REAPI execution projection requires BLAKE3. NativeLink previously defaulted unset `digest_function` to SHA256, making BLAKE3 clients get corrupted Directory digests. We fixed this (Appendix D of the spec, `pr/sha-256-silent-default-fix` in this repo).
+The REAPI execution projection requires BLAKE3. NativeLink previously defaulted unset `digest_function` to SHA256, making BLAKE3 clients get corrupted Directory digests. We fixed this on the `Execute` path (Appendix D of the spec, `straylight/straylight-nativelink@pr/sha-256-silent-default-fix`; `nativelink-service/src/execution_server.rs:336`): a request that leaves `digest_function` unset (the UNKNOWN default) is now rejected rather than silently defaulted.
 
 With the fix shipped, the two-projection model works end-to-end:
 - sha256 at the OCI/registry boundary (everyone already speaks it)
 - BLAKE3 at the REAPI/execution boundary (faster, NativeLink-native)
-- No confusion between them — the declared function is always honored
+- On the `Execute` path the worker uses the client-declared function or refuses the request — it never silently substitutes one for the other
+
+One caveat: the OCI→CAS bridge (`FetchDirectory("oci://…")`) is a *different* consumer path, and it does **not** yet read the request's declared function. It projects with a static per-instance setting (`oci.digest_function`, default BLAKE3; `nativelink-service/src/fetch_server.rs:288`) and drops the request field (`fetch_server.rs:250`). The operator must set `oci.digest_function` to match the execution service (see [Known limitations](#known-limitations)). Spec §14.11 (honor the declared function) is therefore satisfied on `Execute` but not yet on the OCI `FetchDirectory` path.
 
 ## The Integration Agenda
 
@@ -85,12 +87,8 @@ What remains to make NativeLink a conforming consumer of Standard OCI Toolchains
 - **Digest function fix** — execution server rejects unset `digest_function`, global strict mode available
 - **BLAKE3 support** — NativeLink already supports BLAKE3 as a digest function
 - **Store composition** — CAS already stores content by digest; toolchain blobs are just more content
-
-### Done
-
-- **OCI → CAS bridge.** The `nativelink-oci` crate implements the full pipeline: pull from any OCI registry, decompress layers, project into an REAPI `Directory` Merkle tree (BLAKE3), upload to CAS, and return the root digest. Exposed via `FetchDirectory("oci://…")` on the Remote Asset API. See [The OCI → CAS Bridge](./oci-cas-bridge.md).
-
-- **FetchDirectory implementation.** The previously-unimplemented `FetchDirectory` RPC now handles both OCI URIs (via the bridge) and pre-pushed remote assets (via store lookup). Configured per-instance with digest function and dedup settings.
+- **OCI → CAS bridge.** The `nativelink-oci` crate implements the pipeline: pull the image and gzip-decompress its layers, project them into an REAPI `Directory` Merkle tree (BLAKE3 by default, SHA256 optional), upload the blobs to CAS, and return the root digest. Registry reach is Docker Hub (anonymous pull token) plus any registry that serves anonymous pulls — there is no private-registry credential support (`nativelink-oci/src/registry.rs:224-237`). Exposed via `FetchDirectory("oci://…")` on the Remote Asset API. See [The OCI → CAS Bridge](./oci-cas-bridge.md).
+- **FetchDirectory implementation.** The previously-unimplemented `FetchDirectory` RPC now handles both OCI URIs (via the bridge) and pre-pushed remote assets (via store lookup). Configured per-instance with a digest function and dedup settings (`OciFetchConfig`); the request's own `digest_function` is not consulted for the OCI path (see [Known limitations](#known-limitations)).
 
 ### Next
 
@@ -104,6 +102,16 @@ What remains to make NativeLink a conforming consumer of Standard OCI Toolchains
    - Given an OCI image, can we produce the REAPI projection?
    - Given a REAPI root digest, does the content match the OCI layers?
    - Does the floor loader resolve correctly in a sandboxed execution?
+
+### Known limitations
+
+The bridge is real and exercised, but it is deliberately narrow. What it does *not* do today:
+
+- **No private-registry credentials.** Authentication is a Docker Hub anonymous pull token for `registry-1.docker.io`; every other registry is contacted anonymously (`nativelink-oci/src/registry.rs:224-237`). There is no credential field on `OciFetchConfig`, so private repositories on other registries cannot be pulled.
+- **gzip layers only.** `+gzip` (and uncompressed) layers import; a `+zstd` layer is rejected with `zstd decompression not yet implemented` (`nativelink-oci/src/oci_client.rs:356`). The spec permits zstd transport compression (§5.1), so this is a consumer gap, not a spec change.
+- **No manifest-list tags.** The client parses a single image manifest only: `OciManifest.config` and `layers` are non-optional and the `Accept` header omits the index/list media types (`nativelink-oci/src/registry.rs:130-137,277`). A tag whose reference resolves to an image index — a manifest list, i.e. an image built for several architectures — fails to deserialize. Pull a single-image digest instead.
+- **Request digest function ignored on the OCI path.** The projection uses the static `oci.digest_function` (default BLAKE3), not the request's declared function (`nativelink-service/src/fetch_server.rs:250`,`288`). The operator must set `oci.digest_function` to match the execution service — the field is documented as "Must match what the execution service expects" (`nativelink-config/src/cas_server.rs:203`). This is exactly the matched-configuration discipline the spec calls "retired" for `Execute`; it is not retired for the OCI bridge (spec §6.6, Appendix E, item E3).
+- **Whole-image buffering.** A layer blob is read fully into memory (`registry.rs:349`) and the projected tree is held resident as a map of file content (`projection.rs:102`) before upload. Import is not streaming; a very large toolchain image is bounded by available memory.
 
 ### Out of Scope (for NativeLink)
 

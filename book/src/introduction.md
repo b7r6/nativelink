@@ -26,10 +26,11 @@ By the end of this book you will understand:
 - **Toolchains** — the three approaches (Nix/LRE, containers, hermetic cross-compilers) and when each one wins
 - **Client integration** — Bazel and Buck2 as equal first-class citizens, with real configs and real gotchas
 - **Deployment** — from a single binary on localhost to a production Kubernetes fleet with observability
+- **This fork's extensions** — the OCI → CAS bridge that turns registry images into content-addressed REAPI input trees, and the Nix substituter facade that serves the same CAS as a Nix binary cache
 
 ## How to Read This
 
-Parts I and II give you the mental model and the protocol. Parts III and IV are the internals — stores and scheduling. Part V is toolchains, which is where most teams get stuck. Part VI is client integration. Parts VII and VIII are deployment and worked examples.
+Parts I and II give you the mental model and the protocol. Parts III and IV are the internals — stores and scheduling. Part V is toolchains, which is where most teams get stuck. Part VI is client integration. Parts VII and VIII are deployment and worked examples. Part IX covers this fork's extensions: the OCI → CAS bridge, which pulls a registry image into CAS as an REAPI `Directory` tree so a toolchain becomes an action input instead of pre-installed infrastructure, and the Nix substituter facade, which serves the CAS to stock `nix` clients over the Nix binary-cache protocol.
 
 Read it front to back the first time. The code links point into the actual NativeLink source — follow them.
 

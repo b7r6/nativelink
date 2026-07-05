@@ -1,6 +1,6 @@
 # REAPI from First Principles
 
-The Remote Execution API (REAPI) is a gRPC protocol defined by the Bazel team and adopted by the industry. It consists of five services. Every remote cache and remote execution system — NativeLink, Buildbarn, EngFlow, BuildBuddy — implements these same five services.
+The Remote Execution API (REAPI) is a gRPC protocol defined by the Bazel team and adopted by the industry. Its core is five services. Every remote cache and remote execution system — NativeLink, Buildbarn, EngFlow, BuildBuddy — implements these same five. A companion protocol from the same `remote-apis` repository, the Remote Asset API, adds two more (`Fetch` and `Push`); NativeLink serves it too, and this fork's OCI → CAS bridge (Part IX) rides on it.
 
 Understanding REAPI is not optional. If you don't understand the protocol, you cannot debug cache misses, you cannot reason about performance, and you cannot configure NativeLink correctly.
 
@@ -80,6 +80,28 @@ service Capabilities {
 Feature negotiation. The client asks "what do you support?" and the server responds with digest functions, max batch sizes, supported compressors, execution priority ranges, etc. Clients use this to adapt their behavior.
 
 **Source:** [`nativelink-service/src/capabilities_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/capabilities_server.rs)
+
+## The Remote Asset API (companion protocol)
+
+Alongside the five core services, the same `remote-apis` repository defines the **Remote Asset API** — two services that map an external URI to content in CAS:
+
+```protobuf
+service Fetch {
+  rpc FetchBlob(FetchBlobRequest) returns (FetchBlobResponse);
+  rpc FetchDirectory(FetchDirectoryRequest) returns (FetchDirectoryResponse);
+}
+
+service Push {
+  rpc PushBlob(PushBlobRequest) returns (PushBlobResponse);
+  rpc PushDirectory(PushDirectoryRequest) returns (PushDirectoryResponse);
+}
+```
+
+`Fetch` resolves a URI — an `http(s)://` tarball, an `oci://` image — into CAS and returns a blob digest or a root `Directory` digest that a client can drop straight into an action's `input_root_digest`. `Push` records the reverse mapping, associating a URI with content already in CAS so a later `Fetch` can find it. NativeLink serves both: `FetchServer` handles `FetchBlob` and `FetchDirectory`; `PushServer` handles `PushBlob` (its `PushDirectory` is currently unimplemented, [`push_server.rs:157`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/push_server.rs)). In config they appear as the `fetch` and `push` service entries (`FetchConfig.fetch_store`, `PushConfig.push_store`).
+
+This is where this fork's OCI → CAS bridge lives. A `FetchDirectory` request whose URI starts with `oci://` or `docker://` ([`fetch_server.rs:192`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs)) pulls the image, projects its layers into an REAPI `Directory` Merkle tree, uploads the blobs, and returns the root digest — turning a registry image into an action input. Any other URI falls back to a plain remote-asset lookup in the fetch store. Part IX covers the bridge end to end.
+
+**Source:** [`nativelink-service/src/fetch_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs), [`nativelink-service/src/push_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/push_server.rs)
 
 ## Instance Names
 

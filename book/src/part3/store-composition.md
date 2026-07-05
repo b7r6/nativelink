@@ -91,6 +91,8 @@ Wraps any store and compresses content on write, decompresses on read. The calle
 
 Supported algorithms: LZ4 (default, fast), ZSTD (better ratio). Compression is chunked — large blobs are split into frames so partial reads don't require decompressing the whole blob.
 
+This ZSTD is the CAS-internal compression applied to stored blobs; it is unrelated to the `zstd` *layer* compression an OCI image may carry, which the OCI → CAS bridge does not yet decompress (gzip layers only — see [Part IX](../part9/oci-cas-bridge.md)).
+
 ```json5
 compression: {
   backend: { /* inner store */ },

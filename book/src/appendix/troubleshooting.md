@@ -127,6 +127,121 @@ supported_platform_properties: {
 3. If toolchain mismatch: add toolchain identity to platform properties (Part V)
 4. Nuclear option: clear the AC and rebuild
 
+## OCI Toolchain / Fetch Errors
+
+These cover the OCI → CAS bridge: a `FetchDirectory` request whose URI starts
+with `oci://` or `docker://` pulls the image, projects its layers into an REAPI
+`Directory` tree, and uploads the blobs to CAS. The bridge is an OCI registry
+*client* — NativeLink pulls images, it does not serve a registry. See
+[The OCI → CAS Bridge](../part9/oci-cas-bridge.md). Unless noted, these failures
+surface to the gRPC client as `INVALID_ARGUMENT` on `FetchDirectory`.
+
+### "OCI toolchain support not configured for this instance" (UNIMPLEMENTED)
+
+**Cause:** A `FetchDirectory` request used an `oci://` or `docker://` URI, but
+the instance's `fetch` service has no `oci` block, so the handler returns
+`Code::Unimplemented` (`fetch_server.rs:253-259`).
+
+**Fix:** Add an `oci` section to the `fetch` service for that instance:
+```json5
+services: {
+  fetch: [{
+    instance_name: "main",
+    fetch_store: "CAS_STORE",
+    oci: {
+      cas_store: "CAS_STORE",     // where to upload; defaults to fetch_store
+      dedup_check: true,          // has_many() before upload
+      digest_function: "BLAKE3"   // must match your execution service
+    }
+  }]
+}
+```
+
+### "Registry returned 401" / "403" pulling a private image
+
+**Cause:** The OCI client only performs a real `Bearer`-token handshake for
+Docker Hub (`registry-1.docker.io`); for every other registry it sends
+anonymous requests (`registry.rs:230-237`). Even the Docker Hub token request
+carries no credentials, so private Docker Hub repositories fail too. There is no
+credential field in `OciFetchConfig` — only `cas_store`, `dedup_check`, and
+`digest_function`.
+
+**Fix:**
+1. Pull only public, anonymously-readable images with `oci://` / `docker://`
+   today.
+2. For a private image, mirror it to a registry NativeLink can read
+   anonymously, or project it out-of-band and publish it as a pre-pushed remote
+   asset (the non-OCI `FetchDirectory` path serves stored `Directory` digests).
+3. Credentialed pulls are a known gap, not a misconfiguration.
+
+### "zstd decompression not yet implemented"
+
+**Cause:** The layer is zstd-compressed (a `+zstd` media type). Only gzip layers
+are decompressed today; `decompress_zstd()` is a stub that returns this error
+(`oci_client.rs:356-363`).
+
+**Fix:** Rebuild and republish the toolchain image with gzip-compressed layers —
+the default for `docker build`, `crane`, and most CI image tooling.
+
+### "Whiteout entry '…' found in layer N"
+
+**Cause:** A layer carries a whiteout marker (a filename beginning with `.wh.`)
+that deletes a path from a lower layer. The projection treats conforming
+toolchain images as additive and disjoint (spec §5.2) and rejects whiteouts
+rather than applying them (`projection.rs:169-175`).
+
+**Fix:** Flatten the image to a single additive layer (for example a squashed
+build, or `docker export` of a started container) so no path is deleted in a
+later layer. Build toolchain images by adding files, never by removing them.
+
+### Multi-architecture tag fails with "Parsing manifest JSON"
+
+**Cause:** The tag points to a manifest list / image index (multi-architecture),
+not a single-image manifest. `OciManifest.config` and `OciManifest.layers` are
+required fields (`registry.rs:130-137`) and the `Accept` header omits the
+index/list media types (`registry.rs:277-279`), so an index fails to
+deserialize.
+
+**Fix:**
+1. Reference one platform's image by digest: `oci://registry/repo@sha256:…`
+   pointing at the per-architecture manifest, not the multi-architecture tag.
+2. Resolve the platform manifest out-of-band (`crane manifest`,
+   `docker manifest inspect`) and fetch that digest.
+3. Manifest-list resolution is future work — see
+   [The OCI → CAS Bridge](../part9/oci-cas-bridge.md) ("What's Next").
+
+### OCI import exhausts memory on a large image or layer
+
+**Cause:** Nothing streams. Each blob is buffered whole in memory
+(`registry.rs:349-354`), every decompressed layer is retained at once
+(`oci_client.rs:210-247`), and the projection keeps every file's content
+resident as `Bytes` — once in the in-memory tree and again in the file-blob map
+(`projection.rs:102,457`). Peak memory is roughly the compressed blobs plus the
+decompressed layers plus the whole file tree, all live at the same time.
+
+**Fix:**
+1. Keep toolchain images modest; split a very large toolchain across separate
+   images and fetches.
+2. Give the NativeLink process headroom for the largest single image you pull.
+3. Streaming layer import is listed as future work in
+   [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
+
+### Root digest under the "wrong" hash after an OCI import
+
+**Cause:** For OCI URIs the request's `digest_function` is ignored — the handler
+parameter is discarded (`fetch_server.rs:250`) and the projection always uses
+the static `digest_function` from `OciFetchConfig` (default `BLAKE3`,
+`cas_server.rs:204`). The response reports the function actually used
+(`fetch_server.rs:288-291`), but a client that assumes its own requested
+function will look for the root `Directory` under a different hash.
+
+**Fix:**
+1. Set `oci.digest_function` to match what your execution service and clients
+   expect. It must be `BLAKE3` or `SHA256`; any other value is a startup error
+   (`fetch_server.rs:77-86`).
+2. Read the `digest_function` field on `FetchDirectoryResponse` rather than
+   assuming the request's value was honored.
+
 ## Performance Issues
 
 ### Slow uploads

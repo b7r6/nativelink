@@ -161,6 +161,13 @@ hashing is non-conformant (§14.11; Appendix D)._
 OCI content identity. Transport compression (`+gzip`, `+zstd`) MAY be applied; it
 changes the blob digest, not the diff_id, and MUST NOT be part of identity.
 
+> **Implementation note (NativeLink consumer; informative).** This section permits
+> `+zstd` transport compression, but the current NativeLink OCI→CAS bridge
+> decompresses `+gzip` (and uncompressed) layers only; a `+zstd` layer is rejected
+> (`nativelink-oci/src/oci_client.rs:356`, `zstd decompression not yet implemented`).
+> Images intended for NativeLink import should ship gzip-compressed or uncompressed
+> layers until zstd support lands (Appendix F).
+
 5.2. **Additive, disjoint, no whiteouts.** Components MUST occupy disjoint subtrees;
 layers are additive; a conforming image MUST NOT use whiteouts. Layers MUST be listed
 in a deterministic canonical order so the manifest digest is a stable function of
@@ -240,10 +247,24 @@ corrupted Directory digests. This gap is now closed:
   services (CAS, AC, ByteStream).
 - Legacy mode emits a diagnostic warning on first unset digest_function.
 
-With this fix shipped (`sensenet-ai/nativelink@pr/sha-256-silent-default-fix`), the
-REAPI BLAKE3 projection is unblocked for end-to-end deployment. The two-projection
-model (sha256 at OCI boundary, BLAKE3 at RE boundary) is now implementable without
-requiring matched-configuration discipline (Appendix E, item E3 retired by E4).
+With this fix shipped (`straylight/straylight-nativelink@pr/sha-256-silent-default-fix`,
+`nativelink-service/src/execution_server.rs:336`), the REAPI BLAKE3 projection is
+unblocked for end-to-end execution: a worker hashing output Directory trees uses the
+client-declared function or refuses the request. The two-projection model (sha256 at
+the OCI boundary, BLAKE3 at the RE boundary) is deployable on the `Execute` path.
+
+**One consumer path is not yet conformant.** The `Execute` path honors the declared
+digest function (§14.11), but the OCI→CAS bridge that realizes this section —
+`FetchDirectory("oci://…")` in NativeLink's `FetchServer` — does **not** read the
+request's declared digest function. It projects with a static per-instance value
+(`oci.digest_function`, default BLAKE3; `nativelink-service/src/fetch_server.rs:288`)
+and drops the request field (the parameter is `_digest_function_proto`,
+`fetch_server.rs:250`). Matched-configuration discipline is therefore still required
+for this consumer: the operator must set `oci.digest_function` to the function the
+execution service expects — the config field is documented as "Must match what the
+execution service expects" (`nativelink-config/src/cas_server.rs:203`). Item E3
+(Appendix E) is **not** retired for the OCI bridge; E4 supersedes it only on the
+`Execute` path.
 
 ---
 
@@ -677,8 +698,11 @@ base). Overlay/copy/hardlink/symlink are materialization and never enter a diges
 
 ## Appendix D. Remote-execution interop — conformance gap (NativeLink) — CLOSED
 
-> **Revision 3 (NativeLink track): this gap is now closed.** The fix shipped on
-> branch `pr/sha-256-silent-default-fix` at `sensenet-ai/nativelink`.
+> **Revision 3 (NativeLink track): this gap is now closed on the `Execute` path.**
+> The fix shipped on branch `pr/sha-256-silent-default-fix` at
+> `straylight/straylight-nativelink`. The OCI→CAS bridge (`FetchDirectory`) is a
+> separate consumer path and does not yet honor the request-declared function; see
+> the Consequence note below and §6.6.
 
 **The bug (now fixed):** A worker hashed child `Directory` nodes with the action's
 digest function, which arrived unset (protobuf default `0`) and **defaulted to
@@ -704,26 +728,40 @@ A BLAKE3 client then disagreed on child digests and directory outputs corrupted.
 `nativelink-service/tests/execution_server_test.rs` asserts that the execution
 server returns `INVALID_ARGUMENT` for `digest_function = 0`, preventing regression.
 
-**Consequence for this specification:** With E4 shipped (Appendix E), the
-two-projection model is fully implementable: sha256 stays at the OCI/registry
-boundary, BLAKE3 is the RE digest function, and NativeLink no longer silently
-substitutes one for the other. Matched-configuration discipline (E3) is retired.
+**Consequence for this specification:** With E4 shipped (Appendix E), the `Execute`
+path is sound: sha256 stays at the OCI/registry boundary, BLAKE3 is the RE digest
+function, and the worker no longer silently substitutes one for the other. On this
+path matched-configuration discipline (E3) is retired — the declared function is
+honored or the request is refused. It is **not** retired for the OCI→CAS bridge
+(`FetchDirectory`), which still projects with a static per-instance digest function
+(§6.6) and so still depends on the operator matching `oci.digest_function` to the
+execution service.
 
 ## Appendix E. Migration sequencing
 
 ```
 //  E1  self-containedness (ELF interp/RPATH; §12)         gates EXEC    — ✅ DONE
 //  E2  identity over content, not inodes (§4.2, §10)      gates CACHE   — ✅ DONE
-//  E3  match the digest function end-to-end per projection discipline, today (§4.4)  — RETIRED by E4
-//  E4  RE consumer honors the declared function (§14.11)   the fix; retires E3  — ✅ DONE (pr/sha-256-silent-default-fix)
+//  E3  match the digest function end-to-end per projection discipline (§4.4)
+//        — retired by E4 on the Execute path;
+//          STILL REQUIRED for the OCI→CAS bridge (§6.6, fetch_server.rs:250,288)
+//  E4  RE consumer honors the declared function (§14.11)   the fix; retires E3 on Execute
+//        — ✅ DONE for Execute (execution_server.rs:336, pr/sha-256-silent-default-fix)
+//        — ✗ NOT YET for the FetchDirectory OCI bridge (uses static oci.digest_function)
 //  E5  container floor base layer (§9)                     gates "nice inside"  — ✅ DONE
 //
-//  ALL BLOCKING ITEMS COMPLETE.
+//  ALL BLOCKING ITEMS FOR EXECUTION COMPLETE.
 //  sha256 floors the OCI projection; BLAKE3 lands at the REAPI Merkle projection;
 //  the logical content binds them; hints relate them.
 //
-//  Remaining work: dlopen-closure tooling (§12.6), verify-manifest (§7.2),
-//  REAPI projection end-to-end test (Stage 5 in buck2-prelude).
+//  Remaining work:
+//    OCI→CAS bridge to honor the request-declared digest function
+//      (§14.11; today it uses the static oci.digest_function — fetch_server.rs:250,288),
+//    zstd layer decompression (§5.1; oci_client.rs:356),
+//    manifest-list / multi-architecture tag support
+//      (§6.3; registry.rs:130-137,277 parse a single image manifest only),
+//    dlopen-closure tooling (§12.6), verify-manifest (§7.2),
+//    REAPI projection end-to-end test (Stage 5 in buck2-prelude).
 ```
 
 ## Appendix F. Implementation status (rev 3, NativeLink track)
@@ -734,7 +772,10 @@ substitutes one for the other. Matched-configuration discipline (E3) is retired.
 | §5           | OCI distribution projection              | Implemented                           | `prelude/oci/oci_image.bzl`                            |
 | §6.1–6.4     | REAPI execution projection               | **Unblocked** (was blocked on App. D) | Pending end-to-end test                                |
 | §6.5         | Hints (annotations)                      | Implemented                           | `prelude/oci/oci_image.bzl` annotations                |
-| §6.6         | REAPI unblock (NativeLink fix)           | **Shipped**                           | `sensenet-ai/nativelink@pr/sha-256-silent-default-fix` |
+| §6.6         | REAPI unblock — `Execute` path           | **Shipped**                           | `execution_server.rs:336` (`straylight/straylight-nativelink@pr/sha-256-silent-default-fix`) |
+| §5–§6        | OCI→CAS bridge (`FetchDirectory`)         | Implemented (gzip; BLAKE3/SHA256)     | `nativelink-oci/`, `nativelink-service/src/fetch_server.rs` |
+| §5.1         | zstd layer decompression                 | **Not implemented** (gzip only)       | `nativelink-oci/src/oci_client.rs:356`                 |
+| §6.3         | manifest-list tags (several architectures) | **Not supported** (single manifest) | `nativelink-oci/src/registry.rs:130-137,277`           |
 | §8           | Toolchain layout (FHS)                   | Implemented                           | `prelude/nix/toolchain_assemble.bzl`                   |
 | §9           | Container floor                          | Implemented                           | `prelude/oci/container_floor.bzl`                      |
 | §10          | Identity ≠ materialization               | Implemented                           | Design invariant (no inode refs in identity)           |
@@ -748,7 +789,7 @@ substitutes one for the other. Matched-configuration discipline (E3) is retired.
 | §12.6        | dlopen-closure                           | **Specified only**                    | Not yet tooled                                         |
 | §12.7        | No factory paths                         | Implemented                           | Finalize strips; receipt verifies                      |
 | §13          | Single-sysroot contract                  | Implemented                           | `prelude/nix/toolchain_rules.bzl`                      |
-| §14.11       | Consumer honors declared digest          | **Fixed (NativeLink)**                | Execution server rejects unset                         |
+| §14.11       | Consumer honors declared digest          | **Partial**                           | `Execute` rejects unset (`execution_server.rs:336`); OCI `FetchDirectory` uses static `oci.digest_function` (`fetch_server.rs:250`,`288`) |
 | —            | Property tests (ELF manifest)            | 12 properties                         | `tools/std-oci-toolchain/tests/`                       |
 | —            | Property tests (finalize, libelf oracle) | 8 invariants                          | `tools/std-oci-toolchain/tests/`                       |
 | —            | Floor loader unit tests                  | 7 tests                               | `tools/ld-std-oci-toolchain/tests/`                    |
@@ -757,6 +798,10 @@ substitutes one for the other. Matched-configuration discipline (E3) is retired.
 
 **Unimplemented (tracked):**
 
+- OCI→CAS bridge does not honor the request-declared digest function (§14.11) — it projects with the static per-instance `oci.digest_function` and drops the request field (`nativelink-service/src/fetch_server.rs:250`,`288`); the operator must match `oci.digest_function` to the execution service (`nativelink-config/src/cas_server.rs:203`)
+- zstd layer decompression (§5.1) — `decompress_zstd` returns `zstd decompression not yet implemented` (`nativelink-oci/src/oci_client.rs:356`); images for NativeLink import must ship gzip or uncompressed layers
+- manifest-list tags (§6.3) — the client parses a single image manifest only (`OciManifest.config`/`layers` are non-optional and the `Accept` header omits the index/list media types; `nativelink-oci/src/registry.rs:130-137,277`); a tag that resolves to an image index fails to deserialize — pull a single-image digest instead
+- private-registry authentication — a Docker Hub anonymous pull token is issued for `registry-1.docker.io`; every other registry is contacted anonymously and there is no credential field on `OciFetchConfig` (`nativelink-oci/src/registry.rs:224-237`)
 - `std-oci-toolchain verify-manifest` (§7.2 consumer verification) — declared, returns "not yet implemented"
 - dlopen-closure recording and `--check-closure` (§12.6) — needs `strace`/static analysis tooling
 - REAPI projection end-to-end test (NativeLink BLAKE3 worker → client verifies Directory digests)

@@ -11,7 +11,14 @@ This creates real problems:
 - A client sets `container-image: docker://my-toolchain:latest`. Does the server interpret this? Pull the image? Use it as an opaque match key? The protocol doesn't say.
 - A worker advertises `cpu_count: 8`. A client requests `cpu_count: 4`. Is the worker eligible? Is `cpu_count` a minimum, an exact match, or informational? The protocol doesn't say.
 
-NativeLink resolves this with typed property matching in the scheduler config:
+The `container-image` question is worth pinning down now, because this book uses `docker://` in two unrelated senses:
+
+- **As a platform-property value** — `container-image: docker://…` is an *opaque match key*. The scheduler compares it as a string; the server never parses or pulls it. Whether a container is pulled at all is up to the worker, not the protocol (Part V, [Container-Based Toolchains](../part5/containers.md)).
+- **As a `FetchDirectory` URI** — a `docker://…` or `oci://…` URI handed to the Remote Asset API's `Fetch` service is an *import trigger*. Here the server *does* pull the image, project its layers into CAS, and return a `Directory` digest ([`fetch_server.rs:192`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs)). That path is this fork's OCI → CAS bridge — see Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
+
+So "does the server pull the image?" has two answers, and which one applies depends entirely on where the URI appears. Part IX is the half of the story where the answer is yes.
+
+NativeLink resolves the untyped-property side with typed property matching in the scheduler config:
 
 ```json5
 // From nativelink-config/src/schedulers.rs
@@ -35,11 +42,11 @@ The consequence: two workers with identical platform properties but different to
 
 The protocol cannot detect or prevent this. The only solutions are:
 
-1. **Pin the toolchain in the platform properties** (e.g., `container-image: docker://toolchain@sha256:...`)
+1. **Pin the toolchain in the platform properties** (e.g., `container-image: docker://toolchain@sha256:...`) — an opaque match key, not a fetch (see the note in Gap 1)
 2. **Pin the toolchain in the action inputs** (include the compiler binary in the input tree)
 3. **Use Nix** (where the toolchain's store path is content-addressed by construction)
 
-Part V of this book is entirely about these approaches.
+Part V of this book is entirely about these approaches. This fork adds a fourth: fetch the toolchain image *as* an action input via the OCI → CAS bridge, so its content digest lands inside the action hash the same way a pinned input tree does — see Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
 
 ## Gap 3: No Cache Invalidation
 

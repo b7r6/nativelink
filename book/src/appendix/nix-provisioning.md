@@ -336,10 +336,10 @@ Each topology config is a committed JSON5 file rendered from the Dhall schema â€
 
 ```bash
 # Instant remote cache for local development:
-nix run github:sensenet-ai/nativelink#cache-only
+nix run github:straylight-prelude/straylight-nativelink#cache-only
 
 # Full single-node remote execution:
-nix run github:sensenet-ai/nativelink#single-node
+nix run github:straylight-prelude/straylight-nativelink#single-node
 
 # Then in your project:
 echo 'build --remote_cache=grpc://127.0.0.1:50051' >> .bazelrc
