@@ -61,7 +61,9 @@
           lre = import ./local-remote-execution/overlays/default.nix {inherit nix2container;};
           tools = import ./tools/public/default.nix {inherit nix2container;};
         };
-        # TODO(jaroeichler): Keep template inputs on upstream.
+        # Fork note: template inputs point at this fork's origin
+        # (git.s4.gl/straylight/straylight-nativelink), pinned in
+        # templates/bazel/{flake.nix,MODULE.bazel}. Keep those two in sync.
         templates = {
           bazel = {
             path = ./templates/bazel;
@@ -434,7 +436,7 @@
             program = "${pkgs.writeShellScript "book-serve" ''
               cd "$(${pkgs.git}/bin/git rev-parse --show-toplevel)/book"
               echo "NativeLink: The Missing Guide — http://localhost:3000"
-              exec ${pkgs.mdbook}/bin/mdbook serve --open --port 3000
+              exec ${pkgs.mdbook}/bin/mdbook serve --open --port 3000  --hostname 0.0.0.0
             ''}";
           };
         };
@@ -552,6 +554,41 @@
             }
             else {}
           );
+        checks =
+          {
+            # Focused Rust test gate for the Nix substituter: the
+            # nativelink-nix protocol crate plus the nix_cache_server HTTP
+            # facade and its integration suite.
+            nix-crate-tests = let
+              # Linking the test binaries against the musl C deps
+              # (zlib-ng/zstd) pulls in fortified __*_chk symbols musl
+              # doesn't provide. The plain binary drops those code paths
+              # via --gc-sections, but the test binaries retain them, so
+              # the C deps themselves must be built without fortification —
+              # hence a dedicated buildDepsOnly rather than reusing the
+              # package's cached artifacts.
+              testArgs =
+                (commonArgsFor pkgs)
+                // {
+                  hardeningDisable = ["fortify"];
+                };
+            in
+              (craneLibFor pkgs).cargoTest (
+                testArgs
+                // {
+                  cargoArtifacts = (craneLibFor pkgs).buildDepsOnly testArgs;
+                  cargoExtraArgs = "--locked -p nativelink-nix -p nativelink-service";
+                }
+              );
+          }
+          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            # End-to-end round trip: a real `nix` client against a running
+            # nativelink nix_cache service in a NixOS VM. Needs KVM, so it is
+            # Linux-only.
+            nix-substituter-e2e = pkgs.callPackage ./tools/checks/nix-substituter-vm-test.nix {
+              inherit nativelink;
+            };
+          };
         pre-commit.settings = {
           hooks = import ./tools/pre-commit-hooks.nix {
             inherit pkgs;
