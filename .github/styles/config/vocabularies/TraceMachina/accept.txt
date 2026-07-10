@@ -342,6 +342,7 @@ interop
 interoperate
 keyspace
 libc
+libcurl
 libelf
 liveness
 materializer
@@ -379,6 +380,7 @@ TTLs
 typechecks
 [Uu]nmanifested
 [Uu]nreferenced
+[Uu]ncached
 [Uu]ntyped
 untrusted
 URIs

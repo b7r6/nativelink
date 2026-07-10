@@ -326,6 +326,41 @@ async fn inner_main(
         // Currently we only support http as our socket type.
         let ListenerConfig::Http(http_config) = server_cfg.listener;
 
+        // A caching MITM fetch proxy owns its entire listener: it speaks the
+        // HTTP `CONNECT` proxy protocol, not the shared gRPC/axum service
+        // stack, so it is handled here and the rest of the server setup is
+        // skipped for this listener.
+        if let Some(proxy_cfg) = services.http_cache_proxy {
+            let fetch_proxy =
+                nativelink_service::fetch_proxy::FetchProxy::new(&proxy_cfg, &store_manager)
+                    .err_tip(|| "Could not create HTTP cache proxy service")?;
+            let socket_addr = http_config
+                .socket_address
+                .parse::<SocketAddr>()
+                .map_err(|e| {
+                    Error::from_std_err(Code::InvalidArgument, &e)
+                        .append(format!("Invalid address '{}'", http_config.socket_address))
+                })?;
+            let tcp_listener = if http_config.freebind {
+                bind_freebind(socket_addr)
+            } else {
+                TcpListener::bind(&socket_addr).await
+            }
+            .map_err(|e| {
+                Error::from_std_err(Code::Internal, &e)
+                    .append(format!("Failed to bind fetch proxy to '{socket_addr}'"))
+            })?;
+            info!(
+                %socket_addr,
+                ca_cert_file = %proxy_cfg.ca_cert_file,
+                "Ready, HTTP cache proxy listening (trust its CA via NIX_SSL_CERT_FILE)",
+            );
+            drop(background_spawn!("fetch_proxy_listener", async move {
+                fetch_proxy.serve(tcp_listener).await;
+            }));
+            continue;
+        }
+
         let execution_server = services
             .execution
             .as_ref()

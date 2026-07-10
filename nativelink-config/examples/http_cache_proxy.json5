@@ -1,0 +1,98 @@
+// Caching HTTP forward proxy (TLS-intercepting) backed by a NativeLink CAS.
+//
+// A build client points HTTPS_PROXY/HTTP_PROXY at this listener and trusts the
+// proxy's generated CA. The first fetch of any URL is streamed from the origin
+// into the CAS; every later fetch of the same URL is served from the CAS, so
+// one fetch makes the deployment a durable mirror of exactly what the builds
+// download.
+//
+// For nix (the primary consumer):
+//
+//   export HTTPS_PROXY=http://cache.example.com:50080
+//   export HTTP_PROXY=http://cache.example.com:50080
+//   export NIX_SSL_CERT_FILE=/var/lib/nativelink/fetch-proxy/ca.crt
+//
+// nix verifies every fixed-output derivation (fetchurl/fetchTarball) against
+// its declared hash regardless of what the proxy serves, so a stale or wrong
+// cache entry can never corrupt a build.
+//
+// This listener speaks the HTTP proxy protocol (CONNECT), so it must NOT share
+// a port with the gRPC/nix_cache services.
+{
+  stores: [
+    {
+      // Fetched bodies are content-addressed by sha256(body), so wrapping the
+      // store in `verify` rejects a corrupt/truncated body at write time. This
+      // store may be shared with the gRPC CAS and the nix_cache NAR store.
+      name: "FETCH_CAS",
+      verify: {
+        verify_size: true,
+        verify_hash: true,
+        backend: {
+          fast_slow: {
+            fast: {
+              filesystem: {
+                content_path: "/tmp/nativelink/fetch-proxy/cas-fast/content_path",
+                temp_path: "/tmp/nativelink/fetch-proxy/cas-fast/temp_path",
+                eviction_policy: {
+                  // 5gb of hot bodies.
+                  max_bytes: 5000000000,
+                },
+              },
+            },
+            slow: {
+              filesystem: {
+                content_path: "/tmp/nativelink/fetch-proxy/cas-slow/content_path",
+                temp_path: "/tmp/nativelink/fetch-proxy/cas-slow/temp_path",
+                eviction_policy: {
+                  // 200gb of fetched content total.
+                  max_bytes: 200000000000,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // String-keyed URL index: url -> (digest, size, content-type). Keep it a
+      // plain store (do NOT wrap in verify/size_partitioning/completeness).
+      name: "FETCH_ALIAS",
+      memory: {
+        eviction_policy: {
+          max_bytes: 100000000,
+        },
+      },
+    },
+  ],
+  servers: [
+    {
+      name: "fetch_proxy",
+      listener: {
+        http: {
+          socket_address: "0.0.0.0:50080",
+        },
+      },
+      services: {
+        http_cache_proxy: {
+          cas_store: "FETCH_CAS",
+          alias_store: "FETCH_ALIAS",
+
+          // Generated together on first start if either file is missing. The
+          // certificate is what clients trust (NIX_SSL_CERT_FILE); the key can
+          // impersonate any host to those clients, so keep it private (it is
+          // written 0600 when generated).
+          ca_cert_file: "/var/lib/nativelink/fetch-proxy/ca.crt",
+          ca_key_file: "/var/lib/nativelink/fetch-proxy/ca.key",
+
+          // Largest response body that will be cached; a larger response is
+          // streamed through to the client but not stored. Default 2 GiB.
+          max_fetch_size_bytes: 2147483648,
+
+          // Timeout for fetching a single URL from the origin on a miss.
+          fetch_timeout_s: 300,
+        },
+      },
+    },
+  ],
+}

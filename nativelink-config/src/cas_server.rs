@@ -582,6 +582,68 @@ fn default_nix_store_dir() -> String {
     "/nix/store".to_string()
 }
 
+/// Configuration for the caching HTTP forward proxy
+/// (see [`ServicesConfig::http_cache_proxy`]).
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct HttpCacheProxyConfig {
+    /// Store name for fetched bodies. Digest-keyed: every body is stored
+    /// under `DigestInfo(sha256(body), size)`, so any content-addressed CAS
+    /// works and may be shared with the gRPC CAS and the `nix_cache` NAR
+    /// store. Wrapping it in `verify` is recommended.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// Store name for the URL index. A small string-keyed map from a fetched
+    /// URL to the `(digest, size, content-type)` of its body in `cas_store`,
+    /// so a repeat fetch of the same URL is served from the CAS. Must be a
+    /// separate, string-keyed store (do not wrap in `verify`,
+    /// `size_partitioning`, or `completeness_checking`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub alias_store: StoreRefName,
+
+    /// Path to the proxy's CA certificate. Clients must trust this to accept
+    /// the intercepted TLS connections (nix: `NIX_SSL_CERT_FILE`). Generated
+    /// along with `ca_key_file` if either file is missing.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ca_cert_file: String,
+
+    /// Path to the proxy's CA private key. This key can impersonate any host
+    /// to a client that trusts the CA, so keep it private (it is written
+    /// `0600` when generated). Generated with `ca_cert_file` if missing.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ca_key_file: String,
+
+    /// Maximum size in bytes of a single response body the proxy will cache.
+    /// A larger response is streamed through to the client but not stored.
+    ///
+    /// Default: 2147483648 (2 GiB)
+    #[serde(
+        default = "default_max_fetch_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_fetch_size_bytes: u64,
+
+    /// Timeout in seconds for fetching a single URL from the origin on a
+    /// cache miss.
+    ///
+    /// Default: 300
+    #[serde(
+        default = "default_fetch_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub fetch_timeout_s: u64,
+}
+
+const fn default_max_fetch_size_bytes() -> u64 {
+    2 * 1024 * 1024 * 1024 // 2 GiB
+}
+
+const fn default_fetch_timeout_s() -> u64 {
+    300
+}
+
 const fn default_nix_priority() -> u32 {
     40
 }
@@ -832,6 +894,15 @@ pub struct ServicesConfig {
         deserialize_with = "super::backcompat::opt_vec_with_instance_name"
     )]
     pub nix_cache: Option<Vec<WithInstanceName<NixCacheConfig>>>,
+
+    /// Caching HTTP forward proxy (TLS-intercepting) that stores fetched
+    /// bodies in a `NativeLink` CAS. A build client points `HTTPS_PROXY`/
+    /// `HTTP_PROXY` at this listener and trusts its generated CA (nix reads
+    /// it via `NIX_SSL_CERT_FILE`); the first fetch of a URL is streamed
+    /// from the origin into the CAS and every later fetch is served from it.
+    /// This listener speaks the HTTP proxy protocol (`CONNECT`), so it must
+    /// not share a port with other services.
+    pub http_cache_proxy: Option<HttpCacheProxyConfig>,
 
     /// This is the service used for workers to connect and communicate
     /// through.

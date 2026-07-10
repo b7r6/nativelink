@@ -29,7 +29,13 @@ base64 = { version = "0.22.1", default-features = false, features = ["std"] }
 bytes = { version = "1.10.1", default-features = false }
 futures = { version = "0.3.31", default-features = false }
 http-body-util = { version = "0.1.3", default-features = false }
-hyper = { version = "1.6.0", default-features = false }
+hyper = { version = "1.6.0", default-features = false, features = [
+  "http1",
+  "server",
+] }
+hyper-util = { version = "0.1.11", default-features = false, features = [
+  "tokio",
+] }
 opentelemetry = { version = "0.32.0", default-features = false }
 opentelemetry-semantic-conventions = { version = "0.32.0", default-features = false, features = [
   "default",
@@ -43,6 +49,10 @@ prost-types = { version = "0.14.4", default-features = false, features = [
 rand = { version = "0.9.0", default-features = false, features = [
   "thread_rng",
 ] }
+rcgen = { version = "0.14.2", default-features = false, features = [
+  "pem",
+  "ring",
+] }
 reqwest = { version = "0.12.15", default-features = false, features = [
   "rustls-tls",
   "stream",
@@ -51,9 +61,13 @@ serde_json5 = { version = "0.2.1", default-features = false }
 tokio = { version = "1.52.2", features = [
   "fs",
   "io-util",
+  "net",
   "rt-multi-thread",
   "signal",
 ], default-features = false }
+tokio-rustls = { version = "0.26.2", default-features = false, features = [
+  "ring",
+] }
 tokio-stream = { version = "0.1.17", features = [
   "fs",
 ], default-features = false }
