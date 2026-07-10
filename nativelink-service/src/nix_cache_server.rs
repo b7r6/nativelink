@@ -40,6 +40,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Instant;
 
 use async_compression::Level;
 use async_compression::tokio::bufread::{
@@ -69,7 +70,7 @@ use nativelink_nix::nar_url::{
 };
 use nativelink_nix::narinfo::is_store_path_hash;
 use nativelink_nix::path_info::NixPathInfo;
-use nativelink_nix::signing::NixSigningKey;
+use nativelink_nix::signing::{NixPublicKey, NixSigningKey};
 use nativelink_nix::{narinfo, nixbase32};
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::{DropCloserReadHalf, make_buf_channel_pair};
@@ -82,6 +83,7 @@ use nativelink_util::store_trait::{
 use nativelink_util::task::JoinHandleDropGuard;
 use nativelink_util::{fs, spawn};
 use opentelemetry::context::{Context as OtelContext, FutureExt};
+use reqwest::Client as HttpClient;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::time::timeout;
@@ -594,6 +596,64 @@ struct TranscodeInflight {
     notify: Notify,
 }
 
+/// One resolved upstream Nix binary cache for the read-through feature:
+/// the normalized base URL (no trailing slash) and the parsed public keys
+/// a fetched `narinfo` must verify against before it is cached.
+#[derive(Debug)]
+struct UpstreamCache {
+    base_url: String,
+    public_keys: Vec<NixPublicKey>,
+}
+
+/// The outcome of a read-through attempt: `Some(record)` when an upstream
+/// had the path (and it was verified and ingested), `None` when no
+/// upstream had it. `Error` is a hard local failure (e.g. a store write
+/// failing); transport/upstream faults are folded into `Ok(None)` so a
+/// flaky upstream never turns a lookup into a 5xx.
+type ReadThroughResult = Result<Option<Bytes>, Error>;
+
+/// A single in-flight read-through that concurrent `narinfo` GETs for the
+/// same store-path hash coalesce onto — the leader fetches from upstream,
+/// stores the record, and wakes every follower with the result. Mirrors
+/// [`TranscodeInflight`]; keyed on the 32-char store-path hash so a burst
+/// of identical misses triggers exactly one upstream fetch.
+#[derive(Debug)]
+struct ReadThroughInflight {
+    result: StdMutex<Option<ReadThroughResult>>,
+    notify: Notify,
+}
+
+/// Maps a `narinfo` `Compression:` value to the decoder used to ingest the
+/// upstream NAR. `None`/`"none"` is an uncompressed NAR. Returns `None`
+/// for codecs this service cannot decode (e.g. `br`), so such a path is
+/// treated as an upstream miss rather than a hard error.
+fn codec_for_compression(compression: &str) -> Option<NarCodec> {
+    match compression {
+        "none" | "" => Some(NarCodec::None),
+        "xz" => Some(NarCodec::Xz),
+        "zstd" => Some(NarCodec::Zstd),
+        "bzip2" => Some(NarCodec::Bzip2),
+        "gzip" => Some(NarCodec::Gzip),
+        _ => None,
+    }
+}
+
+/// Joins an upstream base URL with the `URL:` field of a fetched `narinfo`.
+/// Nix `narinfo` URLs are relative (`nar/<name>.nar.xz`), but tolerate an
+/// absolute URL just in case.
+fn join_upstream_url(base_url: &str, narinfo_url: &str) -> String {
+    if narinfo_url.starts_with("http://") || narinfo_url.starts_with("https://") {
+        narinfo_url.to_string()
+    } else {
+        format!("{base_url}/{}", narinfo_url.trim_start_matches('/'))
+    }
+}
+
+/// A read-through negative cache never grows past this many entries: once
+/// reached, expired entries are swept before the next insert. Bounds
+/// memory when a client probes a very large space of non-existent paths.
+const NEGATIVE_CACHE_MAX_ENTRIES: usize = 50_000;
+
 /// One configured Nix cache instance: resolved stores, identity, and
 /// counters. Shared with every request handler through the router state.
 #[derive(Debug, MetricsComponent)]
@@ -638,6 +698,20 @@ pub struct NixCacheInstance {
     /// the NAR digest.
     transcode_inflight: StdMutex<HashMap<DigestInfo, Arc<TranscodeInflight>>>,
 
+    /// Upstream caches to read through on a local `narinfo` miss; empty
+    /// disables read-through. See [`Self::read_through`].
+    upstreams: Vec<UpstreamCache>,
+    /// Shared outbound HTTP client for upstream fetches.
+    http_client: HttpClient,
+    /// Timeout for a single upstream `narinfo` probe.
+    upstream_timeout: Duration,
+    /// How long a "not found in any upstream" result is remembered.
+    upstream_negative_ttl: Duration,
+    /// store-path hash -> expiry instant for negatively-cached misses.
+    negative_cache: StdMutex<HashMap<String, Instant>>,
+    /// Coalesces concurrent read-throughs of the same store-path hash.
+    readthrough_inflight: StdMutex<HashMap<String, Arc<ReadThroughInflight>>>,
+
     #[metric(help = "Number of narinfo GET requests")]
     narinfo_gets: CounterWithTime,
     #[metric(help = "Number of accepted narinfo PUT requests")]
@@ -658,6 +732,20 @@ pub struct NixCacheInstance {
     rejected_puts: CounterWithTime,
     #[metric(help = "Number of requests rejected with 401 for missing or invalid tokens")]
     unauthorized_requests: CounterWithTime,
+    #[metric(help = "Number of narinfo misses served by fetching from an upstream cache")]
+    upstream_hits: CounterWithTime,
+    #[metric(help = "Number of narinfo misses no configured upstream cache had")]
+    upstream_misses: CounterWithTime,
+    #[metric(
+        help = "Number of upstream read-through attempts that failed with a transport or upstream error"
+    )]
+    upstream_errors: CounterWithTime,
+    #[metric(
+        help = "Number of upstream narinfo documents refused for failing signature verification"
+    )]
+    upstream_rejected_unsigned: CounterWithTime,
+    #[metric(help = "Number of NAR bytes ingested from upstream caches via read-through")]
+    upstream_nar_bytes: Counter,
 }
 
 impl NixCacheInstance {
@@ -737,6 +825,41 @@ impl NixCacheInstance {
         let max_concurrent_nar_streams = config.max_concurrent_nar_streams.max(1);
         let max_concurrent_transcodes = config.max_concurrent_transcodes.max(1);
 
+        // Resolve upstream caches for read-through. Each upstream must
+        // list at least one trusted public key: read-through only caches a
+        // path whose upstream narinfo verifies, so an upstream with no keys
+        // could never contribute and is a configuration error caught here.
+        let mut upstreams = Vec::with_capacity(config.upstream_caches.len());
+        for upstream in &config.upstream_caches {
+            let base_url = upstream.url.trim_end_matches('/').to_string();
+            if base_url.is_empty() {
+                return Err(make_input_err!(
+                    "'upstream_caches' entry has an empty 'url'"
+                ));
+            }
+            if upstream.trusted_public_keys.is_empty() {
+                return Err(make_input_err!(
+                    "'upstream_caches' entry '{base_url}' has no 'trusted_public_keys'; \
+                     read-through requires at least one key to verify fetched narinfo against"
+                ));
+            }
+            let mut public_keys = Vec::with_capacity(upstream.trusted_public_keys.len());
+            for key in &upstream.trusted_public_keys {
+                public_keys
+                    .push(NixPublicKey::from_string(key).err_tip(|| {
+                        format!("In 'trusted_public_keys' of upstream '{base_url}'")
+                    })?);
+            }
+            upstreams.push(UpstreamCache {
+                base_url,
+                public_keys,
+            });
+        }
+        let http_client = HttpClient::builder()
+            .user_agent(concat!("nativelink-nix-cache/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|e| make_err!(Code::Internal, "Failed to build upstream HTTP client: {e}"))?;
+
         Ok(Self {
             instance_name: config.instance_name.clone(),
             mount_path,
@@ -759,6 +882,12 @@ impl NixCacheInstance {
             nar_stream_semaphore: Arc::new(Semaphore::new(max_concurrent_nar_streams)),
             transcode_semaphore: Arc::new(Semaphore::new(max_concurrent_transcodes)),
             transcode_inflight: StdMutex::new(HashMap::new()),
+            upstreams,
+            http_client,
+            upstream_timeout: Duration::from_secs(config.upstream_timeout_s),
+            upstream_negative_ttl: Duration::from_secs(config.upstream_negative_ttl_s),
+            negative_cache: StdMutex::new(HashMap::new()),
+            readthrough_inflight: StdMutex::new(HashMap::new()),
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
@@ -769,6 +898,11 @@ impl NixCacheInstance {
             aux_puts: CounterWithTime::default(),
             rejected_puts: CounterWithTime::default(),
             unauthorized_requests: CounterWithTime::default(),
+            upstream_hits: CounterWithTime::default(),
+            upstream_misses: CounterWithTime::default(),
+            upstream_errors: CounterWithTime::default(),
+            upstream_rejected_unsigned: CounterWithTime::default(),
+            upstream_nar_bytes: Counter::default(),
         })
     }
 
@@ -889,6 +1023,300 @@ impl NixCacheInstance {
             _task: task,
             _permit: permit,
         }))
+    }
+
+    /// Whether `hash` is currently remembered as absent from every
+    /// upstream. Expired entries are dropped on access.
+    fn is_negatively_cached(&self, hash: &str) -> bool {
+        if self.upstream_negative_ttl.is_zero() {
+            return false;
+        }
+        let mut cache = self
+            .negative_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match cache.get(hash) {
+            Some(&expiry) if expiry > Instant::now() => true,
+            Some(_) => {
+                cache.remove(hash);
+                false
+            }
+            None => false,
+        }
+    }
+
+    /// Remembers that no upstream had `hash`, so repeated probes (Nix
+    /// issues many while computing a closure) do not re-query upstream for
+    /// `upstream_negative_ttl`. Sweeps expired entries when the map is
+    /// large so it can never grow without bound.
+    fn mark_negative(&self, hash: &str) {
+        if self.upstream_negative_ttl.is_zero() {
+            return;
+        }
+        let now = Instant::now();
+        let mut cache = self
+            .negative_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if cache.len() >= NEGATIVE_CACHE_MAX_ENTRIES {
+            cache.retain(|_, &mut expiry| expiry > now);
+        }
+        cache.insert(hash.to_string(), now + self.upstream_negative_ttl);
+    }
+
+    /// Attempts to satisfy a local `narinfo` miss from the configured
+    /// upstream caches, storing the path (`narinfo` and NAR) locally on a
+    /// verified hit so it is durable from then on. Returns the freshly
+    /// stored record, or `None` when read-through is disabled or no
+    /// upstream has the path. Concurrent identical misses coalesce onto a
+    /// single fetch.
+    async fn read_through(&self, hash: &str) -> ReadThroughResult {
+        if self.upstreams.is_empty() || self.is_negatively_cached(hash) {
+            return Ok(None);
+        }
+
+        // Coalesce concurrent read-throughs of the same hash, mirroring the
+        // transcode-coalescing pattern: the first caller becomes the leader
+        // and fetches; the rest await its published result.
+        let (slot, is_leader) = {
+            let mut inflight = self
+                .readthrough_inflight
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(existing) = inflight.get(hash) {
+                (Arc::clone(existing), false)
+            } else {
+                let slot = Arc::new(ReadThroughInflight {
+                    result: StdMutex::new(None),
+                    notify: Notify::new(),
+                });
+                inflight.insert(hash.to_string(), Arc::clone(&slot));
+                (slot, true)
+            }
+        };
+
+        if is_leader {
+            let result = self.fetch_across_upstreams(hash).await;
+            if matches!(result, Ok(None)) {
+                self.mark_negative(hash);
+            }
+            // Publish and wake followers BEFORE removing the slot, so a
+            // follower already holding this slot always observes the result.
+            {
+                let mut cell = slot
+                    .result
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                *cell = Some(result.clone());
+            }
+            slot.notify.notify_waiters();
+            self.readthrough_inflight
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(hash);
+            result
+        } else {
+            // Follower: register the waiter (`enable`) BEFORE reading the
+            // result cell so a publish that races with the read is never
+            // missed, then re-check after each wake.
+            loop {
+                let notified = slot.notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                let maybe_result = slot
+                    .result
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                if let Some(result) = maybe_result {
+                    return result;
+                }
+                notified.await;
+            }
+        }
+    }
+
+    /// Tries each configured upstream in order, returning the first
+    /// verified hit. A per-upstream transport or protocol error is logged
+    /// and treated as a miss for that upstream so the next one is still
+    /// tried and a flaky upstream never becomes a client-facing 5xx.
+    async fn fetch_across_upstreams(&self, hash: &str) -> ReadThroughResult {
+        for upstream in &self.upstreams {
+            match self.fetch_one_upstream(upstream, hash).await {
+                Ok(Some(record)) => {
+                    self.upstream_hits.inc();
+                    return Ok(Some(record));
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    self.upstream_errors.inc();
+                    warn!(
+                        ?err,
+                        %hash,
+                        url = %upstream.base_url,
+                        "Upstream read-through failed; trying next upstream",
+                    );
+                }
+            }
+        }
+        self.upstream_misses.inc();
+        Ok(None)
+    }
+
+    /// Fetches one store path from a single upstream: probes its
+    /// `narinfo`, verifies the signature against the upstream's trusted
+    /// keys, downloads and verifies the NAR against the signed
+    /// `NarHash`/`NarSize`, ingests the uncompressed NAR into the CAS, and
+    /// stores the record (preserving upstream signatures and adding this
+    /// instance's own). Returns `None` for a clean upstream miss (404/401/
+    /// 403, hash mismatch, unsupported compression, failed verification).
+    async fn fetch_one_upstream(&self, upstream: &UpstreamCache, hash: &str) -> ReadThroughResult {
+        // 1. narinfo probe.
+        let narinfo_url = format!("{}/{hash}.narinfo", upstream.base_url);
+        let resp = self
+            .http_client
+            .get(&narinfo_url)
+            .timeout(self.upstream_timeout)
+            .send()
+            .await
+            .err_tip(|| format!("Requesting upstream narinfo {narinfo_url}"))?;
+        let status = resp.status();
+        if matches!(
+            status,
+            StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+        ) {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(make_err!(
+                Code::Unavailable,
+                "upstream narinfo {narinfo_url} returned {status}"
+            ));
+        }
+        let text = resp
+            .text()
+            .await
+            .err_tip(|| "Reading upstream narinfo body")?;
+        let info = narinfo::parse(&text).err_tip(|| "Parsing upstream narinfo")?;
+
+        // 2. The returned narinfo must be for the store path we asked for,
+        //    and for our store dir; otherwise it is not ours to cache.
+        let store_hash = info
+            .store_path_hash()
+            .err_tip(|| "Validating StorePath in upstream narinfo")?;
+        if store_hash != hash {
+            warn!(%hash, %store_hash, "upstream narinfo StorePath hash mismatch; ignoring");
+            return Ok(None);
+        }
+        let upstream_store_dir = info
+            .store_path
+            .rfind('/')
+            .map_or("", |idx| &info.store_path[..idx]);
+        if upstream_store_dir != self.store_dir {
+            warn!(
+                %hash,
+                upstream_store_dir,
+                our_store_dir = %self.store_dir,
+                "upstream narinfo is for a different store dir; ignoring",
+            );
+            return Ok(None);
+        }
+
+        // 3. Require a valid signature from a trusted key before caching:
+        //    the fingerprint covers StorePath, NarHash, NarSize, and
+        //    References, so a verified narinfo pins exactly the NAR bytes
+        //    fetched in step 4.
+        let fingerprint = info.fingerprint();
+        let verified = info.sigs.iter().any(|sig| {
+            upstream
+                .public_keys
+                .iter()
+                .any(|key| key.verify(&fingerprint, sig))
+        });
+        if !verified {
+            self.upstream_rejected_unsigned.inc();
+            warn!(
+                %hash,
+                url = %upstream.base_url,
+                "upstream narinfo failed signature verification; refusing to cache",
+            );
+            return Ok(None);
+        }
+
+        // 4. Fetch and ingest the NAR. Unsupported compression is a clean
+        //    miss rather than an error.
+        let Some(codec) = codec_for_compression(&info.compression) else {
+            warn!(
+                %hash,
+                compression = %info.compression,
+                "upstream NAR uses a compression this cache cannot decode; ignoring",
+            );
+            return Ok(None);
+        };
+        let nar_url = join_upstream_url(&upstream.base_url, &info.url);
+        let nar_resp = self
+            .http_client
+            .get(&nar_url)
+            .send()
+            .await
+            .err_tip(|| format!("Requesting upstream NAR {nar_url}"))?;
+        if !nar_resp.status().is_success() {
+            return Err(make_err!(
+                Code::Unavailable,
+                "upstream NAR {nar_url} returned {}",
+                nar_resp.status()
+            ));
+        }
+        let nar_stream = nar_resp.bytes_stream().map_err(axum::Error::new).boxed();
+        let (nar_sha256, nar_size) = ingest_nar_spooled(self, codec, nar_stream)
+            .await
+            .err_tip(|| "Ingesting upstream NAR into cas_store")?;
+
+        // 5. The ingested NAR must match the SIGNED NarHash/NarSize. A
+        //    mismatch means the upstream served bytes that do not match the
+        //    signature it also served: refuse, leaving the ingested blob
+        //    unreferenced (it is under its own true digest and will be
+        //    evicted) and writing no record.
+        if nar_sha256 != info.nar_hash || nar_size != info.nar_size {
+            warn!(
+                %hash,
+                url = %upstream.base_url,
+                "upstream NAR hash/size does not match its signed narinfo; refusing",
+            );
+            return Ok(None);
+        }
+        self.upstream_nar_bytes.add(nar_size);
+
+        // 6. Build and store the record: preserve the upstream signatures
+        //    verbatim and add this instance's own for every key that has
+        //    not already signed this fingerprint. The served NAR is our
+        //    canonical uncompressed blob (file_* left unset), so the
+        //    re-rendered narinfo advertises Compression: none.
+        let mut path_info = NixPathInfo::from_nar_info(&info);
+        let new_sigs: Vec<String> = self
+            .signing_keys
+            .iter()
+            .filter(|key| {
+                !path_info
+                    .signatures
+                    .iter()
+                    .any(|sig| sig.split(':').next() == Some(key.name()))
+            })
+            .map(|key| key.sign(&fingerprint))
+            .collect();
+        path_info.signatures.extend(new_sigs);
+        let record = path_info
+            .encode_record()
+            .err_tip(|| "Encoding read-through narinfo record")?;
+        let record_bytes = Bytes::from(record);
+        with_sha256_ctx(
+            self.path_info_store
+                .update_oneshot(StoreKey::new_str(hash), record_bytes.clone()),
+        )
+        .await
+        .err_tip(|| "Storing read-through narinfo record in path_info_store")?;
+        debug!(%hash, url = %upstream.base_url, nar_size, "read-through cached upstream path");
+        Ok(Some(record_bytes))
     }
 }
 
@@ -1032,6 +1460,13 @@ async fn head_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<R
         .await
         .err_tip(|| "Checking narinfo existence in path_info_store")?;
     if found.is_some() {
+        return Ok(empty_response(StatusCode::OK));
+    }
+    // A local miss reads through, exactly as the GET handler does — nix's
+    // `isValidPath` probes availability with a HEAD before copying, so
+    // read-through must answer HEAD too or `nix copy --from` reports the
+    // path missing without ever issuing the GET.
+    if instance.read_through(hash).await?.is_some() {
         Ok(empty_response(StatusCode::OK))
     } else {
         Ok(empty_response(StatusCode::NOT_FOUND))
@@ -1062,14 +1497,26 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
     let Some(hash) = narinfo_name_hash(file) else {
         return Ok(empty_response(StatusCode::NOT_FOUND));
     };
-    // `Code::NotFound` propagates to a 404 through `error_response`.
-    let record = with_sha256_ctx(instance.path_info_store.get_part_unchunked(
+    // A local hit serves directly. A local miss (`Code::NotFound`) falls
+    // through to read-through when upstreams are configured; that fetches,
+    // verifies, and stores the path so this and later requests are served
+    // locally. With no upstreams (or an upstream miss) it stays a 404.
+    let record = match with_sha256_ctx(instance.path_info_store.get_part_unchunked(
         StoreKey::new_str(hash),
         0,
         None,
     ))
     .await
-    .err_tip(|| "Fetching narinfo record from path_info_store")?;
+    {
+        Ok(record) => record,
+        Err(err) if err.code == Code::NotFound => match instance.read_through(hash).await? {
+            Some(record) => record,
+            None => return Ok(empty_response(StatusCode::NOT_FOUND)),
+        },
+        Err(err) => {
+            return Err(err).err_tip(|| "Fetching narinfo record from path_info_store");
+        }
+    };
     // A record that exists but does not decode is a server-side problem
     // (500), not a client error: never let it surface as a 400 or 404.
     let path_info = NixPathInfo::decode_record(&record)
@@ -2484,6 +2931,12 @@ mod tests {
             nar_stream_semaphore: Arc::new(tokio::sync::Semaphore::new(max_nar_streams)),
             transcode_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             transcode_inflight: std::sync::Mutex::new(std::collections::HashMap::new()),
+            upstreams: vec![],
+            http_client: reqwest::Client::new(),
+            upstream_timeout: core::time::Duration::from_secs(30),
+            upstream_negative_ttl: core::time::Duration::from_secs(60),
+            negative_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
+            readthrough_inflight: std::sync::Mutex::new(std::collections::HashMap::new()),
             narinfo_gets: CounterWithTime::default(),
             narinfo_puts: CounterWithTime::default(),
             nar_gets: CounterWithTime::default(),
@@ -2494,6 +2947,11 @@ mod tests {
             aux_puts: CounterWithTime::default(),
             rejected_puts: CounterWithTime::default(),
             unauthorized_requests: CounterWithTime::default(),
+            upstream_hits: CounterWithTime::default(),
+            upstream_misses: CounterWithTime::default(),
+            upstream_errors: CounterWithTime::default(),
+            upstream_rejected_unsigned: CounterWithTime::default(),
+            upstream_nar_bytes: Counter::default(),
         })
     }
 

@@ -300,6 +300,8 @@ bwrap
 [Cc]acheable
 canonicalization
 cgroups
+[Cc]odec
+[Cc]odecs
 [Cc]onformant
 deduped
 deduplicate
@@ -372,9 +374,11 @@ superset
 sysroot
 [Tt]iering
 toolchains_llvm
+[Tt]ranscoder
 TTLs
 typechecks
 [Uu]nmanifested
+[Uu]nreferenced
 [Uu]ntyped
 untrusted
 URIs

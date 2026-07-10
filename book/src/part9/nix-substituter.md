@@ -138,6 +138,93 @@ trusted-public-keys = nix-cache.example.org-1:<base64> cache.nixos.org-1:6NCHdD5
 netrc-file = /etc/nix/netrc   # on token-gated caches the token is the password
 ```
 
+## Upstream Read-Through
+
+A local miss is a `404` by default. Configure `upstream_caches` and it
+becomes a *read-through*: the first request for a path the cache doesn't
+have fetches it from an upstream substituter, verifies it, ingests it into
+the same stores every other path lives in, and serves it — so one fetch
+makes the deployment a durable mirror of exactly the closure your builds
+pull. This is the substituter's answer to "front `cache.nixos.org` and
+`nix-community` but own the bytes."
+
+```json5
+nix_cache: [{
+  instance_name: "main",
+  cas_store: "NIX_NAR_STORE",
+  path_info_store: "NIX_PATH_INFO_STORE",
+  alias_store: "NIX_ALIAS_STORE",
+  signing_key_files: ["/etc/nativelink/my-cache.key"],
+  upstream_caches: [
+    { url: "https://cache.nixos.org",
+      trusted_public_keys: ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="] },
+    { url: "https://nix-community.cachix.org",
+      trusted_public_keys: ["nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="] },
+  ],
+  upstream_negative_ttl_s: 60,   // remember misses so closure probes don't re-hammer upstream
+  upstream_timeout_s: 30,        // narinfo probe timeout; the NAR download is bounded by max_nar_size_bytes
+}]
+```
+
+The full example is `nativelink-config/examples/nix_cache_readthrough.json5`.
+
+The miss path in `get_narinfo_inner` runs this sequence per upstream, in
+order, taking the first hit:
+
+1. **Probe** `GET <url>/<hash>.narinfo`. A `404`/`401`/`403` is a clean
+   miss — try the next upstream. Any other non-success is a transport
+   error: logged and treated as a miss so a flaky upstream never becomes a
+   client-facing `5xx`.
+2. **Bind the metadata to what was asked.** The returned `narinfo`'s
+   `StorePath` hash must equal the requested hash, and its store dir must
+   equal this instance's `store_dir`; otherwise it isn't ours to cache.
+3. **Verify the signature — before storing anything.** The `narinfo`
+   fingerprint (which covers `StorePath`, `NarHash`, `NarSize`, and
+   `References`) must verify against one of the `trusted_public_keys` set
+   for that upstream. An unsigned or unverifiable `narinfo` is refused
+   and the path is treated as a miss, so **read-through can never be a
+   cache-poisoning vector**. This is why every upstream must list at least
+   one key — an upstream with none could never contribute and is a config
+   error caught at startup.
+4. **Fetch and verify the NAR.** The NAR is streamed from the upstream,
+   decompressed through the codec its `Compression` names (an unsupported
+   codec like `br` is a clean miss), hashed, and written to the CAS via the
+   same `ingest_nar_spooled` path uploads use — including the
+   `max_nar_size_bytes` decompression-bomb cap. The ingested NAR must hash
+   to the signed `NarHash`/`NarSize`; a mismatch
+   means the upstream served bytes its own signature doesn't cover, so the
+   path is refused (the ingested blob is unreferenced and evicts on its
+   own) and no record is written.
+5. **Store the record.** The upstream signatures are preserved verbatim and
+   this instance's own `Sig` is added for every key that hasn't signed the
+   fingerprint yet, so downstream clients can trust the mirror with its own
+   public key alone. The served NAR is this cache's canonical uncompressed
+   blob, so the re-rendered `narinfo` advertises `Compression: none`.
+
+The NAR is fetched **eagerly** during the `narinfo` GET so the freshly
+written record satisfies a `completeness_checking` `path_info_store`
+immediately — the recommended composition (a lazy fetch would 404 its own
+record until the NAR arrived). Read-through populates the stores regardless
+of `read_only`, which only gates client PUTs, so a public read-only front
+still fills itself. It fires on `HEAD` as well as `GET`: `nix copy --from`
+(and `isValidPath`) probes a path's availability with a `HEAD` on the
+`narinfo` before ever issuing the `GET`, so a `HEAD`-only read-through would
+otherwise report the path missing and the client would never fetch it.
+
+Two guards keep upstream traffic sane. Concurrent identical misses
+**coalesce**: the first request for a hash becomes the leader and fetches
+while the rest await its result on the same slot (the leader/`notify`
+pattern the zstd transcoder uses), so a thundering herd is one fetch.
+Misses are **negatively cached** for `upstream_negative_ttl_s`, because Nix
+issues a `narinfo` probe for every path in a closure while planning a
+build and most of those aren't on any upstream — without it, each plan
+would re-query every upstream for every absent path. Only misses are
+remembered; a hit is durable in the stores.
+
+The `upstream_hits`, `upstream_misses`, `upstream_errors`,
+`upstream_rejected_unsigned`, and `upstream_nar_bytes` metrics on the
+instance make the read-through behavior observable.
+
 ## Deploying Alongside Remote Execution
 
 `nix_cache` is an ordinary service entry: it mounts an HTTP router at `/nix/<instance_name>` on the same listener as the gRPC CAS, AC, and execution services, so one `NativeLink` process can be both a remote-execution endpoint and a Nix cache on one port. Its `cas_store` may reuse the same content-addressed store the gRPC CAS uses — Nix `sha256` NAR blobs and Bazel `blake3` blobs coexist in it, because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. The `path_info_store` and `alias_store` are string-keyed and must be separate stores.

@@ -501,6 +501,81 @@ pub struct NixCacheConfig {
         deserialize_with = "convert_duration_with_shellexpand"
     )]
     pub nar_upload_idle_timeout_s: u64,
+
+    /// Upstream Nix binary caches to read through on a local miss. When
+    /// non-empty, a `narinfo` GET that misses the local `path_info_store`
+    /// is retried against each listed cache in order; the first cache that
+    /// has the path (and whose `narinfo` verifies against one of its
+    /// `trusted_public_keys`) is fetched — `narinfo` AND NAR — verified,
+    /// and ingested into this instance's stores, so the path is served
+    /// locally from then on ("durable on first fetch"). The re-served
+    /// `narinfo` is signed with this instance's own `signing_key_files`
+    /// in addition to the preserved upstream signatures.
+    ///
+    /// The NAR is fetched eagerly during the `narinfo` GET so the record
+    /// satisfies a `completeness_checking` `path_info_store` immediately;
+    /// see the store-composition notes in `examples/nix_cache.json5`.
+    /// Read-through populates the stores regardless of `read_only` (which
+    /// only gates client PUTs).
+    ///
+    /// Default: [] (read-through disabled; a local miss is a plain 404)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_caches: Vec<NixUpstreamCacheConfig>,
+
+    /// How long, in seconds, to remember that a path was NOT found in any
+    /// upstream, so a repeated request (Nix issues many `narinfo` probes
+    /// while computing a closure) does not re-query every upstream each
+    /// time. Only misses are cached; a successful fetch is durable in the
+    /// stores. Set to 0 to disable negative caching.
+    ///
+    /// Ignored when `upstream_caches` is empty.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_upstream_negative_ttl_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upstream_negative_ttl_s: u64,
+
+    /// Timeout, in seconds, for a single upstream `narinfo` probe. Kept
+    /// short because the probe is a small metadata request; the (possibly
+    /// large) NAR download that follows a hit is not bound by this timeout
+    /// but by `max_nar_size_bytes` during ingest.
+    ///
+    /// Ignored when `upstream_caches` is empty.
+    ///
+    /// Default: 30
+    #[serde(
+        default = "default_upstream_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upstream_timeout_s: u64,
+}
+
+/// One upstream Nix binary cache for the read-through feature (see
+/// [`NixCacheConfig::upstream_caches`]).
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct NixUpstreamCacheConfig {
+    /// Base URL of the upstream binary cache, without a trailing slash,
+    /// e.g. `"https://cache.nixos.org"` or
+    /// `"https://nix-community.cachix.org"`. The `narinfo` is fetched from
+    /// `<url>/<hash>.narinfo` and the NAR from `<url>/<narinfo URL>`.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub url: String,
+
+    /// Nix public keys (`<name>:<base64>`, the same form listed in a
+    /// client's `trusted-public-keys`, e.g.
+    /// `cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`)
+    /// that a fetched `narinfo` must be signed by before this cache will
+    /// store and serve it. At least one listed key must verify the
+    /// `narinfo` fingerprint; an unsigned or unverifiable `narinfo` is
+    /// refused and the path is treated as an upstream miss, so
+    /// read-through can never be a cache-poisoning vector. Must be
+    /// non-empty.
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub trusted_public_keys: Vec<String>,
 }
 
 fn default_nix_store_dir() -> String {
@@ -525,6 +600,14 @@ const fn default_max_concurrent_transcodes() -> usize {
 
 const fn default_nar_upload_idle_timeout_s() -> u64 {
     60
+}
+
+const fn default_upstream_negative_ttl_s() -> u64 {
+    60
+}
+
+const fn default_upstream_timeout_s() -> u64 {
+    30
 }
 
 // From https://github.com/serde-rs/serde/issues/818#issuecomment-287438544

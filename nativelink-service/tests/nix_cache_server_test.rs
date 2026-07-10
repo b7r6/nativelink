@@ -2020,3 +2020,215 @@ async fn zstd_instance_preserves_original_codec_over_transcoding() -> Result<(),
     assert_eq!(body.as_ref(), xz_blob.as_slice());
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Upstream read-through
+// ---------------------------------------------------------------------------
+
+/// Serves `router` on an ephemeral loopback port over real HTTP so a
+/// read-through front cache can reach it with its reqwest client. Returns
+/// the base URL (`http://127.0.0.1:<port>`) and the serving task's guard
+/// (drop it to simulate the upstream going away).
+async fn spawn_http(router: Router) -> (String, nativelink_util::task::JoinHandleDropGuard<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind loopback");
+    let addr = listener.local_addr().expect("local addr");
+    let handle = nativelink_util::spawn!("test_upstream_http", async move {
+        axum::serve(listener, router.into_make_service())
+            .await
+            .expect("axum serve");
+    });
+    (format!("http://{addr}"), handle)
+}
+
+/// The public key string (`test-int-1:...`) matching [`SERVER_SECRET_KEY`],
+/// which every [`CacheFixture`] signs served narinfo with.
+fn server_public_key() -> String {
+    NixSigningKey::from_secret_string(SERVER_SECRET_KEY)
+        .expect("server secret key parses")
+        .public_key_string()
+}
+
+#[nativelink_test]
+async fn read_through_fetches_verifies_and_caches_from_upstream() -> Result<(), Error> {
+    // An upstream cache holding one signed path.
+    let upstream = CacheFixture::new("rt-up");
+    let (up_mount, up_router) = upstream.server("main", false);
+    let payload = b"read-through upstream NAR payload: opaque bytes 0123456789";
+    let store_path = test_store_path("read-through-happy", "hello-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    publish(&up_router, &up_mount, &info, payload).await;
+    let (base, handle) = spawn_http(up_router).await;
+    let upstream_url = format!("{base}{up_mount}");
+    let upstream_pubkey = server_public_key();
+
+    // A front cache configured to read through to that upstream.
+    let front = CacheFixture::new("rt-front");
+    let (mount, router) = front.server_with_extra(
+        "main",
+        &format!(
+            r#"upstream_caches: [{{ url: "{upstream_url}", trusted_public_keys: ["{upstream_pubkey}"] }}]"#
+        ),
+    );
+    let path_hash = store_path_hash(&store_path);
+
+    // A local miss reads through, verifies, ingests, and serves.
+    let served = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served.store_path, store_path);
+    assert_eq!(served.nar_hash, sha256(payload));
+    assert_eq!(served.nar_size, payload.len() as u64);
+    // We serve our own canonical uncompressed NAR.
+    assert_eq!(served.compression, "none");
+    let canonical = nar_url::canonical_nar_name(&sha256(payload), payload.len() as u64);
+    assert_eq!(served.url, format!("nar/{canonical}"));
+    // The served narinfo carries a valid signature.
+    let fingerprint = narinfo::fingerprint(
+        &served.store_path,
+        &served.nar_hash,
+        served.nar_size,
+        &served.references,
+    );
+    let key = NixPublicKey::from_string(&upstream_pubkey).expect("pubkey parses");
+    assert!(
+        served.sigs.iter().any(|sig| key.verify(&fingerprint, sig)),
+        "served narinfo must carry a valid signature: {:?}",
+        served.sigs
+    );
+
+    // The NAR is now local: a NAR GET returns the exact bytes.
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), payload);
+
+    // Durable: with the upstream gone, the front still serves from its own
+    // stores (proving the first fetch persisted, not proxied).
+    drop(handle);
+    let served_again = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served_again.store_path, store_path);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn read_through_refuses_untrusted_upstream_signature() -> Result<(), Error> {
+    let upstream = CacheFixture::new("rt-badsig-up");
+    let (up_mount, up_router) = upstream.server("main", false);
+    let payload = b"untrusted upstream payload that must never be cached";
+    let store_path = test_store_path("read-through-badsig", "evil-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    publish(&up_router, &up_mount, &info, payload).await;
+    let (base, _handle) = spawn_http(up_router).await;
+    let upstream_url = format!("{base}{up_mount}");
+
+    // The front trusts a DIFFERENT key than the upstream signs with, so
+    // the fetched narinfo fails verification and must not be cached.
+    let untrusted_key = "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
+    let front = CacheFixture::new("rt-badsig-front");
+    let (mount, router) = front.server_with_extra(
+        "main",
+        &format!(
+            r#"upstream_caches: [{{ url: "{upstream_url}", trusted_public_keys: ["{untrusted_key}"] }}]"#
+        ),
+    );
+    let path_hash = store_path_hash(&store_path);
+
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "an unverifiable upstream narinfo must be refused, not cached"
+    );
+    // Nothing was ingested: signature verification precedes the NAR fetch,
+    // so the NAR blob never entered the front's store either.
+    let digest = DigestInfo::new(sha256(payload), payload.len() as u64);
+    assert!(
+        front
+            .nar_memory
+            .get_part_unchunked(digest, 0, None)
+            .await
+            .is_err(),
+        "no NAR should have been ingested for an unverified path"
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn read_through_missing_upstream_path_is_404() -> Result<(), Error> {
+    // An empty upstream: it has nothing, so every narinfo probe 404s.
+    let upstream = CacheFixture::new("rt-empty-up");
+    let (up_mount, up_router) = upstream.server("main", false);
+    let (base, _handle) = spawn_http(up_router).await;
+    let upstream_url = format!("{base}{up_mount}");
+    let upstream_pubkey = server_public_key();
+
+    let front = CacheFixture::new("rt-empty-front");
+    let (mount, router) = front.server_with_extra(
+        "main",
+        &format!(
+            r#"upstream_caches: [{{ url: "{upstream_url}", trusted_public_keys: ["{upstream_pubkey}"] }}]"#
+        ),
+    );
+    let store_path = test_store_path("read-through-missing", "absent-1.0");
+    let path_hash = store_path_hash(&store_path);
+
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn read_through_answers_head_probe() -> Result<(), Error> {
+    // `nix copy --from` (and `isValidPath`) probes availability with a HEAD
+    // on the narinfo before issuing the GET, so read-through must answer HEAD
+    // too or the client reports the path missing without ever fetching it.
+    let upstream = CacheFixture::new("rt-head-up");
+    let (up_mount, up_router) = upstream.server("main", false);
+    let payload = b"read-through HEAD probe payload: opaque bytes";
+    let store_path = test_store_path("read-through-head", "hi-1.0");
+    let info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    publish(&up_router, &up_mount, &info, payload).await;
+    let (base, _handle) = spawn_http(up_router).await;
+    let upstream_url = format!("{base}{up_mount}");
+    let upstream_pubkey = server_public_key();
+
+    let front = CacheFixture::new("rt-head-front");
+    let (mount, router) = front.server_with_extra(
+        "main",
+        &format!(
+            r#"upstream_caches: [{{ url: "{upstream_url}", trusted_public_keys: ["{upstream_pubkey}"] }}]"#
+        ),
+    );
+    let path_hash = store_path_hash(&store_path);
+
+    let (status, _, _) = call(
+        &router,
+        head_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a HEAD on a locally-absent path must read-through and answer 200"
+    );
+    Ok(())
+}
