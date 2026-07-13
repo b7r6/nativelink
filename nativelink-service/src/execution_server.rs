@@ -332,7 +332,7 @@ impl ExecutionServer {
         // this function to hash output Directory trees, and a mismatch corrupts
         // results for clients expecting a different algorithm (e.g. BLAKE3
         // clients getting SHA256 directory digests). See:
-        // https://github.com/straylight-prelude/straylight-nativelink/blob/main/book/src/part9/standard-oci-toolchain.md §4.4, §14.11
+        // https://github.com/straylight-prelude/straylight-nativelink/blob/main/book/src/part9/standard-oci-toolchain.md §4.4, §14.16
         if request.digest_function == 0 {
             return Err(make_input_err!(
                 "ExecuteRequest.digest_function must be explicitly set (received \

@@ -2,7 +2,7 @@
 
 This is a fork of `TraceMachina/nativelink`, and upstream is excellent — see the introduction for how genuinely we mean that. So the only question worth answering here is the one a skeptical operator actually asks: *why run this version instead of stock NativeLink?*
 
-Four reasons. Each is a real capability you can exercise today, each has sharp edges we state plainly, and each points at the chapter that proves it. If a claim below isn't backed by code we'd want you to file a bug.
+Five reasons. Each is a real capability you can exercise today, each has sharp edges we state plainly, and each points at the chapter that proves it. If a claim below isn't backed by code we'd want you to file a bug.
 
 ## 1. Toolchains as Content — the OCI → CAS Bridge
 
@@ -44,8 +44,16 @@ And **offline config validation**: `nativelink --check <config>` parses a config
 
 → **Part V, [Nix and LRE](../part5/nix-lre.md)** and **Part VIII, [Local Remote Execution with Nix](../part8/lre-nix.md)** for the toolchain pins; the `--check` workflow is covered in **Part IX, [The Nix Substituter Facade](../part9/nix-substituter.md#validating-configuration)**.
 
+## 5. Tee Every Network Fetch Into the CAS — the CAS Witness
+
+Even with the two bridges above, a build still reaches past the `CAS` for raw bytes: `fetchurl` tarballs, release archives, anything a fixed-output derivation downloads before a store path exists. Those fetches are invisible to the cache and rot when an upstream URL moves. The CAS witness closes that gap. It is a TLS-intercepting caching *forward proxy* that stores every fetched body in the `CAS` under `sha256(body)` and serves the next fetch of that URL from the store. Point a build client's `HTTPS_PROXY` at it and trust its CA, and every `curl` or `fetchurl` becomes a durable, content-addressed artifact — with no integrity risk, because Nix re-verifies each fixed-output derivation against its declared hash regardless of what the proxy serves. Configure a witness key and it goes one step further: every cached fetch earns a signed DSSE/in-toto attestation, stored in the `CAS` and returned in an `X-Straylight-Witness` header — a verifiable record of what was fetched, from where, and when.
+
+**Honest scope:** the newest and most experimental addition, and trusted-network-only. The proxy has no request authentication — anyone who can reach it can drive fetches and obtain attestations — and a cache hit re-signs its receipt after only an existence check. It is a *trusted-infrastructure attester*, not a public notary: run it inside your build network, never on the open internet.
+
+→ **Part IX, [The CAS Witness](../part9/cas-witness.md)** for the proxy protocol, the attestation format, and the trust model in full.
+
 ## The Shape of the Bet
 
-Read the four together and the thesis from the introduction stops being abstract. The OCI bridge pulls foreign content *into* the `CAS` as toolchains. The Nix facade serves `CAS` content *out* in a foreign protocol. The digest-function fix guarantees the hashing under all of it is honest. And `--check` means you find out your topology is wrong before it's serving traffic. One content-addressed store, many protocols speaking to it, correctness that's structural rather than hoped-for.
+Read the five together and the thesis from the introduction stops being abstract. The OCI bridge pulls foreign content *into* the `CAS` as toolchains, and the CAS witness tees the build's raw network fetches into it too. The Nix facade serves `CAS` content *out* in a foreign protocol. The digest-function fix guarantees the hashing under all of it is honest. And `--check` means you find out your topology is wrong before it's serving traffic. One content-addressed store, many protocols speaking to it, correctness that's structural rather than hoped-for.
 
 That's why this fork. Everything underneath it is TraceMachina's, and excellent. What we added is the part where the same `CAS` starts holding everything.

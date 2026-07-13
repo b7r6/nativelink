@@ -48,10 +48,13 @@ Everything above compares implementations of the same protocol. For choosing *th
 |---|---|---|---|---|---|---|
 | OCI → CAS toolchain bridge | Yes | No | No | No | No | No |
 | Nix binary-cache facade | Yes | No | No | No | No | No |
+| CAS witness (caching fetch proxy) | Yes | No | No | No | No | No |
 
 **OCI → CAS toolchain bridge.** A `FetchDirectory("oci://…")` call on the Remote Asset API pulls an OCI toolchain image, folds every layer into one REAPI `Directory` tree, uploads the blobs, and returns a root `Directory` digest — the toolchain's execution identity. A client merges that digest into an action's `input_root_digest` and the worker fetches the toolchain from the `CAS` like any other input. The toolchain becomes content-addressed data instead of pre-installed infrastructure. It is a happy-path prototype today (`gzip` layers only, real auth for Docker Hub alone, single-platform manifests, whole images buffered in memory) — all documented, none hidden. See [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
 
 **Nix binary-cache facade.** The `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over the same store composition: each NAR is a `CAS` blob, path metadata rides in standard REv2 `ActionResult` envelopes, and garbage collection is eviction plus a completeness check rather than a bespoke sweep. Point a `substituters` entry at it and stock `nix` clients work with no plugin. Nix `sha256` NAR blobs and Bazel `blake3` blobs coexist in one store, because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. See [The Nix Substituter Facade](../part9/nix-substituter.md).
+
+**CAS witness.** The `cas_witness` service is a TLS-intercepting caching forward proxy for the raw network fetches a build performs — the `fetchurl` tarballs and release archives a fixed-output derivation pulls, which the substituter cannot mirror until someone has already built and pushed the derivation. A client sets `HTTPS_PROXY` and `NIX_SSL_CERT_FILE`; the witness terminates TLS with a locally-generated CA, tees each fetched body into the `CAS` under `sha256(body)`, and maps the URL to it, so the first download makes the deployment a durable mirror. It is trusted only for availability, never integrity — `nix` re-verifies every fetch against its declared hash — and can optionally emit a signed DSSE/in-toto attestation per fetch. See [The CAS Witness](../part9/cas-witness.md).
 
 Two smaller additions harden the base rather than extend it:
 

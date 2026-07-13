@@ -3,23 +3,16 @@
 
 # Standard OCI Toolchain Specification
 
-**Version:** RC1, revision 3 (NativeLink track — implementation-informed amendments)
-**Canonical:** `straylight-buck2-prelude/docs/TOOLCHAIN-SPEC.md` (RC1 rev 2)
-**This copy:** NativeLink book track — adds §12.3.1 (binary format), §6.6 (REAPI
-unblock status), renames paths to match implementation, narrows manifest carriage.
-Reconcile with canonical before ratification.
+**Version:** RC3
+**Status:** Draft
 
-> **Revision 3 (NativeLink track).** Incorporates implementation feedback from
-> `straylight-buck2-prelude/tools/`:
->
-> - §12.2: floor loader path updated to `/lib/ld-std-oci-toolchain.so`
-> - §12.3: manifest carriage narrowed to PT_NOTE only; adds §12.3.1 normative
->   binary wire format
-> - §6.6: REAPI execution projection unblocked (NativeLink digest function fix
->   shipped on `pr/sha-256-silent-default-fix`)
-> - Appendix B: tool names corrected (`std-oci-toolchain`, not `straylight-cas`)
-> - Appendix D: conformance gap status updated (fix shipped)
-> - Appendix F (new): implementation status matrix
+> **This appendix is a verbatim mirror; it is not the source of truth.** The
+> canonical, authoritative copy of this specification lives in the
+> `straylight-toolchain` repository at `spec/standard-oci-toolchain-spec.md` —
+> the static-musl LLVM sysroot builder that is also the spec's reference
+> implementation. Make edits there and sync them here; on any discrepancy the
+> `straylight-toolchain` copy is authoritative. It is reproduced in full so this
+> book stays self-contained.
 
 ---
 
@@ -50,19 +43,22 @@ needs.
 
 **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **SHOULD**, **SHOULD
 NOT**, **MAY**, **OPTIONAL** per RFC 2119 / RFC 8174 when capitalized. §1–§14 are
-**normative**; Appendices A–E are **informative**.
+**normative**; Appendices A–D are **informative**.
 
 ---
 
 ## 1. Scope
 
 1.1. Defines the **identity**, **projections** (OCI distribution, REAPI execution,
-container), **layout**, **self-containedness**, **use contract**, and **conformance**
-of a toolchain artifact and its consumers.
+container), **layout**, **naming**, **self-containedness**, **use contract**, and
+**conformance** of a toolchain artifact and its consumers.
 
 1.2. Does not define how components are built (App. A), assembled (App. B),
 materialized (App. C), or which execution backend is used (App. D). None of these
 MUST affect identity.
+
+1.3. Assumes a **hosted Linux target** with a C library. Freestanding, bare-metal,
+and no-std toolchains are out of scope.
 
 ---
 
@@ -94,6 +90,10 @@ MUST affect identity.
   Prohibited as identity (§11).
 - **Materialization** — presenting content on a filesystem (overlay/copy/hardlink/
   symlink). Downstream of identity (§10).
+- **Host environment** — the library environment in which the toolchain's own
+  binaries execute, including `dlopen` targets such as proc macros.
+- **Target environment** — the library environment the toolchain links into the
+  artifacts it produces, provided by the sysroot (§13).
 
 ---
 
@@ -114,9 +114,9 @@ stored, signed, scanned, and distributed.
 
 3.4. The **REAPI execution projection** is the Merkle serialization a remote-execution
 worker consumes: a `Directory` tree whose files are content-addressed blobs.
-Addressed by **BLAKE3** (the declared RE digest function), because execution wants
-the faster hash and the worker's CAS is BLAKE3-native. This is where work is
-actually scheduled and cached.
+Addressed by the declared RE digest function (**BLAKE3** by preference, §6.2),
+because execution benefits from the faster hash and the worker's CAS is
+BLAKE3-native. This is where work is actually scheduled and cached.
 
 3.5. The **container projection** is the runnable form (§9): content materialized into
 a rootfs with an FHS floor, usable under `docker run`.
@@ -131,10 +131,25 @@ are materialization and never affect it.
 ## 4. Content addressing (the invariant)
 
 4.1. A component's **logical content** is fixed by a **canonical serialization**: a
-reproducible (normalized) tar — entries byte-lexicographically ordered, fixed mtimes,
-fixed uid/gid/uname/gname, content-relevant mode bits only, no non-portable special
-files. (Same canonicalization NAR provides for nix, in the ubiquitous format. NAR
-MUST NOT be the serialization.)
+reproducible (normalized) tar with the following fixed values:
+
+| field      | value                | rationale                                    |
+| ---------- | -------------------- | -------------------------------------------- |
+| `mtime`    | 0 (epoch)            | reproducibility                              |
+| `uid/gid`  | 0/0                  | no ownership semantics in a CAS              |
+| `uname`    | `""`                 | no ownership semantics in a CAS              |
+| `gname`    | `""`                 | no ownership semantics in a CAS              |
+| `mode`     | 0755 (executable)    | content-relevant: the execute bit             |
+|            | 0644 (regular file)  | content-relevant: regular file                |
+|            | 0777 (symlink)       | tar convention; target string is the content  |
+| `devmajor` | 0                    | no devices in a toolchain                     |
+| `devminor` | 0                    | no devices in a toolchain                     |
+| `typeflag` | `'0'` regular, `'2'` symlink, `'5'` directory | per entry type          |
+
+Entries MUST be byte-lexicographically ordered by path. No non-portable special
+files. Two conforming serializers given the same logical content tree MUST produce
+byte-identical output. (Same canonicalization NAR provides for nix, in the ubiquitous
+format. NAR MUST NOT be the serialization.)
 
 4.2. Serialization is over the **intended layout**, not the storage representation.
 Intended symlinks (e.g. `cc → clang`) are content (their target string is hashed);
@@ -149,8 +164,8 @@ RE digest function (§6).
 4.4. **No consumer MUST assume a default digest algorithm.** A consumer that hashes or
 rehashes content — including the child `Directory`/`Tree` nodes of the REAPI
 projection — MUST use the algorithm **declared** by the descriptor or execute request,
-and MUST NOT substitute a default. _Defaulting the digest function for tree-node
-hashing is non-conformant (§14.11; Appendix D)._
+and MUST NOT substitute a default. Defaulting the digest function for tree-node
+hashing is non-conformant (§14.16).
 
 ---
 
@@ -160,13 +175,6 @@ hashing is non-conformant (§14.11; Appendix D)._
 **diff_id** (sha256 over the uncompressed canonical tar of §4.1) is the component's
 OCI content identity. Transport compression (`+gzip`, `+zstd`) MAY be applied; it
 changes the blob digest, not the diff_id, and MUST NOT be part of identity.
-
-> **Implementation note (NativeLink consumer; informative).** This section permits
-> `+zstd` transport compression, but the current NativeLink OCI→CAS bridge
-> decompresses `+gzip` (and uncompressed) layers only; a `+zstd` layer is rejected
-> (`nativelink-oci/src/oci_client.rs:356`, `zstd decompression not yet implemented`).
-> Images intended for NativeLink import should ship gzip-compressed or uncompressed
-> layers until zstd support lands (Appendix F).
 
 5.2. **Additive, disjoint, no whiteouts.** Components MUST occupy disjoint subtrees;
 layers are additive; a conforming image MUST NOT use whiteouts. Layers MUST be listed
@@ -189,14 +197,14 @@ layers.
 of §6.5:
 
 ```
-dev.straylight.toolchain.role             = "cxx"        // the role label, not identity
-dev.straylight.toolchain.layout-version   = "1"
-dev.straylight.toolchain.oci.digest        = "sha256"
-dev.straylight.toolchain.reapi.digest-function = "BLAKE3"     // hint (§6.5)
-dev.straylight.toolchain.reapi.root        = "<hash>/<size>"  // hint: REAPI root Directory digest
+dev.straylight.toolchain.role                  = "cxx"
+dev.straylight.toolchain.layout-version        = "2"
+dev.straylight.toolchain.oci.digest            = "sha256"
+dev.straylight.toolchain.reapi.digest-function = "BLAKE3"
+dev.straylight.toolchain.reapi.root            = "<hash>/<size>"
 ```
 
-The role label MUST NOT be used as identity; identity is the manifest digest (5.4).
+The role label MUST NOT be used as identity; identity is the manifest digest (§5.4).
 
 ---
 
@@ -236,35 +244,10 @@ A hint is an optimization: a consumer MAY verify it by recomputation, MUST treat
 hint that fails verification as absent, and MUST NOT rely on an unverified hint for
 correctness (only for fetch planning).
 
-6.6. **REAPI projection status (rev 3, informative).** The REAPI execution projection
-was previously blocked by a conformance gap in NativeLink (Appendix D): the server
-defaulted `digest_function` to SHA256 when unset, causing BLAKE3 clients to receive
-corrupted Directory digests. This gap is now closed:
-
-- The NativeLink execution server unconditionally rejects `ExecuteRequest` with
-  `digest_function = 0` (UNKNOWN), returning `INVALID_ARGUMENT`.
-- A global config option (`require_explicit_digest_function`) extends this to all
-  services (CAS, AC, ByteStream).
-- Legacy mode emits a diagnostic warning on first unset digest_function.
-
-With this fix shipped (`straylight/straylight-nativelink@pr/sha-256-silent-default-fix`,
-`nativelink-service/src/execution_server.rs:336`), the REAPI BLAKE3 projection is
-unblocked for end-to-end execution: a worker hashing output Directory trees uses the
-client-declared function or refuses the request. The two-projection model (sha256 at
-the OCI boundary, BLAKE3 at the RE boundary) is deployable on the `Execute` path.
-
-**One consumer path is not yet conformant.** The `Execute` path honors the declared
-digest function (§14.11), but the OCI→CAS bridge that realizes this section —
-`FetchDirectory("oci://…")` in NativeLink's `FetchServer` — does **not** read the
-request's declared digest function. It projects with a static per-instance value
-(`oci.digest_function`, default BLAKE3; `nativelink-service/src/fetch_server.rs:288`)
-and drops the request field (the parameter is `_digest_function_proto`,
-`fetch_server.rs:250`). Matched-configuration discipline is therefore still required
-for this consumer: the operator must set `oci.digest_function` to the function the
-execution service expects — the config field is documented as "Must match what the
-execution service expects" (`nativelink-config/src/cas_server.rs:203`). Item E3
-(Appendix E) is **not** retired for the OCI bridge; E4 supersedes it only on the
-`Execute` path.
+6.6. **Conforming RE server behavior.** A conforming REAPI execution server MUST
+reject an `ExecuteRequest` with `digest_function = 0` (UNKNOWN) and return
+`INVALID_ARGUMENT`. Silently defaulting the digest function is non-conformant
+(§14.16). See Appendix D for interoperability notes.
 
 ---
 
@@ -280,7 +263,7 @@ A mismatch MUST be treated as a corrupt image.
 
 ---
 
-## 8. Toolchain layout
+## 8. Toolchain layout and naming
 
 8.1. A toolchain MUST present a sysroot-compatible layout rooted at one directory:
 
@@ -304,17 +287,124 @@ interpret it; discoverable metadata is carried as annotations (§5.6).
 8.3. Adjacency expectations (driver finds linker in `bin/`; resource dir relative to
 the driver) MUST be satisfiable within the root without external configuration.
 
-8.4. In a multi-toolchain container, each toolchain MUST reside at a named path:
+8.4. In a multi-toolchain container, each toolchain MUST reside at a content-
+discriminated path:
 
 ```
-/toolchains/<toolchain-name>/
+/toolchains/<canonical-name>-<content-suffix>/
 ```
 
-where `<toolchain-name>` is a human-readable identifier encoding the significant
-configuration axes (e.g. `cxx-clang21-libstdcxx-glibc`, `rust-stable`). Multiple
-toolchains MAY coexist in one image as disjoint subtrees. A default symlink
-(`/toolchains/default → /toolchains/<primary>`) SHOULD be provided for `PATH`
-resolution.
+where `<canonical-name>` is the canonical toolchain name (§8.5) and
+`<content-suffix>` is a truncation of the toolchain's content digest — the first 16
+hexadecimal characters (64 bits) of the BLAKE3 hash of the REAPI root `Directory`
+digest. The suffix MUST be present. A path without a content-derived suffix is
+non-conformant (§14.8).
+
+The content suffix ensures monotonicity: adding a layer to the image never shadows
+an existing toolchain, because two distinct toolchains cannot collide on path
+regardless of layer ordering. The human-readable prefix preserves discoverability.
+
+A default symlink SHOULD be provided:
+
+```
+/toolchains/default → /toolchains/<primary-canonical-name>-<content-suffix>
+```
+
+8.5. **Canonical toolchain naming.** The canonical name is a structured encoding of
+the toolchain's configuration axes, in fixed order. It is human-readable,
+machine-parseable, and deterministic — the same configuration MUST produce the same
+canonical name regardless of producer.
+
+**Grammar:**
+
+```
+toolchain-name  = role "-" driver version "-" cxxlib "-" clib
+                  [ "-on-" host-cxxlib "-" host-clib ]
+                  [ "-" target ]
+role            = "cxx" | "cc" | "rust" | "go" | "zig" | ALPHA+
+driver          = ALPHA+
+version         = DIGIT+ [ "." DIGIT+ ]
+cxxlib          = "libstdcxx" | "libcxx"
+host-cxxlib     = cxxlib
+clib            = "glibc" | "musl"
+host-clib       = clib
+target          = arch "-" vendor "-" os
+```
+
+**Axis table:**
+
+| axis    | values (closed where noted)                  | required?                      |
+| ------- | -------------------------------------------- | ------------------------------ |
+| role    | `cxx`, `cc`, `rust`, `go`, `zig`, … (open)   | REQUIRED                       |
+| driver  | `clang`, `gcc`, `rustc`, `gccgo`, … (open)   | REQUIRED                       |
+| version | bare major or major.minor, no `v` prefix     | REQUIRED                       |
+| cxxlib  | `libstdcxx`, `libcxx` (closed)               | REQUIRED                       |
+| clib    | `glibc`, `musl` (closed)                     | REQUIRED                       |
+| target  | GNU target triple (open)                     | OPTIONAL (omit = native)       |
+
+All components MUST be lowercase. Delimiter is `-` between axes, no delimiter
+between driver and version. No special characters (`+` in `libstdc++` becomes
+`libstdcxx`; `libc++` becomes `libcxx`).
+
+`role` and `driver` are **open** — a new language does not require a spec revision.
+`cxxlib` and `clib` are **closed** — a new C or C++ standard library is a significant
+ABI event and requires a spec amendment to register its canonical short name.
+
+**The cxxlib axis is always REQUIRED.** Every hosted toolchain carries a C++ standard
+library in its closure because everything FFIs: Rust `-sys` crates link C++
+transitively; Go's cgo path links against the system C++ stdlib; Zig bundles its own
+libc++ for C++ interop. The C++ stdlib determines ABI compatibility when outputs from
+different toolchains link into the same process.
+
+**Host/target split.** The naming grammar distinguishes the **target** library
+environment (what the toolchain links into produced artifacts, governed by §13) from
+the **host** library environment (what the toolchain's own binaries are linked
+against, governed by §12).
+
+The `-on-` clause is REQUIRED when the host libraries differ from the target,
+and OMITTED when they match. A name without `-on-` asserts host == target.
+
+The host/target split is not hypothetical. A Rust toolchain targeting musl requires
+glibc on the host side because proc macros are dylibs `dlopen`'d into `rustc`'s
+address space — they must be ABI-compatible with the compiler process, which requires
+the host clib. Two toolchains with the same target but different host libraries are
+NOT interchangeable.
+
+**Ordering rule.** Axes appear in the fixed order given by the grammar. The order is
+by decreasing significance for human scanning: role (what are you building?), driver
+(what compiles it?), runtime libraries (what does it link against?), host override
+(what does the compiler itself run on?), target (what architecture?).
+
+**Examples:**
+
+```
+cxx-clang21-libstdcxx-glibc
+cxx-clang21-libcxx-musl
+cxx-gcc14-libstdcxx-glibc
+cxx-clang21-libstdcxx-glibc-aarch64-linux-gnu
+rust-rustc1.80-libstdcxx-musl-on-libstdcxx-glibc
+go-go1.23-libstdcxx-glibc
+cc-clang21-libstdcxx-musl-on-libstdcxx-glibc
+```
+
+With content suffix (§8.4):
+
+```
+rust-rustc1.80-libstdcxx-musl-on-libstdcxx-glibc-a7f3e291b04c8d12
+```
+
+Full multi-toolchain paths:
+
+```
+/toolchains/cxx-clang21-libstdcxx-glibc-a7f3e291b04c8d12/
+/toolchains/rust-rustc1.80-libstdcxx-musl-on-libstdcxx-glibc-3c9f20e8a1b74d06/
+/toolchains/default → /toolchains/cxx-clang21-libstdcxx-glibc-a7f3e291b04c8d12
+```
+
+**Validation.** A conforming producer MUST emit names matching the grammar. A
+conforming consumer SHOULD parse the name for display and filtering but MUST NOT use
+the parsed components as identity (§11, §5.4 — identity is the manifest digest,
+never the name).
 
 ---
 
@@ -333,22 +423,17 @@ environment (`PATH`, `SSL_CERT_FILE`/`SSL_CERT_DIR`, `TERM`, `EDITOR`) such that
 toolchain driver(s) resolve on `PATH`.
 
 9.2.1. The floor SHOULD additionally include a **productive interactive environment**:
-an editor (`nvim`), a search tool (`ripgrep`), a find tool (`fd`), a JSON tool
-(`jq`), version control (`git`), a network tool (`curl`), and a shell prompt
-(`starship`). The rationale: the container is a workspace, not merely an execution
-environment. 75 MB of developer tools is negligible next to a 1.2 GB toolchain and
-unconditionally worth the ability to work inside the container when debugging,
-testing, or renting compute.
+a text editor (e.g., `nvim`), a recursive search tool (e.g., `ripgrep`), a file
+finder (e.g., `fd`), a JSON processor (e.g., `jq`), version control (e.g., `git`),
+an HTTP client (e.g., `curl`), and a shell prompt (e.g., `starship`). The rationale:
+the container is a workspace, not merely an execution environment. 75 MB of developer
+tools is negligible next to a 1.2 GB toolchain and unconditionally worth the ability
+to work inside the container when debugging, testing, or renting compute.
 
 9.3. The floor MUST be provided by an additive, content-addressed **base layer**,
 disjoint from the toolchain component layers (§5.2). The minimal REAPI execution
 input root (§6) MAY omit the base layer; the runnable/developer image MUST include
 it.
-
-9.4. (Rationale, informative.) One image serves distribution, execution, and
-interactive use. Execution wants a minimal input root; a human wants a pleasant
-shell. Disjoint additive layering serves both from one content-addressed image
-without forking it. If you `docker run` one of these, it should be nice inside.
 
 ---
 
@@ -393,16 +478,18 @@ appearance of a CAS without its guarantee. This specification requires the guara
 
 ## 12. Self-containedness (content-closure)
 
-> **Revision 3 note.** This replaces the prior §12 wholesale and corrects Appendix B.
-> The prior §12 closed the artifact over its _directory tree_ (path-closure); this
-> revision closes it over its _content manifest_ (content-closure). The distinction
-> is load-bearing and is the whole point of the floor loader.
-
 **Principle.** A conforming toolchain's own ELF objects MUST resolve every dynamic
 dependency by **content** — a digest recorded in the object's manifest (§12.3) —
 and MUST NOT resolve any dependency by an ambient or embedded **path**, with
 exactly one permitted external path reference: the floor dynamic loader (§12.2).
 Self-containedness is closure over the manifest, not over the tree.
+
+A **fully static** object — no `PT_INTERP` and empty `DT_NEEDED` — has no dynamic
+dependency to resolve and no interpreter to anchor. It trivially satisfies this
+section, a strictly stronger property than the manifest closure §12.3 would otherwise
+record, and requires neither the floor loader (§12.2) nor a manifest note. §12.1–§12.6
+constrain objects that carry dynamic dependencies; a static-PIE toolchain is
+conformant with the applicable subset being empty.
 
 > This section governs the runtime resolution of the **toolchain's own binaries**
 > (e.g. `clang` finding `libstdc++.so.6` in order to _run_). It does **not** govern
@@ -420,25 +507,28 @@ patchelf --print-rpath <each-elf>                      // → ""
 readelf -d <each-elf> | grep -E 'RPATH|RUNPATH'       // → no output
 ```
 
-12.2. **`PT_INTERP` MUST name the floor loader at one well-known path.** Every
-executable's ELF interpreter MUST be a single deployment-wide path
-(`/lib/ld-std-oci-toolchain.so`), identical across all toolchains. This is the **sole
+12.2. **A dynamically-linked executable's `PT_INTERP` MUST name the floor loader at
+one well-known path.** Every executable that carries an interpreter MUST set it to a
+single deployment-wide path (`/lib/ld-std-oci-toolchain.so`), identical across all
+toolchains. A fully static executable carries no `PT_INTERP` and is exempt (§12
+principle). This is the **sole
 permitted external path reference** of §12 — the one input-addressed _location_
 anchor in an otherwise content-addressed system. The kernel resolves `PT_INTERP`
 during `execve` before any CAS-aware code runs, so the loader itself cannot be named
 by content at the interpreter slot.
 
-The floor loader (`ld-std-oci-toolchain.so`) is:
+The floor loader (`ld-std-oci-toolchain.so`) MUST:
 
-- Statically linked against musl (no dependencies of its own)
-- Compiled as a static-pie C++23 binary
-- Provided by the container floor base layer (§9.3)
-- Content-addressed _as a file_ (its own digest is in the CAS) even though its
-  _location_ is fixed
-- A dispatch shim: it reads the executed binary's PT_NOTE manifest (§12.3.1),
-  extracts the loader entry (soname_len == 0), resolves the per-toolchain
-  `ld-linux-x86-64.so.2` from `/cas/<blake3-hex>`, verifies the hash, and
-  `execve`s it with the original binary as argv[0]
+- Have no dynamic dependencies (fully statically linked).
+- Be a position-independent executable.
+- Be provided by the container floor base layer (§9.3).
+- Be content-addressed as a file (its own digest is in the CAS) even though its
+  location is fixed.
+
+The floor loader is a dispatch shim: it reads the executed binary's PT_NOTE manifest
+(§12.3.1), extracts the loader entry (soname_len == 0), resolves the per-toolchain
+`ld-linux-x86-64.so.2` from `/cas/<blake3-hex>`, verifies the hash, and `execve`s it
+with the original binary as argv[0].
 
 This allows multiple glibc versions to coexist: each toolchain's real `ld-linux` is
 content in the CAS, resolved by hash. The floor loader is universal across all
@@ -455,10 +545,6 @@ object the build resolved, and (b) the **versioned-symbol requirements** bound
 against that object. The manifest MUST be carried as an ELF note in a `PT_NOTE`
 segment with note name `"dev.straylight.cas"` and note type `0x01`.
 
-> **Revision 3.** The section (`.straylight.cas`) and sidecar (`<binary>.cas`)
-> carriage options from RC1 rev 2 are withdrawn. The implementation uses PT_NOTE
-> exclusively; multiple carriage formats add complexity without benefit.
-
 The manifest MUST be **complete**: a `DT_NEEDED` with no manifest row is a
 non-conforming object.
 
@@ -469,7 +555,11 @@ little-endian):
 
 ```
 ELF Note header:
-  n_namesz  = 20                          // strlen("dev.straylight.cas") + 1
+  n_namesz  = 19                          // strlen("dev.straylight.cas") + 1 = 19
+                                          //   (the name FIELD is then padded to 20
+                                          //    bytes for 4-byte alignment; n_namesz
+                                          //    itself is 19. The shipped floor loader
+                                          //    checks n_namesz == 19.)
   n_descsz  = <variable>                  // total descriptor bytes
   n_type    = 0x01                        // CAS_MANIFEST
   n_name    = "dev.straylight.cas\0"      // padded to 4-byte alignment
@@ -484,12 +574,22 @@ Descriptor header:
 Per entry (repeated num_entries times):
   soname_len    : u16                    // 0 = loader entry (special)
   soname        : [soname_len]           // DT_NEEDED string, verbatim
-  digest        : [digest_len]           // raw hash bytes
-  num_ver_reqs  : u8                     // GNU version requirements count
+  digest        : [digest_len]           // raw hash bytes (NOT hex-encoded)
+  num_ver_reqs  : u8                     // GNU version requirements count (0 = none)
   per version requirement:
     vername_len : u16
     vername     : [vername_len]          // e.g. "GLIBC_2.34"
 ```
+
+**Forward compatibility.** A parser encountering `version > 1` MUST treat the note
+as absent (skip it) and MUST NOT attempt to parse the descriptor body. A floor loader
+that skips a manifest note MUST refuse to load the binary (fail closed). This gives a
+clean upgrade path: bump version, old loaders refuse, new loaders parse.
+
+**Integrity.** Before walking entries, a parser MUST verify that `n_descsz` is at
+least `8 + num_entries * (2 + digest_len + 1)` (the minimum possible descriptor size
+assuming zero-length sonames and zero version requirements). If the check fails, the
+note MUST be treated as corrupt and the loader MUST refuse to load the binary.
 
 **Special entries:**
 
@@ -523,18 +623,25 @@ influence on resolution and interposition. The loader **has no code path** that 
 the environment for library location or preload. The mechanism that would express the
 attack is removed, not forbidden.
 
-12.6. **`dlopen` closure MUST be recorded and staged; resolution MUST fail closed.**
-Any object that may `dlopen` at runtime — including glibc's own NSS (`libnss_*`) and
-any plugin mechanism — MUST have its runtime-reachable set recorded in the manifest
-as a **dlopen-closure**, and every object in that closure MUST be staged in the CAS.
-A `dlopen` of a name absent from the recorded closure MUST fail closed — it MUST NOT
-fall back to a path search.
+12.6. **`dlopen` closure SHOULD be recorded and staged; resolution SHOULD fail
+closed.** Any object that may `dlopen` at runtime — including glibc's own NSS
+(`libnss_*`) and any plugin mechanism such as Rust proc macros — SHOULD have its
+runtime-reachable set recorded in the manifest as a **dlopen-closure**, and every
+object in that closure SHOULD be staged in the CAS. A `dlopen` of a name absent from
+the recorded closure SHOULD fail closed — it SHOULD NOT fall back to a path search.
 
 > (Informative.) The dlopen-closure is the hard operational part of this model.
 > `DT_NEEDED` is statically present; `dlopen` targets may be computed at runtime.
 > Producing a correct closure requires either observing the build/runtime `dlopen` set
 > or constraining the configuration (e.g. a fixed `nsswitch.conf` whose modules are
-> enumerable). This spec mandates recording, staging, and failing closed on a miss.
+> enumerable). This specification recommends recording, staging, and failing closed on
+> a miss. Promotion to MUST is expected in a future revision when tooling matures.
+
+> (Informative.) The host/target split (§8.5) makes the dlopen-closure especially
+> critical for Rust toolchains. Proc macros are the primary `dlopen` use case; they
+> must be compiled against the HOST clib. The dlopen-closure must record that `rustc`'s
+> `dlopen` targets are host-ABI, and the floor loader must resolve them from the
+> host-clib CAS entries, not the target-clib sysroot.
 
 12.7. **No factory path anywhere.** Factory store paths (e.g. `/nix/store/...`) MUST
 NOT appear in any layer content, in any form, including inside binaries, text
@@ -560,7 +667,7 @@ sysroot argument:
 objects, and libraries MUST be discoverable via sysroot search; a peer linker MUST be
 discoverable by name in `bin/`.
 
-> **Target vs own (clarification).** The "dynamic linker" discoverable via sysroot is
+> **Target vs host (clarification).** The "dynamic linker" discoverable via sysroot is
 > the **target** interpreter — the one the compiler stamps into _programs it builds_
 > (via `-Wl,-dynamic-linker,<sysroot>/lib/ld-linux-x86-64.so.2`). This is distinct
 > from the resolution of the _toolchain's own binaries_ at runtime, which is governed
@@ -589,35 +696,38 @@ verbatim (one greppable toolchain token).
 - **14.6** No RPATH/RUNPATH on any ELF object (stripped, not redirected); no factory
   store path in any content (§12.1, §12.7).
 - **14.7** No input-addressed identifier is used as identity or present (§11).
-- **14.15** PT_INTERP on every executable is the single deployment-wide floor-loader
-  path; the floor loader is provided by the base layer and is itself content-addressed
-  as a file (§12.2).
-- **14.16** Every DT_NEEDED entry has a complete manifest row (soname → declared-fn
+- **14.8** The toolchain path includes a content-derived suffix; a path with only
+  human-readable components is non-conformant (§8.4). The canonical name matches the
+  grammar of §8.5.
+- **14.9** Every **dynamically-linked** executable's PT_INTERP is the single
+  deployment-wide floor-loader path; the floor loader is provided by the base layer,
+  has no dynamic dependencies, and is itself content-addressed as a file (§12.2). A
+  fully static (PIE) executable with no PT_INTERP and empty DT_NEEDED trivially
+  satisfies §12 and is exempt.
+- **14.10** Every DT_NEEDED entry has a complete manifest row (soname → declared-fn
   digest + version-reqs); no DT_NEEDED is unmanifested (§12.3).
-- **14.17** The floor loader resolves solely via the CAS, verifies each resolved
+- **14.11** The floor loader resolves solely via the CAS, verifies each resolved
   object against its manifest digest, and consults no RPATH/RUNPATH/LD\_\*/ld.so.cache
   (§12.4, §12.5).
-- **14.18** The dlopen-closure (incl. NSS) is recorded and staged; an unrecorded
-  dlopen fails closed (§12.6).
-- **14.19** Resolution is structurally deterministic: no ambiguous used-symbol binding
+- **14.12** Resolution is structurally deterministic: no ambiguous used-symbol binding
   ships without an ordering edge (§12.8).
-- **14.8** Identity from symlink-, hardlink-, and copy-materializations is identical
+- **14.13** Identity from symlink-, hardlink-, and copy-materializations is identical
   (§10).
-- **14.9** Usable via the single-sysroot contract (§13).
-- **14.10** A runnable image satisfies the container floor (§9): `/bin/sh`, core
+- **14.14** Usable via the single-sysroot contract (§13).
+- **14.15** A runnable image satisfies the container floor (§9): `/bin/sh`, core
   utilities, `/etc` essentials (passwd/group/nsswitch/CA bundle), writable `/tmp`,
   and `PATH` such that `which <driver>` and `<driver> --version` succeed.
 
 **Conforming consumer:**
 
-- **14.11** Honors the **declared** digest function for all hashing, including REAPI
-  child `Directory`/`Tree` nodes, and **never assumes a default** (§4.4). _Defaulting
-  the tree-node digest function is non-conformant (Appendix D)._
-- **14.12** Derives identity from a projection, never from a materialized rootfs's
+- **14.16** Honors the **declared** digest function for all hashing, including REAPI
+  child `Directory`/`Tree` nodes, and **never assumes a default** (§4.4). Defaulting
+  the tree-node digest function is non-conformant.
+- **14.17** Derives identity from a projection, never from a materialized rootfs's
   inodes (§10.2).
-- **14.13** Treats hints as optimization only: verifies before relying, uses an
+- **14.18** Treats hints as optimization only: verifies before relying, uses an
   unverified hint solely for fetch planning (§6.5).
-- **14.14** Includes the toolchain's execution identity (REAPI root `Directory`
+- **14.19** Includes the toolchain's execution identity (REAPI root `Directory`
   digest) in the action cache key when using it as a build input (§10.3).
 
 ---
@@ -626,7 +736,7 @@ verbatim (one greppable toolchain token).
 
 # Appendices (informative)
 
-## Appendix A. Building components with nix (the factory, and where it stops)
+## Appendix A. Building components with nix
 
 `nix build` produces a component; its realized **output content** is serialized
 canonically (§4.1) and addressed by content. Its store path, `.drv`, and NAR
@@ -636,57 +746,44 @@ build-time optimization, not identity.
 
 ## Appendix B. Assembly and self-containedness (satisfying §12)
 
-> **Revision 3.** This appendix is corrected: assembly **strips** RPATH (not sets it),
-> sets PT_INTERP to the floor loader, and emits the content manifest.
-
 Assembly is a two-phase pipeline:
 
-**Phase 1: `toolchain_assemble`** (Buck2 rule: `prelude/nix/toolchain_assemble.bzl`)
-places component content from Nix into the §8 FHS layout. Runs `patchelf` to rewrite
-interpreter and RPATH to temporary paths for assembly-time linking verification.
+**Phase 1: assembly** places component content from Nix into the §8 FHS layout.
+Runs `patchelf` to rewrite interpreter and RPATH.
 
-**Phase 2: `std-oci-toolchain finalize`** (Buck2 rule: `prelude/oci/cas_toolchain.bzl`)
-performs the §12 finalization on every ELF object in the assembled tree:
+**Pre-finalization RPATH convention.** Phase 1 MUST set RUNPATH on each ELF object to
+`$ORIGIN`-relative paths that resolve within the §8 layout (e.g., `$ORIGIN/../lib`).
+This ensures finalization can resolve DT_NEEDED entries from the assembled tree
+without depending on the build system's output directory structure.
 
-1. Resolves each `DT_NEEDED` soname via RUNPATH (the assembly-time path)
-2. BLAKE3-hashes each resolved library
-3. Strips `DT_RUNPATH`/`DT_RPATH` (zeros d_val to point at strtab[0]='\0')
-4. Overwrites `PT_INTERP` in-place to `/lib/ld-std-oci-toolchain.so`
-5. Appends a `PT_NOTE` segment with the content manifest (§12.3.1)
-6. Stages resolved libraries to `/cas/<blake3-hex>`
+The Phase 1 output (assembled but not finalized) is NOT a conforming toolchain,
+MUST NOT be distributed, and MUST NOT appear in any OCI layer.
 
-This is an **atomic** operation per binary — either all five steps succeed or none
-do. The output is a finalized tree (`toolchain/`) plus a CAS directory (`cas/`).
+**Phase 2: finalization** performs the §12 closure on every ELF object in the
+assembled tree:
 
-```
-//  per ELF object — the `finalize` subcommand does all of this:
-std-oci-toolchain finalize <each-elf> \
-  --interpreter /lib/ld-std-oci-toolchain.so \
-  --cas-dir ./cas
+1. Resolves each `DT_NEEDED` soname via RUNPATH (the `$ORIGIN`-relative path).
+   An unresolvable `DT_NEEDED` is a **fatal error** — it indicates a broken assembly
+   and MUST NOT produce a manifest entry.
+2. BLAKE3-hashes each resolved library.
+3. Strips `DT_RUNPATH`/`DT_RPATH` (zeros d_val to point at strtab[0]='\0').
+4. Overwrites `PT_INTERP` in-place to `/lib/ld-std-oci-toolchain.so`.
+5. Appends a `PT_NOTE` segment with the content manifest (§12.3.1).
+6. Stages resolved libraries to `/cas/<blake3-hex>`.
 
-//  equivalent to (but atomic):
-//    resolve DT_NEEDED → paths
-//    blake3sum each resolved lib → digest
-//    strip RPATH (zero d_val)
-//    overwrite PT_INTERP
-//    inject PT_NOTE (§12.3.1 binary format)
-//    cp resolved libs → cas/<digest>
-```
+This is an **atomic** operation per binary — either all steps succeed or none do. The
+output is a finalized tree (`toolchain/`) plus a CAS directory (`cas/`).
 
 Receipts (empty / exit-0 ⇒ conformant):
 
 ```
 patchelf --print-rpath <each-elf>                          // → ""   (stripped)
 readelf -l <driver> | grep interpreter                     // → /lib/ld-std-oci-toolchain.so
-std-oci-toolchain dump-manifest <each-elf>                 // → every DT_NEEDED has a row
 grep -rIl /nix/store <toolchain>/                          // → empty (text refs too)
 bwrap --ro-bind <floor> / --ro-bind <toolchain> /toolchains/<name> \
       --ro-bind ./cas /cas \
       --tmpfs /tmp -- /toolchains/<name>/bin/<driver> --version   // → exit 0
 ```
-
-**Implementation:** `straylight-buck2-prelude/tools/std-oci-toolchain/` (C++23, linked
-against glibc — it is a build-time tool, not a deployment artifact).
 
 ## Appendix C. Materialization and the three projections (illustrating §10)
 
@@ -696,112 +793,42 @@ One logical content tree, three projections, all sharing identity by content:
 (materialized rootfs with the §9 floor; `docker run`, bwrap rootfs source, worker
 base). Overlay/copy/hardlink/symlink are materialization and never enter a digest.
 
-## Appendix D. Remote-execution interop — conformance gap (NativeLink) — CLOSED
+## Appendix D. Remote-execution interoperability notes
 
-> **Revision 3 (NativeLink track): this gap is now closed on the `Execute` path.**
-> The fix shipped on branch `pr/sha-256-silent-default-fix` at
-> `straylight/straylight-nativelink`. The OCI→CAS bridge (`FetchDirectory`) is a
-> separate consumer path and does not yet honor the request-declared function; see
-> the Consequence note below and §6.6.
+The two-projection model (sha256 at the OCI boundary, BLAKE3 at the RE boundary)
+requires that the REAPI execution server honor the declared digest function (§6.6,
+§14.16). Implementations that silently default an unset `digest_function` to SHA256
+produce corrupted `Directory` digests when the client expects BLAKE3.
 
-**The bug (now fixed):** A worker hashed child `Directory` nodes with the action's
-digest function, which arrived unset (protobuf default `0`) and **defaulted to
-SHA256 server-side** via `TryFrom<i32>` in `nativelink-util/src/digest_hasher.rs`.
-A BLAKE3 client then disagreed on child digests and directory outputs corrupted.
+A conforming RE server MUST reject `ExecuteRequest` with `digest_function = 0`
+(UNKNOWN), returning `INVALID_ARGUMENT` (§6.6). A global strict-mode configuration
+option that extends this rejection to all services (CAS, AC, ByteStream) is
+RECOMMENDED for new deployments.
 
-**The fix (three layers):**
+## Appendix E. Changelog
 
-1. **Execution server** (`nativelink-service/src/execution_server.rs`):
-   unconditionally rejects `ExecuteRequest.digest_function == 0` with
-   `INVALID_ARGUMENT`. This is the critical path — where Directory tree hashing
-   happens and where the mismatch manifests as corruption.
+A summary of substantive changes between released versions — not a normative diff.
+The spec body always states the current requirements; git carries the authoritative
+history.
 
-2. **Global strict mode** (`nativelink-config/src/cas_server.rs`):
-   `global.require_explicit_digest_function = true` makes ALL services reject
-   unset digest functions. Recommended for new deployments.
+**RC3** (2026-07-05)
 
-3. **Legacy warning** (`nativelink-util/src/digest_hasher.rs`): when strict mode is
-   off, the first unset `digest_function` emits a one-time `warn!` identifying the
-   risk and pointing operators to the config fix.
+- §12, §12.2, §14.9 — carve out the fully static (PIE) case: an object with no
+  `PT_INTERP` and empty `DT_NEEDED` trivially satisfies self-containedness (a strictly
+  stronger property than the manifest closure it would otherwise carry) and requires
+  no floor loader. §14.9 previously asserted `PT_INTERP == floor path` on _every_
+  executable, which a conforming sovereign static-PIE toolchain — the best-case
+  object — could never satisfy; the floor-loader requirement now applies to
+  dynamically-linked executables.
+- Folded the standalone amendments ledger into this changelog; the spec body now
+  reads as current state rather than a running diff.
 
-**Regression test:** `execute_rejects_unset_digest_function` in
-`nativelink-service/tests/execution_server_test.rs` asserts that the execution
-server returns `INVALID_ARGUMENT` for `digest_function = 0`, preventing regression.
+**RC2** (2026-07-02)
 
-**Consequence for this specification:** With E4 shipped (Appendix E), the `Execute`
-path is sound: sha256 stays at the OCI/registry boundary, BLAKE3 is the RE digest
-function, and the worker no longer silently substitutes one for the other. On this
-path matched-configuration discipline (E3) is retired — the declared function is
-honored or the request is refused. It is **not** retired for the OCI→CAS bridge
-(`FetchDirectory`), which still projects with a static per-instance digest function
-(§6.6) and so still depends on the operator matching `oci.digest_function` to the
-execution service.
-
-## Appendix E. Migration sequencing
-
-```
-//  E1  self-containedness (ELF interp/RPATH; §12)         gates EXEC    — ✅ DONE
-//  E2  identity over content, not inodes (§4.2, §10)      gates CACHE   — ✅ DONE
-//  E3  match the digest function end-to-end per projection discipline (§4.4)
-//        — retired by E4 on the Execute path;
-//          STILL REQUIRED for the OCI→CAS bridge (§6.6, fetch_server.rs:250,288)
-//  E4  RE consumer honors the declared function (§14.11)   the fix; retires E3 on Execute
-//        — ✅ DONE for Execute (execution_server.rs:336, pr/sha-256-silent-default-fix)
-//        — ✗ NOT YET for the FetchDirectory OCI bridge (uses static oci.digest_function)
-//  E5  container floor base layer (§9)                     gates "nice inside"  — ✅ DONE
-//
-//  ALL BLOCKING ITEMS FOR EXECUTION COMPLETE.
-//  sha256 floors the OCI projection; BLAKE3 lands at the REAPI Merkle projection;
-//  the logical content binds them; hints relate them.
-//
-//  Remaining work:
-//    OCI→CAS bridge to honor the request-declared digest function
-//      (§14.11; today it uses the static oci.digest_function — fetch_server.rs:250,288),
-//    zstd layer decompression (§5.1; oci_client.rs:356),
-//    manifest-list / multi-architecture tag support
-//      (§6.3; registry.rs:130-137,277 parse a single image manifest only),
-//    dlopen-closure tooling (§12.6), verify-manifest (§7.2),
-//    REAPI projection end-to-end test (Stage 5 in buck2-prelude).
-```
-
-## Appendix F. Implementation status (rev 3, NativeLink track)
-
-| Spec section | Component                                | Status                                | Location                                               |
-| ------------ | ---------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
-| §4.1         | Canonical tar serialization              | Implemented                           | `prelude/oci/oci_image.bzl` (crane)                    |
-| §5           | OCI distribution projection              | Implemented                           | `prelude/oci/oci_image.bzl`                            |
-| §6.1–6.4     | REAPI execution projection               | **Unblocked** (was blocked on App. D) | Pending end-to-end test                                |
-| §6.5         | Hints (annotations)                      | Implemented                           | `prelude/oci/oci_image.bzl` annotations                |
-| §6.6         | REAPI unblock — `Execute` path           | **Shipped**                           | `execution_server.rs:336` (`straylight/straylight-nativelink@pr/sha-256-silent-default-fix`) |
-| §5–§6        | OCI→CAS bridge (`FetchDirectory`)         | Implemented (gzip; BLAKE3/SHA256)     | `nativelink-oci/`, `nativelink-service/src/fetch_server.rs` |
-| §5.1         | zstd layer decompression                 | **Not implemented** (gzip only)       | `nativelink-oci/src/oci_client.rs:356`                 |
-| §6.3         | manifest-list tags (several architectures) | **Not supported** (single manifest) | `nativelink-oci/src/registry.rs:130-137,277`           |
-| §8           | Toolchain layout (FHS)                   | Implemented                           | `prelude/nix/toolchain_assemble.bzl`                   |
-| §9           | Container floor                          | Implemented                           | `prelude/oci/container_floor.bzl`                      |
-| §10          | Identity ≠ materialization               | Implemented                           | Design invariant (no inode refs in identity)           |
-| §11          | No input-addressing                      | Implemented                           | `grep -rIl /nix/store` receipt passes                  |
-| §12.1        | Strip RPATH/RUNPATH                      | Implemented                           | `std-oci-toolchain finalize`                           |
-| §12.2        | Floor loader (`ld-std-oci-toolchain`)    | **Fully implemented**                 | `tools/ld-std-oci-toolchain/` (C++23, musl static-pie) |
-| §12.3        | PT_NOTE content manifest                 | **Fully implemented**                 | `tools/std-oci-toolchain/` (emit, dump, finalize)      |
-| §12.3.1      | Binary wire format                       | **Fully implemented**                 | `tools/ld-std-oci-toolchain/note_parse.h`              |
-| §12.4        | CAS-only resolution                      | **Fully implemented**                 | Floor loader resolves from `/cas/<blake3>`             |
-| §12.5        | No ambient authority                     | **Fully implemented**                 | No `LD_*` code paths in loader                         |
-| §12.6        | dlopen-closure                           | **Specified only**                    | Not yet tooled                                         |
-| §12.7        | No factory paths                         | Implemented                           | Finalize strips; receipt verifies                      |
-| §13          | Single-sysroot contract                  | Implemented                           | `prelude/nix/toolchain_rules.bzl`                      |
-| §14.11       | Consumer honors declared digest          | **Partial**                           | `Execute` rejects unset (`execution_server.rs:336`); OCI `FetchDirectory` uses static `oci.digest_function` (`fetch_server.rs:250`,`288`) |
-| —            | Property tests (ELF manifest)            | 12 properties                         | `tools/std-oci-toolchain/tests/`                       |
-| —            | Property tests (finalize, libelf oracle) | 8 invariants                          | `tools/std-oci-toolchain/tests/`                       |
-| —            | Floor loader unit tests                  | 7 tests                               | `tools/ld-std-oci-toolchain/tests/`                    |
-| —            | Sandboxed execution (bwrap)              | Stage 6 + Stage 7                     | `prelude/oci/sandboxed_toolchain.bzl`                  |
-| —            | Test matrix (clang 19/21, glibc/musl)    | Full                                  | `tests/toolchains/BUCK`                                |
-
-**Unimplemented (tracked):**
-
-- OCI→CAS bridge does not honor the request-declared digest function (§14.11) — it projects with the static per-instance `oci.digest_function` and drops the request field (`nativelink-service/src/fetch_server.rs:250`,`288`); the operator must match `oci.digest_function` to the execution service (`nativelink-config/src/cas_server.rs:203`)
-- zstd layer decompression (§5.1) — `decompress_zstd` returns `zstd decompression not yet implemented` (`nativelink-oci/src/oci_client.rs:356`); images for NativeLink import must ship gzip or uncompressed layers
-- manifest-list tags (§6.3) — the client parses a single image manifest only (`OciManifest.config`/`layers` are non-optional and the `Accept` header omits the index/list media types; `nativelink-oci/src/registry.rs:130-137,277`); a tag that resolves to an image index fails to deserialize — pull a single-image digest instead
-- private-registry authentication — a Docker Hub anonymous pull token is issued for `registry-1.docker.io`; every other registry is contacted anonymously and there is no credential field on `OciFetchConfig` (`nativelink-oci/src/registry.rs:224-237`)
-- `std-oci-toolchain verify-manifest` (§7.2 consumer verification) — declared, returns "not yet implemented"
-- dlopen-closure recording and `--check-closure` (§12.6) — needs `strace`/static analysis tooling
-- REAPI projection end-to-end test (NativeLink BLAKE3 worker → client verifies Directory digests)
+- §12.3.1 note format reconciled against the _shipped_ floor loader (the oracle),
+  not the drifted source header. `n_namesz = 19` (not 20 — the name field is padded to
+  20 bytes for 4-byte alignment, but the length is 19; a note written with `namesz=20`
+  is silently skipped). The descriptor header is 8 bytes:
+  `version:u8, digest_fn:u8, num_entries:u16, digest_len:u16, _reserved:u16`. Verified
+  by disassembling the shipped loader, byte-diffing the C++ and Python finalizers, and
+  running a Python-finalized binary through the real loader to `exit 0`.

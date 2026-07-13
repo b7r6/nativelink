@@ -71,14 +71,14 @@ The OCI manifest digest (sha256) identifies the toolchain for distribution. The 
 
 ### How does the BLAKE3 fix relate?
 
-The REAPI execution projection requires BLAKE3. NativeLink previously defaulted unset `digest_function` to SHA256, making BLAKE3 clients get corrupted Directory digests. We fixed this on the `Execute` path (Appendix D of the spec, `straylight/straylight-nativelink@pr/sha-256-silent-default-fix`; `nativelink-service/src/execution_server.rs:336`): a request that leaves `digest_function` unset (the UNKNOWN default) is now rejected rather than silently defaulted.
+The REAPI execution projection requires BLAKE3. NativeLink previously defaulted unset `digest_function` to SHA256, making BLAKE3 clients get corrupted Directory digests. We fixed this on the `Execute` path (`straylight/straylight-nativelink@pr/sha-256-silent-default-fix`; `nativelink-service/src/execution_server.rs:336`): a request that leaves `digest_function` unset (the UNKNOWN default) is now rejected rather than silently defaulted. This is the behavior §6.6 requires and the interoperability notes in Appendix D describe.
 
 With the fix shipped, the two-projection model works end-to-end:
 - sha256 at the OCI/registry boundary (everyone already speaks it)
 - BLAKE3 at the REAPI/execution boundary (faster, NativeLink-native)
 - On the `Execute` path the worker uses the client-declared function or refuses the request — it never silently substitutes one for the other
 
-One caveat: the OCI→CAS bridge (`FetchDirectory("oci://…")`) is a *different* consumer path, and it does **not** yet read the request's declared function. It projects with a static per-instance setting (`oci.digest_function`, default BLAKE3; `nativelink-service/src/fetch_server.rs:288`) and drops the request field (`fetch_server.rs:250`). The operator must set `oci.digest_function` to match the execution service (see [Known limitations](#known-limitations)). Spec §14.11 (honor the declared function) is therefore satisfied on `Execute` but not yet on the OCI `FetchDirectory` path.
+One caveat: the OCI→CAS bridge (`FetchDirectory("oci://…")`) is a *different* consumer path, and it does **not** read the request's declared function. It projects with a static per-instance setting (`oci.digest_function`, default BLAKE3; `nativelink-service/src/fetch_server.rs:288`) and drops the request field, whose handler parameter is named `_digest_function_proto` (`fetch_server.rs:250`). The operator must set `oci.digest_function` to match the execution service (see [Known limitations](#known-limitations)). Spec §14.16 (honor the declared function, never assume a default) is therefore satisfied on `Execute` but not on the OCI `FetchDirectory` path.
 
 ## The Integration Agenda
 
@@ -112,15 +112,15 @@ The bridge is real and exercised, but it is deliberately narrow. What it does *n
 - **No private-registry credentials.** Authentication is a Docker Hub anonymous pull token for `registry-1.docker.io`; every other registry is contacted anonymously (`nativelink-oci/src/registry.rs:224-237`). There is no credential field on `OciFetchConfig`, so private repositories on other registries cannot be pulled.
 - **gzip layers only.** `+gzip` (and uncompressed) layers import; a `+zstd` layer is rejected with `zstd decompression not yet implemented` (`nativelink-oci/src/oci_client.rs:356`). The spec permits zstd transport compression (§5.1), so this is a consumer gap, not a spec change.
 - **No manifest-list tags.** The client parses a single image manifest only: `OciManifest.config` and `layers` are non-optional and the `Accept` header omits the index/list media types (`nativelink-oci/src/registry.rs:130-137,277`). A tag whose reference resolves to an image index — a manifest list, i.e. an image built for several architectures — fails to deserialize. Pull a single-image digest instead.
-- **Request digest function ignored on the OCI path.** The projection uses the static `oci.digest_function` (default BLAKE3), not the request's declared function (`nativelink-service/src/fetch_server.rs:250`,`288`). The operator must set `oci.digest_function` to match the execution service — the field is documented as "Must match what the execution service expects" (`nativelink-config/src/cas_server.rs:203`). This is exactly the matched-configuration discipline the spec calls "retired" for `Execute`; it is not retired for the OCI bridge (spec §6.6, Appendix E, item E3).
+- **Request digest function ignored on the OCI path.** The projection uses the static `oci.digest_function` (default BLAKE3), not the request's declared function (`nativelink-service/src/fetch_server.rs:250`,`288`). The operator must set `oci.digest_function` to match the execution service — the field is documented as "Must match what the execution service expects" (`nativelink-config/src/cas_server.rs:203`). On `Execute` the server honors the declared function outright (§6.6); the OCI bridge instead relies on this matched-configuration discipline, so it is a conforming-consumer gap against §14.16 rather than an outright violation — the digests it produces are correct whenever the operator's config agrees with the caller.
 - **Whole-image buffering.** A layer blob is read fully into memory (`registry.rs:349`) and the projected tree is held resident as a map of file content (`projection.rs:102`) before upload. Import is not streaming; a very large toolchain image is bounded by available memory.
 
 ### Out of Scope (for NativeLink)
 
-- Building toolchains (that's Nix + Buck2 in `straylight-buck2-prelude`)
-- Assembling toolchains (that's `std-oci-toolchain finalize`)
-- The floor loader itself (that's `ld-std-oci-toolchain`, deployed in the container)
-- OCI image construction (that's crane/skopeo in Buck2 rules)
+- Building toolchains (that's Nix; the reference implementation is `straylight-toolchain`, a static-musl LLVM sysroot builder)
+- Assembling toolchains (that's the C++ `std-oci-toolchain finalize` tool in `straylight-buck2-prelude`)
+- The floor loader itself (`ld-std-oci-toolchain`; needed only by a *dynamically-linked* toolchain, §12)
+- OCI image construction (crane/skopeo in Buck2 rules)
 
 NativeLink's role is: store the content, serve the content, hash it correctly, and never lie about the digest function. The spec ensures that content is well-formed. Together they make toolchain management a solved problem rather than a perpetual source of cache misses.
 
@@ -129,8 +129,8 @@ NativeLink's role is: store the content, serve the content, hash it correctly, a
 The full specification is [Appendix F: Standard OCI Toolchain Specification](../appendix/standard-oci-toolchain-spec.md). Key sections for NativeLink operators:
 
 - **§6** — REAPI correspondence (how OCI verbs map to REAPI verbs)
-- **§6.6** — REAPI unblock status (the digest function fix)
+- **§6.6** — Conforming RE server behavior (the digest function fix)
 - **§9** — Container floor (what `docker run` gets you)
-- **§14.11** — Conforming consumer requirements (what NativeLink must do)
-- **Appendix D** — The conformance gap we closed
+- **§14.16** — Conforming consumer requirement: honor the declared digest function, never assume a default (what NativeLink must do)
+- **Appendix D** — Remote-execution interoperability notes
 - **Appendix F** — Implementation status matrix

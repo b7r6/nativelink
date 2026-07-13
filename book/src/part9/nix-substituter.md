@@ -27,7 +27,7 @@ This is the mirror image of the [OCI → CAS Bridge](./oci-cas-bridge.md). The O
 
 ## The Data Model
 
-**Each NAR is an uncompressed CAS blob.** Every NAR is stored in its canonical uncompressed form under `DigestInfo(sha256(nar), nar_size)` — the same identity the `NarHash`/`NarSize` fields advertise. Uploads arrive compressed (default `nix copy` behavior) or raw; the service decompresses to the canonical form before storing (`nar_url::codec_for_name` maps `.nar`, `.nar.xz`, `.nar.zst`, `.nar.bz2`; bare `.nar` bodies get sniffed for the gzip magic bytes). Because the key is content-derived, the NAR store sits behind `verify{}` with both size and hash checks: a corrupt or truncated upload is rejected at write time instead of served to clients.
+**Each NAR is an uncompressed CAS blob.** Every NAR is stored in its canonical uncompressed form under `DigestInfo(sha256(nar), nar_size)` — the same identity the `NarHash`/`NarSize` fields advertise. Uploads arrive compressed (default `nix copy` behavior) or raw; the service decompresses to the canonical form before storing (`nar_url::codec_for_name` maps `.nar`, `.nar.xz`, `.nar.zst`, `.nar.bz2`; bare `.nar` bodies get sniffed for the gzip magic bytes). Because the key is content-derived, integrity is enforced *inside the service*, not delegated to the store: the ingest path hashes every byte and, on the fast direct route, `ingest_nar_direct` withholds EOF from the CAS write the moment `sha256(body)` diverges from the named digest — dropping the writer aborts the write, so wrong bytes never commit under the claimed digest even on a plain store. The spooled route keys the blob on the digest it computed while decompressing, and a bare `{hash}.nar` name is additionally cross-checked so its 52-char stem must equal `sha256(content)`. Wrapping `cas_store` in a `verify{}` store (both `verify_size` and `verify_hash`) is therefore defense-in-depth, not the guarantee — the examples still recommend it, and every example config does so.
 
 **Path-info records are `ActionResult` envelopes.** The metadata for one store path — everything a `.narinfo` needs except the URL and compression — is a `NixPathInfo` message (`nativelink-nix/src/path_info.rs`) carried inside a standard REv2 `ActionResult`:
 
@@ -103,11 +103,19 @@ services: {
     read_token_files: [],               // each file holds ONE token; Bearer or netrc password
     write_token_files: [],              // PUTs additionally need one of these
     preserve_upload_compression: true,  // serve pushed compression back verbatim (default)
-    serve_compression: "zstd",          // omit (or "none") to serve uncompressed NARs
-    compression_level: 3,               // zstd level used at ingest
+    serve_compression: "zstd",          // omit (or "none", the default) to serve uncompressed NARs
+    compression_level: 3,               // zstd level (1..=22), applied at ingest; default 3
+    // Hardening limits, all optional; defaults shown. Generous by design.
+    max_nar_size_bytes: 34359738368,    // 32 GiB decompressed-NAR cap (decompression-bomb guard)
+    max_concurrent_nar_streams: 256,    // NAR GETs streamed at once; over this → retryable 503
+    max_concurrent_transcodes: 8,       // concurrent zstd transcodes (must be >= 1)
+    nar_upload_idle_timeout_s: 60,      // abort a NAR upload stalled this long with 408
+    // spool_path: "/var/lib/nativelink/nix-spool",  // default: <tmp>/nativelink-nix-spool/<instance>
   }],
 }
 ```
+
+The hardening limits keep an untrusted or misbehaving client from turning an upload into a denial of service. `max_nar_size_bytes` caps the *decompressed* size of a single NAR: a declared size over the cap (a canonical name's embedded size, or the `Content-Length` of a direct upload) is refused with `413` before any body is read, and a compressed stream that expands past it — a decompression bomb — is aborted mid-flight with the partial spool file deleted. `max_concurrent_nar_streams` bounds the NAR GET response bodies streamed at once, each holding a producer task and a permit released only when its body is fully drained or the client disconnects; a request over the ceiling gets a retryable `503` rather than a committed `200` and unbounded buffering. `max_concurrent_transcodes` bounds how many concurrent runs of the zstd transcoder re-encode a NAR at once (both ceilings are coerced up to 1 at startup, and `--check` rejects a configured 0). `nar_upload_idle_timeout_s` aborts an upload with `408` once its body stalls past the window — the timer resets on every received chunk, so a slow-but-steady push survives — releasing the spool file and descriptor. `spool_path` is the staging directory where compressed uploads are stream-decompressed before landing in `cas_store`; it is created if missing and, at startup, pruned of *only* the files this instance wrote (a fixed `nativelink-nix-spool-` prefix with a `.nar` extension), so pointing it at a shared directory can never delete unrelated data.
 
 Store composition has sharp edges here because two of the three stores are string-keyed. [Store Composition](../part3/store-composition.md) covers the wrapper stack in general; these are the edges specific to `nix_cache`:
 
@@ -235,7 +243,7 @@ On a single machine this collapses to one process on one port — the [Single No
 
 ## Validating Configuration
 
-`nativelink --check <config>` parses a configuration and resolves every store and scheduler reference — catching a mistyped `cas_store` or `scheduler` name that would otherwise only fail at boot — then exits without binding a socket, connecting to a backend, or creating any store directory. It prints a one-line summary on success and names each unresolved reference on failure, with an exit code a continuous-integration gate can read.
+`nativelink <config> --check` parses a configuration and resolves every store and scheduler reference — catching a mistyped `cas_store` or `scheduler` name that would otherwise only fail at boot — then exits without binding a socket, connecting to a backend, or creating any store directory. Beyond reference resolution it also validates the `nix_cache` field invariants that would otherwise surface only at service boot: the `trusted_public_keys` of every upstream must be non-empty (read-through refuses to cache an unverifiable narinfo, so a keyless upstream could never contribute), a `compression_level` set alongside `serve_compression: "zstd"` must be in zstd's `1..=22` range, and `max_concurrent_nar_streams`/`max_concurrent_transcodes` must each be at least 1. On success it prints a one-line summary to standard output — `OK: <config> — N stores, N schedulers, N servers, all references resolve` — and on failure prints `FAIL: <config> — configuration is invalid` to `stderr` followed by one line per problem, exiting non-zero so a continuous-integration gate can read the result.
 
 ## Code Map
 

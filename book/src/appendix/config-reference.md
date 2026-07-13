@@ -209,23 +209,68 @@ nix_cache: [{
   spool_path: "/var/spool/nativelink-nix",// staging dir for decompressing NAR uploads.
                                           //   Default: <system temp>/nativelink-nix-spool/<instance_name>
   read_only: false,                       // if true, PUT returns 405. Default: false
-  read_token_files: [],                   // one token per file; non-empty makes reads require a token. Default: []
-  write_token_files: [],                  // one token per file; non-empty makes PUT require a write token. Default: []
+  read_token_files: [],                   // one token per file; non-empty makes reads require a read OR write token. Default: []
+  write_token_files: [],                  // one token per file. Once ANY token is configured, a PUT requires a WRITE
+                                          //   token — a read token alone cannot write (fail closed). Default: []
 
   // Serving compression.
   serve_compression: "zstd",              // unset/"none" serves uncompressed; "zstd" transcodes. Default: unset
-  compression_level: 3,                   // zstd level when serve_compression is "zstd". Default: 3
+  compression_level: 3,                   // zstd level 1..=22 when serve_compression is "zstd"; `nativelink --check`
+                                          //   rejects out-of-range values. Default: 3
   preserve_upload_compression: true,      // store + serve a compressed upload's original bytes verbatim. Default: true
 
   // Hardening (defaults are deliberately generous).
   max_nar_size_bytes: "32gb",             // reject NARs over this size. Default: 34359738368 (32 GiB)
-  max_concurrent_nar_streams: 256,        // concurrent NAR GET bodies; over-limit gets 503. Default: 256
-  max_concurrent_transcodes: 8,           // concurrent zstd transcodes. Default: 8
-  nar_upload_idle_timeout_s: 60           // abort an idle upload with 408 after this many seconds. Default: 60
+  max_concurrent_nar_streams: 256,        // concurrent NAR GET bodies (must be >= 1); over-limit gets 503. Default: 256
+  max_concurrent_transcodes: 8,           // concurrent zstd transcodes (must be >= 1). Default: 8
+  nar_upload_idle_timeout_s: 60,          // abort an idle upload with 408 after this many seconds. Default: 60
+
+  // Read-through (optional): on a local miss, fetch + verify + cache a path from
+  // an upstream binary cache. Omit `upstream_caches` to disable. Full example in
+  // nativelink-config/examples/nix_cache_readthrough.json5.
+  upstream_caches: [{
+    url: "https://cache.nixos.org",       // upstream binary-cache base URL.
+    trusted_public_keys: [                // MUST be non-empty: a fetched narinfo is cached only when it carries
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="  // a valid signature from one of these keys.
+    ]
+  }],
+  upstream_negative_ttl_s: 60,            // remember a proven-absent path this long; transient upstream failures
+                                          //   (5xx/timeout/NAR mismatch) are NOT negative-cached. Default: 60
+  upstream_timeout_s: 30                  // per-upstream narinfo-probe timeout, seconds. Default: 30
 }]
 ```
 
-Only `cas_store`, `path_info_store` and `alias_store` are required; every other field defaults as noted. `cas_store` may reuse the same content-addressed store as the gRPC CAS, but `path_info_store` and `alias_store` are string-keyed and must be separate stores. See `nativelink-config/examples/basic_cas_with_nix.json5` for a combined deployment.
+Only `cas_store`, `path_info_store` and `alias_store` are required; every other field defaults as noted. Read-through (`upstream_caches`) is optional — omit it for a purely local cache. `cas_store` may reuse the same content-addressed store as the gRPC CAS, but `path_info_store` and `alias_store` are string-keyed and must be separate stores. See `nativelink-config/examples/basic_cas_with_nix.json5` for a combined deployment and `nix_cache_readthrough.json5` for read-through.
+
+### CasWitnessConfig (`cas_witness`)
+
+`CasWitnessConfig` (`cas_server.rs:604`) is a fork addition and a `services.cas_witness` entry. It runs a TLS-intercepting, caching **forward proxy** for the raw network fetches a build makes (`fetchurl` tarballs, release archives) — the bytes a fixed-output derivation downloads before any store path exists. Unlike the gRPC services and `nix_cache`, it speaks the `CONNECT` proxy protocol and so **owns its entire listener**: put it on a listener of its own, with no other services. See [The CAS Witness](../part9/cas-witness.md).
+
+```json5
+cas_witness: {
+  // Required stores.
+  cas_store: "FETCH_CAS",                 // fetched bodies, keyed by DigestInfo(sha256(body), size). Any CAS
+                                          //   works and may be shared with the gRPC CAS; `verify` recommended.
+  alias_store: "FETCH_ALIAS",             // string-keyed map: fetched URL -> (digest, size, content-type).
+                                          //   A separate string-keyed store (do NOT wrap in verify).
+
+  // TLS-intercepting CA (both files generated together if either is missing).
+  ca_cert_file: "/var/lib/nativelink/cas-witness/ca.crt", // clients must trust this (nix: NIX_SSL_CERT_FILE).
+  ca_key_file: "/var/lib/nativelink/cas-witness/ca.key",  // can impersonate any host — keep private (0600).
+
+  // Witnessing (optional): sign a DSSE/in-toto attestation for every cached fetch.
+  witness_key_file: "/var/lib/nativelink/cas-witness/witness.key", // ed25519 32-byte seed, base64; generated if
+                                          //   absent. When set, each cached fetch gets a signed attestation in the
+                                          //   CAS plus X-Straylight-Witness{,-Receipt} response headers.
+                                          //   Unset = plain caching proxy. Default: unset
+
+  // Limits.
+  max_fetch_size_bytes: "2gb",            // bodies over this stream through to the client but are NOT cached. Default: 2 GiB
+  fetch_timeout_s: 300                    // origin fetch timeout on a miss, seconds. Default: 300
+}
+```
+
+`cas_store`, `alias_store`, `ca_cert_file` and `ca_key_file` are required; `witness_key_file` is optional (omit to disable attestations). The proxy is trusted only for **availability**, never integrity — Nix verifies every fixed-output derivation against its declared hash regardless of what the proxy serves. `nativelink-config/examples/cas_witness.json5` is a full runnable example.
 
 ## WorkerConfig
 

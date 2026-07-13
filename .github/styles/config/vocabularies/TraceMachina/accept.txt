@@ -385,3 +385,13 @@ typechecks
 untrusted
 URIs
 workdir
+cgo
+clib
+cxxlib
+discoverability
+dylibs
+finalizers
+preimage
+serializers
+sonames
+stdlib

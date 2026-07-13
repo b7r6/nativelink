@@ -120,7 +120,7 @@ async fn instance_name_fail() -> Result<(), Box<dyn core::error::Error>> {
 /// rejected with `INVALID_ARGUMENT` rather than silently defaulting to SHA256.
 /// A silent default causes BLAKE3 clients to receive SHA256-hashed Directory
 /// digests in `ActionResults`, corrupting output trees.
-/// See: Standard OCI Toolchain Specification §4.4, §14.11
+/// See: Standard OCI Toolchain Specification §4.4, §14.16
 #[nativelink_test]
 async fn execute_rejects_unset_digest_function() -> Result<(), Box<dyn core::error::Error>> {
     let store_manager = make_store_manager().await?;
