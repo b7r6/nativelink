@@ -580,6 +580,17 @@
                   cargoExtraArgs = "--locked -p nativelink-nix -p nativelink-service";
                 }
               );
+            # Validate every example config with `nativelink --check`.
+            # Purely offline (no sockets, no I/O), so it works in a sandbox.
+            check-example-configs =
+              pkgs.runCommand "check-example-configs" {
+                nativeBuildInputs = [nativelink];
+              } ''
+                for f in ${./nativelink-config/examples}/*.json5; do
+                  nativelink --check "$f" || exit 1
+                done
+                touch $out
+              '';
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             # End-to-end round trip: a real `nix` client against a running

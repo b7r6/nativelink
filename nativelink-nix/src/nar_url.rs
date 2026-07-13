@@ -491,3 +491,130 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+
+    use super::{
+        NarCodec, canonical_nar_name, canonical_nar_zst_name, format_alias, parse_alias,
+        parse_canonical_any, parse_canonical_nar_name,
+    };
+    use crate::nixbase32;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 4096,
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::Off,
+            )),
+            ..ProptestConfig::default()
+        })]
+
+        /// Round-trip: a canonical `.nar` name parses back to its exact
+        /// `(hash, size)`.
+        #[test]
+        fn canonical_nar_name_round_trips(hash in any::<[u8; 32]>(), size in any::<u64>()) {
+            let name = canonical_nar_name(&hash, size);
+            prop_assert_eq!(parse_canonical_nar_name(&name), Some((hash, size)));
+            prop_assert_eq!(
+                parse_canonical_any(&name),
+                Some((hash, size, NarCodec::None))
+            );
+        }
+
+        /// Round-trip: a canonical `.nar.zst` name parses back via
+        /// `parse_canonical_any` and is NOT an uncompressed `.nar` name.
+        #[test]
+        fn canonical_nar_zst_name_round_trips(hash in any::<[u8; 32]>(), size in any::<u64>()) {
+            let name = canonical_nar_zst_name(&hash, size);
+            prop_assert_eq!(
+                parse_canonical_any(&name),
+                Some((hash, size, NarCodec::Zstd))
+            );
+            prop_assert_eq!(parse_canonical_nar_name(&name), None);
+        }
+
+        /// Round-trip: a formatted alias parses back to its `(hash, size)`.
+        #[test]
+        fn alias_round_trips(hash in any::<[u8; 32]>(), size in any::<u64>()) {
+            let alias = format_alias(&hash, size);
+            let (parsed_hash, parsed_size) = parse_alias(&alias).expect("round-trip parse");
+            prop_assert_eq!(parsed_hash, hash);
+            prop_assert_eq!(parsed_size, size);
+        }
+
+        /// Parse never panics on arbitrary strings (all four parsers).
+        #[test]
+        fn parsers_never_panic_on_arbitrary_string(s in ".*") {
+            let _a = parse_canonical_nar_name(&s);
+            let _b = parse_canonical_any(&s);
+            let _c = parse_alias(&s);
+        }
+
+        /// Parse never panics on arbitrary bytes viewed as a lossy string.
+        #[test]
+        fn parsers_never_panic_on_lossy_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..=96)) {
+            let s = String::from_utf8_lossy(&bytes);
+            let _a = parse_canonical_nar_name(&s);
+            let _b = parse_canonical_any(&s);
+            let _c = parse_alias(&s);
+        }
+
+        /// Canonicality: any string `parse_canonical_nar_name` accepts
+        /// re-renders to the identical string.
+        #[test]
+        fn accepted_nar_names_re_render_identically(s in ".*") {
+            if let Some((hash, size)) = parse_canonical_nar_name(&s) {
+                prop_assert_eq!(canonical_nar_name(&hash, size), s);
+            }
+        }
+
+        /// Canonicality: any string `parse_canonical_any` accepts
+        /// re-renders (per codec) to the identical string.
+        #[test]
+        fn accepted_any_names_re_render_identically(s in ".*") {
+            if let Some((hash, size, codec)) = parse_canonical_any(&s) {
+                let rendered = match codec {
+                    NarCodec::None => canonical_nar_name(&hash, size),
+                    NarCodec::Zstd => canonical_nar_zst_name(&hash, size),
+                    other => panic!("parse_canonical_any yielded unexpected codec {other:?}"),
+                };
+                prop_assert_eq!(rendered, s);
+            }
+        }
+
+        /// Canonicality: any alias `parse_alias` accepts re-renders to the
+        /// identical string.
+        #[test]
+        fn accepted_aliases_re_render_identically(s in ".*") {
+            if let Ok((hash, size)) = parse_alias(&s) {
+                prop_assert_eq!(format_alias(&hash, size), s);
+            }
+        }
+
+        /// A structured generator that hits the canonical grammar far more
+        /// often than `.*`: a genuinely valid 52-char nix32 hash (obtained
+        /// by encoding 32 random bytes), `-`, a decimal that may carry
+        /// leading zeros or overflow, and a varied suffix. This exercises
+        /// the re-render property on genuinely-accepted inputs and on the
+        /// near-misses (leading-zero size, overflow, wrong extension).
+        #[test]
+        fn structured_nar_names_re_render_when_accepted(
+            hash_bytes in any::<[u8; 32]>(),
+            size_str in "0?[0-9]{1,21}",
+            ext in prop::sample::select(vec![".nar", ".nar.zst", ".nar.xz", ""]),
+        ) {
+            let hash = nixbase32::encode(&hash_bytes);
+            let name = format!("{hash}-{size_str}{ext}");
+            if let Some((h, sz, codec)) = parse_canonical_any(&name) {
+                let rendered = match codec {
+                    NarCodec::None => canonical_nar_name(&h, sz),
+                    NarCodec::Zstd => canonical_nar_zst_name(&h, sz),
+                    other => panic!("unexpected codec {other:?}"),
+                };
+                prop_assert_eq!(rendered, name);
+            }
+        }
+    }
+}

@@ -373,6 +373,11 @@ pub struct NixCacheConfig {
     /// treats a `401` on a `narinfo` fetch as a clean miss, so a private
     /// cache stays hidden from unauthenticated clients.
     ///
+    /// SECURITY: the token is a Bearer/HTTP-Basic credential and travels
+    /// in the clear over a plaintext HTTP listener. Only enable this on a
+    /// listener that terminates TLS, or behind a TLS-terminating reverse
+    /// proxy; otherwise the token is trivially sniffable on the wire.
+    ///
     /// Default: [] (anonymous reads)
     #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
     pub read_token_files: Vec<String>,
@@ -382,6 +387,11 @@ pub struct NixCacheConfig {
     /// additionally requires a valid write token — a read token alone is
     /// not enough. `read_only` still wins over a valid write token:
     /// uploads then get `405`.
+    ///
+    /// SECURITY: like `read_token_files`, this token is transmitted as a
+    /// Bearer/HTTP-Basic credential and is sent in cleartext over a
+    /// plaintext HTTP listener. Only expose it over TLS (or behind a
+    /// TLS-terminating proxy).
     ///
     /// Default: [] (writes gated only by `read_only`)
     #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
@@ -403,9 +413,13 @@ pub struct NixCacheConfig {
     pub serve_compression: Option<String>,
 
     /// The zstd compression level used when `serve_compression` is
-    /// `"zstd"`; ignored otherwise.
+    /// `"zstd"`; ignored otherwise. Must be in zstd's valid range,
+    /// `1..=22`, when set — `nativelink --check` rejects an out-of-range
+    /// value rather than letting the encoder silently clamp it at serve
+    /// time.
     ///
-    /// Default: 3
+    /// There is no serde default: when unset, the service applies zstd
+    /// level 3 at serve time.
     #[serde(
         default,
         deserialize_with = "convert_optional_numeric_with_shellexpand"
@@ -582,12 +596,12 @@ fn default_nix_store_dir() -> String {
     "/nix/store".to_string()
 }
 
-/// Configuration for the caching HTTP forward proxy
-/// (see [`ServicesConfig::http_cache_proxy`]).
+/// Configuration for the CAS witness (caching HTTP forward proxy)
+/// (see [`ServicesConfig::cas_witness`]).
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
-pub struct HttpCacheProxyConfig {
+pub struct CasWitnessConfig {
     /// Store name for fetched bodies. Digest-keyed: every body is stored
     /// under `DigestInfo(sha256(body), size)`, so any content-addressed CAS
     /// works and may be shared with the gRPC CAS and the `nix_cache` NAR
@@ -614,6 +628,18 @@ pub struct HttpCacheProxyConfig {
     /// `0600` when generated). Generated with `ca_cert_file` if missing.
     #[serde(deserialize_with = "convert_string_with_shellexpand")]
     pub ca_key_file: String,
+
+    /// Path to the witness signing key (ed25519, raw 32-byte seed in
+    /// base64). When set, the proxy emits a DSSE/in-toto attestation for
+    /// every cached fetch, stored in the CAS and referenced by two
+    /// response headers: `X-Straylight-Witness` (BLAKE3 key of the
+    /// attestation in the CAS) and `X-Straylight-Witness-Receipt` (a
+    /// compact signed binding that identifies the attestation as
+    /// belonging to this transaction). Generated if the file does not
+    /// exist. When unset, witnessing is disabled and the proxy behaves
+    /// as a plain caching proxy.
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub witness_key_file: Option<String>,
 
     /// Maximum size in bytes of a single response body the proxy will cache.
     /// A larger response is streamed through to the client but not stored.
@@ -895,14 +921,14 @@ pub struct ServicesConfig {
     )]
     pub nix_cache: Option<Vec<WithInstanceName<NixCacheConfig>>>,
 
-    /// Caching HTTP forward proxy (TLS-intercepting) that stores fetched
-    /// bodies in a `NativeLink` CAS. A build client points `HTTPS_PROXY`/
+    /// CAS witness (caching HTTP forward proxy, TLS-intercepting) that stores
+    /// fetched bodies in a `NativeLink` CAS. A build client points `HTTPS_PROXY`/
     /// `HTTP_PROXY` at this listener and trusts its generated CA (nix reads
     /// it via `NIX_SSL_CERT_FILE`); the first fetch of a URL is streamed
     /// from the origin into the CAS and every later fetch is served from it.
     /// This listener speaks the HTTP proxy protocol (`CONNECT`), so it must
     /// not share a port with other services.
-    pub http_cache_proxy: Option<HttpCacheProxyConfig>,
+    pub cas_witness: Option<CasWitnessConfig>,
 
     /// This is the service used for workers to connect and communicate
     /// through.
@@ -1596,11 +1622,18 @@ impl CasConfig {
     /// because [`crate::stores`] / the store manager resolve names last-wins
     /// and would otherwise silently drop the earlier definition.
     ///
+    /// In addition to reference resolution, a small set of `nix_cache`
+    /// field-value invariants that would otherwise only surface at service
+    /// boot (empty upstream `trusted_public_keys`, out-of-range zstd
+    /// `compression_level`, zero `max_concurrent_*`) are checked here; see
+    /// [`validate_nix_cache_fields`].
+    ///
     /// # Errors
     ///
     /// Returns `Err(Code::InvalidArgument)` if any referenced store/scheduler
-    /// name is undeclared, or if a store/scheduler name is declared more than
-    /// once.
+    /// name is undeclared, if a store/scheduler name is declared more than
+    /// once, or if a `nix_cache` instance violates one of the field-value
+    /// invariants above.
     pub fn validate_references(&self) -> Result<(), Error> {
         let mut problems: Vec<String> = Vec::new();
 
@@ -1739,6 +1772,16 @@ impl CasConfig {
                     &format!("{prefix}.nix_cache[{name}].alias_store"),
                     &entry.alias_store,
                 );
+                // Field-value validation for a nix_cache instance. These are
+                // NOT reference checks, but they belong on the same offline
+                // `nativelink --check` path so an operator learns about a
+                // config that would fail (or be silently coerced) at service
+                // boot without binding a socket.
+                validate_nix_cache_fields(
+                    &format!("{prefix}.nix_cache[{name}]"),
+                    &entry.config,
+                    &mut checker.problems,
+                );
             }
             if let Some(worker_api) = &services.worker_api {
                 checker.scheduler(
@@ -1748,6 +1791,16 @@ impl CasConfig {
             }
             if let Some(bep) = &services.experimental_bep {
                 checker.store(&format!("{prefix}.experimental_bep.store"), &bep.store);
+            }
+            if let Some(cas_witness) = &services.cas_witness {
+                checker.store(
+                    &format!("{prefix}.cas_witness.cas_store"),
+                    &cas_witness.cas_store,
+                );
+                checker.store(
+                    &format!("{prefix}.cas_witness.alias_store"),
+                    &cas_witness.alias_store,
+                );
             }
         }
 
@@ -1815,6 +1868,70 @@ fn collect_ref_store_names<'a>(spec: &'a StoreSpec, out: &mut Vec<&'a StoreRefNa
         | StoreSpec::RedisStore(_)
         | StoreSpec::Noop(_)
         | StoreSpec::ExperimentalMongo(_) => {}
+    }
+}
+
+/// Minimum zstd compression level accepted by the encoder.
+const ZSTD_MIN_COMPRESSION_LEVEL: i32 = 1;
+/// Maximum zstd compression level accepted by the encoder.
+const ZSTD_MAX_COMPRESSION_LEVEL: i32 = 22;
+
+/// Validates the scalar field values of a single [`NixCacheConfig`] instance,
+/// pushing a human-readable message onto `problems` for each violation.
+///
+/// These checks mirror invariants the service enforces (or silently coerces)
+/// at boot, surfaced here so `nativelink --check` catches them offline:
+///
+/// * `trusted_public_keys` on every configured upstream must be non-empty —
+///   an upstream with no trusted key can never verify a fetched `narinfo`, so
+///   read-through would always treat the path as a miss (the field is
+///   `#[serde(default)]`, so an empty vec parses cleanly but is useless).
+/// * `compression_level`, when set together with `serve_compression = "zstd"`,
+///   must lie in zstd's real `1..=22` range; an out-of-range value is silently
+///   clamped by the encoder at serve time, quietly discarding the operator's
+///   chosen tradeoff.
+/// * `max_concurrent_nar_streams` / `max_concurrent_transcodes` must be `>= 1`;
+///   the service coerces `0` to `1` via `.max(1)`, so `0` does not mean
+///   "unlimited" as an operator might assume.
+///
+/// `path` is the config location prefix (e.g.
+/// `servers[0].services.nix_cache[main]`) used to build precise messages.
+fn validate_nix_cache_fields(path: &str, config: &NixCacheConfig, problems: &mut Vec<String>) {
+    for (upstream_idx, upstream) in config.upstream_caches.iter().enumerate() {
+        if upstream.trusted_public_keys.is_empty() {
+            problems.push(format!(
+                "{path}.upstream_caches[{upstream_idx}] (url '{}') has an empty \
+                 trusted_public_keys; at least one key is required or every \
+                 fetched narinfo is rejected as unverifiable",
+                upstream.url
+            ));
+        }
+    }
+
+    // `compression_level` only takes effect for zstd; validate its range only
+    // when zstd serving is actually selected so a stale level left on a
+    // `serve_compression: "none"` cache is not spuriously flagged.
+    if config.serve_compression.as_deref() == Some("zstd")
+        && let Some(level) = config.compression_level
+        && !(ZSTD_MIN_COMPRESSION_LEVEL..=ZSTD_MAX_COMPRESSION_LEVEL).contains(&level)
+    {
+        problems.push(format!(
+            "{path}.compression_level {level} is outside zstd's valid range \
+             {ZSTD_MIN_COMPRESSION_LEVEL}..={ZSTD_MAX_COMPRESSION_LEVEL}"
+        ));
+    }
+
+    if config.max_concurrent_nar_streams == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_nar_streams must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_concurrent_transcodes == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_transcodes must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
     }
 }
 
@@ -2205,6 +2322,7 @@ mod tests {
         stores: [
             { name: "CAS", memory: {} },
             { name: "AC", memory: {} },
+            { name: "ALIAS", memory: {} },
             { name: "WRAPPED", fast_slow: {
                 fast: { ref_store: { name: "CAS" } },
                 slow: { noop: {} },
@@ -2229,6 +2347,12 @@ mod tests {
                 capabilities: [{ instance_name: "main", remote_execution: { scheduler: "SCHED" } }],
                 bytestream: [{ instance_name: "main", cas_store: "CAS" }],
                 worker_api: { scheduler: "SCHED" },
+                cas_witness: {
+                    cas_store: "CAS",
+                    alias_store: "ALIAS",
+                    ca_cert_file: "/tmp/ca.crt",
+                    ca_key_file: "/tmp/ca.key",
+                },
             },
         }],
     }"#;
@@ -2260,6 +2384,37 @@ mod tests {
         );
         assert!(
             message.contains("servers[0].services.cas[main].cas_store"),
+            "error must name the reference site: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_undefined_cas_witness_store() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        cas_witness: {
+                            cas_store: "CAS_TYPO",
+                            alias_store: "CAS",
+                            ca_cert_file: "/tmp/ca.crt",
+                            ca_key_file: "/tmp/ca.key",
+                        },
+                    },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("CAS_TYPO"),
+            "error must name the bad store ref: {message}"
+        );
+        assert!(
+            message.contains("servers[0].services.cas_witness.cas_store"),
             "error must name the reference site: {message}"
         );
     }
@@ -2452,5 +2607,463 @@ mod tests {
         );
         cfg.validate_references()
             .expect("unreferenced catalog stores are not walked");
+    }
+
+    // ----------------------------------------------------------------------
+    // `nix_cache` field-value validation (also part of `validate_references`).
+    // ----------------------------------------------------------------------
+
+    /// A reference-valid `CasConfig` with exactly one `nix_cache` instance and
+    /// no upstreams, used as a mutation base for the field-value tests. Every
+    /// store it names is declared, so `validate_references` on the pristine
+    /// value succeeds and any later failure is attributable to the mutation.
+    fn cas_config_with_one_nix_cache() -> CasConfig {
+        parse_cas_config(
+            r#"{
+                stores: [
+                    { name: "NAR", memory: {} },
+                    { name: "PI", memory: {} },
+                    { name: "ALIAS", memory: {} },
+                ],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        nix_cache: [{
+                            instance_name: "main",
+                            cas_store: "NAR",
+                            path_info_store: "PI",
+                            alias_store: "ALIAS",
+                        }],
+                    },
+                }],
+            }"#,
+        )
+    }
+
+    /// Mutable handle to the single `nix_cache` instance's config in a
+    /// [`cas_config_with_one_nix_cache`]-shaped value.
+    fn nix_cache_mut(cfg: &mut CasConfig) -> &mut NixCacheConfig {
+        &mut cfg.servers[0]
+            .services
+            .as_mut()
+            .expect("services present")
+            .nix_cache
+            .as_mut()
+            .expect("nix_cache present")[0]
+            .config
+    }
+
+    fn sample_upstream(keys: Vec<String>) -> NixUpstreamCacheConfig {
+        NixUpstreamCacheConfig {
+            url: "https://cache.example.org".to_string(),
+            trusted_public_keys: keys,
+        }
+    }
+
+    #[test]
+    fn validate_references_rejects_empty_upstream_trusted_keys() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).upstream_caches = vec![sample_upstream(Vec::new())];
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("trusted_public_keys")
+                && message.contains("cache.example.org")
+                && message.contains("nix_cache[main]"),
+            "error must name the empty-keys upstream and its instance: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_accepts_non_empty_upstream_trusted_keys() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).upstream_caches =
+            vec![sample_upstream(vec![GOLDEN_SIGNING_PUBLIC_KEY.to_string()])];
+        cfg.validate_references()
+            .expect("a non-empty trusted_public_keys upstream is accepted");
+    }
+
+    #[test]
+    fn validate_references_rejects_out_of_range_zstd_compression_level() {
+        // 0, 23, and a negative are all outside zstd's 1..=22 range.
+        for bad in [0_i32, 23, -1, i32::MIN, i32::MAX] {
+            let mut cfg = cas_config_with_one_nix_cache();
+            {
+                let nc = nix_cache_mut(&mut cfg);
+                nc.serve_compression = Some("zstd".to_string());
+                nc.compression_level = Some(bad);
+            }
+            let err = match cfg.validate_references() {
+                Ok(()) => panic!("level {bad} must be rejected"),
+                Err(err) => err,
+            };
+            assert_eq!(err.code, Code::InvalidArgument);
+            let message = err.messages.join("\n");
+            assert!(
+                message.contains("compression_level") && message.contains("1..=22"),
+                "error must explain the zstd range for level {bad}: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_references_accepts_in_range_zstd_compression_level() {
+        // Both boundaries (1 and 22) and an interior value are accepted.
+        for good in [1_i32, 3, 19, 22] {
+            let mut cfg = cas_config_with_one_nix_cache();
+            {
+                let nc = nix_cache_mut(&mut cfg);
+                nc.serve_compression = Some("zstd".to_string());
+                nc.compression_level = Some(good);
+            }
+            cfg.validate_references()
+                .unwrap_or_else(|e| panic!("level {good} must be accepted: {e}"));
+        }
+    }
+
+    #[test]
+    fn validate_references_ignores_compression_level_without_zstd() {
+        // An out-of-range level is not flagged when zstd serving is not
+        // selected, because the field is inert then.
+        let mut cfg = cas_config_with_one_nix_cache();
+        {
+            let nc = nix_cache_mut(&mut cfg);
+            nc.serve_compression = None;
+            nc.compression_level = Some(99);
+        }
+        cfg.validate_references()
+            .expect("compression_level is inert without serve_compression = zstd");
+
+        let mut cfg = cas_config_with_one_nix_cache();
+        {
+            let nc = nix_cache_mut(&mut cfg);
+            nc.serve_compression = Some("none".to_string());
+            nc.compression_level = Some(-5);
+        }
+        cfg.validate_references()
+            .expect("compression_level is inert when serve_compression = none");
+    }
+
+    #[test]
+    fn validate_references_rejects_zero_max_concurrent_nar_streams() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).max_concurrent_nar_streams = 0;
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("max_concurrent_nar_streams") && message.contains(">= 1"),
+            "error must explain the >= 1 requirement: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_rejects_zero_max_concurrent_transcodes() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).max_concurrent_transcodes = 0;
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("max_concurrent_transcodes") && message.contains(">= 1"),
+            "error must explain the >= 1 requirement: {message}"
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // Adversarial property tests. Failure persistence is disabled so no
+    // `proptest-regressions/` artifacts land in the tree.
+    // ----------------------------------------------------------------------
+
+    mod proptests {
+        use proptest::prelude::*;
+        use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence};
+
+        use super::*;
+
+        fn no_persist() -> ProptestConfig {
+            ProptestConfig {
+                failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
+                ..ProptestConfig::default()
+            }
+        }
+
+        /// Base valid `nix_cache` config text, parameterised only by the store
+        /// names so the "undefined store" property can inject a random ref.
+        fn nix_cache_config_text(cas_store: &str) -> String {
+            format!(
+                r#"{{
+                    stores: [
+                        {{ name: "NAR", memory: {{}} }},
+                        {{ name: "PI", memory: {{}} }},
+                        {{ name: "ALIAS", memory: {{}} }},
+                    ],
+                    servers: [{{
+                        listener: {{ http: {{ socket_address: "0.0.0.0:50051" }} }},
+                        services: {{
+                            nix_cache: [{{
+                                instance_name: "main",
+                                cas_store: "{cas_store}",
+                                path_info_store: "PI",
+                                alias_store: "ALIAS",
+                            }}],
+                        }},
+                    }}],
+                }}"#
+            )
+        }
+
+        fn base_nix_cache_cas_config() -> CasConfig {
+            serde_json5::from_str(&nix_cache_config_text("NAR"))
+                .expect("base nix_cache config parses")
+        }
+
+        fn nix_cache_field_mut(cfg: &mut CasConfig) -> &mut NixCacheConfig {
+            &mut cfg.servers[0]
+                .services
+                .as_mut()
+                .expect("services")
+                .nix_cache
+                .as_mut()
+                .expect("nix_cache")[0]
+                .config
+        }
+
+        proptest! {
+            #![proptest_config(no_persist())]
+
+            /// The deserializer must never panic on arbitrary input: it either
+            /// parses or returns an error, for both a full `ServicesConfig` and
+            /// a bare `NixCacheConfig`. (In-tree complement to the libfuzzer
+            /// `cas_config` target.)
+            #[test]
+            fn deserializer_never_panics_on_arbitrary_text(input in ".*") {
+                // Reaching here without a panic is the property; the parse
+                // outcome itself is discarded.
+                let _services = serde_json5::from_str::<ServicesConfig>(&input);
+                let _nix_cache = serde_json5::from_str::<NixCacheConfig>(&input);
+            }
+
+            /// Structured-but-adversarial JSON (balanced object with random
+            /// keys/values) also never panics the deserializer.
+            #[test]
+            fn deserializer_never_panics_on_structured_json(
+                keys in prop::collection::vec("[a-z_]{1,8}", 0..6),
+                vals in prop::collection::vec(-1_000_000_i64..1_000_000, 0..6),
+            ) {
+                let body = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, k)| {
+                        let v = vals.get(i).copied().unwrap_or(0);
+                        format!("\"{k}\": {v}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let obj = format!("{{{body}}}");
+                let _services = serde_json5::from_str::<ServicesConfig>(&obj);
+                let _nix_cache = serde_json5::from_str::<NixCacheConfig>(&obj);
+            }
+
+            /// (a) A `nix_cache` upstream with empty `trusted_public_keys` is
+            /// ALWAYS rejected, regardless of URL.
+            #[test]
+            fn empty_upstream_trusted_keys_always_rejected(
+                url in "[a-z][a-z0-9.-]{0,40}",
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                nix_cache_field_mut(&mut cfg).upstream_caches = vec![NixUpstreamCacheConfig {
+                    url: format!("https://{url}"),
+                    trusted_public_keys: Vec::new(),
+                }];
+                let err = cfg.validate_references().unwrap_err();
+                prop_assert_eq!(err.code, Code::InvalidArgument);
+                prop_assert!(err.messages.join("\n").contains("trusted_public_keys"));
+            }
+
+            /// (b) With `serve_compression = "zstd"`, a `compression_level`
+            /// outside 1..=22 is ALWAYS rejected and one inside is ALWAYS
+            /// accepted (holding all other fields valid).
+            #[test]
+            fn zstd_compression_level_range_enforced(level in any::<i32>()) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.serve_compression = Some("zstd".to_string());
+                    nc.compression_level = Some(level);
+                }
+                let result = cfg.validate_references();
+                if (1..=22).contains(&level) {
+                    prop_assert!(
+                        result.is_ok(),
+                        "in-range level {} must be accepted: {:?}", level, result.err()
+                    );
+                } else {
+                    let err = result.unwrap_err();
+                    prop_assert_eq!(err.code, Code::InvalidArgument);
+                    prop_assert!(err.messages.join("\n").contains("compression_level"));
+                }
+            }
+
+            /// (c) A zero `max_concurrent_*` is ALWAYS rejected; any non-zero
+            /// value passes that particular check.
+            #[test]
+            fn zero_max_concurrent_always_rejected(
+                streams in 0_usize..2048,
+                transcodes in 0_usize..2048,
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.max_concurrent_nar_streams = streams;
+                    nc.max_concurrent_transcodes = transcodes;
+                }
+                let result = cfg.validate_references();
+                if streams == 0 || transcodes == 0 {
+                    prop_assert!(result.is_err(), "a zero max_concurrent_* must be rejected");
+                } else {
+                    prop_assert!(
+                        result.is_ok(),
+                        "non-zero max_concurrent_* must pass: {:?}", result.err()
+                    );
+                }
+            }
+
+            /// (d) An otherwise-valid, fully-resolved config with valid
+            /// nix_cache fields is ALWAYS accepted across the whole valid space
+            /// of the fields under test.
+            #[test]
+            fn fully_valid_nix_cache_config_always_accepted(
+                level in 1_i32..=22,
+                streams in 1_usize..4096,
+                transcodes in 1_usize..4096,
+                keys in prop::collection::vec("[A-Za-z0-9.:+/=-]{1,60}", 1..4),
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.serve_compression = Some("zstd".to_string());
+                    nc.compression_level = Some(level);
+                    nc.max_concurrent_nar_streams = streams;
+                    nc.max_concurrent_transcodes = transcodes;
+                    nc.upstream_caches = vec![NixUpstreamCacheConfig {
+                        url: "https://cache.example.org".to_string(),
+                        trusted_public_keys: keys,
+                    }];
+                }
+                cfg.validate_references()
+                    .expect("a fully-valid nix_cache config must be accepted");
+            }
+
+            /// (e) An undefined store reference is ALWAYS rejected — property
+            /// over random ref names that are not among the declared stores.
+            #[test]
+            fn undefined_store_ref_always_rejected(
+                bad_ref in "[A-Za-z0-9_]{1,32}",
+            ) {
+                // Exclude the (few) names that are actually declared so the
+                // ref really is dangling.
+                prop_assume!(!["NAR", "PI", "ALIAS"].contains(&bad_ref.as_str()));
+                let cfg: CasConfig =
+                    serde_json5::from_str(&nix_cache_config_text(&bad_ref))
+                        .expect("config text parses");
+                let err = cfg.validate_references().unwrap_err();
+                prop_assert_eq!(err.code, Code::InvalidArgument);
+                let message = err.messages.join("\n");
+                prop_assert!(
+                    message.contains(&bad_ref) && message.contains("undefined store"),
+                    "must flag the dangling ref '{}': {}", bad_ref, message
+                );
+            }
+
+            /// A generated `NixCacheConfig` survives a JSON serialize →
+            /// deserialize round trip unchanged (guards against serde attribute
+            /// drift on the fields exercised here).
+            #[test]
+            fn nix_cache_config_json_round_trips(
+                priority in any::<u32>(),
+                want_mass_query in any::<bool>(),
+                read_only in any::<bool>(),
+                preserve_upload_compression in any::<bool>(),
+                level in 1_i32..=22,
+                streams in 1_usize..4096,
+                transcodes in 1_usize..4096,
+                max_nar in 1_u64..1_000_000_000_000,
+                idle in 0_u64..100_000,
+                neg_ttl in 0_u64..100_000,
+                up_ttl in 0_u64..100_000,
+                keys in prop::collection::vec("[A-Za-z0-9.:+/=-]{1,40}", 0..3),
+            ) {
+                // Start from a parsed baseline (all fields present), then set
+                // the varied fields directly on the struct.
+                let mut original: NixCacheConfig = serde_json5::from_str(
+                    r#"{
+                        cas_store: "NAR",
+                        path_info_store: "PI",
+                        alias_store: "ALIAS",
+                    }"#,
+                ).expect("baseline NixCacheConfig parses");
+                original.priority = priority;
+                original.want_mass_query = want_mass_query;
+                original.read_only = read_only;
+                original.preserve_upload_compression = preserve_upload_compression;
+                original.serve_compression = Some("zstd".to_string());
+                original.compression_level = Some(level);
+                original.max_concurrent_nar_streams = streams;
+                original.max_concurrent_transcodes = transcodes;
+                original.max_nar_size_bytes = max_nar;
+                original.nar_upload_idle_timeout_s = idle;
+                original.upstream_negative_ttl_s = neg_ttl;
+                original.upstream_timeout_s = up_ttl;
+                original.upstream_caches = keys
+                    .into_iter()
+                    .map(|k| NixUpstreamCacheConfig {
+                        url: "https://cache.example.org".to_string(),
+                        trusted_public_keys: vec![k],
+                    })
+                    .collect();
+
+                let json = serde_json::to_string(&original)
+                    .expect("NixCacheConfig serializes to json");
+                let reparsed: NixCacheConfig = serde_json5::from_str(&json)
+                    .expect("serialized NixCacheConfig re-parses");
+
+                prop_assert_eq!(original.cas_store, reparsed.cas_store);
+                prop_assert_eq!(original.path_info_store, reparsed.path_info_store);
+                prop_assert_eq!(original.alias_store, reparsed.alias_store);
+                prop_assert_eq!(original.priority, reparsed.priority);
+                prop_assert_eq!(original.want_mass_query, reparsed.want_mass_query);
+                prop_assert_eq!(original.read_only, reparsed.read_only);
+                prop_assert_eq!(
+                    original.preserve_upload_compression,
+                    reparsed.preserve_upload_compression
+                );
+                prop_assert_eq!(original.serve_compression, reparsed.serve_compression);
+                prop_assert_eq!(original.compression_level, reparsed.compression_level);
+                prop_assert_eq!(
+                    original.max_concurrent_nar_streams,
+                    reparsed.max_concurrent_nar_streams
+                );
+                prop_assert_eq!(
+                    original.max_concurrent_transcodes,
+                    reparsed.max_concurrent_transcodes
+                );
+                prop_assert_eq!(original.max_nar_size_bytes, reparsed.max_nar_size_bytes);
+                prop_assert_eq!(
+                    original.nar_upload_idle_timeout_s,
+                    reparsed.nar_upload_idle_timeout_s
+                );
+                prop_assert_eq!(
+                    original.upstream_negative_ttl_s,
+                    reparsed.upstream_negative_ttl_s
+                );
+                prop_assert_eq!(original.upstream_timeout_s, reparsed.upstream_timeout_s);
+                prop_assert_eq!(
+                    original.upstream_caches.len(),
+                    reparsed.upstream_caches.len()
+                );
+            }
+        }
     }
 }

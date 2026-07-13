@@ -1,20 +1,21 @@
-// Caching HTTP forward proxy (TLS-intercepting) backed by a NativeLink CAS.
+// CAS witness (caching HTTP forward proxy, TLS-intercepting) backed by a
+// NativeLink CAS.
 //
 // A build client points HTTPS_PROXY/HTTP_PROXY at this listener and trusts the
-// proxy's generated CA. The first fetch of any URL is streamed from the origin
-// into the CAS; every later fetch of the same URL is served from the CAS, so
-// one fetch makes the deployment a durable mirror of exactly what the builds
-// download.
+// CAS witness's generated CA. The first fetch of any URL is streamed from the
+// origin into the CAS; every later fetch of the same URL is served from the
+// CAS, so one fetch makes the deployment a durable mirror of exactly what the
+// builds download.
 //
 // For nix (the primary consumer):
 //
 //   export HTTPS_PROXY=http://cache.example.com:50080
 //   export HTTP_PROXY=http://cache.example.com:50080
-//   export NIX_SSL_CERT_FILE=/var/lib/nativelink/fetch-proxy/ca.crt
+//   export NIX_SSL_CERT_FILE=/tmp/nativelink/cas-witness/ca.crt
 //
 // nix verifies every fixed-output derivation (fetchurl/fetchTarball) against
-// its declared hash regardless of what the proxy serves, so a stale or wrong
-// cache entry can never corrupt a build.
+// its declared hash regardless of what the CAS witness serves, so a stale or
+// wrong cache entry can never corrupt a build.
 //
 // This listener speaks the HTTP proxy protocol (CONNECT), so it must NOT share
 // a port with the gRPC/nix_cache services.
@@ -32,8 +33,8 @@
           fast_slow: {
             fast: {
               filesystem: {
-                content_path: "/tmp/nativelink/fetch-proxy/cas-fast/content_path",
-                temp_path: "/tmp/nativelink/fetch-proxy/cas-fast/temp_path",
+                content_path: "/tmp/nativelink/cas-witness/cas-fast/content_path",
+                temp_path: "/tmp/nativelink/cas-witness/cas-fast/temp_path",
                 eviction_policy: {
                   // 5gb of hot bodies.
                   max_bytes: 5000000000,
@@ -42,8 +43,8 @@
             },
             slow: {
               filesystem: {
-                content_path: "/tmp/nativelink/fetch-proxy/cas-slow/content_path",
-                temp_path: "/tmp/nativelink/fetch-proxy/cas-slow/temp_path",
+                content_path: "/tmp/nativelink/cas-witness/cas-slow/content_path",
+                temp_path: "/tmp/nativelink/cas-witness/cas-slow/temp_path",
                 eviction_policy: {
                   // 200gb of fetched content total.
                   max_bytes: 200000000000,
@@ -67,23 +68,32 @@
   ],
   servers: [
     {
-      name: "fetch_proxy",
+      name: "cas_witness",
       listener: {
         http: {
           socket_address: "0.0.0.0:50080",
         },
       },
       services: {
-        http_cache_proxy: {
+        cas_witness: {
           cas_store: "FETCH_CAS",
           alias_store: "FETCH_ALIAS",
 
           // Generated together on first start if either file is missing. The
           // certificate is what clients trust (NIX_SSL_CERT_FILE); the key can
           // impersonate any host to those clients, so keep it private (it is
-          // written 0600 when generated).
-          ca_cert_file: "/var/lib/nativelink/fetch-proxy/ca.crt",
-          ca_key_file: "/var/lib/nativelink/fetch-proxy/ca.key",
+          // written 0600 when generated). For a production deployment move
+          // these to a persistent, root-owned directory such as
+          // /var/lib/nativelink/cas-witness/.
+          ca_cert_file: "/tmp/nativelink/cas-witness/ca.crt",
+          ca_key_file: "/tmp/nativelink/cas-witness/ca.key",
+
+          // Ed25519 witness signing key. Generated on first start if missing
+          // (written 0600). When set, every cached fetch is attested with a
+          // DSSE/in-toto statement stored in the CAS under its BLAKE3 key, and
+          // responses carry X-Straylight-Witness / X-Straylight-Witness-Receipt
+          // headers. Omit this field to disable witnessing.
+          witness_key_file: "/tmp/nativelink/cas-witness/witness.key",
 
           // Largest response body that will be cached; a larger response is
           // streamed through to the client but not stored. Default 2 GiB.

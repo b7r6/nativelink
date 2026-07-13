@@ -326,14 +326,14 @@ async fn inner_main(
         // Currently we only support http as our socket type.
         let ListenerConfig::Http(http_config) = server_cfg.listener;
 
-        // A caching MITM fetch proxy owns its entire listener: it speaks the
+        // The CAS witness owns its entire listener: it speaks the
         // HTTP `CONNECT` proxy protocol, not the shared gRPC/axum service
         // stack, so it is handled here and the rest of the server setup is
         // skipped for this listener.
-        if let Some(proxy_cfg) = services.http_cache_proxy {
-            let fetch_proxy =
-                nativelink_service::fetch_proxy::FetchProxy::new(&proxy_cfg, &store_manager)
-                    .err_tip(|| "Could not create HTTP cache proxy service")?;
+        if let Some(witness_cfg) = services.cas_witness {
+            let cas_witness =
+                nativelink_service::cas_witness::CasWitness::new(&witness_cfg, &store_manager)
+                    .err_tip(|| "Could not create CAS witness service")?;
             let socket_addr = http_config
                 .socket_address
                 .parse::<SocketAddr>()
@@ -348,15 +348,15 @@ async fn inner_main(
             }
             .map_err(|e| {
                 Error::from_std_err(Code::Internal, &e)
-                    .append(format!("Failed to bind fetch proxy to '{socket_addr}'"))
+                    .append(format!("Failed to bind CAS witness to '{socket_addr}'"))
             })?;
             info!(
                 %socket_addr,
-                ca_cert_file = %proxy_cfg.ca_cert_file,
-                "Ready, HTTP cache proxy listening (trust its CA via NIX_SSL_CERT_FILE)",
+                ca_cert_file = %witness_cfg.ca_cert_file,
+                "Ready, CAS witness listening (trust its CA via NIX_SSL_CERT_FILE)",
             );
-            drop(background_spawn!("fetch_proxy_listener", async move {
-                fetch_proxy.serve(tcp_listener).await;
+            drop(background_spawn!("cas_witness_listener", async move {
+                cas_witness.serve(tcp_listener).await;
             }));
             continue;
         }
@@ -527,6 +527,22 @@ async fn inner_main(
         }
 
         if let Some(nix_cache_cfgs) = &services.nix_cache {
+            // A plaintext (non-TLS) listener sends Bearer/Basic tokens in the
+            // clear. We do not hard-fail — TLS is often terminated by a proxy
+            // in front — but warn so token auth on a bare HTTP listener is a
+            // deliberate, visible choice rather than a silent leak.
+            if http_config.tls.is_none() {
+                for cfg in nix_cache_cfgs {
+                    if !cfg.read_token_files.is_empty() || !cfg.write_token_files.is_empty() {
+                        warn!(
+                            "nix_cache instance '{}' has auth tokens on a plaintext HTTP \
+                             listener; Bearer/Basic credentials will travel in cleartext — \
+                             terminate TLS on this listener or in front of it",
+                            cfg.instance_name
+                        );
+                    }
+                }
+            }
             let nix_cache_server = NixCacheServer::new(nix_cache_cfgs, &store_manager)
                 .err_tip(|| "Could not create NixCache service")?;
             for (prefix, router) in nix_cache_server.routers() {

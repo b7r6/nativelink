@@ -30,12 +30,14 @@
 //! under `log/{drvBasename}`, and zstd-compressed serving
 //! (`serve_compression = "zstd"`), all against the same store wiring.
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode, header};
+use axum::routing::get;
 use bytes::Bytes;
 use http_body_util::BodyExt;
 use nativelink_config::cas_server::{NixCacheConfig, WithInstanceName};
@@ -2230,5 +2232,588 @@ async fn read_through_answers_head_probe() -> Result<(), Error> {
         StatusCode::OK,
         "a HEAD on a locally-absent path must read-through and answer 200"
     );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Negative-cache poisoning (transient vs definitive upstream miss)
+// ---------------------------------------------------------------------------
+
+/// A programmable upstream mock, richer than a `CacheFixture`: it counts
+/// every `{hash}.narinfo` probe and can be flipped between three modes so a
+/// single upstream can move from "transiently broken" to "serving". The NAR
+/// GET returns the payload bytes verbatim.
+///
+/// This is what lets us assert the negative-cache poisoning fix: a 5xx probe
+/// must be served as a miss WITHOUT being negative-cached (the next probe
+/// re-queries upstream), whereas a genuine 404 IS negative-cached (a second
+/// probe short-circuits without a new upstream request).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UpstreamMode {
+    /// Every narinfo probe returns `503` (a transient failure).
+    ServerError,
+    /// Every narinfo probe returns `404` (a definitive absence).
+    NotFound,
+    /// Serve the (signed) narinfo and the NAR bytes.
+    Healthy,
+}
+
+struct MockUpstream {
+    mode: Arc<StdMutex<UpstreamMode>>,
+    narinfo_probes: Arc<AtomicUsize>,
+}
+
+/// Spawns a programmable upstream serving one signed store path. Returns the
+/// base URL, the mode handle (to flip behavior between requests), the probe
+/// counter, and the serving task guard.
+async fn spawn_mock_upstream(
+    store_path: &str,
+    payload: &'static [u8],
+    initial_mode: UpstreamMode,
+) -> (
+    String,
+    Arc<StdMutex<UpstreamMode>>,
+    Arc<AtomicUsize>,
+    nativelink_util::task::JoinHandleDropGuard<()>,
+) {
+    let path_hash = store_path_hash(store_path).to_string();
+    let nar_basename = client_nar_basename(payload);
+
+    // A genuinely-signed narinfo for the server key the front trusts: the
+    // front verifies the upstream signature before caching, so an unsigned
+    // document would be refused regardless of the transient/definitive logic
+    // under test.
+    let mut info = narinfo_for_payload(store_path, format!("nar/{nar_basename}"), payload);
+    let server_key = NixSigningKey::from_secret_string(SERVER_SECRET_KEY).expect("server key");
+    info.sigs = vec![server_key.sign(&info.fingerprint())];
+    let narinfo_text = info.render();
+
+    let mode = Arc::new(StdMutex::new(initial_mode));
+    let narinfo_probes = Arc::new(AtomicUsize::new(0));
+    let state = MockUpstream {
+        mode: Arc::clone(&mode),
+        narinfo_probes: Arc::clone(&narinfo_probes),
+    };
+    let state = Arc::new(state);
+
+    // The front's `upstream_url` ends in the mount path `/nix/main`, so the
+    // probe it issues is `GET /nix/main/{hash}.narinfo`; register there.
+    let narinfo_route = format!("/nix/main/{path_hash}.narinfo");
+    let nar_route = format!("/nix/main/nar/{nar_basename}");
+
+    let narinfo_state = Arc::clone(&state);
+    let narinfo_body = narinfo_text.clone();
+    let nar_state = Arc::clone(&state);
+
+    let router = Router::new()
+        .route(
+            &narinfo_route,
+            get(move || {
+                let state = Arc::clone(&narinfo_state);
+                let body = narinfo_body.clone();
+                async move {
+                    state.narinfo_probes.fetch_add(1, Ordering::SeqCst);
+                    let mode = *state
+                        .mode
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    match mode {
+                        UpstreamMode::ServerError => (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "upstream is transiently unavailable".to_string(),
+                        ),
+                        UpstreamMode::NotFound => {
+                            (StatusCode::NOT_FOUND, "no such path".to_string())
+                        }
+                        UpstreamMode::Healthy => (StatusCode::OK, body),
+                    }
+                }
+            }),
+        )
+        .route(
+            &nar_route,
+            get(move || {
+                let state = Arc::clone(&nar_state);
+                async move {
+                    let mode = *state
+                        .mode
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    match mode {
+                        UpstreamMode::Healthy => (StatusCode::OK, Bytes::from_static(payload)),
+                        _ => (StatusCode::NOT_FOUND, Bytes::from_static(b"")),
+                    }
+                }
+            }),
+        );
+    let (base, handle) = spawn_http(router).await;
+    (base, mode, narinfo_probes, handle)
+}
+
+/// Builds a front cache that reads through to `upstream_url`, trusting the
+/// server key. `negative_ttl_s` controls how long a definitive miss is
+/// remembered (set high so the second definitive probe reliably short-
+/// circuits within the test).
+fn front_for_upstream(
+    fixture: &CacheFixture,
+    upstream_url: &str,
+    negative_ttl_s: u64,
+) -> (String, Router) {
+    let upstream_pubkey = server_public_key();
+    fixture.server_with_extra(
+        "main",
+        &format!(
+            r#"upstream_negative_ttl_s: {negative_ttl_s},
+               upstream_caches: [{{ url: "{upstream_url}", trusted_public_keys: ["{upstream_pubkey}"] }}]"#
+        ),
+    )
+}
+
+/// THE negative-cache poisoning test. A transient upstream failure (`503`)
+/// is served as a miss but must NOT be negative-cached: the moment the SAME
+/// upstream recovers, the very next probe re-queries it and the path is
+/// fetched, verified, and cached. A cached `404` here would hide a path that
+/// actually exists upstream for the whole `upstream_negative_ttl`.
+#[nativelink_test]
+async fn transient_upstream_failure_is_not_negative_cached_and_recovers() -> Result<(), Error> {
+    const PAYLOAD: &[u8] = b"read-through recovery payload: opaque bytes 0123456789";
+    let store_path = test_store_path("rt-transient-seed", "recover-1.0");
+    let (base, mode, probes, _handle) =
+        spawn_mock_upstream(&store_path, PAYLOAD, UpstreamMode::ServerError).await;
+
+    let front = CacheFixture::new("rt-transient-front");
+    // A long negative TTL: if the transient miss were (wrongly) cached, the
+    // recovery probe below would be short-circuited and the assertion would
+    // fail — exactly the regression this locks in.
+    let (mount, router) = front_for_upstream(&front, &format!("{base}/nix/main"), 3600);
+    let path_hash = store_path_hash(&store_path);
+    let narinfo_uri = format!("{mount}/{path_hash}.narinfo");
+
+    // Probe 1: upstream 5xx -> the front serves a miss (404), ingests nothing.
+    let (status, _, _) = call(&router, get_request(&narinfo_uri)).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a transient upstream 5xx is served as a miss"
+    );
+    assert_eq!(
+        front.path_info_memory.len_for_test(),
+        0,
+        "nothing cached yet"
+    );
+    let after_first = probes.load(Ordering::SeqCst);
+    assert!(after_first >= 1, "the upstream must have been probed once");
+
+    // Flip the SAME upstream to healthy. Because the transient miss was NOT
+    // negative-cached, the next probe must re-query upstream.
+    *mode
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = UpstreamMode::Healthy;
+
+    // Probe 2: re-queries upstream, fetches + verifies + caches, serves 200.
+    let served = get_narinfo(&router, &mount, path_hash).await;
+    assert_eq!(served.store_path, store_path);
+    assert_eq!(served.nar_hash, sha256(PAYLOAD));
+    assert!(
+        probes.load(Ordering::SeqCst) > after_first,
+        "recovery must re-probe upstream (transient miss must not be cached)"
+    );
+
+    // The NAR is now local and durable.
+    let canonical = nar_url::canonical_nar_name(&sha256(PAYLOAD), PAYLOAD.len() as u64);
+    let (status, _, body) = call(&router, get_request(&format!("{mount}/nar/{canonical}"))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_ref(), PAYLOAD);
+    Ok(())
+}
+
+/// The contrast case: a genuine `404` upstream IS negative-cached, so a
+/// second probe within the TTL short-circuits and does NOT hit upstream
+/// again (asserted via the probe counter on the mock).
+#[nativelink_test]
+async fn definitive_upstream_404_is_negative_cached_and_short_circuits() -> Result<(), Error> {
+    const PAYLOAD: &[u8] = b"definitely-absent payload never served by the upstream";
+    let store_path = test_store_path("rt-definitive-seed", "absent-1.0");
+    let (base, _mode, probes, _handle) =
+        spawn_mock_upstream(&store_path, PAYLOAD, UpstreamMode::NotFound).await;
+
+    let front = CacheFixture::new("rt-definitive-front");
+    let (mount, router) = front_for_upstream(&front, &format!("{base}/nix/main"), 3600);
+    let path_hash = store_path_hash(&store_path);
+    let narinfo_uri = format!("{mount}/{path_hash}.narinfo");
+
+    // Probe 1: upstream 404 -> miss, and the absence is negative-cached.
+    let (status, _, _) = call(&router, get_request(&narinfo_uri)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let after_first = probes.load(Ordering::SeqCst);
+    assert!(after_first >= 1, "the first miss must probe upstream");
+
+    // Probe 2: the negative cache short-circuits; no new upstream request.
+    let (status, _, _) = call(&router, get_request(&narinfo_uri)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        probes.load(Ordering::SeqCst),
+        after_first,
+        "a negatively-cached 404 must not re-probe upstream within the TTL"
+    );
+    Ok(())
+}
+
+/// An unreachable upstream (connection refused) is a transport error — the
+/// transient/indeterminate case. It is served as a miss but must NOT be
+/// negative-cached, so the moment the SAME address starts accepting, the next
+/// probe re-queries and the path resolves. A single front and a single stable
+/// upstream address make this deterministic: the address is bound (so the
+/// negative-cache key is fixed) but not served until after the first probe.
+#[nativelink_test]
+async fn unreachable_upstream_is_not_negative_cached() -> Result<(), Error> {
+    const PAYLOAD: &[u8] = b"unreachable-then-reachable payload 0123456789";
+    let store_path = test_store_path("rt-unreachable-seed", "flaky-1.0");
+    let path_hash = store_path_hash(&store_path).to_string();
+    let nar_basename = client_nar_basename(PAYLOAD);
+
+    // Bind a stable loopback address, but do NOT serve on it yet: connections
+    // are refused, which the read-through surfaces as a transport error.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind upstream");
+    let addr = listener.local_addr().expect("addr");
+    let upstream_url = format!("http://{addr}/nix/main");
+
+    let front = CacheFixture::new("rt-unreachable-front");
+    let (mount, router) = front_for_upstream(&front, &upstream_url, 3600);
+    let narinfo_uri = format!("{mount}/{path_hash}.narinfo");
+
+    // Probe 1: nothing is accepting on `addr` -> connection error -> miss,
+    // nothing cached, and (critically) NOT negative-cached.
+    let (status, _, _) = call(&router, get_request(&narinfo_uri)).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a connection error is a miss"
+    );
+    assert_eq!(front.path_info_memory.len_for_test(), 0);
+
+    // Now start serving a validly-signed path on the SAME address.
+    let mut info = narinfo_for_payload(&store_path, format!("nar/{nar_basename}"), PAYLOAD);
+    let server_key = NixSigningKey::from_secret_string(SERVER_SECRET_KEY).expect("server key");
+    info.sigs = vec![server_key.sign(&info.fingerprint())];
+    let narinfo_text = info.render();
+    let up_router = Router::new()
+        .route(
+            &format!("/nix/main/{path_hash}.narinfo"),
+            get(move || {
+                let body = narinfo_text.clone();
+                async move { (StatusCode::OK, body) }
+            }),
+        )
+        .route(
+            &format!("/nix/main/nar/{nar_basename}"),
+            get(move || async move { (StatusCode::OK, Bytes::from_static(PAYLOAD)) }),
+        );
+    let _handle = nativelink_util::spawn!("test_late_upstream", async move {
+        axum::serve(listener, up_router.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    // Probe 2: because the connection error was not negative-cached, this
+    // re-queries the now-live upstream, verifies, ingests, and serves 200.
+    let served = get_narinfo(&router, &mount, &path_hash).await;
+    assert_eq!(served.store_path, store_path);
+    assert_eq!(served.nar_hash, sha256(PAYLOAD));
+    Ok(())
+}
+
+/// A post-download NAR hash/size mismatch is a transient/indeterminate
+/// condition (corruption or tampering in transit), NOT proof of absence: it
+/// must be served as a miss and NOT negative-cached, so the next probe of a
+/// now-honest upstream re-fetches. The mock serves a validly-signed narinfo
+/// but NAR bytes that disagree with the signed `NarHash`.
+#[nativelink_test]
+async fn upstream_nar_hash_mismatch_is_not_negative_cached() -> Result<(), Error> {
+    const PAYLOAD: &[u8] = b"the true NAR bytes the signed narinfo commits to 01234";
+    const WRONG: &[u8] = b"tampered NAR bytes of the very same byte length !!!!!!";
+    assert_eq!(PAYLOAD.len(), WRONG.len());
+    let store_path = test_store_path("rt-mismatch-seed", "tampered-1.0");
+    let path_hash = store_path_hash(&store_path).to_string();
+    let nar_basename = client_nar_basename(PAYLOAD);
+
+    // Signed narinfo commits to sha256(PAYLOAD); the NAR route serves WRONG.
+    let mut info = narinfo_for_payload(&store_path, format!("nar/{nar_basename}"), PAYLOAD);
+    let server_key = NixSigningKey::from_secret_string(SERVER_SECRET_KEY).expect("server key");
+    info.sigs = vec![server_key.sign(&info.fingerprint())];
+    let narinfo_text = info.render();
+
+    let probes = Arc::new(AtomicUsize::new(0));
+    let probes_route = Arc::clone(&probes);
+    let router = Router::new()
+        .route(
+            &format!("/nix/main/{path_hash}.narinfo"),
+            get(move || {
+                let probes = Arc::clone(&probes_route);
+                let body = narinfo_text.clone();
+                async move {
+                    probes.fetch_add(1, Ordering::SeqCst);
+                    (StatusCode::OK, body)
+                }
+            }),
+        )
+        .route(
+            &format!("/nix/main/nar/{nar_basename}"),
+            get(move || async move { (StatusCode::OK, Bytes::from_static(WRONG)) }),
+        );
+    let (base, _handle) = spawn_http(router).await;
+
+    let front = CacheFixture::new("rt-mismatch-front");
+    let (mount, router) = front_for_upstream(&front, &format!("{base}/nix/main"), 3600);
+
+    // Probe 1: the NAR fails to match its signed NarHash -> indeterminate ->
+    // served as a miss, nothing cached, NOT negative-cached.
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a NAR/narinfo hash mismatch is served as a miss"
+    );
+    assert_eq!(
+        front.path_info_memory.len_for_test(),
+        0,
+        "a tampered path must not be cached"
+    );
+
+    // Probe 2 must re-query upstream (the mismatch was not negative-cached).
+    let after_first = probes.load(Ordering::SeqCst);
+    let (status, _, _) = call(
+        &router,
+        get_request(&format!("{mount}/{path_hash}.narinfo")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(
+        probes.load(Ordering::SeqCst) > after_first,
+        "a hash-mismatch miss must not be negative-cached; the next probe re-queries"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Write-token fail-closed
+// ---------------------------------------------------------------------------
+
+/// With `read_token_files` set but `write_token_files` NOT set, a PUT with a
+/// valid READ token must fail closed (`401`) — a read token is never a write
+/// token. Previously this silently granted write access to every read-token
+/// holder. Reads with the token still succeed, and nothing is written.
+#[nativelink_test]
+async fn read_token_alone_cannot_write_without_write_tokens() -> Result<(), Error> {
+    let fixture = CacheFixture::new("read-only-token");
+    let read_token_path = token_file("read-only-token", READ_TOKEN);
+    let (mount, router) = fixture.server_with_extra(
+        "main",
+        &format!(r#"read_token_files: ["{}"],"#, read_token_path.display()),
+    );
+
+    // The read token opens reads, including nix-cache-info.
+    let (status, _, _) = call(
+        &router,
+        authed(
+            get_request(&format!("{mount}/nix-cache-info")),
+            &bearer(READ_TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "read token opens reads");
+
+    // A PUT carrying that same valid read token must be 401: with reads gated
+    // and no write tokens configured, writes fail closed.
+    let payload = b"bytes a read token must never be able to push";
+    let nar_uri = format!("{mount}/nar/{}", client_nar_basename(payload));
+    let (status, headers, _) = call(
+        &router,
+        authed(put_request(&nar_uri, payload), &bearer(READ_TOKEN)),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "a read token must not authorize writes when no write tokens are set"
+    );
+    assert!(
+        header_text(&headers, &header::WWW_AUTHENTICATE).starts_with("Basic"),
+        "the 401 must carry the Basic challenge"
+    );
+
+    // An anonymous PUT is likewise 401 (read auth denies it first).
+    assert_eq!(
+        put_with_auth(&router, &nar_uri, payload, "Bearer not-a-token").await,
+        StatusCode::UNAUTHORIZED,
+        "an invalid token cannot write either"
+    );
+
+    // Nothing was written by any rejected PUT.
+    assert_eq!(fixture.nar_memory.len_for_test(), 0);
+    assert_eq!(fixture.path_info_memory.len_for_test(), 0);
+    assert_eq!(fixture.alias_memory.len_for_test(), 0);
+    Ok(())
+}
+
+/// The fully-open case (NO tokens at all) still allows anonymous writes:
+/// fail-closed applies only once ANY token auth is configured. This guards
+/// against the fail-closed fix over-reaching into trusted-network mode.
+#[nativelink_test]
+async fn no_tokens_configured_still_allows_anonymous_write() -> Result<(), Error> {
+    let fixture = CacheFixture::new("open-write");
+    let (mount, router) = fixture.server("main", false);
+
+    let payload = b"anonymous push on a fully-open cache";
+    // The whole NAR-then-narinfo flow succeeds with no Authorization header.
+    let basename = put_nar(&router, &mount, payload).await;
+    let store_path = test_store_path("open-write-seed", "open-1.0");
+    let info = narinfo_for_payload(&store_path, format!("nar/{basename}"), payload);
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::CREATED,
+        "anonymous narinfo PUT must succeed with no tokens configured"
+    );
+    assert!(fixture.nar_memory.len_for_test() > 0, "the NAR was written");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Self-verifying direct ingest (no verify{} wrapper)
+// ---------------------------------------------------------------------------
+
+/// A bare-name NAR PUT whose body does NOT match the digest named in the URL
+/// is rejected (`4xx`) and nothing is committed — even though this fixture's
+/// NAR store is a plain in-memory store WITHOUT a `verify{}` wrapper. The
+/// self-certification inside `ingest_nar_direct` is what stops the cache
+/// poisoning on a plain store.
+#[nativelink_test]
+async fn put_nar_with_body_not_matching_named_digest_is_rejected() -> Result<(), Error> {
+    // The URL names the digest of PAYLOAD_A, with a matching Content-Length,
+    // but the body is PAYLOAD_B (same length, different bytes).
+    const PAYLOAD_A: &[u8] = b"the bytes whose sha256 the URL name commits to !!";
+    const PAYLOAD_B: &[u8] = b"entirely different bytes of the very same length.";
+
+    // A plain MemoryStore NAR store (no VerifyStore), so only the in-handler
+    // self-check can reject a mismatched body.
+    let nar_memory = MemoryStore::new(&MemorySpec::default());
+    let path_info_memory = MemoryStore::new(&MemorySpec::default());
+    let path_info_store = CompletenessCheckingStore::new(
+        Store::new(path_info_memory.clone()),
+        Store::new(nar_memory.clone()),
+    );
+    let alias_memory = MemoryStore::new(&MemorySpec::default());
+    let store_manager = Arc::new(StoreManager::new());
+    store_manager.add_store(NAR_STORE_NAME, Store::new(nar_memory.clone()));
+    store_manager.add_store(PATH_INFO_STORE_NAME, Store::new(path_info_store));
+    store_manager.add_store(ALIAS_STORE_NAME, Store::new(alias_memory.clone()));
+
+    let signing_key_path = std::env::temp_dir().join(format!(
+        "nix_cache_server_test-{}-plain-nar.secret",
+        std::process::id()
+    ));
+    std::fs::write(&signing_key_path, format!("{SERVER_SECRET_KEY}\n")).expect("write key");
+    let config: NixCacheConfig = serde_json5::from_str(&format!(
+        r#"{{
+            cas_store: "{NAR_STORE_NAME}",
+            path_info_store: "{PATH_INFO_STORE_NAME}",
+            alias_store: "{ALIAS_STORE_NAME}",
+            signing_key_files: ["{}"],
+        }}"#,
+        signing_key_path.display()
+    ))
+    .expect("config parses");
+    let server = NixCacheServer::new(
+        &[WithInstanceName {
+            instance_name: "main".to_string(),
+            config,
+        }],
+        &store_manager,
+    )
+    .expect("server");
+    let (mount, instance_router) = server.routers().pop().expect("router");
+    let router = Router::new().nest(&mount, instance_router);
+
+    assert_eq!(PAYLOAD_A.len(), PAYLOAD_B.len());
+    let named = client_nar_basename(PAYLOAD_A);
+    let (status, _, _) = call(
+        &router,
+        put_request(&format!("{mount}/nar/{named}"), PAYLOAD_B),
+    )
+    .await;
+    assert!(
+        status.is_client_error(),
+        "a body that does not match its named digest must be 4xx, got {status}"
+    );
+    // The plain store must hold nothing: the mismatched bytes never committed.
+    assert_eq!(
+        nar_memory.len_for_test(),
+        0,
+        "no NAR must be committed on a digest mismatch, even without verify{{}}"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Build-log Content-Encoding allowlist
+// ---------------------------------------------------------------------------
+
+/// A build-log PUT with a bogus `Content-Encoding` is a `400` (the value
+/// would otherwise be replayed verbatim as a response header to every reader
+/// of the shared log). An allowed encoding (`br`) is accepted and replayed on
+/// a later GET.
+#[nativelink_test]
+async fn build_log_content_encoding_is_allowlisted() -> Result<(), Error> {
+    // Not real brotli: the cache treats the body as opaque and only gates the
+    // (allowlisted) Content-Encoding it will replay to later readers.
+    const BR_BODY: &[u8] = b"\x0b\x02\x80pretend-brotli allowlisted log bytes\x03";
+
+    let fixture = CacheFixture::new("log-enc-allowlist");
+    let (mount, router) = fixture.server("main", false);
+
+    let drv_path = test_store_path("log-enc-seed", "encoded-1.0.drv");
+    let drv = store_path_basename(&drv_path);
+    let log_uri = format!("{mount}/log/{drv}");
+
+    // A bogus Content-Encoding is rejected with 400 and stores nothing.
+    let mut bogus = put_request(&log_uri, b"some log bytes");
+    bogus.headers_mut().insert(
+        header::CONTENT_ENCODING,
+        HeaderValue::from_static("totally-bogus"),
+    );
+    let (status, _, _) = call(&router, bogus).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "an unlisted Content-Encoding must 400"
+    );
+    let (status, _, _) = call(&router, get_request(&log_uri)).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a rejected log PUT must not have stored anything"
+    );
+
+    // `br` is on the allowlist: accepted and replayed verbatim.
+    let mut good = put_request(&log_uri, BR_BODY);
+    good.headers_mut()
+        .insert(header::CONTENT_ENCODING, HeaderValue::from_static("br"));
+    let (status, _, body) = call(&router, good).await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "an allowlisted encoding must be accepted: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let (status, headers, body) = call(&router, get_request(&log_uri)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_text(&headers, &header::CONTENT_ENCODING), "br");
+    assert_eq!(body.as_ref(), BR_BODY);
     Ok(())
 }

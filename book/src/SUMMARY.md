@@ -82,7 +82,7 @@
 - [The Standard OCI Toolchain](./part9/standard-oci-toolchain.md)
 - [The OCI → CAS Bridge](./part9/oci-cas-bridge.md)
 - [The Nix Substituter Facade](./part9/nix-substituter.md)
-- [The Caching Fetch Proxy](./part9/fetch-proxy.md)
+- [The CAS Witness](./part9/cas-witness.md)
 
 ---
 

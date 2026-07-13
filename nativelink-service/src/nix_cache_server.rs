@@ -121,6 +121,10 @@ const MAX_LOG_NAME_LEN: usize = 240;
 /// Directory name under the system temp dir used when `spool_path` is not
 /// configured.
 const DEFAULT_SPOOL_DIR_NAME: &str = "nativelink-nix-spool";
+/// Filename prefix for every NAR spool file. Startup pruning removes ONLY
+/// files carrying this prefix, so pointing `spool_path` at a shared or
+/// already-populated directory can never delete unrelated files.
+const SPOOL_FILE_PREFIX: &str = "nativelink-nix-spool-";
 /// The `Compression`/`file_compression` name of the zstd codec.
 const ZSTD_COMPRESSION_NAME: &str = "zstd";
 /// Default zstd level when `serve_compression` is `"zstd"` and no
@@ -222,6 +226,20 @@ fn is_valid_log_name(drv: &str) -> bool {
         && drv.len() <= MAX_LOG_NAME_LEN
         && !drv.contains("..")
         && drv.bytes().all(|b| b.is_ascii_graphic() && b != b'/')
+}
+
+/// Whether a client-supplied build-log `Content-Encoding` is one this cache
+/// will store and replay verbatim to later readers. Restricting to a known
+/// set stops an uploader from injecting an arbitrary `Content-Encoding`
+/// response header into a shared cached log that every reader then tries to
+/// decode. The value is a (possibly comma-separated) list of codec tokens.
+fn is_allowed_log_encoding(encoding: &str) -> bool {
+    encoding.split(',').map(str::trim).all(|token| {
+        matches!(
+            token.to_ascii_lowercase().as_str(),
+            "" | "identity" | "gzip" | "x-gzip" | "deflate" | "br" | "zstd" | "xz" | "bzip2"
+        )
+    })
 }
 
 /// Returns `sha256(data)`. Token comparisons happen in hashed space, so
@@ -560,7 +578,17 @@ fn prepare_spool_dir(spool_dir: &Path) -> Result<(), Error> {
         let file_type = entry
             .file_type()
             .err_tip(|| format!("Failed to stat spool entry {}", entry.path().display()))?;
+        // Only prune files we know we created: a `spool_path` misconfigured
+        // to a shared/populated directory must never cost unrelated data.
+        let is_spool_file = entry.file_name().to_str().is_some_and(|name| {
+            name.starts_with(SPOOL_FILE_PREFIX)
+                && Path::new(name)
+                    .extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    == Some("nar")
+        });
         if file_type.is_file()
+            && is_spool_file
             && let Err(err) = std::fs::remove_file(entry.path())
         {
             warn!(?err, path = %entry.path().display(), "Failed to prune stale NAR spool file");
@@ -611,6 +639,26 @@ struct UpstreamCache {
 /// failing); transport/upstream faults are folded into `Ok(None)` so a
 /// flaky upstream never turns a lookup into a 5xx.
 type ReadThroughResult = Result<Option<Bytes>, Error>;
+
+/// The aggregate outcome of probing every upstream for one store-path
+/// hash. Distinguishes a proven absence from an unproven one so only the
+/// former is negative-cached: caching an [`Indeterminate`] miss would turn
+/// a transient upstream outage into a `404` served for the whole
+/// `upstream_negative_ttl`, hiding a path that actually exists upstream.
+///
+/// [`Indeterminate`]: UpstreamOutcome::Indeterminate
+enum UpstreamOutcome {
+    /// An upstream had the path; carries the stored narinfo record bytes.
+    Hit(Bytes),
+    /// Every upstream was reachable and definitively lacked the path
+    /// (e.g. a `404`). Safe to negative-cache.
+    DefinitiveMiss,
+    /// No upstream returned the path, but at least one failed transiently
+    /// (timeout, 5xx, transport error, a post-download NAR hash/size
+    /// mismatch, or a local ingest error), so absence is unproven — served
+    /// as a miss but never negative-cached.
+    Indeterminate,
+}
 
 /// A single in-flight read-through that concurrent `narinfo` GETs for the
 /// same store-path hash coalesce onto — the leader fetches from upstream,
@@ -857,6 +905,14 @@ impl NixCacheInstance {
         }
         let http_client = HttpClient::builder()
             .user_agent(concat!("nativelink-nix-cache/", env!("CARGO_PKG_VERSION")))
+            // Cap connection establishment and, crucially, the idle time
+            // between response data frames. The read (idle) timeout stops a
+            // stalled upstream NAR download from hanging the read-through
+            // leader — and every follower coalesced onto it — forever,
+            // without capping the total duration of a large but healthy
+            // download the way a per-request total `.timeout()` would.
+            .connect_timeout(Duration::from_secs(config.upstream_timeout_s))
+            .read_timeout(Duration::from_secs(config.upstream_timeout_s))
             .build()
             .map_err(|e| make_err!(Code::Internal, "Failed to build upstream HTTP client: {e}"))?;
 
@@ -927,17 +983,27 @@ impl NixCacheInstance {
         }
     }
 
-    /// Gates writes: read authorization first, then — when
-    /// `write_token_files` is configured — a valid write token (a read
-    /// token alone is not enough). `read_only` is checked separately by
-    /// the PUT handlers and wins over a valid write token.
+    /// Gates writes. Read authorization runs first. Then, whenever ANY
+    /// token auth is configured on the instance, a write requires a valid
+    /// WRITE token — a read token alone is never sufficient. In particular
+    /// if reads are gated but `write_token_files` is empty, writes are
+    /// denied outright (fail closed) rather than silently granting write
+    /// access to every read-token holder; point `write_token_files` at the
+    /// same files as `read_token_files` to intentionally allow that. Only a
+    /// cache with NO tokens at all leaves writes open (trusted-network
+    /// mode), gated solely by `read_only`, which the PUT handlers enforce
+    /// separately and which wins over any valid write token.
     fn authorize_write(&self, headers: &HeaderMap) -> Option<Response> {
         if let Some(denied) = self.authorize_read(headers) {
             return Some(denied);
         }
-        if self.write_token_hashes.is_empty() {
+        // No token auth configured at all: open cache for trusted networks.
+        if self.read_token_hashes.is_empty() && self.write_token_hashes.is_empty() {
             return None;
         }
+        // Otherwise a valid write token is mandatory. When no write tokens
+        // are configured, `token_matches_any` against an empty set is always
+        // false, so writes fail closed until write tokens are provisioned.
         let presented = extract_token(headers).map(|token| sha256_of(token.as_bytes()));
         let authorized =
             presented.is_some_and(|hash| token_matches_any(&hash, &self.write_token_hashes));
@@ -1096,10 +1162,18 @@ impl NixCacheInstance {
         };
 
         if is_leader {
-            let result = self.fetch_across_upstreams(hash).await;
-            if matches!(result, Ok(None)) {
+            let outcome = self.fetch_across_upstreams(hash).await;
+            // Only a proven-absent result is safe to negative-cache. An
+            // indeterminate miss (a transient upstream failure) is returned
+            // as a plain miss but must be retried on the next probe, not
+            // remembered as a 404 for `upstream_negative_ttl`.
+            if matches!(outcome, UpstreamOutcome::DefinitiveMiss) {
                 self.mark_negative(hash);
             }
+            let result: ReadThroughResult = match outcome {
+                UpstreamOutcome::Hit(record) => Ok(Some(record)),
+                UpstreamOutcome::DefinitiveMiss | UpstreamOutcome::Indeterminate => Ok(None),
+            };
             // Publish and wake followers BEFORE removing the slot, so a
             // follower already holding this slot always observes the result.
             {
@@ -1138,17 +1212,24 @@ impl NixCacheInstance {
 
     /// Tries each configured upstream in order, returning the first
     /// verified hit. A per-upstream transport or protocol error is logged
-    /// and treated as a miss for that upstream so the next one is still
-    /// tried and a flaky upstream never becomes a client-facing 5xx.
-    async fn fetch_across_upstreams(&self, hash: &str) -> ReadThroughResult {
+    /// and treated as an INDETERMINATE result for that upstream so the next
+    /// one is still tried and a flaky upstream never becomes a
+    /// client-facing 5xx — but a miss produced (even partly) by such an
+    /// error is [`UpstreamOutcome::Indeterminate`], never negative-cached,
+    /// so a transient outage cannot turn an existing path into a cached
+    /// 404. Only when every upstream was reachable and definitively lacked
+    /// the path is the result [`UpstreamOutcome::DefinitiveMiss`].
+    async fn fetch_across_upstreams(&self, hash: &str) -> UpstreamOutcome {
+        let mut had_error = false;
         for upstream in &self.upstreams {
             match self.fetch_one_upstream(upstream, hash).await {
                 Ok(Some(record)) => {
                     self.upstream_hits.inc();
-                    return Ok(Some(record));
+                    return UpstreamOutcome::Hit(record);
                 }
                 Ok(None) => {}
                 Err(err) => {
+                    had_error = true;
                     self.upstream_errors.inc();
                     warn!(
                         ?err,
@@ -1160,7 +1241,11 @@ impl NixCacheInstance {
             }
         }
         self.upstream_misses.inc();
-        Ok(None)
+        if had_error {
+            UpstreamOutcome::Indeterminate
+        } else {
+            UpstreamOutcome::DefinitiveMiss
+        }
     }
 
     /// Fetches one store path from a single upstream: probes its
@@ -1278,12 +1363,17 @@ impl NixCacheInstance {
         //    unreferenced (it is under its own true digest and will be
         //    evicted) and writing no record.
         if nar_sha256 != info.nar_hash || nar_size != info.nar_size {
-            warn!(
-                %hash,
-                url = %upstream.base_url,
-                "upstream NAR hash/size does not match its signed narinfo; refusing",
-            );
-            return Ok(None);
+            // A post-download hash/size mismatch means truncation, corruption,
+            // or tampering in transit — a transient/indeterminate condition,
+            // NOT proof the path is absent. Return an error (folded into
+            // `Indeterminate` upstream) so it is retried next probe rather
+            // than negative-cached as a 404. The ingested blob is left
+            // unreferenced under its own true digest and will be evicted.
+            return Err(make_err!(
+                Code::Unavailable,
+                "upstream NAR hash/size does not match its signed narinfo for {hash} at {}; refusing",
+                upstream.base_url
+            ));
         }
         self.upstream_nar_bytes.add(nar_size);
 
@@ -2143,12 +2233,12 @@ async fn put_nar_inner(
     // original compressed blob was stored too.
     let (nar_sha256, nar_size, preserved) = if let Some((file_sha256, file_size)) = preserved_digest
     {
-        // Store the original compressed bytes verbatim — the `verify{}`
-        // wrapper validates sha256(compressed) == the name hash — then
-        // decompress that blob into the canonical uncompressed NAR.
-        // Storing the compressed blob is 1:1 with the wire bytes, so it
-        // adds no amplification; the decompression-bomb cap still applies
-        // to the DECOMPRESSED output inside `decompress_cas_blob`.
+        // Store the original compressed bytes verbatim — `ingest_nar_direct`
+        // self-verifies sha256(compressed) == the name hash before it
+        // commits — then decompress that blob into the canonical
+        // uncompressed NAR. Storing the compressed blob is 1:1 with the wire
+        // bytes, so it adds no amplification; the decompression-bomb cap
+        // still applies to the DECOMPRESSED output inside `decompress_cas_blob`.
         ingest_nar_direct(instance, file_sha256, file_size, full_stream)
             .await
             .err_tip(|| "Storing the original compressed NAR blob")?;
@@ -2159,9 +2249,10 @@ async fn put_nar_inner(
         && let Some((digest_sha256, digest_size)) = bare_nar_digest_from_name(name, content_length)
     {
         // Fast path: the digest is known before the body is read, so the
-        // bytes stream straight into the CAS. The recommended `verify{}`
-        // wrapper recomputes sha256 in-stream and rejects mismatches at
-        // EOF. No spool file involved.
+        // bytes stream straight into the CAS. `ingest_nar_direct`
+        // self-verifies sha256(body) == the named digest before committing,
+        // so a mismatch is rejected even without a `verify{}` store. No
+        // spool file involved.
         ingest_nar_direct(instance, digest_sha256, digest_size, full_stream).await?;
         (digest_sha256, digest_size, None)
     } else {
@@ -2362,12 +2453,24 @@ async fn put_build_log_inner(
     // `Content-Encoding` header: keep the encoded bytes verbatim and
     // remember the encoding for GET to replay.
     let content_encoding = match headers.get(CONTENT_ENCODING) {
-        Some(value) => Some(
-            value
+        Some(value) => {
+            let encoding = value
                 .to_str()
                 .map_err(|e| make_input_err!("Content-Encoding header is not ASCII: {e}"))?
-                .to_string(),
-        ),
+                .trim()
+                .to_string();
+            // This value is stored and later replayed verbatim as the
+            // response `Content-Encoding` for every reader of this shared
+            // log, so only accept a curated set of codec tokens — never an
+            // arbitrary attacker-chosen header value.
+            if !is_allowed_log_encoding(&encoding) {
+                return Err(make_input_err!(
+                    "unsupported build-log Content-Encoding '{encoding}': expected some \
+                     combination of identity, gzip, deflate, br, zstd, xz, or bzip2"
+                ));
+            }
+            Some(encoding)
+        }
         None => None,
     };
     let Some(body_bytes) = read_body_limited(body, MAX_LOG_BODY_BYTES).await? else {
@@ -2415,6 +2518,15 @@ where
         UploadSizeInfo::ExactSize(nar_size),
     ));
     let pump_fut = async move {
+        // Self-certify the upload: hash every byte and confirm it matches
+        // the digest named in the request BEFORE committing (before EOF).
+        // This makes CAS integrity independent of whether the operator
+        // wrapped `cas_store` in a `verify{}` store — on a hash/size
+        // mismatch we return without sending EOF, which drops `tx` and makes
+        // `cas_store.update` fail, so the wrong bytes never commit under the
+        // claimed digest (no silent cache poisoning even on a plain store).
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        let mut written: u64 = 0;
         loop {
             // Bound each body read by the idle timeout so a stalled client
             // cannot pin the upload (and the CAS write half) indefinitely.
@@ -2433,9 +2545,29 @@ where
             if chunk.is_empty() {
                 continue;
             }
+            written = written.saturating_add(chunk.len() as u64);
+            // Reject an over-long body before over-sending to the CAS write
+            // half (whose `ExactSize` would also reject it, but failing here
+            // keeps the error a clean 400).
+            if written > nar_size {
+                return Err(make_input_err!(
+                    "NAR upload exceeds its declared size of {nar_size} bytes"
+                ));
+            }
+            hasher.update(&chunk);
             tx.send(chunk)
                 .await
                 .err_tip(|| "Sending NAR bytes to cas_store")?;
+        }
+        let finalized = hasher.finalize_digest();
+        let computed: &[u8; 32] = finalized.packed_hash();
+        if written != nar_size || *computed != nar_sha256 {
+            // Return WITHOUT sending EOF: dropping `tx` aborts the CAS write
+            // so the mismatched bytes are never committed under the digest.
+            return Err(make_input_err!(
+                "uploaded NAR does not match its named digest \
+                 (declared {nar_size} bytes, received {written})"
+            ));
         }
         tx.send_eof().err_tip(|| "Sending EOF to cas_store")
     };
@@ -2469,7 +2601,9 @@ where
         NarCodec::Bzip2 => Box::new(BzDecoder::new(reader)),
     };
 
-    let spool_path = instance.spool_dir.join(format!("{}.nar", Uuid::new_v4()));
+    let spool_path = instance
+        .spool_dir
+        .join(format!("{SPOOL_FILE_PREFIX}{}.nar", Uuid::new_v4()));
     let spool_guard = SpoolFileGuard::new(spool_path.clone());
     let mut spool_file = fs::create_file(&spool_path)
         .await
@@ -2583,7 +2717,9 @@ async fn decompress_cas_blob(
         NarCodec::Bzip2 => Box::new(BzDecoder::new(reader)),
     };
 
-    let spool_path = instance.spool_dir.join(format!("{}.nar", Uuid::new_v4()));
+    let spool_path = instance
+        .spool_dir
+        .join(format!("{SPOOL_FILE_PREFIX}{}.nar", Uuid::new_v4()));
     let spool_guard = SpoolFileGuard::new(spool_path.clone());
     let mut spool_file = fs::create_file(&spool_path)
         .await
@@ -2889,10 +3025,12 @@ mod tests {
     use super::{
         Counter, CounterWithTime, DEFAULT_SPOOL_DIR_NAME, DEFAULT_ZSTD_LEVEL, DigestHasher,
         DigestHasherFunc, DigestInfo, HeaderMap, HeaderValue, NarCodec, NixCacheInstance,
-        NixPathInfo, RangeRequest, ServeCompression, StatusCode, Store, StoreLike,
-        bare_nar_digest_from_name, bare_nar_stem_sha256, constant_time_eq, error_response,
-        extract_token, ingest_nar_direct, ingest_nar_spooled, is_valid_log_name,
-        is_valid_nar_upload_name, listing_name_hash, narinfo_name_hash, parse_range,
+        NixPathInfo, RangeRequest, SPOOL_FILE_PREFIX, ServeCompression, StatusCode, Store,
+        StoreLike, bare_nar_digest_from_name, bare_nar_stem_sha256, canonical_nar_name,
+        canonical_nar_zst_name, codec_for_name, compressed_upload_digest, constant_time_eq,
+        error_response, extract_token, ingest_nar_direct, ingest_nar_spooled,
+        is_allowed_log_encoding, is_valid_log_name, is_valid_nar_upload_name, listing_name_hash,
+        narinfo_name_hash, nixbase32, parse_canonical_any, parse_canonical_nar_name, parse_range,
         prepare_spool_dir, resolve_or_transcode_zstd, sha256_of, token_matches_any,
         transcode_nar_to_zstd, with_sha256_ctx,
     };
@@ -3555,5 +3693,247 @@ mod tests {
             "the in-flight map must be drained after completion"
         );
         Ok(())
+    }
+
+    /// Spool-directory pruning is scoped strictly to files this service
+    /// created: an UNRELATED file dropped into a misconfigured shared
+    /// `spool_path` must survive `prepare_spool_dir`, while a genuine leftover
+    /// spool file (carrying [`SPOOL_FILE_PREFIX`] and the `.nar` suffix) is
+    /// removed. Losing unrelated operator data here would be a data-loss bug.
+    #[test]
+    fn prepare_spool_dir_prunes_only_spool_files() {
+        let dir = std::env::temp_dir()
+            .join(DEFAULT_SPOOL_DIR_NAME)
+            .join(format!("prune-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+
+        // An unrelated file that must be preserved.
+        let unrelated = dir.join("important.txt");
+        std::fs::write(&unrelated, b"operator data that must not be deleted").expect("write");
+        // A genuine leftover spool file that must be pruned.
+        let stale_spool = dir.join(format!("{SPOOL_FILE_PREFIX}{}.nar", Uuid::new_v4()));
+        std::fs::write(&stale_spool, b"stale partial NAR").expect("write");
+        // A file that merely ends in `.nar` but lacks the prefix must survive:
+        // pruning keys on BOTH the prefix and the suffix.
+        let foreign_nar = dir.join("someones-artifact.nar");
+        std::fs::write(&foreign_nar, b"not ours").expect("write");
+        // A file with the prefix but the wrong suffix must also survive.
+        let prefixed_other = dir.join(format!("{SPOOL_FILE_PREFIX}{}.tmp", Uuid::new_v4()));
+        std::fs::write(&prefixed_other, b"not a spool nar").expect("write");
+
+        prepare_spool_dir(&dir).expect("prepare spool dir");
+
+        assert!(unrelated.exists(), "unrelated file must survive pruning");
+        assert!(
+            foreign_nar.exists(),
+            "a .nar without the spool prefix must survive"
+        );
+        assert!(
+            prefixed_other.exists(),
+            "a prefixed file without the .nar suffix must survive"
+        );
+        assert!(
+            !stale_spool.exists(),
+            "a genuine leftover spool file must be pruned"
+        );
+
+        drop(std::fs::remove_dir_all(&dir));
+    }
+
+    /// The build-log `Content-Encoding` allowlist accepts every known codec
+    /// token (and their comma-combinations, case-insensitively, with
+    /// surrounding whitespace) while rejecting anything else.
+    #[test]
+    fn is_allowed_log_encoding_accepts_known_and_rejects_unknown() {
+        for good in [
+            "",
+            "identity",
+            "gzip",
+            "x-gzip",
+            "deflate",
+            "br",
+            "zstd",
+            "xz",
+            "bzip2",
+            "BR",
+            "GZip",
+            "gzip, br",
+            " br , zstd ",
+            "identity,identity",
+        ] {
+            assert!(is_allowed_log_encoding(good), "must accept '{good}'");
+        }
+        for bad in [
+            "totally-bogus",
+            "gzip, totally-bogus",
+            "br;q=1.0",
+            "chunked",
+            "compress",
+            "gzip br", // space-separated, not comma
+            "../etc",
+        ] {
+            assert!(!is_allowed_log_encoding(bad), "must reject '{bad}'");
+        }
+    }
+
+    mod proptests {
+        use proptest::prelude::*;
+        use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence};
+
+        use super::super::BASE64;
+        use super::*;
+
+        fn no_persist() -> ProptestConfig {
+            ProptestConfig {
+                // Never write a `proptest-regressions/` file into the tree.
+                failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
+                ..ProptestConfig::default()
+            }
+        }
+
+        /// Builds an `Authorization` header map from an arbitrary ASCII string
+        /// (header values must be visible ASCII / bytes hyper accepts).
+        fn auth_map(value: &str) -> HeaderMap {
+            let mut headers = HeaderMap::new();
+            if let Ok(v) = HeaderValue::from_str(value) {
+                headers.insert(super::super::AUTHORIZATION, v);
+            }
+            headers
+        }
+
+        proptest! {
+            #![proptest_config(no_persist())]
+
+            /// `constant_time_eq` must agree with `==` on every input,
+            /// including empty and length-mismatched slices.
+            #[test]
+            fn constant_time_eq_matches_plain_eq(a: Vec<u8>, b: Vec<u8>) {
+                prop_assert_eq!(constant_time_eq(&a, &b), a == b);
+            }
+
+            /// On equal-length pairs it still exactly matches `==` (the branch
+            /// past the length gate).
+            #[test]
+            fn constant_time_eq_matches_on_equal_length(pair in
+                (0usize..64).prop_flat_map(|len| {
+                    (proptest::collection::vec(any::<u8>(), len),
+                     proptest::collection::vec(any::<u8>(), len))
+                })
+            ) {
+                let (a, b) = pair;
+                prop_assert_eq!(a.len(), b.len());
+                prop_assert_eq!(constant_time_eq(&a, &b), a == b);
+            }
+
+            /// It is reflexive for any slice.
+            #[test]
+            fn constant_time_eq_is_reflexive(a: Vec<u8>) {
+                prop_assert!(constant_time_eq(&a, &a));
+            }
+
+            /// `extract_token` must never panic on ANY header value bytes, and
+            /// must never return an empty token.
+            #[test]
+            fn extract_token_never_panics(value in ".*") {
+                if let Some(token) = extract_token(&auth_map(&value)) {
+                    prop_assert!(!token.is_empty());
+                }
+            }
+
+            /// A well-formed `Bearer <token>` extracts exactly that token, for
+            /// any non-empty visible-ASCII token containing no spaces.
+            #[test]
+            fn extract_token_reads_bearer(token in "[!-~&&[^ ]]{1,64}") {
+                let headers = auth_map(&format!("Bearer {token}"));
+                let extracted = extract_token(&headers);
+                prop_assert_eq!(extracted.as_deref(), Some(token.as_str()));
+            }
+
+            /// A well-formed `Basic base64(user:password)` extracts the
+            /// password (the token nix authenticates with via netrc), for any
+            /// user/password drawn from a byte set with no ':' and no NUL.
+            #[test]
+            fn extract_token_reads_basic_password(
+                user in "[a-zA-Z0-9._-]{0,32}",
+                password in "[a-zA-Z0-9._!@#$%^&*()+-]{1,48}",
+            ) {
+                let encoded = BASE64.encode(format!("{user}:{password}"));
+                let headers = auth_map(&format!("Basic {encoded}"));
+                let extracted = extract_token(&headers);
+                prop_assert_eq!(extracted.as_deref(), Some(password.as_str()));
+            }
+
+            /// The NAR name parsers must never panic on arbitrary strings.
+            #[test]
+            fn nar_name_parsers_never_panic(name in ".*", len in any::<u64>()) {
+                let _ = bare_nar_digest_from_name(&name, Some(len));
+                let _ = bare_nar_digest_from_name(&name, None);
+                let _ = bare_nar_stem_sha256(&name);
+                let _ = parse_canonical_any(&name);
+                let _ = parse_canonical_nar_name(&name);
+                for codec in [NarCodec::None, NarCodec::Gzip, NarCodec::Xz, NarCodec::Zstd, NarCodec::Bzip2] {
+                    let _ = compressed_upload_digest(&name, codec, Some(len));
+                    let _ = compressed_upload_digest(&name, codec, None);
+                }
+                let _ = is_valid_nar_upload_name(&name);
+                let _ = codec_for_name(&name);
+            }
+
+            /// Any name `canonical_nar_name` produces round-trips through
+            /// `parse_canonical_nar_name` and `parse_canonical_any` back to the
+            /// same `(hash, size)` — and re-rendering equals the input.
+            #[test]
+            fn canonical_nar_name_round_trips(hash in any::<[u8; 32]>(), size in any::<u64>()) {
+                let name = canonical_nar_name(&hash, size);
+                prop_assert_eq!(parse_canonical_nar_name(&name), Some((hash, size)));
+                prop_assert_eq!(parse_canonical_any(&name), Some((hash, size, NarCodec::None)));
+                // The renderer is a true inverse of the parser on its own output.
+                let (rt_hash, rt_size) = parse_canonical_nar_name(&name).expect("parses");
+                prop_assert_eq!(canonical_nar_name(&rt_hash, rt_size), name);
+            }
+
+            /// Likewise for the canonical `.nar.zst` name.
+            #[test]
+            fn canonical_nar_zst_name_round_trips(hash in any::<[u8; 32]>(), size in any::<u64>()) {
+                let name = canonical_nar_zst_name(&hash, size);
+                prop_assert_eq!(parse_canonical_any(&name), Some((hash, size, NarCodec::Zstd)));
+                let (_, _, codec) = parse_canonical_any(&name).expect("parses");
+                prop_assert_eq!(codec, NarCodec::Zstd);
+            }
+
+            /// A bare `{52 nix32}.nar` name round-trips through
+            /// `bare_nar_stem_sha256` (stem == sha256(content)) and, with a
+            /// Content-Length, through `bare_nar_digest_from_name`.
+            #[test]
+            fn bare_nar_stem_round_trips(hash in any::<[u8; 32]>(), len in any::<u64>()) {
+                let name = format!("{}.nar", nixbase32::encode(&hash));
+                prop_assert_eq!(bare_nar_stem_sha256(&name), Some(hash));
+                prop_assert_eq!(bare_nar_digest_from_name(&name, Some(len)), Some((hash, len)));
+            }
+
+            /// `is_allowed_log_encoding` never panics on arbitrary strings, and
+            /// a single random non-codec token is always rejected.
+            #[test]
+            fn is_allowed_log_encoding_never_panics(s in ".*") {
+                let _ = is_allowed_log_encoding(&s);
+            }
+
+            /// Any token outside the known codec set is rejected (alone and
+            /// when appended to a valid list).
+            #[test]
+            fn is_allowed_log_encoding_rejects_non_codecs(
+                token in "[a-z][a-z0-9-]{2,20}"
+            ) {
+                const KNOWN: &[&str] =
+                    &["identity", "gzip", "x-gzip", "deflate", "br", "zstd", "xz", "bzip2"];
+                prop_assume!(!KNOWN.contains(&token.as_str()));
+                prop_assert!(!is_allowed_log_encoding(&token), "rejects '{}'", token);
+                prop_assert!(
+                    !is_allowed_log_encoding(&format!("gzip, {token}")),
+                    "rejects a list containing '{}'",
+                    token
+                );
+            }
+        }
     }
 }

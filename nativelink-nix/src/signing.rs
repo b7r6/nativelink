@@ -41,20 +41,32 @@ use nativelink_error::{Error, make_input_err};
 /// Splits a `<name>:<base64 payload>` string at the first `:`, validates the
 /// name, and decodes the payload.
 ///
-/// Error messages never echo the payload: for secret keys the raw input is
-/// key material and must not surface in logs. The base64 decode error is
-/// safe to include — it names at most the single *invalid* symbol, which by
-/// definition is not part of well-formed key material.
-fn split_key_string(s: &str, what: &str) -> Result<(String, Vec<u8>), Error> {
+/// Error messages never echo the payload itself. `echo_decode_error`
+/// controls whether the underlying base64 error is interpolated:
+///
+/// - For a PUBLIC key it is safe to include — the error names at most the
+///   single *invalid* symbol, which by definition is not part of the key.
+/// - For a SECRET key the whole input is key material, and even the
+///   base64 error can echo a payload-derived fragment (for example the
+///   trailing bytes on a length error), so the message stays generic.
+fn split_key_string(
+    s: &str,
+    what: &str,
+    echo_decode_error: bool,
+) -> Result<(String, Vec<u8>), Error> {
     let (name, payload_b64) = s.split_once(':').ok_or_else(|| {
         make_input_err!("Nix {what} is missing the ':' separator between name and base64 payload")
     })?;
     if name.is_empty() {
         return Err(make_input_err!("Nix {what} has an empty key name"));
     }
-    let payload = BASE64
-        .decode(payload_b64)
-        .map_err(|e| make_input_err!("Nix {what} has an invalid base64 payload: {e}"))?;
+    let payload = BASE64.decode(payload_b64).map_err(|e| {
+        if echo_decode_error {
+            make_input_err!("Nix {what} has an invalid base64 payload: {e}")
+        } else {
+            make_input_err!("Nix {what} has an invalid base64 payload")
+        }
+    })?;
     Ok((name.to_owned(), payload))
 }
 
@@ -73,7 +85,9 @@ impl NixSigningKey {
     /// The embedded public key half is validated against the seed (via
     /// [`SigningKey::from_keypair_bytes`]); a mismatch is an input error.
     pub fn from_secret_string(s: &str) -> Result<Self, Error> {
-        let (name, payload) = split_key_string(s, "secret key")?;
+        // A secret key is entirely key material: do not echo the base64
+        // decode error, which can surface a payload-derived fragment.
+        let (name, payload) = split_key_string(s, "secret key", false)?;
         let payload_len = payload.len();
         let keypair_bytes: [u8; KEYPAIR_LENGTH] = payload.try_into().map_err(|_| {
             make_input_err!(
@@ -135,7 +149,9 @@ pub struct NixPublicKey {
 impl NixPublicKey {
     /// Parses a Nix public key string: `<name>:<base64 of 32 bytes>`.
     pub fn from_string(s: &str) -> Result<Self, Error> {
-        let (name, payload) = split_key_string(s, "public key")?;
+        // A public key is not secret, so echoing the base64 decode error
+        // (which names at most the single invalid symbol) is safe.
+        let (name, payload) = split_key_string(s, "public key", true)?;
         let payload_len = payload.len();
         let key_bytes: [u8; PUBLIC_KEY_LENGTH] = payload.try_into().map_err(|_| {
             make_input_err!(
@@ -173,6 +189,12 @@ impl NixPublicKey {
         let Ok(signature) = Signature::from_slice(&sig_bytes) else {
             return false;
         };
+        // DELIBERATE: `Verifier::verify` is the non-strict ed25519 check
+        // (it does not reject non-canonical `s` or small-order `R` the way
+        // `verify_strict` does). This is a Nix/libsodium-parity choice —
+        // libsodium's `crypto_sign_verify_detached`, which Nix uses, is
+        // likewise non-strict — so a signature Nix accepts we accept and
+        // vice versa. Do NOT switch this to `verify_strict`.
         self.key.verify(fingerprint.as_bytes(), &signature).is_ok()
     }
 }
@@ -209,8 +231,11 @@ mod tests {
     // The fingerprint below is constructed BY HAND from those narinfo fields
     // per Nix's fingerprint format:
     //   "1;<store path>;<nar hash sha256:nix32>;<nar size>;<comma-joined full reference paths>"
-    // (references are the narinfo basenames prefixed with /nix/store/, in
-    // narinfo order).
+    // (references are the narinfo basenames prefixed with /nix/store/, then
+    // byte-lexicographically SORTED — matching Nix's sorted StorePathSet,
+    // which is what `narinfo::fingerprint()` computes. This fixture's two
+    // references happen to already be in sorted order, so the hand-written
+    // string matches regardless.)
     const NIX_FINGERPRINT: &str = "1;/nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3;sha256:1b89r1vlfiv6immkhq8aqxhy1jrzh2araqsn6rvwhrjgpy3pd52h;1856888;/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66,/nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3";
     // The Sig line nix wrote with our key.
     const NIX_SIG: &str = "nl-test-1:fVj4XST/j2Yz1xgPY0pjDjmGMUbMjVRC84PzQJKNfOWth+poDayvMYGa1LX+JlY+TcT0Gdk6U4RCk50sEduTBA==";
@@ -351,5 +376,223 @@ mod tests {
         assert!(rendered.contains("<redacted>"));
         // Must not leak any part of the base64 key material.
         assert!(!rendered.contains("JopCSw"));
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use ed25519_dalek::SigningKey;
+    use proptest::prelude::*;
+
+    use super::{NixPublicKey, NixSigningKey};
+
+    /// Builds a Nix secret-key string `<name>:<base64(seed||public)>` from
+    /// an arbitrary 32-byte seed and a legal key name, then parses it into
+    /// a [`NixSigningKey`]. Every 32-byte seed is a valid ed25519 key, so
+    /// this always succeeds.
+    fn signing_key_strategy() -> impl Strategy<Value = (String, NixSigningKey)> {
+        (any::<[u8; 32]>(), "[a-z0-9][a-z0-9.-]{0,15}").prop_map(|(seed, name)| {
+            let signing = SigningKey::from_bytes(&seed);
+            let secret = format!("{name}:{}", BASE64.encode(signing.to_keypair_bytes()));
+            let key = NixSigningKey::from_secret_string(&secret).expect("valid generated secret");
+            (name, key)
+        })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 2048,
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::Off,
+            )),
+            ..ProptestConfig::default()
+        })]
+
+        /// sign -> verify round-trips for arbitrary fingerprint strings.
+        #[test]
+        fn sign_then_verify_round_trips(
+            (_name, key) in signing_key_strategy(),
+            fingerprint in ".*",
+        ) {
+            let public = NixPublicKey::from_string(&key.public_key_string())
+                .expect("public key parses");
+            let sig = key.sign(&fingerprint);
+            prop_assert!(public.verify(&fingerprint, &sig));
+        }
+
+        /// `public_key_string()` parses back to a key with the same name
+        /// that verifies the same signatures.
+        #[test]
+        fn public_key_string_round_trips(
+            (name, key) in signing_key_strategy(),
+            fingerprint in ".*",
+        ) {
+            let public = NixPublicKey::from_string(&key.public_key_string())
+                .expect("public key parses");
+            prop_assert_eq!(public.name(), name.as_str());
+            let sig = key.sign(&fingerprint);
+            prop_assert!(public.verify(&fingerprint, &sig));
+        }
+
+        /// Tamper detection: changing any single byte of the fingerprint
+        /// (to a different ASCII byte, keeping it valid UTF-8) makes
+        /// verification fail.
+        #[test]
+        fn flipping_fingerprint_byte_fails_verification(
+            (_name, key) in signing_key_strategy(),
+            // A nonempty printable-ASCII fingerprint so a byte change keeps
+            // the string valid UTF-8 and unambiguous.
+            fingerprint in "[ -~]{1,64}",
+            pos in any::<prop::sample::Index>(),
+            replacement in 0x20u8..=0x7e,
+        ) {
+            let public = NixPublicKey::from_string(&key.public_key_string())
+                .expect("public key parses");
+            let sig = key.sign(&fingerprint);
+            let mut bytes = fingerprint.clone().into_bytes();
+            let idx = pos.index(bytes.len());
+            // Force a genuinely different byte at `idx`.
+            let new_byte = if bytes[idx] == replacement {
+                if replacement == 0x7e { 0x20 } else { replacement + 1 }
+            } else {
+                replacement
+            };
+            bytes[idx] = new_byte;
+            let tampered = String::from_utf8(bytes).expect("still ASCII");
+            prop_assert_ne!(&tampered, &fingerprint);
+            prop_assert!(!public.verify(&tampered, &sig));
+        }
+
+        /// Tamper detection: flipping any bit of the signature's decoded
+        /// bytes makes verification fail.
+        #[test]
+        fn flipping_signature_byte_fails_verification(
+            (name, key) in signing_key_strategy(),
+            fingerprint in ".*",
+            pos in any::<prop::sample::Index>(),
+            xor in 1u8..=u8::MAX,
+        ) {
+            let public = NixPublicKey::from_string(&key.public_key_string())
+                .expect("public key parses");
+            let sig = key.sign(&fingerprint);
+            let (_, sig_b64) = sig.split_once(':').expect("sig has ':'");
+            let mut raw = BASE64.decode(sig_b64).expect("sig base64");
+            let idx = pos.index(raw.len());
+            raw[idx] ^= xor;
+            let tampered = format!("{name}:{}", BASE64.encode(&raw));
+            prop_assert!(!public.verify(&fingerprint, &tampered));
+        }
+
+        /// Tamper detection: flipping any bit of the PUBLIC key's bytes
+        /// yields a key that does not verify the untampered signature (when
+        /// the tampered bytes still form a valid curve point).
+        #[test]
+        fn flipping_key_byte_fails_verification(
+            (name, key) in signing_key_strategy(),
+            fingerprint in ".*",
+            pos in any::<prop::sample::Index>(),
+            xor in 1u8..=u8::MAX,
+        ) {
+            let sig = key.sign(&fingerprint);
+            let public_str = key.public_key_string();
+            let (_, key_b64) = public_str.split_once(':').expect("key has ':'");
+            let mut raw = BASE64.decode(key_b64).expect("key base64");
+            let idx = pos.index(raw.len());
+            raw[idx] ^= xor;
+            let tampered_str = format!("{name}:{}", BASE64.encode(&raw));
+            // A tampered key may not decode to a valid curve point; only if
+            // it does can we check that it rejects the original signature.
+            if let Ok(tampered_key) = NixPublicKey::from_string(&tampered_str) {
+                prop_assert!(!tampered_key.verify(&fingerprint, &sig));
+            }
+        }
+
+        /// Wrong-key rejection: a DIFFERENT keypair (same name) does not
+        /// verify a signature made by the first key.
+        #[test]
+        fn wrong_key_rejects_signature(
+            (name, key_a) in signing_key_strategy(),
+            seed_b in any::<[u8; 32]>(),
+            fingerprint in ".*",
+        ) {
+            let sig = key_a.sign(&fingerprint);
+            let signing_b = SigningKey::from_bytes(&seed_b);
+            // Only meaningful when the two keys actually differ.
+            prop_assume!(
+                signing_b.verifying_key().to_bytes()
+                    != key_a.public_key_string()
+                        .split_once(':')
+                        .map(|(_, b64)| BASE64.decode(b64).expect("b64"))
+                        .expect("public bytes")
+                        .as_slice()
+            );
+            let secret_b = format!("{name}:{}", BASE64.encode(signing_b.to_keypair_bytes()));
+            let key_b = NixSigningKey::from_secret_string(&secret_b).expect("valid secret b");
+            let public_b = NixPublicKey::from_string(&key_b.public_key_string())
+                .expect("public b parses");
+            prop_assert!(!public_b.verify(&fingerprint, &sig));
+        }
+
+        /// Malformed secret-key strings never panic (Err or Ok, no unwind);
+        /// and a secret-key parse error never echoes the payload.
+        #[test]
+        fn secret_key_parse_never_panics(s in ".*") {
+            match NixSigningKey::from_secret_string(&s) {
+                Ok(_) | Err(_) => {}
+            }
+        }
+
+        /// Malformed public-key strings never panic.
+        #[test]
+        fn public_key_parse_never_panics(s in ".*") {
+            match NixPublicKey::from_string(&s) {
+                Ok(_) | Err(_) => {}
+            }
+        }
+
+        /// `verify` never panics on arbitrary signature strings and returns
+        /// `false` for anything that is not a genuine signature.
+        #[test]
+        fn verify_never_panics_on_arbitrary_sig(
+            (_name, key) in signing_key_strategy(),
+            fingerprint in ".*",
+            sig in ".*",
+        ) {
+            let public = NixPublicKey::from_string(&key.public_key_string())
+                .expect("public key parses");
+            // Reaching here without unwinding is the core property. `verify`
+            // is also deterministic, so a second call must agree — this both
+            // consumes the result and asserts something non-trivial.
+            let verified = public.verify(&fingerprint, &sig);
+            prop_assert_eq!(verified, public.verify(&fingerprint, &sig));
+        }
+
+        /// A secret-key base64 error message must NOT interpolate the
+        /// underlying decode error (which could echo payload-derived
+        /// bytes); the public-key path may.
+        #[test]
+        fn secret_key_error_never_echoes_decode_detail(
+            name in "[a-z0-9][a-z0-9.-]{0,10}",
+            // A payload with an illegal-length base64 body: decodes with a
+            // length/symbol error whose Display can name payload bytes.
+            body in "[A-Za-z0-9+/]{5}",
+        ) {
+            let s = format!("{name}:{body}");
+            if let Err(e) = NixSigningKey::from_secret_string(&s) {
+                let msg = e.to_string();
+                prop_assert!(
+                    msg.contains("invalid base64 payload"),
+                    "unexpected message: {msg}"
+                );
+                // The generic form has no trailing ": <detail>" after the
+                // word "payload".
+                prop_assert!(
+                    !msg.contains("payload:"),
+                    "secret-key error leaked decode detail: {msg}"
+                );
+            }
+        }
     }
 }

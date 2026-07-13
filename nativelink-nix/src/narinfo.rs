@@ -28,7 +28,8 @@
 //!   `References` or `CA` lines are errors; `Sig` may repeat.
 //! - A missing `Compression` field means `bzip2` to Nix, so the field is
 //!   non-optional here and always rendered explicitly.
-//! - `Deriver: unknown-deriver` parses to `None` and is never rendered.
+//! - `Deriver: unknown-deriver` (and an empty `Deriver` value) parses to
+//!   `None` and is never rendered.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -111,6 +112,38 @@ fn parse_hash_field(value: &str) -> Result<[u8; 32], Error> {
     })
 }
 
+/// Parses a strict canonical decimal `u64` the way Nix's `string2Int`
+/// does, rejecting the leading `+` and leading zeros that Rust's
+/// `str::parse::<u64>` silently accepts.
+///
+/// A value is accepted only when it is non-empty, all ASCII digits, has
+/// no leading `+`, and has no leading zero unless it is the single digit
+/// `"0"`. This mirrors the canonical-decimal check in
+/// `nix_cache_server`'s `compressed_upload_digest`, so `FileSize`/`NarSize`
+/// on the wire are held to exactly the size grammar the rest of the facade
+/// uses.
+///
+/// # Errors
+///
+/// Returns an `InvalidArgument` error for an empty string, any non-digit
+/// byte (including a leading `+` or `-`), a leading zero on a multi-digit
+/// value, or a value that overflows `u64`.
+fn parse_strict_u64(value: &str, field: &str) -> Result<u64, Error> {
+    if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(make_input_err!(
+            "corrupt narinfo: {field} '{value}' is not a decimal number"
+        ));
+    }
+    if value.len() > 1 && value.starts_with('0') {
+        return Err(make_input_err!(
+            "corrupt narinfo: {field} '{value}' has leading zeros"
+        ));
+    }
+    value
+        .parse::<u64>()
+        .map_err(|e| make_input_err!("corrupt narinfo: {field} '{value}' does not fit in u64: {e}"))
+}
+
 /// Parses a `.narinfo` document.
 ///
 /// Follows `NarInfo::NarInfo(...)` in Nix's `src/libstore/nar-info.cc`:
@@ -138,7 +171,12 @@ pub fn parse(text: &str) -> Result<NarInfo, Error> {
     let mut sigs: Vec<String> = Vec::new();
     let mut ca: Option<String> = None;
 
-    for line in text.split('\n') {
+    for raw_line in text.split('\n') {
+        // Strip a single trailing '\r' so a CRLF-served narinfo parses
+        // identically to an LF one; otherwise every value would carry a
+        // '\r' suffix (`Compression: xz\r` looks unsupported, a hash or
+        // size gains a byte and fails to parse).
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
         if line.is_empty() {
             continue;
         }
@@ -157,26 +195,23 @@ pub fn parse(text: &str) -> Result<NarInfo, Error> {
                 file_hash = Some(parse_hash_field(value).err_tip(|| "in narinfo FileHash field")?);
             }
             "FileSize" => {
-                file_size = Some(
-                    value
-                        .parse::<u64>()
-                        .err_tip(|| format!("corrupt narinfo: invalid FileSize '{value}'"))?,
-                );
+                file_size = Some(parse_strict_u64(value, "FileSize")?);
             }
             "NarHash" => {
                 nar_hash = Some(parse_hash_field(value).err_tip(|| "in narinfo NarHash field")?);
             }
             "NarSize" => {
-                nar_size = Some(
-                    value
-                        .parse::<u64>()
-                        .err_tip(|| format!("corrupt narinfo: invalid NarSize '{value}'"))?,
-                );
+                nar_size = Some(parse_strict_u64(value, "NarSize")?);
             }
             "References" => {
                 if references.is_some() {
                     return Err(make_input_err!("corrupt narinfo: extra References line"));
                 }
+                // Nix-faithful: references are ASCII-space-delimited (Nix
+                // splits the value on `' '`). Empty tokens from double or
+                // trailing spaces are dropped so they never become empty
+                // references (which would fail later store-path validation
+                // and corrupt the fingerprint).
                 references = Some(
                     value
                         .split(' ')
@@ -186,7 +221,11 @@ pub fn parse(text: &str) -> Result<NarInfo, Error> {
                 );
             }
             "Deriver" => {
-                if value != "unknown-deriver" {
+                // `unknown-deriver` is Nix's explicit sentinel for "no
+                // deriver"; an empty value means the same thing, and
+                // treating it as absent keeps `parse` consistent with
+                // `path_info::{from,to}_nar_info` (which map empty <-> None).
+                if !value.is_empty() && value != "unknown-deriver" {
                     deriver = Some(value.to_string());
                 }
             }
@@ -972,5 +1011,282 @@ mod tests {
             info.store_path_hash().expect("valid"),
             "bvkx110ylicifcgl0xiid5f100hx3ar7"
         );
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+
+    use super::{NarInfo, fingerprint, parse};
+
+    /// A store path with a real 32-char nix32 hash and a safe name.
+    fn store_path_strategy() -> impl Strategy<Value = String> {
+        (
+            proptest::collection::vec(0u8..32, 32),
+            "[0-9a-zA-Z+._?=-]{1,20}",
+        )
+            .prop_map(|(hash_digits, name)| {
+                let hash: String = hash_digits
+                    .into_iter()
+                    .map(|d| char::from(b"0123456789abcdfghijklmnpqrsvwxyz"[usize::from(d)]))
+                    .collect();
+                // Keep the name Nix-legal (no leading '.') so the store path
+                // survives the path_info validators used elsewhere.
+                format!("/nix/store/{hash}-n{name}")
+            })
+    }
+
+    /// A field value with no line-structure bytes: safe to place after
+    /// `Name: ` and render/parse back verbatim. Never empty.
+    fn safe_value() -> impl Strategy<Value = String> {
+        "[!-~ ]{1,40}".prop_filter("no CR/LF", |s| !s.contains(['\n', '\r']))
+    }
+
+    /// A reference basename: nonempty and free of the space delimiter and
+    /// line bytes, so `References` round-trips exactly.
+    fn reference_strategy() -> impl Strategy<Value = String> {
+        "[!-~]{1,30}".prop_filter("no space/CR/LF", |s| !s.contains([' ', '\n', '\r']))
+    }
+
+    /// A verbatim `name:base64` signature string free of line bytes.
+    fn sig_strategy() -> impl Strategy<Value = String> {
+        "[a-z0-9.-]{1,12}:[A-Za-z0-9+/=]{1,90}"
+            .prop_filter("no CR/LF", |s| !s.contains(['\n', '\r']))
+    }
+
+    /// Builds a structurally-valid, render/parse-stable [`NarInfo`]. Every
+    /// invariant that `parse` normalizes on is pre-satisfied so that
+    /// `parse(render(x)) == x`:
+    /// - `url`/`compression` nonempty (empty would be re-defaulted),
+    /// - `nar_size` nonzero (zero is corrupt),
+    /// - references nonempty and space-free (the split delimiter),
+    /// - a `Some` `deriver` is nonempty and not `unknown-deriver`,
+    /// - a `Some` `ca` is nonempty,
+    /// - no field value carries a `\n`/`\r`.
+    fn narinfo_strategy() -> impl Strategy<Value = NarInfo> {
+        (
+            store_path_strategy(),
+            safe_value(),                            // url
+            "[a-z0-9]{1,8}",                         // compression
+            proptest::option::of(any::<[u8; 32]>()), // file_hash
+            proptest::option::of(1u64..=u64::MAX),   // file_size
+            any::<[u8; 32]>(),                       // nar_hash
+            1u64..=u64::MAX,                         // nar_size
+            proptest::collection::vec(reference_strategy(), 0..6),
+            proptest::option::of(
+                "[!-~]{1,20}".prop_filter("nonempty, not the sentinel, no CR/LF", |s: &String| {
+                    s != "unknown-deriver" && !s.contains(['\n', '\r'])
+                }),
+            ),
+            proptest::option::of(
+                "[!-~ ]{1,15}".prop_filter("no CR/LF", |s: &String| !s.contains(['\n', '\r'])),
+            ),
+            proptest::collection::vec(sig_strategy(), 0..4),
+            proptest::option::of(safe_value()),
+        )
+            .prop_map(
+                |(
+                    store_path,
+                    url,
+                    compression,
+                    file_hash,
+                    file_size,
+                    nar_hash,
+                    nar_size,
+                    references,
+                    deriver,
+                    system,
+                    sigs,
+                    ca,
+                )| NarInfo {
+                    store_path,
+                    url,
+                    compression,
+                    file_hash,
+                    file_size,
+                    nar_hash,
+                    nar_size,
+                    references,
+                    deriver,
+                    system,
+                    sigs,
+                    ca,
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 2048,
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::Off,
+            )),
+            ..ProptestConfig::default()
+        })]
+
+        /// THE key fuzz property: `parse` never panics on arbitrary UTF-8.
+        #[test]
+        fn parse_never_panics_on_arbitrary_string(s in ".*") {
+            // Determinism doubles as a no-panic assertion (both calls run).
+            prop_assert_eq!(parse(&s).is_ok(), parse(&s).is_ok());
+        }
+
+        /// `parse` never panics on arbitrary bytes viewed as a lossy string.
+        #[test]
+        fn parse_never_panics_on_lossy_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..=256)) {
+            let s = String::from_utf8_lossy(&bytes);
+            // Determinism doubles as a no-panic assertion (both calls run).
+            prop_assert_eq!(parse(&s).is_ok(), parse(&s).is_ok());
+        }
+
+        /// `parse` never panics on a structured-but-mutated narinfo: take a
+        /// rendered valid document, flip/insert bytes, and parse.
+        #[test]
+        fn parse_never_panics_on_mutated_narinfo(
+            info in narinfo_strategy(),
+            byte in any::<u8>(),
+            pos in any::<prop::sample::Index>(),
+            insert in any::<bool>(),
+        ) {
+            let mut bytes = info.render().into_bytes();
+            if bytes.is_empty() {
+                return Ok(());
+            }
+            let idx = pos.index(bytes.len());
+            if insert {
+                bytes.insert(idx, byte);
+            } else {
+                bytes[idx] = byte;
+            }
+            let s = String::from_utf8_lossy(&bytes);
+            // Determinism doubles as a no-panic assertion (both calls run).
+            prop_assert_eq!(parse(&s).is_ok(), parse(&s).is_ok());
+        }
+
+        /// Idempotent round-trip: a structurally-valid narinfo parses back
+        /// to itself, and re-rendering is a fixed point.
+        #[test]
+        fn render_parse_round_trips(info in narinfo_strategy()) {
+            let rendered = info.render();
+            let reparsed = parse(&rendered).expect("valid narinfo must parse");
+            prop_assert_eq!(&reparsed, &info);
+            prop_assert_eq!(reparsed.render(), rendered);
+        }
+
+        /// `parse(render(parse(t)?)) == parse(t)?` for any text that parses:
+        /// parsing is idempotent through a render.
+        #[test]
+        fn parse_render_parse_is_idempotent(s in ".*") {
+            if let Ok(first) = parse(&s) {
+                let second = parse(&first.render()).expect("re-parse of rendered narinfo");
+                prop_assert_eq!(second, first);
+            }
+        }
+
+        /// The fingerprint is invariant under reference reordering (it sorts
+        /// byte-lexicographically before joining).
+        #[test]
+        fn fingerprint_invariant_under_reference_reordering(
+            info in narinfo_strategy(),
+            seed in any::<u64>(),
+        ) {
+            let base = info.fingerprint();
+            // A deterministic Fisher-Yates shuffle of the references, so the
+            // fingerprint must be invariant across every reachable ordering.
+            let mut shuffled = info.references.clone();
+            let mut state = seed | 1;
+            for i in (1..shuffled.len()).rev() {
+                // SplitMix64-style step; the exact PRNG is irrelevant, only
+                // that it reaches many permutations across proptest cases.
+                state = state.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(1);
+                let bound = u64::try_from(i).expect("len fits u64") + 1;
+                let j = usize::try_from(state % bound).expect("bounded index");
+                shuffled.swap(i, j);
+            }
+            let reordered = fingerprint(
+                &info.store_path,
+                &info.nar_hash,
+                info.nar_size,
+                &shuffled,
+            );
+            prop_assert_eq!(reordered, base);
+        }
+
+        /// The fingerprint is invariant under CRLF-vs-LF line endings: a
+        /// document served with CRLF parses to the same fingerprint as its
+        /// LF form.
+        #[test]
+        fn fingerprint_invariant_under_crlf(info in narinfo_strategy()) {
+            let lf = info.render();
+            let crlf = lf.replace('\n', "\r\n");
+            let from_lf = parse(&lf).expect("LF parse");
+            let from_crlf = parse(&crlf).expect("CRLF parse");
+            prop_assert_eq!(from_lf.fingerprint(), from_crlf.fingerprint());
+            // And the whole document is identical after CRLF stripping.
+            prop_assert_eq!(from_lf, from_crlf);
+        }
+
+        /// Field-value INJECTION defense: a `\n`/`\r` smuggled into a field
+        /// value cannot survive a parse round trip to forge a later field.
+        ///
+        /// `render` does not escape, so a hand-built `NarInfo` whose `url`
+        /// contains `\nSig: forged...` DOES render a line a naive reader
+        /// would treat as a signature. The invariant that makes this safe
+        /// in practice is that a `NarInfo` produced by `parse` can never
+        /// carry a line-structure byte in any field (parse splits on
+        /// `\n` and strips `\r`). We assert exactly that: whatever a
+        /// forged, re-parsed document yields, none of its parsed fields
+        /// contains `\n` or `\r`, so a THIRD parse observes no new field
+        /// and the round trip is a fixed point (no forged field is gained
+        /// or lost on further passes).
+        #[test]
+        fn newline_injection_cannot_survive_a_parse_round_trip(mut info in narinfo_strategy()) {
+            info.url = format!("{}\nSig: forged-key:QUJDRA==", info.url);
+            let rendered = info.render();
+            if let Ok(parsed) = parse(&rendered) {
+                // No field a parse produced may carry a line byte.
+                let has_line_byte = |s: &str| s.contains(['\n', '\r']);
+                prop_assert!(!has_line_byte(&parsed.store_path));
+                prop_assert!(!has_line_byte(&parsed.url));
+                prop_assert!(!has_line_byte(&parsed.compression));
+                prop_assert!(parsed.references.iter().all(|r| !has_line_byte(r)));
+                prop_assert!(parsed.sigs.iter().all(|s| !has_line_byte(s)));
+                prop_assert!(parsed.deriver.as_deref().is_none_or(|d| !has_line_byte(d)));
+                prop_assert!(parsed.system.as_deref().is_none_or(|s| !has_line_byte(s)));
+                prop_assert!(parsed.ca.as_deref().is_none_or(|c| !has_line_byte(c)));
+                // A parse produced from parse output is a fixed point: no
+                // forged field materializes or vanishes on the next pass.
+                let reparsed = parse(&parsed.render()).expect("re-parse");
+                prop_assert_eq!(reparsed, parsed);
+            }
+        }
+
+        /// Strict integers: a `FileSize`/`NarSize` value with a leading `+`
+        /// or leading zeros is rejected, even though Rust's `parse::<u64>`
+        /// would accept the former's leading zeros.
+        #[test]
+        fn strict_integer_fields_reject_leading_plus_and_zeros(
+            info in narinfo_strategy(),
+            digits in "[0-9]{1,6}",
+            which in 0u8..3,
+        ) {
+            let lf = info.render();
+            // Build a non-canonical size token.
+            let bad = match which {
+                0 => format!("0{digits}"),   // leading zero
+                1 => format!("+{digits}"),   // leading plus
+                _ => format!("00{digits}"),  // multiple leading zeros
+            };
+            // NarSize is always present; replace its value.
+            let nar_line = format!("NarSize: {}\n", info.nar_size);
+            let bad_nar = format!("NarSize: {bad}\n");
+            prop_assert!(lf.contains(&nar_line));
+            let mutated = lf.replace(&nar_line, &bad_nar);
+            prop_assert!(
+                parse(&mutated).is_err(),
+                "NarSize '{}' must be rejected", bad
+            );
+        }
     }
 }

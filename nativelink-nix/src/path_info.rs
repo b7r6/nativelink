@@ -259,16 +259,42 @@ impl NixPathInfo {
         Ok(())
     }
 
-    /// Validates the store path, every reference, and every signature —
-    /// the single choke point shared by [`Self::to_nar_info`] (the render
-    /// path) and [`Self::encode_record`] (the persist path), so a record
-    /// that cannot be rendered can never be stored in the first place.
+    /// Validates the `nar_size`, the store path, every reference, and every
+    /// signature — the single choke point shared by [`Self::to_nar_info`]
+    /// (the render path) and [`Self::encode_record`] (the persist path), so
+    /// a record that cannot be rendered can never be stored in the first
+    /// place and vice versa.
+    ///
+    /// `nar_size` must be nonzero and fit in an `i64`:
+    /// - A zero `nar_size` is unrenderable (a `.narinfo` with `NarSize: 0`
+    ///   is corrupt to Nix); if `encode_record` accepted it, the record
+    ///   would persist and then 500 forever on GET.
+    /// - A `nar_size` above `i64::MAX` cannot be stored (it does not fit a
+    ///   `Digest`'s `size_bytes`), so accepting it in `to_nar_info` would
+    ///   let a renderable-but-unstorable path exist; both paths reject it
+    ///   here to stay symmetric.
     ///
     /// # Errors
     ///
-    /// Returns an `InvalidArgument` error if the store-path name, any
-    /// reference, or any signature is malformed.
+    /// Returns an `InvalidArgument` error if `nar_size` is zero or exceeds
+    /// `i64::MAX`, or if the store-path name, any reference, or any
+    /// signature is malformed.
     fn validate_store_path_references_and_signatures(&self) -> Result<(), Error> {
+        if self.nar_size == 0 {
+            return Err(make_input_err!(
+                "NixPathInfo for '{}' has a zero nar_size",
+                self.store_path
+            ));
+        }
+        // A Digest's size_bytes is an i64; a nar_size above i64::MAX can
+        // never be persisted, so reject it on the render path too.
+        i64::try_from(self.nar_size).map_err(|e| {
+            make_input_err!(
+                "NixPathInfo for '{}' nar_size {} does not fit in a Digest's i64 size_bytes: {e}",
+                self.store_path,
+                self.nar_size
+            )
+        })?;
         validate_store_path(&self.store_path)
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         for reference in &self.references {
@@ -312,22 +338,19 @@ impl NixPathInfo {
     /// # Errors
     ///
     /// Returns an `InvalidArgument` error if `nar_sha256` is not 32
-    /// bytes, `nar_size` is zero, any reference is not a store-path
-    /// basename, any signature is not `name:base64(64 bytes)`, or the
-    /// `file_*` trio violates its all-or-none invariant (see
-    /// [`Self::validate_file_fields`]).
+    /// bytes, `nar_size` is zero or exceeds `i64::MAX` (rejected so this
+    /// render path and [`Self::encode_record`] accept the same shapes),
+    /// any reference is not a store-path basename, any signature is not
+    /// `name:base64(64 bytes)`, or the `file_*` trio violates its
+    /// all-or-none invariant (see [`Self::validate_file_fields`]).
     pub fn to_nar_info(&self, url: String, compression: String) -> Result<NarInfo, Error> {
         let nar_hash = self
             .nar_hash()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
-        if self.nar_size == 0 {
-            return Err(make_input_err!(
-                "NixPathInfo for '{}' has a zero nar_size",
-                self.store_path
-            ));
-        }
         self.validate_file_fields()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
+        // A zero nar_size is rejected inside this shared choke point, so
+        // to_nar_info and encode_record accept/reject the same shapes.
         self.validate_store_path_references_and_signatures()?;
         Ok(NarInfo {
             store_path: self.store_path.clone(),
@@ -376,19 +399,23 @@ impl NixPathInfo {
     /// # Errors
     ///
     /// Returns an `InvalidArgument` error if `nar_sha256` is not 32
-    /// bytes, `nar_size` exceeds `i64::MAX` (the range of a `Digest`'s
-    /// `size_bytes`), or the `file_*` trio violates its all-or-none
-    /// invariant (see [`Self::validate_file_fields`]).
+    /// bytes, `nar_size` is zero (rejected so encode and
+    /// [`Self::to_nar_info`] accept the same shapes) or exceeds
+    /// `i64::MAX` (the range of a `Digest`'s `size_bytes`), a reference or
+    /// signature is malformed, or the `file_*` trio violates its
+    /// all-or-none invariant (see [`Self::validate_file_fields`]).
     pub fn encode_record(&self) -> Result<Vec<u8>, Error> {
         let nar_hash = self
             .nar_hash()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         self.validate_file_fields()
             .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
-        // Same reference/signature/store-path checks `to_nar_info` runs, so
-        // an unrenderable record is rejected at PUT (400) instead of being
-        // stored and then 500ing forever on GET.
+        // Same nar_size/reference/signature/store-path checks `to_nar_info`
+        // runs (including the i64 nar_size bound), so an unrenderable record
+        // is rejected at PUT (400) instead of being stored and then 500ing
+        // forever on GET — and a renderable one is always storable.
         self.validate_store_path_references_and_signatures()?;
+        // The bound above guarantees this succeeds; we still need the value.
         let size_bytes = i64::try_from(self.nar_size).map_err(|e| {
             make_input_err!(
                 "NixPathInfo nar_size {} does not fit in a Digest's i64 size_bytes: {e}",
@@ -791,7 +818,13 @@ mod tests {
         // Every mutation that makes `to_nar_info` fail must ALSO make
         // `encode_record` fail, so an unrenderable record can never be
         // persisted (the PUT/GET validation-asymmetry fix).
-        let cases: [FileFieldViolation; 6] = [
+        let cases: [FileFieldViolation; 7] = [
+            (
+                // A zero nar_size is unrenderable (NarSize: 0 is corrupt to
+                // Nix), so encode_record must reject it too.
+                |i| i.nar_size = 0,
+                "zero nar_size",
+            ),
             (
                 |i| i.references.push("no-hash-prefix".to_string()),
                 "short reference",
@@ -1186,5 +1219,264 @@ mod tests {
         let decoded =
             NixPathInfo::decode_record(record.encode_to_vec().as_slice()).expect("decode record");
         assert_eq!(decoded, sample_info());
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use proptest::prelude::*;
+
+    use super::NixPathInfo;
+
+    const NIX32: &[u8; 32] = b"0123456789abcdfghijklmnpqrsvwxyz";
+
+    /// A 32-character nix32 store-path hash.
+    fn hash32() -> impl Strategy<Value = String> {
+        proptest::collection::vec(0usize..32, 32).prop_map(|digits| {
+            digits
+                .into_iter()
+                .map(|d| char::from(NIX32[d]))
+                .collect::<String>()
+        })
+    }
+
+    /// A Nix-legal store-path name component (no leading '.').
+    fn store_name() -> impl Strategy<Value = String> {
+        "[0-9a-zA-Z+_?=-][0-9a-zA-Z+._?=-]{0,30}"
+            .prop_filter("no leading dot, within 211 bytes", |s: &String| {
+                !s.starts_with('.') && s.len() <= 211
+            })
+    }
+
+    /// A valid store path `/nix/store/<hash>-<name>`.
+    fn store_path() -> impl Strategy<Value = String> {
+        (hash32(), store_name()).prop_map(|(h, n)| format!("/nix/store/{h}-{n}"))
+    }
+
+    /// A valid reference basename `<hash>-<name>`.
+    fn reference() -> impl Strategy<Value = String> {
+        (hash32(), store_name()).prop_map(|(h, n)| format!("{h}-{n}"))
+    }
+
+    /// A valid signature `<name>:<base64 of 64 bytes>`.
+    fn signature() -> impl Strategy<Value = String> {
+        ("[a-z0-9][a-z0-9.-]{0,10}", any::<[u8; 64]>())
+            .prop_map(|(name, raw)| format!("{name}:{}", BASE64.encode(raw)))
+    }
+
+    /// The optional `file_*` trio, all-absent or all-present with a valid
+    /// 32-byte hash, nonzero size, nonempty compression, and an optional
+    /// `file_url` (only when the trio is present).
+    fn file_fields() -> impl Strategy<Value = (Vec<u8>, u64, String, String)> {
+        prop_oneof![
+            // Absent trio: empty hash, zero size, empty compression, empty url.
+            Just((Vec::new(), 0u64, String::new(), String::new())),
+            // Present trio, optionally with a file_url.
+            (
+                any::<[u8; 32]>(),
+                1u64..=u64::MAX,
+                "[a-z0-9]{1,6}",
+                proptest::option::of("[!-~]{1,30}"),
+            )
+                .prop_map(|(hash, size, compression, url)| (
+                    hash.to_vec(),
+                    size,
+                    compression,
+                    url.unwrap_or_default(),
+                )),
+        ]
+    }
+
+    /// A structurally-VALID [`NixPathInfo`]: everything the shared
+    /// validators require. `nar_size` is capped at `i64::MAX` so
+    /// `encode_record` (which must fit a `Digest`'s i64) succeeds; the
+    /// separate `nar_size_boundaries` property covers the overflow edge.
+    fn valid_path_info() -> impl Strategy<Value = NixPathInfo> {
+        (
+            store_path(),
+            any::<[u8; 32]>(),
+            // 0x7FFF_FFFF_FFFF_FFFF == i64::MAX, the largest nar_size that
+            // fits a Digest's i64 size_bytes and so still encodes.
+            1u64..=0x7FFF_FFFF_FFFF_FFFF,
+            proptest::collection::vec(reference(), 0..6),
+            proptest::option::of(reference()), // deriver (drv basename or absent)
+            proptest::option::of("[!-~]{1,20}"), // system
+            proptest::collection::vec(signature(), 0..4),
+            proptest::option::of("[!-~]{1,40}"), // ca
+            file_fields(),
+        )
+            .prop_map(
+                |(
+                    store_path,
+                    nar_sha256,
+                    nar_size,
+                    references,
+                    deriver,
+                    system,
+                    signatures,
+                    ca,
+                    (file_sha256, file_size, file_compression, file_url),
+                )| NixPathInfo {
+                    store_path,
+                    nar_sha256: nar_sha256.to_vec(),
+                    nar_size,
+                    references,
+                    deriver: deriver.unwrap_or_default(),
+                    system: system.unwrap_or_default(),
+                    signatures,
+                    ca: ca.unwrap_or_default(),
+                    file_sha256,
+                    file_size,
+                    file_compression,
+                    file_url,
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 2048,
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::Off,
+            )),
+            ..ProptestConfig::default()
+        })]
+
+        /// `encode_record` -> `decode_record` round-trips for any valid
+        /// message (references order preserved, deriver/file trio present
+        /// or absent, sizes across boundaries).
+        #[test]
+        fn encode_decode_record_round_trips(info in valid_path_info()) {
+            let bytes = info.encode_record().expect("valid message must encode");
+            let decoded = NixPathInfo::decode_record(&bytes).expect("must decode");
+            prop_assert_eq!(decoded, info);
+        }
+
+        /// The documented symmetry invariant across the FULL valid space:
+        /// `encode_record(x).is_ok() == to_nar_info(x).is_ok()`.
+        #[test]
+        fn encode_record_and_to_nar_info_agree_on_valid(info in valid_path_info()) {
+            let enc = info.encode_record().is_ok();
+            let nar = info
+                .to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                .is_ok();
+            prop_assert_eq!(enc, nar);
+        }
+
+        /// The symmetry invariant on MUTATED (often-invalid) messages,
+        /// including the edge cases: empty refs, zero size, oversize, bad
+        /// references/signatures, and stray file_url. The two paths must
+        /// always accept or reject together.
+        #[test]
+        fn encode_record_and_to_nar_info_agree_under_mutation(
+            info in valid_path_info(),
+            mutation in 0u8..10,
+            junk in "\\PC*",
+        ) {
+            let mut info = info;
+            // Exactly one arm runs, so moving `junk` into it is fine.
+            match mutation {
+                0 => info.nar_size = 0,
+                1 => info.nar_size = u64::MAX,
+                2 => info.nar_size = u64::try_from(i64::MAX).expect("i64::MAX fits u64") + 1,
+                3 => info.references.push(junk),
+                4 => info.references.clear(),
+                5 => info.signatures.push(junk),
+                6 => info.nar_sha256.truncate(info.nar_sha256.len().saturating_sub(1)),
+                7 => info.store_path = junk,
+                8 => {
+                    // Stray file_url with no trio.
+                    info.file_sha256 = Vec::new();
+                    info.file_size = 0;
+                    info.file_compression = String::new();
+                    info.file_url = "nar/deadbeef.nar.xz".to_string();
+                }
+                _ => {
+                    // Half-present trio.
+                    info.file_sha256 = vec![0u8; 32];
+                    info.file_size = 0;
+                    info.file_compression = String::new();
+                }
+            }
+            let enc = info.encode_record().is_ok();
+            let nar = info
+                .to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                .is_ok();
+            prop_assert_eq!(
+                enc, nar,
+                "encode_record={} but to_nar_info={} for mutation {}",
+                enc, nar, mutation
+            );
+        }
+
+        /// `decode_record` never panics on arbitrary bytes.
+        #[test]
+        fn decode_record_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..=256)) {
+            prop_assert!(
+                NixPathInfo::decode_record(&bytes).is_ok()
+                    || NixPathInfo::decode_record(&bytes).is_err()
+            );
+        }
+
+        /// nar_sha256 length invariant: any digest that is not exactly 32
+        /// bytes is rejected by BOTH encode_record and to_nar_info.
+        #[test]
+        fn nar_sha256_must_be_32_bytes(
+            info in valid_path_info(),
+            len in (0usize..64).prop_filter("not 32", |n| *n != 32),
+        ) {
+            let mut info = info;
+            info.nar_sha256 = vec![0u8; len];
+            prop_assert!(info.encode_record().is_err());
+            prop_assert!(
+                info.to_nar_info("nar/x.nar".to_string(), "none".to_string())
+                    .is_err()
+            );
+        }
+
+        /// nar_size i64/u64 boundary handling: values up to i64::MAX encode
+        /// (and the digest size decodes back with no `as`-truncation), while
+        /// anything above i64::MAX is rejected by encode_record.
+        #[test]
+        fn nar_size_boundaries(info in valid_path_info(), size in any::<u64>()) {
+            let mut info = info;
+            info.nar_size = size;
+            let fits_i64 = i64::try_from(size).is_ok();
+            match info.encode_record() {
+                Ok(bytes) => {
+                    // Accepted only within i64 range, and it must survive
+                    // the round trip with the EXACT same size (no wrap).
+                    prop_assert!(fits_i64 && size != 0);
+                    let decoded = NixPathInfo::decode_record(&bytes).expect("decode");
+                    prop_assert_eq!(decoded.nar_size, size);
+                }
+                Err(_) => {
+                    prop_assert!(size == 0 || !fits_i64);
+                }
+            }
+        }
+
+        /// The three exact boundary sizes are handled without surprise:
+        /// 1 encodes, i64::MAX encodes, i64::MAX + 1 does not.
+        #[test]
+        fn nar_size_exact_boundaries(info in valid_path_info()) {
+            let i64_max = u64::try_from(i64::MAX).expect("i64::MAX fits u64");
+
+            let mut one = info.clone();
+            one.nar_size = 1;
+            prop_assert!(one.encode_record().is_ok());
+
+            let mut max_i64 = info.clone();
+            max_i64.nar_size = i64_max;
+            let bytes = max_i64.encode_record().expect("i64::MAX encodes");
+            let decoded = NixPathInfo::decode_record(&bytes).expect("decode i64::MAX");
+            prop_assert_eq!(decoded.nar_size, i64_max);
+
+            let mut over = info;
+            over.nar_size = i64_max + 1;
+            prop_assert!(over.encode_record().is_err());
+        }
     }
 }

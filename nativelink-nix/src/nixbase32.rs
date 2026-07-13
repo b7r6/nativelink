@@ -287,3 +287,91 @@ mod tests {
         assert!(!is_valid_char(b'E'));
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+
+    use super::{ALPHABET, decode, encode, is_valid_char};
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 4096,
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::Off,
+            )),
+            ..ProptestConfig::default()
+        })]
+
+        /// `decode(encode(bytes)) == bytes` for arbitrary byte strings.
+        #[test]
+        fn decode_of_encode_round_trips(bytes in proptest::collection::vec(any::<u8>(), 0..=64)) {
+            let encoded = encode(&bytes);
+            prop_assert_eq!(encoded.len(), if bytes.is_empty() { 0 } else { (bytes.len() * 8 - 1) / 5 + 1 });
+            prop_assert_eq!(decode(&encoded).expect("round-trip decode"), bytes);
+        }
+
+        /// `decode` never panics on arbitrary UTF-8 strings.
+        #[test]
+        fn decode_never_panics_on_arbitrary_string(s in ".*") {
+            // Reaching here without unwinding is the property; consume the
+            // result so no `let _` / must-use lint fires.
+            // Determinism doubles as a no-panic assertion (both calls run).
+            prop_assert_eq!(decode(&s).is_ok(), decode(&s).is_ok());
+        }
+
+        /// `decode` never panics on arbitrary bytes viewed as a lossy string.
+        #[test]
+        fn decode_never_panics_on_lossy_bytes(bytes in proptest::collection::vec(any::<u8>(), 0..=80)) {
+            let s = String::from_utf8_lossy(&bytes);
+            // Determinism doubles as a no-panic assertion (both calls run).
+            prop_assert_eq!(decode(&s).is_ok(), decode(&s).is_ok());
+        }
+
+        /// Canonicality: any string that decodes Ok re-encodes to itself.
+        /// This is what rejects non-canonical encodings (nonzero trailing
+        /// padding bits): they must never decode successfully.
+        #[test]
+        fn decodable_strings_are_canonical(
+            s in proptest::collection::vec(0usize..32, 0..=60)
+                .prop_map(|digits| digits.into_iter().map(|d| char::from(ALPHABET[d])).collect::<String>())
+        ) {
+            if let Ok(decoded) = decode(&s) {
+                prop_assert_eq!(encode(&decoded), s);
+            }
+        }
+
+        /// Encoding arbitrary bytes always yields a canonical string that
+        /// decodes back and re-encodes to itself (a fixed point).
+        #[test]
+        fn encode_output_is_a_decode_fixed_point(bytes in proptest::collection::vec(any::<u8>(), 0..=48)) {
+            let encoded = encode(&bytes);
+            let decoded = decode(&encoded).expect("encode output must decode");
+            prop_assert_eq!(&decoded, &bytes);
+            prop_assert_eq!(encode(&decoded), encoded);
+        }
+
+        /// Every character outside the alphabet causes rejection: splice a
+        /// non-alphabet byte into an otherwise valid encoding.
+        #[test]
+        fn non_alphabet_character_is_rejected(
+            bytes in proptest::collection::vec(any::<u8>(), 1..=32),
+            pos in any::<prop::sample::Index>(),
+            bad in any::<char>().prop_filter(
+                "must be a non-alphabet ASCII-representable char",
+                |c| !c.is_ascii() || !is_valid_char(*c as u8),
+            ),
+        ) {
+            let encoded = encode(&bytes);
+            let idx = pos.index(encoded.len());
+            let mut chars: Vec<char> = encoded.chars().collect();
+            chars[idx] = bad;
+            let mutated: String = chars.into_iter().collect();
+            // The only way a mutation can still decode is if `bad` is
+            // itself an alphabet character AND the result stays canonical;
+            // by construction `bad` is not in the alphabet, so decode must
+            // fail on that character.
+            prop_assert!(decode(&mutated).is_err(), "expected rejection of {:?}", mutated);
+        }
+    }
+}
