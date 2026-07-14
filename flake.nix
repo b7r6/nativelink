@@ -214,6 +214,21 @@
 
         nativelink = nativelinkFor nativeTargetPkgs;
 
+        # The Nix cache client + watch-store daemon: nl-nix and nl-watch-store,
+        # from the `nativelink-nix-client` workspace crate. Built NATIVE (glibc),
+        # NOT musl-static like the server: it is a host-side systemd daemon, and
+        # rusqlite's bundled sqlite references LFS symbols (lstat64, open64, …)
+        # that musl-static does not provide. `-p` builds just the two client
+        # binaries; crane vendors the lone git dep from the lock.
+        nativelink-nix-client = (craneLibFor pkgs).buildPackage {
+          inherit src;
+          pname = "nativelink-nix-client";
+          version = "1.5.2";
+          strictDeps = true;
+          doCheck = false;
+          cargoExtraArgs = "--locked -p nativelink-nix-client";
+        };
+
         # These two can be built by all build platforms. This is not true for
         # darwin targets which are only buildable via native compilation.
         nativelink-aarch64-linux = nativelinkFor pkgs.pkgsCross.aarch64-multiplatform-musl;
@@ -444,6 +459,7 @@
           rec {
             inherit
               nativelink
+              nativelink-nix-client
               nativelinkCoverageForHost
               nativelink-aarch64-linux
               nativelink-image
