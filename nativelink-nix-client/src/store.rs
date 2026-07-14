@@ -160,18 +160,14 @@ impl NixStore {
     /// `<store_dir>/../var/nix/db/db.sqlite`, unless `NIX_STATE_DIR` overrides
     /// the state directory).
     ///
-    /// The database is opened `SQLITE_OPEN_READ_ONLY` so a running
-    /// `nix-daemon` (which keeps the DB in WAL mode) is never blocked. A plain
-    /// read-only open of a WAL database still needs to touch the sidecar
-    /// `-shm`/`-wal` files; when the process lacks write access to the DB
-    /// directory that open fails with a locking/IO error. In that case we
-    /// retry with the `immutable=1` URI, which reads the main file directly
-    /// and skips the WAL machinery entirely — trading absolute freshness (an
-    /// unflushed WAL is invisible) for not needing to write to the DB dir.
+    /// The database is opened for live, query-only reads that see a running
+    /// `nix-daemon`'s WAL commits (see [`open_nix_db`]); it never writes nix's
+    /// data and never blocks the daemon. On a read-only DB directory it degrades
+    /// to a frozen read-only/`immutable=1` snapshot.
     pub fn open(store_dir: &str) -> Result<Self, Error> {
         let store_dir = store_dir.trim_end_matches('/').to_string();
         let db_path = db_path_for_store(&store_dir);
-        let db = open_read_only(&db_path)?;
+        let db = open_nix_db(&db_path)?;
         Ok(Self { store_dir, db })
     }
 
@@ -331,9 +327,33 @@ fn db_path_for_store(store_dir: &str) -> std::path::PathBuf {
     state_dir.join("db/db.sqlite")
 }
 
-/// Opens `db_path` read-only, falling back to the `immutable=1` URI if a plain
-/// read-only open trips over the WAL sidecar files (see [`NixStore::open`]).
-fn open_read_only(db_path: &std::path::Path) -> Result<Connection, Error> {
+/// Opens the Nix DB for **live** reads that track a running `nix-daemon`'s WAL
+/// commits.
+///
+/// The subtlety that makes this necessary: a plain `SQLITE_OPEN_READ_ONLY`
+/// opener that cannot write the WAL `-shm` shared-memory index only ever sees a
+/// frozen snapshot as of the last checkpoint, and never observes commits made
+/// after it opened. For a long-lived `nl-watch-store` daemon that means every
+/// path built after startup is invisible — the watcher fires but the DB lookup
+/// reports the path as not valid. So we prefer a `READ_WRITE` handle (which lets
+/// SQLite maintain the wal-index, so each query sees the latest commit),
+/// immediately clamped with `PRAGMA query_only = ON` so this connection can
+/// never modify nix's database — a safe, ordinary WAL reader. Only if the
+/// read-write open fails (a genuinely read-only DB directory) do we fall back to
+/// read-only, then the `immutable=1` snapshot, trading live freshness for access.
+fn open_nix_db(db_path: &std::path::Path) -> Result<Connection, Error> {
+    // Preferred: a read-write handle demoted to query-only. This is what lets a
+    // persistent reader see paths committed after it opened.
+    if let Ok(conn) = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_WRITE) {
+        match conn.execute_batch("PRAGMA query_only = ON;") {
+            Ok(()) => return Ok(conn),
+            Err(err) => tracing::debug!(
+                db = %db_path.display(),
+                error = %err,
+                "could not clamp read-write handle to query_only; falling back to read-only",
+            ),
+        }
+    }
     match Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(conn) => Ok(conn),
         Err(err) if is_wal_access_error(&err) => {

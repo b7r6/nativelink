@@ -106,13 +106,31 @@ async fn run(cli: Cli) -> Result<(), Error> {
             },
         };
 
-        // Read metadata on this task (the DB connection is not `Sync`).
-        let meta = match store.query_path_info(&event.path) {
-            Ok(meta) => meta,
-            Err(err) => {
-                tracing::debug!(?err, path = %event.path.full_path(), "skipping (not a valid path yet)");
-                continue;
+        // Read metadata on this task (the DB connection is not `Sync`). fanotify
+        // fires on the store rename, a beat before `nix-daemon` commits the
+        // path's `ValidPaths` row, so a `NotFound` right after the event is
+        // expected — retry briefly (the connection is live) before giving up.
+        let meta = 'lookup: {
+            for attempt in 0..8u32 {
+                match store.query_path_info(&event.path) {
+                    Ok(meta) => break 'lookup Some(meta),
+                    Err(err) if err.code == Code::NotFound => {
+                        if attempt == 7 {
+                            tracing::debug!(path = %event.path.full_path(), "skipping (never became valid)");
+                        } else {
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(?err, path = %event.path.full_path(), "db query failed; skipping");
+                        break 'lookup None;
+                    }
+                }
             }
+            None
+        };
+        let Some(meta) = meta else {
+            continue;
         };
         let permit = Arc::clone(&semaphore)
             .acquire_owned()
