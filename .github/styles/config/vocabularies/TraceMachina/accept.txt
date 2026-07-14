@@ -395,3 +395,5 @@ preimage
 serializers
 sonames
 stdlib
+cron
+subcommand

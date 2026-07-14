@@ -232,6 +232,24 @@ boundaries are milliseconds; against `nativelink_execution_queue_time_bucket`
 they are seconds. Mixing the two units is the most common way to write a cache
 latency alert that never fires.
 
+## Nix Cache Client Metrics (When the Client Runs)
+
+The [`nl-nix` and `nl-watch-store`](../part9/nix-cache-client.md) tools push metrics through this same OTLP pipeline — they call the same `init_tracing()` at startup, so `NL_OTEL_ENDPOINT` points them at the collector exactly as it does the server. Their instruments are named `nl.nix.*` under a meter scope of `nl-nix` or `nl-watch-store`, and they reach Prometheus through the same three transforms (dots to underscores, a `nativelink_` prefix, `_total` on counters):
+
+| Prometheus series | Type | Unit | Emitted by |
+|---|---|---|---|
+| `nativelink_nl_nix_paths_pushed_total` | Counter | paths | successful push |
+| `nativelink_nl_nix_paths_deduped_total` | Counter | paths | `HEAD` dedup skip |
+| `nativelink_nl_nix_push_errors_total` | Counter | pushes | failed push |
+| `nativelink_nl_nix_nar_bytes_total` | Counter | bytes | uncompressed NAR bytes pushed |
+| `nativelink_nl_nix_wire_bytes_total` | Counter | bytes | compressed bytes on the wire |
+| `nativelink_nl_nix_push_seconds_bucket` | Histogram | seconds | wall-clock per push |
+| `nativelink_nl_nix_paths_pulled_total` | Counter | paths | successful pull |
+| `nativelink_nl_nix_pull_errors_total` | Counter | pulls | failed pull |
+| `nativelink_nl_nix_pulled_bytes_total` | Counter | bytes | uncompressed NAR bytes pulled |
+
+These series exist only while a client or daemon is running and pushing to a collector; they are not part of the server's metric surface. The wire-vs-NAR ratio (`nl_nix_wire_bytes_total / nl_nix_nar_bytes_total`) is the achieved compression, and `push_seconds` is in **seconds**, matching the `execution.*` histograms and unlike the millisecond `cache.operation.duration` above.
+
 ## Recording Rules and Dashboards (Shipped)
 
 Rather than reproduce query text, use what the repo ships and query the recorded

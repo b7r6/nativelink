@@ -138,6 +138,8 @@ nix copy --to 'http://cache.example.com:50071/nix/main?compression=none' ./resul
 nix copy --from 'http://cache.example.com:50071/nix/main' /nix/store/<hash>-<name>
 ```
 
+Stock `nix` is not the only client. The fork ships a dedicated one — `nl-nix` (push/pull/info) and the `nl-watch-store` auto-push daemon — that speaks these exact routes while streaming zstd on the wire and emitting OTLP metrics. See [The Nix Cache Client](./nix-cache-client.md).
+
 In `nix.conf`, the cache is an ordinary entry:
 
 ```
