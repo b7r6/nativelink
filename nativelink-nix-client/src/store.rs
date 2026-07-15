@@ -101,6 +101,14 @@ impl StorePath {
         let base = &self.full_path[self.store_dir_len + 1..];
         &base[STORE_PATH_HASH_LEN + 1..]
     }
+
+    /// The store-path basename `<hash>-<name>` (no store directory), as a
+    /// `.narinfo` `References`/`Deriver` line requires — those are basenames,
+    /// only the `StorePath` line is a full path.
+    #[must_use]
+    pub fn base_name(&self) -> &str {
+        &self.full_path[self.store_dir_len + 1..]
+    }
 }
 
 /// Whether `name` matches Nix's store-path name charset (`checkName`): non-empty,
@@ -235,7 +243,9 @@ impl NixStore {
             nar_hash,
             nar_size,
             references,
-            deriver: non_empty(deriver),
+            // The DB stores `deriver` as a full path; a narinfo `Deriver` is a
+            // basename, so strip the store dir.
+            deriver: non_empty(deriver).map(|d| store_basename(&self.store_dir, d)),
             sigs: split_sigs(sigs.as_deref()),
             ca: non_empty(ca),
         })
@@ -432,6 +442,18 @@ fn non_empty(value: Option<String>) -> Option<String> {
     value.filter(|s| !s.is_empty())
 }
 
+/// Strips the store directory from a full path to its `<hash>-<name>` basename
+/// (leaving a value not under the store dir untouched).
+fn store_basename(store_dir: &str, path: String) -> String {
+    match path
+        .strip_prefix(store_dir)
+        .and_then(|rest| rest.strip_prefix('/'))
+    {
+        Some(base) if !base.is_empty() => base.to_string(),
+        _ => path,
+    }
+}
+
 /// Splits a space-separated `sigs` field into individual signatures, dropping
 /// empty fragments (as Nix does when tokenizing on whitespace).
 fn split_sigs(sigs: Option<&str>) -> Vec<String> {
@@ -520,6 +542,36 @@ mod tests {
         assert!(decode_nar_hash("sha256:deadbeef").is_err());
         // Right length, invalid hex.
         assert!(decode_nar_hash(&format!("sha256:{}", "z".repeat(64))).is_err());
+    }
+
+    #[test]
+    fn references_and_deriver_are_basenames_not_full_paths() {
+        // A narinfo `References`/`Deriver` line holds BASENAMES (`<hash>-<name>`),
+        // never full paths — the server rejects a `/nix/store/...` reference with
+        // a 400. Guard both the StorePath accessor and the deriver stripping.
+        let p = StorePath::from_full_path(
+            "/nix/store",
+            "/nix/store/bxlz3hzl8k02rnxpgml6krqkrnpird91-stdenv-linux.drv",
+        )
+        .expect("valid store path");
+        assert_eq!(
+            p.base_name(),
+            "bxlz3hzl8k02rnxpgml6krqkrnpird91-stdenv-linux.drv"
+        );
+        assert!(!p.base_name().contains('/'));
+
+        assert_eq!(
+            store_basename(
+                "/nix/store",
+                "/nix/store/bxlz3hzl8k02rnxpgml6krqkrnpird91-stdenv-linux.drv".to_string()
+            ),
+            "bxlz3hzl8k02rnxpgml6krqkrnpird91-stdenv-linux.drv"
+        );
+        // A value not under the store dir is left untouched, never truncated.
+        assert_eq!(
+            store_basename("/nix/store", "elsewhere".to_string()),
+            "elsewhere"
+        );
     }
 
     #[test]

@@ -199,7 +199,7 @@ impl CacheClient {
             references: meta
                 .references
                 .iter()
-                .map(|r| r.full_path().to_string())
+                .map(|r| r.base_name().to_string())
                 .collect(),
             deriver: meta.deriver.clone(),
             system: None,
