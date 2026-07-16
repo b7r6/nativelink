@@ -81,9 +81,15 @@
 
 - [The Standard OCI Toolchain](./part9/standard-oci-toolchain.md)
 - [The OCI → CAS Bridge](./part9/oci-cas-bridge.md)
-- [The Nix Substituter Facade](./part9/nix-substituter.md)
-- [The Nix Cache Client](./part9/nix-cache-client.md)
-- [The CAS Witness](./part9/cas-witness.md)
+
+---
+
+# Part X: Nix on NativeLink
+
+- [Nix on NativeLink](./part10/overview.md)
+- [The Nix Substituter Facade](./part10/nix-substituter.md)
+- [The Nix Cache Client](./part10/nix-cache-client.md)
+- [The CAS Witness](./part10/cas-witness.md)
 
 ---
 

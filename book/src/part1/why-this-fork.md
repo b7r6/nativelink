@@ -22,7 +22,7 @@ It's a drop-in for `attic`, `harmonia`, or `nix-serve`: point a `substituters` e
 
 **Honest scope:** pre-1.0, but the most finished of our additions and built to be run.
 
-→ **Part IX, [The Nix Substituter Facade](../part9/nix-substituter.md)** for the data model, the protocol-discipline rules, and the round-trip compression story.
+→ **Part X, [The Nix Substituter Facade](../part10/nix-substituter.md)** for the data model, the protocol-discipline rules, and the round-trip compression story.
 
 ## 3. Never Lie About the Digest Function
 
@@ -42,7 +42,7 @@ The **Bazel build works** again: regenerated LRE `rust` and `cc` toolchain pins 
 
 And **offline config validation**: `nativelink --check <config>` parses a configuration and resolves every store and scheduler reference — catching a mistyped `cas_store` or `scheduler` name that would otherwise only surface at boot — then exits without binding a socket, touching a backend, or creating a store directory. It prints a one-line summary and returns an exit code a CI gate can read.
 
-→ **Part V, [Nix and LRE](../part5/nix-lre.md)** and **Part VIII, [Local Remote Execution with Nix](../part8/lre-nix.md)** for the toolchain pins; the `--check` workflow is covered in **Part IX, [The Nix Substituter Facade](../part9/nix-substituter.md#validating-configuration)**.
+→ **Part V, [Nix and LRE](../part5/nix-lre.md)** and **Part VIII, [Local Remote Execution with Nix](../part8/lre-nix.md)** for the toolchain pins; the `--check` workflow is covered in **Part X, [The Nix Substituter Facade](../part10/nix-substituter.md#validating-configuration)**.
 
 ## 5. Tee Every Network Fetch Into the CAS — the CAS Witness
 
@@ -50,7 +50,7 @@ Even with the two bridges above, a build still reaches past the `CAS` for raw by
 
 **Honest scope:** the newest and most experimental addition, and trusted-network-only. The proxy has no request authentication — anyone who can reach it can drive fetches and obtain attestations — and a cache hit re-signs its receipt after only an existence check. It is a *trusted-infrastructure attester*, not a public notary: run it inside your build network, never on the open internet.
 
-→ **Part IX, [The CAS Witness](../part9/cas-witness.md)** for the proxy protocol, the attestation format, and the trust model in full.
+→ **Part X, [The CAS Witness](../part10/cas-witness.md)** for the proxy protocol, the attestation format, and the trust model in full.
 
 ## The Shape of the Bet
 

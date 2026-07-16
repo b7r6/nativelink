@@ -11,11 +11,13 @@ what the builds pull, no store path required. And when it is given a signing
 key, it does more than mirror: it *witnesses*, emitting a signed attestation
 that binds each fetched body to the URL, time, and host that produced it.
 
-It is the third member of the family. The [OCI → CAS bridge](./oci-cas-bridge.md)
-pulls foreign images *into* the CAS; the Nix facade serves CAS content *out* in
-a foreign protocol; the CAS witness sits *between* a client and the open
-internet, teeing whatever crosses it into the CAS and, optionally, notarizing
-the crossing.
+It is the third fill path for a Nix cache (see [Nix on NativeLink](./overview.md)):
+the substituter serves store paths, the [client](./nix-cache-client.md) pushes
+them, and the witness sits *between* a client and the open internet, teeing
+whatever raw bytes cross it into the CAS and, optionally, notarizing the
+crossing — the fetches the store-path cache cannot mirror on its own. It also
+generalizes past Nix: the same content-bridge instinct as this fork's
+[OCI → CAS bridge](../part9/oci-cas-bridge.md), applied to arbitrary HTTP.
 
 ## Why a proxy, and why it intercepts TLS
 

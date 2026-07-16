@@ -2,7 +2,7 @@
 
 Attic-style Nix binary caches re-implement chunking, deduplication, tiering, and garbage collection — the exact machinery a serious CAS already has. NativeLink takes the opposite approach: the `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over store composition. Each NAR is a CAS blob, path metadata rides in REv2 `ActionResult` envelopes, and eviction, tiering, and verification come from the same store wrappers every other service uses.
 
-This is the mirror image of the [OCI → CAS Bridge](./oci-cas-bridge.md). The OCI bridge pulls foreign content *into* the CAS; the Nix facade serves CAS content *out* in a foreign protocol. It is also NativeLink's first config-declared plain-HTTP service: every other service on a listener speaks gRPC, while `nix_cache` mounts an HTTP router at a URL prefix (default `/nix/<instance_name>`) so stock `nix` clients can talk to it with nothing but a `substituters` entry.
+It is NativeLink's first config-declared plain-HTTP service: every other service on a listener speaks gRPC, while `nix_cache` mounts an HTTP router at a URL prefix (default `/nix/<instance_name>`) so stock `nix` clients can talk to it with nothing but a `substituters` entry. It is the *outbound* half of the Nix story — [The Nix Cache Client](./nix-cache-client.md) is how paths get *in* and [The CAS Witness](./cas-witness.md) mirrors the raw fetches it can't (see [Nix on NativeLink](./overview.md)). It is also the exact mirror of this fork's other content-bridge, the [OCI → CAS Bridge](../part9/oci-cas-bridge.md): that pulls foreign content *into* the CAS, this serves CAS content *out* in a foreign protocol.
 
 ## Architecture
 

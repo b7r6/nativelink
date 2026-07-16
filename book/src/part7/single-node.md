@@ -184,7 +184,7 @@ Nix fetches store paths straight out of the CAS over HTTP. It is not a one-line
 add — the substituter needs three stores (a digest-keyed NAR store plus
 string-keyed `path_info_store` and `alias_store`), and the NAR store should sit
 behind `verify` — so the full recipe lives in its own chapter. See
-[The Nix Substituter Facade](../part9/nix-substituter.md).
+[The Nix Substituter Facade](../part10/nix-substituter.md).
 
 ## When to Use This
 

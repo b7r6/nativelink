@@ -234,7 +234,7 @@ latency alert that never fires.
 
 ## Nix Cache Client Metrics (When the Client Runs)
 
-The [`nl-nix` and `nl-watch-store`](../part9/nix-cache-client.md) tools push metrics through this same OTLP pipeline — they call the same `init_tracing()` at startup, so `NL_OTEL_ENDPOINT` points them at the collector exactly as it does the server. Their instruments are named `nl.nix.*` under a meter scope of `nl-nix` or `nl-watch-store`, and they reach Prometheus through the same three transforms (dots to underscores, a `nativelink_` prefix, `_total` on counters):
+The [`nl-nix` and `nl-watch-store`](../part10/nix-cache-client.md) tools push metrics through this same OTLP pipeline — they call the same `init_tracing()` at startup, so `NL_OTEL_ENDPOINT` points them at the collector exactly as it does the server. Their instruments are named `nl.nix.*` under a meter scope of `nl-nix` or `nl-watch-store`, and they reach Prometheus through the same three transforms (dots to underscores, a `nativelink_` prefix, `_total` on counters):
 
 | Prometheus series | Type | Unit | Emitted by |
 |---|---|---|---|

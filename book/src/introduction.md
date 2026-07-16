@@ -36,7 +36,7 @@ The `cas_witness` proxy is the newest and most experimental of the three. It spo
 
 You build software. You've heard of remote caching or remote execution — maybe you've fought with it. You use Bazel, Buck2, or another build system that speaks REAPI, and you want to understand what actually happens when your build talks to a remote backend, without cargo-culting YAML from a getting-started guide.
 
-If you're evaluating NativeLink against Buildbarn, EngFlow, or BuildFarm, this book makes the architectural differences obvious. If you're trying to drag your cache hit rate above 90%, the toolchain chapters will save you weeks. And if the idea of serving your Nix cache and your Bazel `CAS` from one content-addressed store sounds good to you, Part IX is why this fork exists.
+If you're evaluating NativeLink against Buildbarn, EngFlow, or BuildFarm, this book makes the architectural differences obvious. If you're trying to drag your cache hit rate above 90%, the toolchain chapters will save you weeks. And if the idea of serving your Nix cache and your Bazel `CAS` from one content-addressed store sounds good to you, Parts IX and X are why this fork exists.
 
 ## What You'll Learn
 
@@ -52,7 +52,7 @@ By the end of this book you will understand:
 
 ## How to Read This
 
-Parts I and II give you the mental model and the protocol. Parts III and IV are the internals — stores and scheduling. Part V is toolchains, which is where most teams get stuck. Part VI is client integration. Parts VII and VIII are deployment and worked examples. Part IX is this fork's own surface: the Standard OCI Toolchain and the services that move content into and out of the `CAS` — the OCI bridge that pulls registry images in, the Nix substituter that serves store paths back out, and the CAS witness that tees raw network fetches into the store as they cross it.
+Parts I and II give you the mental model and the protocol. Parts III and IV are the internals — stores and scheduling. Part V is toolchains, which is where most teams get stuck. Part VI is client integration. Parts VII and VIII are deployment and worked examples. Parts IX and X are this fork's own surface for moving foreign content through the `CAS`: Part IX is the Standard OCI Toolchain and the OCI → CAS bridge that pulls registry images in as content-addressed REAPI trees; Part X is Nix on NativeLink — the substituter that serves store paths back out, the client that fills the cache, and the CAS witness that tees raw network fetches into the store as they cross it.
 
 Read it front to back the first time. The code links point into the actual NativeLink source — follow them. When a link points at `github.com/straylight-prelude/straylight-nativelink`, that's our fork; when the credit runs to `TraceMachina/nativelink`, that's the foundation.
 

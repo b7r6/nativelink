@@ -65,7 +65,7 @@ NativeLink's entire architecture follows from content-addressing:
 
 - **The scheduler keeps no durable state.** It matches actions to workers by platform properties, holding its action queue and worker registrations in memory (the process wires the scheduler maps up at `src/bin/nativelink.rs:304-317`; `SimpleScheduler` owns an in-memory worker pool and awaited-action queue, `nativelink-scheduler/src/simple_scheduler.rs:124`). It doesn't need to remember what happened before: that state lives only for the lifetime of the process, and failed actions are simply re-dispatched.
 
-- **Anything with a stable hash becomes an ordinary CAS input.** Because identity is computed from bytes, an OCI toolchain image or a Nix store closure can be addressed by content and dropped into the same store as any build artifact — which is exactly what this fork's [OCI → CAS bridge](../part9/oci-cas-bridge.md) and [Nix substituter facade](../part9/nix-substituter.md) do (Part IX).
+- **Anything with a stable hash becomes an ordinary CAS input.** Because identity is computed from bytes, an OCI toolchain image or a Nix store closure can be addressed by content and dropped into the same store as any build artifact — which is exactly what this fork's [OCI → CAS bridge](../part9/oci-cas-bridge.md) and [Nix substituter facade](../part10/nix-substituter.md) do (Parts IX–X).
 
 Content-addressing turns distributed systems problems into hash table problems. That's the insight. That's the whole thing.
 

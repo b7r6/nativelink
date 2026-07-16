@@ -2,7 +2,7 @@
 
 This is the advanced setup: Nix-based toolchains that are bit-for-bit identical between your laptop, CI, and remote workers. Near-perfect cache hit rates. Structural correctness. The full LRE experience.
 
-Local Remote Execution originates upstream in [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink); this fork carries it forward and connects it to two CAS-facing services described in Part 9. The same Nix toolchain closure LRE pins can be served straight out of the CAS by the [Nix substituter facade](../part9/nix-substituter.md), and the [OCI → CAS bridge](../part9/oci-cas-bridge.md) is the non-Nix on-ramp to the same destination. See [Serving the toolchain closure back out of CAS](#serving-the-toolchain-closure-back-out-of-cas) below.
+Local Remote Execution originates upstream in [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink); this fork carries it forward and connects it to two CAS-facing services described in Parts 9 and 10. The same Nix toolchain closure LRE pins can be served straight out of the CAS by the [Nix substituter facade](../part10/nix-substituter.md), and the [OCI → CAS bridge](../part9/oci-cas-bridge.md) is the non-Nix on-ramp to the same destination. See [Serving the toolchain closure back out of CAS](#serving-the-toolchain-closure-back-out-of-cas) below.
 
 ## Prerequisites
 
@@ -280,7 +280,7 @@ Each toolchain has its own image and platform property (`container-image` for `l
 
 LRE and the fork's two CAS-facing services are the same idea pointed in different directions: **toolchains as content-addressed data, not pre-installed infrastructure.**
 
-- **[The Nix Substituter Facade](../part9/nix-substituter.md)** — the `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over the CAS. The Nix store paths LRE pins (the `PATH`/`CC`/`RUST` lines in `lre.bazelrc`) are exactly the closure a `nix_cache` substituter can serve: each NAR is a CAS blob keyed by `sha256`, coexisting with Bazel's `blake3` blobs in one store because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. Point `nix develop` at a `nix_cache` substituter and every developer and CI runner realizes the identical toolchain closure from the cluster instead of rebuilding it — the same "same store paths = cache hits" logic, one layer down.
+- **[The Nix Substituter Facade](../part10/nix-substituter.md)** — the `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over the CAS. The Nix store paths LRE pins (the `PATH`/`CC`/`RUST` lines in `lre.bazelrc`) are exactly the closure a `nix_cache` substituter can serve: each NAR is a CAS blob keyed by `sha256`, coexisting with Bazel's `blake3` blobs in one store because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. Point `nix develop` at a `nix_cache` substituter and every developer and CI runner realizes the identical toolchain closure from the cluster instead of rebuilding it — the same "same store paths = cache hits" logic, one layer down.
 - **[The OCI → CAS Bridge](../part9/oci-cas-bridge.md)** — the complement for teams not on Nix. Rather than a Nix closure, an OCI toolchain image is projected into a REAPI `Directory` tree in CAS and fetched on demand. Same destination (a toolchain living in CAS keyed by digest), different on-ramp.
 
 > **Fork note.** `nix_cache` and the OCI bridge are additions in this fork (`straylight-prelude/straylight-nativelink`), not upstream NativeLink. LRE itself is upstream TraceMachina work that this fork builds on.

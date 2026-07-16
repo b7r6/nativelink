@@ -244,7 +244,7 @@ Only `cas_store`, `path_info_store` and `alias_store` are required; every other 
 
 ### CasWitnessConfig (`cas_witness`)
 
-`CasWitnessConfig` (`cas_server.rs:604`) is a fork addition and a `services.cas_witness` entry. It runs a TLS-intercepting, caching **forward proxy** for the raw network fetches a build makes (`fetchurl` tarballs, release archives) — the bytes a fixed-output derivation downloads before any store path exists. Unlike the gRPC services and `nix_cache`, it speaks the `CONNECT` proxy protocol and so **owns its entire listener**: put it on a listener of its own, with no other services. See [The CAS Witness](../part9/cas-witness.md).
+`CasWitnessConfig` (`cas_server.rs:604`) is a fork addition and a `services.cas_witness` entry. It runs a TLS-intercepting, caching **forward proxy** for the raw network fetches a build makes (`fetchurl` tarballs, release archives) — the bytes a fixed-output derivation downloads before any store path exists. Unlike the gRPC services and `nix_cache`, it speaks the `CONNECT` proxy protocol and so **owns its entire listener**: put it on a listener of its own, with no other services. See [The CAS Witness](../part10/cas-witness.md).
 
 ```json5
 cas_witness: {

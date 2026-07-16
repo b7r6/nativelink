@@ -187,7 +187,7 @@ global: {
 }
 ```
 
-**Serving as a Nix binary cache.** Adding a `nix_cache` service to the public listener turns the same deployment into a Nix HTTP substituter, so cluster nodes can list it in their `substituters` and pull store paths straight out of the CAS. It needs three stores (a digest-keyed NAR store plus string-keyed `path_info_store` and `alias_store`) and is not a one-line add, so the full recipe lives with the substituter chapter rather than here. See [The Nix Substituter Facade](../part9/nix-substituter.md) and the field-by-field breakdown in [Appendix A: Configuration Reference](../appendix/config-reference.md#nixcacheconfig-nix_cache).
+**Serving as a Nix binary cache.** Adding a `nix_cache` service to the public listener turns the same deployment into a Nix HTTP substituter, so cluster nodes can list it in their `substituters` and pull store paths straight out of the CAS. It needs three stores (a digest-keyed NAR store plus string-keyed `path_info_store` and `alias_store`) and is not a one-line add, so the full recipe lives with the substituter chapter rather than here. See [The Nix Substituter Facade](../part10/nix-substituter.md) and the field-by-field breakdown in [Appendix A: Configuration Reference](../appendix/config-reference.md#nixcacheconfig-nix_cache).
 
 Both features exist only in this fork. That is the concrete reason the [runnable images](#runnable-images-and-flakes) must be the fork's — an upstream Helm image simply will not deserialize a config that uses them.
 

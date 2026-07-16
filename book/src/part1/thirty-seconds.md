@@ -64,8 +64,8 @@ This means your choice of build system and your choice of remote execution backe
 > **Fork note.** Three additions turn "CAS as a service" into something bigger than a build cache, all in Part IX:
 >
 > - [The OCI → CAS Bridge](../part9/oci-cas-bridge.md) projects OCI toolchain images into REAPI `Directory` trees, so a worker's toolchain is content it fetches on demand rather than software an operator pre-installs.
-> - [The Nix Substituter Facade](../part9/nix-substituter.md) serves that same CAS back out over the Nix HTTP binary-cache protocol, so stock `nix` treats NativeLink as a substituter with nothing but a `substituters` entry.
-> - [The CAS Witness](../part9/cas-witness.md) is a TLS-intercepting caching proxy that tees raw `fetchurl`-style downloads into the CAS as they cross it, so the first fetch of a URL makes the deployment a durable mirror of it.
+> - [The Nix Substituter Facade](../part10/nix-substituter.md) serves that same CAS back out over the Nix HTTP binary-cache protocol, so stock `nix` treats NativeLink as a substituter with nothing but a `substituters` entry.
+> - [The CAS Witness](../part10/cas-witness.md) is a TLS-intercepting caching proxy that tees raw `fetchurl`-style downloads into the CAS as they cross it, so the first fetch of a URL makes the deployment a durable mirror of it.
 
 ## Why NativeLink
 

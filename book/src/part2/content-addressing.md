@@ -86,7 +86,7 @@ pub trait StoreLike: Send + Sync + Sized + Unpin + 'static {
 
 The key is always a digest. The value is always bytes. This uniformity is why stores compose — any implementation of `has`/`update`/`get_part` is interchangeable with any other. Fast/slow tiering, compression, deduplication — they're all just stores wrapping stores, passing digests down.
 
-Because a store only ever sees a digest and bytes, it is indifferent to *what* those bytes are: a Bazel action output and a Nix NAR are the same kind of object to it, so they coexist in one CAS — the fork's [Nix substituter](../part9/nix-substituter.md) serves NAR blobs straight out of the same store that backs Bazel remote caching, with no separate blob store required.
+Because a store only ever sees a digest and bytes, it is indifferent to *what* those bytes are: a Bazel action output and a Nix NAR are the same kind of object to it, so they coexist in one CAS — the fork's [Nix substituter](../part10/nix-substituter.md) serves NAR blobs straight out of the same store that backs Bazel remote caching, with no separate blob store required.
 
 ## The Cost
 

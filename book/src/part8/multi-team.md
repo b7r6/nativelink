@@ -5,7 +5,7 @@ A production configuration for an organization with multiple teams, multiple lan
 The spine of the design is one shared, content-addressed CAS. Once that substrate exists, this fork lets you build two more things on top of it without standing up new storage:
 
 - The [OCI → CAS bridge](../part9/oci-cas-bridge.md) turns toolchain container images into REAPI `Directory` trees in the same CAS, so workers fetch toolchains as data instead of operators pre-installing them.
-- The [Nix substituter facade](../part9/nix-substituter.md) serves the Nix HTTP binary-cache protocol out of NativeLink stores, so developer laptops and CI can substitute Nix closures from the same backend that answers Bazel and Buck2.
+- The [Nix substituter facade](../part10/nix-substituter.md) serves the Nix HTTP binary-cache protocol out of NativeLink stores, so developer laptops and CI can substitute Nix closures from the same backend that answers Bazel and Buck2.
 
 ## The Scenario
 
@@ -416,7 +416,7 @@ substituters = https://nix.acme.internal:50071/nix/main https://cache.nixos.org
 trusted-public-keys = nix.acme.internal:<base64 ed25519 public key> cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 ```
 
-The store composition rules are load-bearing: `path_info_store` must not sit behind `existence_cache`, `verify`, or `size_partitioning` (all reject or rewrite its string keys), and `alias_store` must not share the `completeness_checking` wrapper. See [The Nix Substituter Facade](../part9/nix-substituter.md) for the full protocol, signing keys, and compression handling.
+The store composition rules are load-bearing: `path_info_store` must not sit behind `existence_cache`, `verify`, or `size_partitioning` (all reject or rewrite its string keys), and `alias_store` must not share the `completeness_checking` wrapper. See [The Nix Substituter Facade](../part10/nix-substituter.md) for the full protocol, signing keys, and compression handling.
 
 ## Client Configurations
 

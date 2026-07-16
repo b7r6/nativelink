@@ -121,7 +121,7 @@ Do not confuse this CAS-internal LZ4 with the *layer* compression an OCI
 image carries. The OCI → CAS bridge handles gzip layers and does not yet
 decompress `zstd` layers (see [Part IX](../part9/oci-cas-bridge.md)); the
 Nix substituter's `serve_compression: "zstd"` is a separate, service-level
-re-encoding, not this store (see [the Nix substituter](../part9/nix-substituter.md)).
+re-encoding, not this store (see [the Nix substituter](../part10/nix-substituter.md)).
 
 ```json5
 compression: {
@@ -147,7 +147,7 @@ If two blobs share byte sequences (e.g., two slightly different binaries), the s
 Note the `has` asymmetry: a `has` on a dedup store checks only that the
 *index* exists in `index_store`; it does not verify that every chunk still
 exists in `content_store`. Keep this in mind when a dedup store sits under
-a completeness check — see the warning in [the Nix substituter](../part9/nix-substituter.md#configuration) about amplifying one metadata request into per-chunk probes.
+a completeness check — see the warning in [the Nix substituter](../part10/nix-substituter.md#configuration) about amplifying one metadata request into per-chunk probes.
 
 ```json5
 dedup: {
@@ -278,7 +278,7 @@ Use it on AC stores only. `cas_store` is typically a `ref_store` pointing
 at the shared CAS so both wrappers see the same content. This is exactly
 how the Nix substituter turns eviction into garbage collection — an evicted
 NAR makes its `.narinfo` read as absent — described in
-[the Nix substituter](../part9/nix-substituter.md).
+[the Nix substituter](../part10/nix-substituter.md).
 
 ## Fork Hardening
 
@@ -378,7 +378,7 @@ and a plain string-keyed store holds URL aliases (deliberately *outside*
 `verify` and `completeness_checking`, which both reject non-digest keys).
 It also documents the sharp edges — which wrappers reject string keys, why
 `dedup` under a completeness check amplifies existence probes — that this
-chapter only sketches. Read [the Nix substituter](../part9/nix-substituter.md);
+chapter only sketches. Read [the Nix substituter](../part10/nix-substituter.md);
 the runnable config is `nativelink-config/examples/nix_cache.json5`.
 
 The algebra is small. The compositions are infinite.
