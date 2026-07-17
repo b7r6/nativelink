@@ -398,3 +398,4 @@ stdlib
 cron
 subcommand
 cachix
+basename
