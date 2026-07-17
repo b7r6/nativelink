@@ -405,3 +405,4 @@ reburst
 [Rr]equeued
 [Rr]evalidate
 [Rr]evalidated
+deque

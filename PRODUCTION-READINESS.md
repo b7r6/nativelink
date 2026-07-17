@@ -56,18 +56,28 @@ by a sweep of the fork crates. `[session]` — surfaced while operating the fork
       verifies NAR integrity against the signed hash but does not verify the
       narinfo *signature* against a trusted public key (the library supports it;
       the CLI has no flag). `part10/nix-cache-client.md`. `[book]` `[session]`
+- [ ] **nix-client: native flake-aware "build + push everything" (retire the
+      shell wrapper).** The `push-flake` app (`nix run …#push-flake`) is a shell
+      wrapper around enumerate-outputs → `nix build` → `nl-nix push --recursive`.
+      Promote it to a first-class `nl-nix` capability (e.g. `nl-nix push --flake
+      <ref>` or a `push-flake` subcommand) so "cache this whole flake" needs no
+      external orchestration — nl-nix already speaks the push protocol; teach it
+      to resolve a flake's outputs for the current system and push their closures
+      (build via the Nix CLI or `nix-eval`/store APIs). `flake.nix`
+      (`apps.push-flake`). `[session]`
 - [ ] **`cas_witness`: re-hash on cache hit before re-attesting.** A hit re-emits a
       receipt after a `has()` existence probe, not a re-read/re-hash — the
       binding is the one captured at first fetch. `cas-witness.md`. `[book]`
 
 ## Tier 2 — Test coverage & robustness (P2) — highest ROI
 
-> Two production-breaking bugs shipped **this session** from the same gap:
+> **Three** production-breaking bugs shipped **this session** from the same gap:
 > `nl-watch-store` emitting **full-path** narinfo `References`/`Deriver` (the
-> server 400'd ~64% of a real toolchain build round), and a **frozen-snapshot**
-> read-only DB open (the watch daemon saw no new paths at all). Both were fixed
-> (`43ec1bc0`, `2de39afa`) — and both shipped because only the ref-less and
-> pure-parsing paths were tested.
+> server 400'd ~64% of a real toolchain build round), a **frozen-snapshot**
+> read-only DB open (the watch daemon saw no new paths at all), and **silent
+> event drops under commit bursts** (large late-committed paths vanished with no
+> log). All three were fixed (`43ec1bc0`, `2de39afa`, `2e2b7ea8`) — and all three
+> shipped because only the ref-less, pure-parsing, calm-rate paths were tested.
 
 - [ ] **Integration suite for the nix-client networking layer.** `client.rs`,
       `watch.rs`, and both binaries have no `#[cfg(test)]`. Cover: push a path
@@ -83,6 +93,26 @@ by a sweep of the fork crates. `[session]` — surfaced while operating the fork
 - [ ] **Reconcile the fanotify→inotify fallback.** The book says the daemon
       auto-downgrades on `EPERM`; the code selects the backend from a
       caller-passed `bool` (`watch_store(.., use_inotify)`). Make it match. `[code]`
+- [ ] **Burst regression test for `nl-watch-store`.** The burst-drop fix
+      (`2e2b7ea8`) has no test that reproduces a commit burst, so the regression
+      can silently return. Commit N paths (several large, committed last) faster
+      than the consumer drains, then assert every one is present in the target
+      cache. `watch.rs`, `bin/nl_watch_store.rs`. `[session]` (burst-drop review
+      finding D, `bugs/2026-07-17-…burst.review.md`)
+- [ ] **Fully decouple the push-permit from the watch consumer.** The consumer
+      still `acquire_owned().await`s the concurrency semaphore inline before
+      spawning each push; under sustained push saturation the channel fills and
+      backpressure now propagates to the (unbounded, `FAN_UNLIMITED_QUEUE`)
+      kernel fanotify queue — a bounded drop traded for unbounded memory growth.
+      Move the acquire into the spawned task. `bin/nl_watch_store.rs`. `[session]`
+      (review finding B — a documented tradeoff today, not a defect)
+- [ ] **Decide the clippy gate for `nativelink-nix-client`.** The workspace sets
+      `std-instead-of-core = "deny"` (`Cargo.toml:196`) but the crate has never
+      been clippy-clean against it (~20 pre-existing violations across
+      `watch.rs`/`client.rs`/`nar.rs`/`store.rs`/`metrics.rs`/`lib.rs`; `nix
+      build` runs `cargo build`, not clippy). Either do a crate-wide `core`/`alloc`
+      pass and run clippy in CI, or record that the fork crates are exempt.
+      `[session]` (review finding A)
 
 ## Tier 3 — Observability the fork should close (P3)
 
