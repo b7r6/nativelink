@@ -16,7 +16,9 @@
 //! and auto-pushes every newly-committed path to a NativeLink `nix_cache`,
 //! deduplicating against the cache.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
+use std::time::Duration;
 
 use clap::Parser;
 use futures::StreamExt as _;
@@ -24,9 +26,25 @@ use nativelink_error::{Code, Error, make_err};
 use nativelink_nix_client::client::{CacheClient, PushOutcome};
 use nativelink_nix_client::config::{Auth, CacheConfig};
 use nativelink_nix_client::metrics::Metrics;
-use nativelink_nix_client::store::NixStore;
+use nativelink_nix_client::store::{NixStore, StorePath};
 use nativelink_nix_client::watch::watch_store;
 use tokio::sync::Semaphore;
+use tokio::time::{Instant, sleep_until};
+
+/// A freshly-committed path is `NotFound` for a beat (fanotify fires before
+/// `nix-daemon` writes the `ValidPaths` row); revalidate a few times before
+/// giving up. Total window: `MAX_VALIDATE_ATTEMPTS * VALIDATE_RETRY`.
+const MAX_VALIDATE_ATTEMPTS: u32 = 8;
+const VALIDATE_RETRY: Duration = Duration::from_millis(250);
+
+/// A store path awaiting revalidation, held off the hot consume path so the
+/// event channel keeps draining (an inline sleep here is what let burst-tail
+/// paths overflow the channel and vanish).
+struct PendingValidation {
+    path: StorePath,
+    attempt: u32,
+    ready_at: Instant,
+}
 
 #[derive(Parser)]
 #[command(
@@ -90,8 +108,17 @@ async fn run(cli: Cli) -> Result<(), Error> {
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|e| make_err!(Code::Internal, "installing SIGTERM handler: {e}"))?;
 
+    // Paths awaiting revalidation, ordered by `ready_at` (each is pushed with
+    // `now + VALIDATE_RETRY`, so insertion order is deadline order).
+    let mut retry: VecDeque<PendingValidation> = VecDeque::new();
+
     loop {
-        let event = tokio::select! {
+        // Yield either a newly-committed path (attempt 0) or a revalidation that
+        // has come due. The revalidation timer races event arrival, so the event
+        // channel keeps draining while paths wait to become valid — there is no
+        // inline sleep to stall the consumer and overflow the channel.
+        let next_ready = retry.front().map(|p| p.ready_at);
+        let to_check = tokio::select! {
             _ = tokio::signal::ctrl_c() => {
                 tracing::info!("SIGINT; draining and stopping");
                 break;
@@ -100,68 +127,74 @@ async fn run(cli: Cli) -> Result<(), Error> {
                 tracing::info!("SIGTERM; draining and stopping");
                 break;
             }
+            () = async move {
+                match next_ready {
+                    Some(at) => sleep_until(at).await,
+                    None => std::future::pending().await,
+                }
+            } => retry.pop_front().map(|p| (p.path, p.attempt)),
             maybe = events.next() => match maybe {
-                Some(event) => event,
+                Some(event) => Some((event.path, 0u32)),
                 None => break,
             },
         };
-
-        // Read metadata on this task (the DB connection is not `Sync`). fanotify
-        // fires on the store rename, a beat before `nix-daemon` commits the
-        // path's `ValidPaths` row, so a `NotFound` right after the event is
-        // expected — retry briefly (the connection is live) before giving up.
-        let meta = 'lookup: {
-            for attempt in 0..8u32 {
-                match store.query_path_info(&event.path) {
-                    Ok(meta) => break 'lookup Some(meta),
-                    Err(err) if err.code == Code::NotFound => {
-                        if attempt == 7 {
-                            tracing::debug!(path = %event.path.full_path(), "skipping (never became valid)");
-                        } else {
-                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                        }
-                    }
-                    Err(err) => {
-                        tracing::warn!(?err, path = %event.path.full_path(), "db query failed; skipping");
-                        break 'lookup None;
-                    }
-                }
-            }
-            None
-        };
-        let Some(meta) = meta else {
+        let Some((path, attempt)) = to_check else {
             continue;
         };
-        let permit = Arc::clone(&semaphore)
-            .acquire_owned()
-            .await
-            .map_err(|e| make_err!(Code::Internal, "acquiring push permit: {e}"))?;
-        let client = Arc::clone(&client);
-        drop(nativelink_util::background_spawn!(
-            "push_watched_path",
-            async move {
-                let _permit = permit;
-                match client.push_path(&meta).await {
-                    Ok(PushOutcome::Uploaded {
-                        nar_size,
-                        wire_bytes,
-                    }) => {
-                        tracing::info!(
-                            path = %meta.path.full_path(),
-                            nar_size,
-                            wire_bytes,
-                            "pushed"
-                        );
+
+        // One non-blocking metadata lookup on this task (the DB connection is
+        // not `Sync`, so it can't move into the spawned push). fanotify fires a
+        // beat before `nix-daemon` writes the `ValidPaths` row, so `NotFound`
+        // right after the event is expected — requeue with a deadline rather
+        // than sleeping here.
+        match store.query_path_info(&path) {
+            Ok(meta) => {
+                let permit = Arc::clone(&semaphore)
+                    .acquire_owned()
+                    .await
+                    .map_err(|e| make_err!(Code::Internal, "acquiring push permit: {e}"))?;
+                let client = Arc::clone(&client);
+                drop(nativelink_util::background_spawn!(
+                    "push_watched_path",
+                    async move {
+                        let _permit = permit;
+                        match client.push_path(&meta).await {
+                            Ok(PushOutcome::Uploaded {
+                                nar_size,
+                                wire_bytes,
+                            }) => {
+                                tracing::info!(
+                                    path = %meta.path.full_path(),
+                                    nar_size,
+                                    wire_bytes,
+                                    "pushed"
+                                );
+                            }
+                            Ok(PushOutcome::AlreadyPresent) => {
+                                tracing::debug!(path = %meta.path.full_path(), "already present");
+                            }
+                            Err(err) => {
+                                tracing::warn!(?err, path = %meta.path.full_path(), "push failed");
+                            }
+                        }
                     }
-                    Ok(PushOutcome::AlreadyPresent) => {
-                        tracing::debug!(path = %meta.path.full_path(), "already present");
-                    }
-                    Err(err) => {
-                        tracing::warn!(?err, path = %meta.path.full_path(), "push failed");
-                    }
+                ));
+            }
+            Err(err) if err.code == Code::NotFound => {
+                if attempt + 1 >= MAX_VALIDATE_ATTEMPTS {
+                    tracing::debug!(path = %path.full_path(), "skipping (never became valid)");
+                } else {
+                    retry.push_back(PendingValidation {
+                        path,
+                        attempt: attempt + 1,
+                        ready_at: Instant::now() + VALIDATE_RETRY,
+                    });
                 }
             }
-        ));
+            Err(err) => {
+                tracing::warn!(?err, path = %path.full_path(), "db query failed; skipping");
+            }
+        }
     }
 
     Ok(())

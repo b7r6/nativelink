@@ -66,6 +66,12 @@ impl Stream for EventStream {
 const FAN_CLOEXEC: u32 = 0x0000_0001;
 const FAN_NONBLOCK: u32 = 0x0000_0002;
 const FAN_CLASS_NOTIF: u32 = 0x0000_0000;
+/// Do not cap the kernel notification queue at 16384 events (needs `CAP_SYS_ADMIN`,
+/// already held). Without this a commit burst overflows the queue and the kernel
+/// drops events, signalling `FAN_Q_OVERFLOW`.
+const FAN_UNLIMITED_QUEUE: u32 = 0x0000_0010;
+/// Set on a synthetic event's `mask` when the kernel dropped events on overflow.
+const FAN_Q_OVERFLOW: u64 = 0x0000_4000;
 const FAN_REPORT_DIR_FID: u32 = 0x0000_0400;
 const FAN_REPORT_NAME: u32 = 0x0000_0800;
 const FAN_REPORT_DFID_NAME: u32 = FAN_REPORT_DIR_FID | FAN_REPORT_NAME;
@@ -160,7 +166,11 @@ impl Backend {
         // returns an owned fd, on failure -1 with `errno` set.
         let raw = unsafe {
             libc::fanotify_init(
-                FAN_CLASS_NOTIF | FAN_REPORT_DFID_NAME | FAN_CLOEXEC | FAN_NONBLOCK,
+                FAN_CLASS_NOTIF
+                    | FAN_UNLIMITED_QUEUE
+                    | FAN_REPORT_DFID_NAME
+                    | FAN_CLOEXEC
+                    | FAN_NONBLOCK,
                 libc::O_RDONLY as u32,
             )
         };
@@ -266,8 +276,15 @@ async fn emit(store_dir: &str, name: &[u8], tx: &mpsc::Sender<StoreEvent>) {
     };
     let full = format!("{store_dir}/{name}");
     if let Ok(path) = StorePath::from_full_path(store_dir, &full) {
-        // A closed receiver just means the daemon is shutting down.
-        drop(tx.try_send(StoreEvent { path }));
+        // Backpressure, never drop: `send().await` waits for channel capacity
+        // when the consumer is behind. The previous `try_send` dropped events
+        // silently on a full channel (not just a closed one), which is how
+        // large paths committed at the tail of a build burst went missing from
+        // the mirror. An `Err` here means the receiver is closed — the daemon
+        // is shutting down.
+        if tx.send(StoreEvent { path }).await.is_err() {
+            tracing::debug!("event receiver closed; store watch shutting down");
+        }
     }
 }
 
@@ -285,6 +302,18 @@ async fn parse_fanotify(mut buf: &[u8], store_dir: &str, tx: &mpsc::Sender<Store
             || meta.vers != FANOTIFY_METADATA_VERSION
         {
             return; // malformed / version mismatch — stop rather than misparse.
+        }
+        // A queue overflow is a synthetic event (no fd, no info record): the
+        // kernel dropped store-commit events. With FAN_UNLIMITED_QUEUE this
+        // should not happen, but if it does, say so loudly — the mirror is now
+        // incomplete and needs a reconciliation pass, not a silent gap.
+        if meta.mask & FAN_Q_OVERFLOW != 0 {
+            tracing::warn!(
+                "fanotify queue overflow: the kernel dropped store-commit events; \
+                 mirrored cache is incomplete until a reconciliation sweep runs"
+            );
+            buf = &buf[event_len..];
+            continue;
         }
         if let Some(name) = fanotify_name(&buf[METADATA_SIZE..event_len]) {
             emit(store_dir, name, tx).await;

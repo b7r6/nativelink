@@ -399,3 +399,9 @@ cron
 subcommand
 cachix
 basename
+fanotify
+reburst
+[Rr]equeue
+[Rr]equeued
+[Rr]evalidate
+[Rr]evalidated
