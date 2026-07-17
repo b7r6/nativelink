@@ -439,6 +439,10 @@
             self.overlays.tools
             (import rust-overlay)
             (import ./tools/rust-overlay-cut-libsecret.nix)
+            # Fix compiler-rt aarch64 cpu_model for musl (sys/auxv.h); lets the
+            # server build for aarch64-unknown-linux-musl. Propagates into
+            # pkgsCross.aarch64-multiplatform-musl used by nativelink-aarch64-linux.
+            (import ./tools/compiler-rt-musl-overlay.nix)
           ];
         };
         apps = {
