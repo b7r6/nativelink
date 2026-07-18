@@ -32,13 +32,19 @@ const ZERO_DATA: Bytes = Bytes::new();
 /// utility like managing EOF in a more friendly way, ensure if no EOF is received
 /// it will send an error to the receiver channel before shutting down and count
 /// the number of bytes sent.
+/// Chunks buffered in flight per channel. Small enough that a fast producer
+/// still applies backpressure promptly, but not so small (it was 2) that a
+/// momentarily-slow consumer — e.g. a shard CAS mid-forward of a multi-GiB blob
+/// — stalls the producer immediately. That instant stall stops the server
+/// draining its inbound stream, the HTTP/2 flow-control window empties, and the
+/// connection resets mid-stream (dropping large cacheable uploads). tokio's
+/// bounded channel does not preallocate, so this capacity costs memory only
+/// while data is actually queued (i.e. exactly during a downstream stall).
+const CHANNEL_BUFFER_CHUNKS: usize = 32;
+
 #[must_use]
 pub fn make_buf_channel_pair() -> (DropCloserWriteHalf, DropCloserReadHalf) {
-    // We allow up to 2 items in the buffer at any given time. There is no major
-    // reason behind this magic number other than thinking it will be nice to give
-    // a little time for another thread to wake up and consume data if another
-    // thread is pumping large amounts of data into the channel.
-    let (tx, rx) = mpsc::channel(2);
+    let (tx, rx) = mpsc::channel(CHANNEL_BUFFER_CHUNKS);
     let eof_sent = Arc::new(AtomicBool::new(false));
     (
         DropCloserWriteHalf {
