@@ -7,6 +7,36 @@
 - **Topology:** `nl-nix push` → gossamer's local `nix_cache` on `127.0.0.1:50071` → `FastSlowStore` { fast = local-filesystem CAS, slow = R2 (S3-compatible) } with `fast_direction = "both"` (write-through). Rendered config: `max_nar_size_bytes = 34359738368` (34 GiB), `casFastBytes = 64 GiB`.
 - **Severity:** **High** — the fleet cache **silently stops accepting any artifact larger than ~5 GiB**. That is exactly the size class we most need cached: the sovereign toolchain sysroots (`cxx-clang22-*`) are ~11–12 GiB each. Small blobs and reads are unaffected, so it presents as "the cache works" while quietly missing on everything big.
 
+## Root cause (corrected after reproduction — 2026-07-18)
+
+The "no multipart / 5 GiB single-part ceiling" hypothesis below is **wrong**:
+`s3_store.rs` *does* implement multipart (`MAX_UPLOAD_SIZE = 48 TiB`,
+`MAX_UPLOAD_PARTS = 10 000`), and `ingest_nar_direct` passes `ExactSize`.
+Reproduced on idle x86 `weyl` against the same R2 bucket: a 10 MiB blob
+(single multipart, 2 parts) and a 6 GiB blob (~1200 parts) both push clean; a
+12 GiB blob **also succeeds** but takes **236 s** and floods the log with:
+
+```
+ERROR aws_smithy_runtime::client::http::connection_poisoning: unable to mark the
+connection for closure because no connection was found! The underlying HTTP
+connector never set a connection.
+```
+
+The real cause is **too many tiny parts**: the part-size math targeted the
+5 MiB floor (`max_size / MIN_MULTIPART_SIZE`), so a 12 GiB blob became ~2300
+concurrent 5 MiB PUTs. That churns/poisons R2's HTTP connection pool. On a good
+link the retries eventually win (slowly); on `gossamer` (aarch64, mid-bootstrap,
+flakier R2 path) the retries **exhaust**, the slow-store write fails, and
+write-through cascades that into discarding the successful fast-store write too
+(`all-three-false`). So it presents as "drops blobs over ~5 GiB" but is really
+"the many-part path gets flaky as the part count climbs."
+
+**Fix applied:** size parts at `TARGET_MULTIPART_PART_SIZE = 64 MiB` (grown only
+to stay under 10 000 parts for very large objects), so 12 GiB → ~192 parts.
+Far fewer connections, faster, reliable. A best-effort write-through (keep the
+fast copy when the slow tier fails) remains a worthwhile follow-up for defence
+in depth.
+
 ## Summary
 
 With `fast_direction = both`, `FastSlowStore::update` tees the incoming stream to

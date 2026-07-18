@@ -74,6 +74,15 @@ const MAX_MULTIPART_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5GB.
 // Note: Type 'u64' chosen to simplify calculations
 const MAX_UPLOAD_PARTS: u64 = 10_000;
 
+// Target size for each multipart part. Deliberately far above the 5 MiB
+// floor: sizing parts at the floor turns a multi-GiB blob into thousands of
+// tiny PUTs, which churns and poisons the HTTP connection pool (aws-smithy
+// "connection never set" storms) and makes large uploads slow and flaky —
+// on a lossy link the retries exhaust and the write fails outright. 64 MiB
+// keeps a 12 GiB blob at ~192 parts; combined with the concurrency limit it
+// bounds in-flight memory to `multipart_max_concurrent_uploads * this`.
+const TARGET_MULTIPART_PART_SIZE: u64 = 64 * 1024 * 1024; // 64MB.
+
 // Default max buffer size for retrying upload requests.
 // Note: If you change this, adjust the docs in the config.
 const DEFAULT_MAX_RETRY_BUFFER_PER_REQUEST: usize = 5 * 1024 * 1024; // 5MB.
@@ -404,14 +413,18 @@ where
         // S3 requires us to upload in parts if the size is greater than 5GB. The part size must be at least
         // 5MB (except last part) and can have up to 10,000 parts.
 
-        // Calculate of number of chunks if we upload in 5MB chucks (min chunk size), clamping to
-        // 10,000 parts and correcting for lossy integer division. This provides the
-        let chunk_count = (max_size / MIN_MULTIPART_SIZE).clamp(0, MAX_UPLOAD_PARTS - 1) + 1;
+        // Size each part at TARGET_MULTIPART_PART_SIZE, growing it only as
+        // needed to keep the part count within the 10,000-part ceiling for
+        // very large objects. Sizing at the 5 MiB floor (the old behaviour)
+        // maximised the part count and drowned R2 in tiny concurrent PUTs.
+        let bytes_per_upload_part = cmp::max(
+            TARGET_MULTIPART_PART_SIZE,
+            max_size.div_ceil(MAX_UPLOAD_PARTS),
+        )
+        .clamp(MIN_MULTIPART_SIZE, MAX_MULTIPART_SIZE);
 
-        // Using clamped first approximation of number of chunks, calculate byte count of each
-        // chunk, excluding last chunk, clamping to min/max upload size 5MB, 5GB.
-        let bytes_per_upload_part =
-            (max_size / chunk_count).clamp(MIN_MULTIPART_SIZE, MAX_MULTIPART_SIZE);
+        // Number of parts this yields (last part may be short).
+        let chunk_count = max_size.div_ceil(bytes_per_upload_part);
 
         // Sanity check before continuing.
         if !(MIN_MULTIPART_SIZE..MAX_MULTIPART_SIZE).contains(&bytes_per_upload_part) {
