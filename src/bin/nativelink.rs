@@ -54,6 +54,7 @@ use nativelink_util::digest_hasher::{
     DigestHasherFunc, set_default_digest_hasher_func, set_require_explicit_digest_function,
 };
 use nativelink_util::health_utils::HealthRegistryBuilder;
+use nativelink_util::metrics_collector::RootMetricsComponent;
 use nativelink_util::origin_event_publisher::OriginEventPublisher;
 #[cfg(target_family = "unix")]
 use nativelink_util::shutdown_guard::Priority;
@@ -89,6 +90,9 @@ const DEFAULT_ADMIN_API_PATH: &str = "/admin";
 
 // Note: This must be kept in sync with the documentation in `HealthConfig::path`.
 const DEFAULT_HEALTH_STATUS_CHECK_PATH: &str = "/status";
+
+// Note: This must be kept in sync with the documentation in `PrometheusConfig::path`.
+const DEFAULT_PROMETHEUS_METRICS_PATH: &str = "/metrics";
 
 // Note: This must be kept in sync with the documentation in
 // `OriginEventsConfig::max_event_queue_size`.
@@ -315,6 +319,20 @@ async fn inner_main(
             worker_schedulers.insert(name.clone(), worker_scheduler.clone());
         }
     }
+
+    // Roots for the Prometheus `/metrics` endpoint: the store manager (all
+    // stores) and every worker scheduler. Both implement `RootMetricsComponent`.
+    // Action schedulers are exposed as `Arc<dyn KnownPlatformPropertyProvider>`
+    // (not a metrics root), so their metrics surface through the corresponding
+    // worker scheduler when one exists.
+    let metrics_roots: Vec<(String, Arc<dyn RootMetricsComponent>)> = {
+        let mut roots: Vec<(String, Arc<dyn RootMetricsComponent>)> =
+            vec![("stores".to_string(), store_manager.clone())];
+        for (name, scheduler) in &worker_schedulers {
+            roots.push((format!("schedulers_{name}"), scheduler.clone()));
+        }
+        roots
+    };
 
     let server_cfgs: Vec<ServerConfig> = cfg.servers.into_iter().collect();
 
@@ -548,6 +566,40 @@ async fn inner_main(
             for (prefix, router) in nix_cache_server.routers() {
                 svc = svc.nest_service(&prefix, router);
             }
+        }
+
+        if let Some(prometheus_cfg) = &services.experimental_prometheus {
+            let path = if prometheus_cfg.path.is_empty() {
+                DEFAULT_PROMETHEUS_METRICS_PATH
+            } else {
+                &prometheus_cfg.path
+            };
+            let metrics_roots = metrics_roots.clone();
+            svc = svc.route(
+                path,
+                axum::routing::get(move || {
+                    let metrics_roots = metrics_roots.clone();
+                    async move {
+                        // Collection walks shared component state and installs a
+                        // scoped tracing subscriber; run it on a blocking thread
+                        // so we never park the async runtime on it.
+                        let body = tokio::task::spawn_blocking(move || {
+                            let metrics =
+                                nativelink_util::metrics_collector::collect(&metrics_roots);
+                            nativelink_util::metrics_collector::render_prometheus(&metrics)
+                        })
+                        .await
+                        .unwrap_or_else(|e| format!("# metrics collection failed: {e}\n"));
+                        (
+                            [(
+                                axum::http::header::CONTENT_TYPE,
+                                "text/plain; version=0.0.4",
+                            )],
+                            body,
+                        )
+                    }
+                }),
+            );
         }
 
         // This is the default service that executes if no other endpoint matches.

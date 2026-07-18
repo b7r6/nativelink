@@ -26,6 +26,7 @@ pub mod fs_util;
 pub mod health_utils;
 pub mod instant_wrapper;
 pub mod metrics;
+pub mod metrics_collector;
 pub mod metrics_utils;
 pub mod operation_state_manager;
 pub mod origin_event;

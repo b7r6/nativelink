@@ -805,6 +805,24 @@ pub struct HealthConfig {
     pub timeout_seconds: u64,
 }
 
+#[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct PrometheusConfig {
+    /// Path to register the Prometheus scrape endpoint. If path is "/metrics",
+    /// and your domain is "example.com", you can reach the endpoint with:
+    /// <http://example.com/metrics>.
+    ///
+    /// The endpoint renders the full `MetricsComponent` tree (store and
+    /// scheduler metrics) as Prometheus text-exposition v0.0.4, prefixed with
+    /// `nativelink_`. Collection is per-scrape, so there is no runtime cost
+    /// when nothing is scraping.
+    ///
+    /// Default: "/metrics"
+    #[serde(default)]
+    pub path: String,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
 pub struct BepConfig {
@@ -950,6 +968,12 @@ pub struct ServicesConfig {
 
     /// This is the service for health status check.
     pub health: Option<HealthConfig>,
+
+    /// Exposes a Prometheus `/metrics` scrape endpoint that renders the full
+    /// `MetricsComponent` tree (stores and schedulers). Disabled unless
+    /// configured. Prefixed `experimental_` because the emitted metric names
+    /// are not yet a stability contract.
+    pub experimental_prometheus: Option<PrometheusConfig>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
