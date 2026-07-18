@@ -13,7 +13,9 @@
 // limitations under the License.
 
 //! `nl-nix` — a `nix copy`-style client that pushes and pulls store paths
-//! to/from a NativeLink `nix_cache`, streaming zstd on the wire.
+//! to/from a NativeLink `nix_cache`, streaming zstd on the wire. The `flake`
+//! subcommand builds a whole flake's outputs and pushes their closures, so the
+//! "build everything, upload it all" flow needs no external shell wrapper.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -77,6 +79,17 @@ enum Command {
         #[arg(long)]
         out: String,
     },
+    /// Build every output of a flake for this system and push each path's whole
+    /// closure. Absorbs the enumerate → `nix build` → push flow that previously
+    /// needed an external shell wrapper.
+    Flake {
+        /// Flake reference to build (default: the flake in the current directory).
+        #[arg(default_value = ".")]
+        flake: String,
+        /// Output types to enumerate, space- or comma-separated.
+        #[arg(long, env = "NL_PUSH_OUTPUTS", default_value = "packages devShells")]
+        outputs: String,
+    },
     /// Print the cache's `/nix-cache-info`.
     Info,
 }
@@ -129,7 +142,122 @@ async fn run(cli: Cli) -> Result<(), Error> {
             }
             Ok(())
         }
+        Command::Flake { flake, outputs } => {
+            let system = nix_current_system().await?;
+            eprintln!("nl-nix: flake={flake} system={system} outputs=[{outputs}]");
+
+            // Enumerate buildable attrs, one output type at a time (a type that
+            // doesn't evaluate — e.g. a flake with no devShells — is skipped,
+            // not fatal).
+            let mut attrs = Vec::new();
+            for kind in outputs.split([' ', ',']).filter(|s| !s.is_empty()) {
+                attrs.extend(flake_attrs(&flake, kind, &system).await);
+            }
+            if attrs.is_empty() {
+                eprintln!("nl-nix: no buildable outputs for {system} in [{outputs}]");
+                return Ok(());
+            }
+            eprintln!("nl-nix: building {} outputs", attrs.len());
+
+            let out_paths = nix_build(&flake, &attrs).await?;
+            if out_paths.is_empty() {
+                return Err(make_input_err!("`nix build` produced no outputs"));
+            }
+            eprintln!("nl-nix: built {} paths; pushing closures", out_paths.len());
+
+            let store = Arc::new(NixStore::open(&cli.store)?);
+            let roots = out_paths
+                .iter()
+                .map(|p| StorePath::from_full_path(&cli.store, p))
+                .collect::<Result<Vec<_>, _>>()?;
+            let ordered = closure(&store, roots)?;
+            push_all(&client, &store, ordered, cli.jobs).await
+        }
     }
+}
+
+/// Runs `nix` with `args`, returning its stdout and whether it exited zero.
+/// `show_progress` inherits the child's stderr (so `nix build` progress reaches
+/// the terminal); otherwise stderr is discarded (quiet probing).
+async fn run_nix(args: &[String], show_progress: bool) -> Result<(String, bool), Error> {
+    let stderr = if show_progress {
+        std::process::Stdio::inherit()
+    } else {
+        std::process::Stdio::null()
+    };
+    let output = tokio::process::Command::new("nix")
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(stderr)
+        .output()
+        .await
+        .map_err(|e| make_input_err!("spawning `nix` (is it on PATH?): {e}"))?;
+    Ok((
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        output.status.success(),
+    ))
+}
+
+/// The Nix system double for this host (`builtins.currentSystem`).
+async fn nix_current_system() -> Result<String, Error> {
+    let (out, ok) = run_nix(
+        &[
+            "eval".into(),
+            "--raw".into(),
+            "--impure".into(),
+            "--expr".into(),
+            "builtins.currentSystem".into(),
+        ],
+        true,
+    )
+    .await?;
+    if !ok {
+        return Err(make_input_err!("`nix eval builtins.currentSystem` failed"));
+    }
+    Ok(out.trim().to_string())
+}
+
+/// The full installable attrs under `<flake>#<kind>.<system>`, empty if that
+/// output type is absent. Uses `--apply` to emit newline-separated names, so no
+/// JSON parser is needed.
+async fn flake_attrs(flake: &str, kind: &str, system: &str) -> Vec<String> {
+    let args = vec![
+        "eval".into(),
+        "--raw".into(),
+        format!("{flake}#{kind}.{system}"),
+        "--apply".into(),
+        "a: builtins.concatStringsSep \"\\n\" (builtins.attrNames a)".into(),
+    ];
+    match run_nix(&args, false).await {
+        Ok((out, true)) => out
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| format!("{kind}.{system}.{l}"))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Builds every installable with `--keep-going` (one broken output doesn't sink
+/// the rest) and returns the realised out paths. Partial failure warns but still
+/// returns what built.
+async fn nix_build(flake: &str, attrs: &[String]) -> Result<Vec<String>, Error> {
+    let mut args = vec![
+        "build".into(),
+        "--no-link".into(),
+        "--keep-going".into(),
+        "--print-out-paths".into(),
+    ];
+    args.extend(attrs.iter().map(|a| format!("{flake}#{a}")));
+    let (out, ok) = run_nix(&args, true).await?;
+    if !ok {
+        eprintln!("nl-nix: some outputs failed to build; pushing the ones that succeeded");
+    }
+    Ok(out
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect())
 }
 
 /// Parses CLI path arguments into validated store paths.

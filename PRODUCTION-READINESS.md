@@ -56,15 +56,13 @@ by a sweep of the fork crates. `[session]` — surfaced while operating the fork
       verifies NAR integrity against the signed hash but does not verify the
       narinfo *signature* against a trusted public key (the library supports it;
       the CLI has no flag). `part10/nix-cache-client.md`. `[book]` `[session]`
-- [ ] **nix-client: native flake-aware "build + push everything" (retire the
-      shell wrapper).** The `push-flake` app (`nix run …#push-flake`) is a shell
-      wrapper around enumerate-outputs → `nix build` → `nl-nix push --recursive`.
-      Promote it to a first-class `nl-nix` capability (e.g. `nl-nix push --flake
-      <ref>` or a `push-flake` subcommand) so "cache this whole flake" needs no
-      external orchestration — nl-nix already speaks the push protocol; teach it
-      to resolve a flake's outputs for the current system and push their closures
-      (build via the Nix CLI or `nix-eval`/store APIs). `flake.nix`
-      (`apps.push-flake`). `[session]`
+- [x] **nix-client: native flake-aware "build + push everything" (retire the
+      shell wrapper).** Done — `nl-nix flake [FLAKE]` enumerates a flake's outputs
+      for the current system, builds them via the Nix CLI (`--keep-going`), and
+      pushes each path's whole closure natively (`bin/nl_nix.rs`). The
+      `push-flake` app is now a thin fleet-defaults delegate (local cache + fleet
+      signing key) to `nl-nix flake`; the client is runnable standalone via
+      `nix run .#nl-nix`. `[session]`
 - [ ] **`cas_witness`: re-hash on cache hit before re-attesting.** A hit re-emits a
       receipt after a `has()` existence probe, not a re-read/re-hash — the
       binding is the one captured at first fetch. `cas-witness.md`. `[book]`

@@ -458,63 +458,29 @@
               exec ${pkgs.mdbook}/bin/mdbook serve --open --port 3000  --hostname 0.0.0.0
             ''}";
           };
-          # `nix run .#push-flake [-- FLAKE]` — build every output of a flake for
-          # this system and push each path's whole closure to a nix_cache via
-          # `nl-nix push --recursive`. The "build everything here, upload it all"
-          # button; wraps the nl-nix client this flake already ships.
+          # The Nix cache client, standalone: `nix run .#nl-nix -- <push|pull|
+          # info|flake> …`. `flake` builds a whole flake and pushes its closures
+          # natively — no shell wrapper.
+          nl-nix = {
+            type = "app";
+            program = "${nativelink-nix-client}/bin/nl-nix";
+          };
+          # `nix run .#push-flake [-- FLAKE]` — fleet-flavored convenience over
+          # `nl-nix flake`: default to the local cache and sign with the fleet
+          # key when present. All enumerate/build/push logic now lives in nl-nix.
           push-flake = {
             type = "app";
             program = pkgs.lib.getExe (pkgs.writeShellApplication {
               name = "push-flake";
-              runtimeInputs = [pkgs.nix pkgs.jq nativelink-nix-client];
+              runtimeInputs = [pkgs.nix nativelink-nix-client];
               text = ''
                 set -euo pipefail
-
-                flake="''${1:-.}"
                 cache="''${NL_NIX_CACHE:-http://127.0.0.1:50071/nix/main}"
-                outputs="''${NL_PUSH_OUTPUTS:-packages devShells}"
-                system="$(nix eval --raw --impure --expr builtins.currentSystem)"
-
-                echo "// push-flake // flake=$flake  system=$system  cache=$cache  outputs=[$outputs]"
-
-                # Enumerate buildable attrs for this system, one output type at a
-                # time (robust: a sibling output that fails to evaluate can't sink
-                # the run, unlike a whole-flake `nix flake show`).
-                attrs=()
-                for kind in $outputs; do
-                  names="$(nix eval --json "$flake#$kind.$system" --apply builtins.attrNames 2>/dev/null || echo '[]')"
-                  while IFS= read -r name; do
-                    [ -n "$name" ] && attrs+=("$kind.$system.$name")
-                  done < <(printf '%s' "$names" | jq -r '.[]')
-                done
-
-                if [ "''${#attrs[@]}" -eq 0 ]; then
-                  echo "// push-flake // no buildable outputs for $system in [$outputs]" >&2
-                  exit 0
-                fi
-
-                installables=()
-                for a in "''${attrs[@]}"; do installables+=("$flake#$a"); done
-                echo "// push-flake // building ''${#attrs[@]} outputs:"
-                printf '  %s\n' "''${attrs[@]}"
-
-                # Build all; --keep-going so one broken output doesn't sink the
-                # rest (failures still print to stderr). stdout is only out paths.
-                mapfile -t outs < <(nix build --no-link --keep-going --print-out-paths "''${installables[@]}")
-                if [ "''${#outs[@]}" -eq 0 ]; then
-                  echo "// push-flake // nothing built" >&2
-                  exit 1
-                fi
-
-                # Sign with the fleet key if the host has it (root); otherwise the
-                # cache re-signs on serve. Push each path's entire reference closure.
                 signing=()
                 if [ -r /run/agenix/nativelink-nix-cache-key ]; then
                   signing=(--signing-key /run/agenix/nativelink-nix-cache-key)
                 fi
-                echo "// push-flake // built ''${#outs[@]} paths; pushing closures to $cache"
-                nl-nix --to "$cache" "''${signing[@]}" push --recursive "''${outs[@]}"
-                echo "// push-flake // done"
+                exec nl-nix --to "$cache" "''${signing[@]}" flake "$@"
               '';
             });
           };
