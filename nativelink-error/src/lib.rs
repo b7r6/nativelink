@@ -354,8 +354,37 @@ impl From<redis::RedisError> for Error {
 
 impl From<tonic::Status> for Error {
     fn from(status: tonic::Status) -> Self {
-        Self::new(status.code(), status.to_string())
+        // tonic codes a mid-stream transport/`hyper` failure (a connection reset
+        // or broken pipe during a large streaming write) as `Code::Unknown`
+        // with message "transport error". But a broken connection is transient
+        // and retryable — the gRPC status model reserves `UNKNOWN` for genuinely
+        // unmapped errors and codes transport failures `UNAVAILABLE`. Left as
+        // `Unknown`, such a blip falls outside both our own `Retrier`'s and most
+        // clients' retry sets, so a retryable failure becomes terminal and
+        // cacheable uploads are silently dropped. Remap transport-originated
+        // `Unknown` to `Unavailable`.
+        let code = if status.code() == Code::Unknown && is_transport_status(&status) {
+            Code::Unavailable
+        } else {
+            status.code()
+        };
+        Self::new(code, status.to_string())
     }
+}
+
+/// Whether a `tonic::Status` originates from a transport-layer failure (a
+/// reset/broken connection), which tonic surfaces as `Code::Unknown`. Precise
+/// when the concrete transport error is reachable in the source chain; falls
+/// back to tonic's "transport error" message otherwise.
+fn is_transport_status(status: &tonic::Status) -> bool {
+    let mut source = std::error::Error::source(status);
+    while let Some(err) = source {
+        if err.is::<tonic::transport::Error>() {
+            return true;
+        }
+        source = err.source();
+    }
+    status.message().contains("transport error")
 }
 
 impl From<Error> for tonic::Status {

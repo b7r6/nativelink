@@ -111,6 +111,21 @@ by a sweep of the fork crates. `[session]` — surfaced while operating the fork
       build` runs `cargo build`, not clippy). Either do a crate-wide `core`/`alloc`
       pass and run clippy in CI, or record that the fork crates are exempt.
       `[session]` (review finding A)
+- [x] **CAS transport errors mis-coded `Unknown` (silent dropped uploads).** Done
+      — a mid-stream connection reset now surfaces as retryable `Unavailable`, not
+      terminal `Unknown` (`nativelink-error/src/lib.rs`, test in
+      `tests/error_tests.rs`), so clients re-upload instead of dropping cacheable
+      blobs. `[session]` (bug `2026-07-18-cas-write-…-unavailable.md`)
+- [ ] **Land multi-GiB (toolchain) CAS uploads in one shot.** The reset above is
+      HTTP/2 flow-control window exhaustion + a 2-slot `buf_channel`
+      (`nativelink-util/src/buf_channel.rs`): a slow downstream shard stalls the
+      inbound stream to a timeout. Fix: enable `experimental_http2_adaptive_window`
+      + raise the initial stream/connection windows on the RE servers (config,
+      `nativelink.rs:667-707`), raise the `buf_channel` capacity (code — validate),
+      and `rpc_timeout_s = 0` for the forwarding `GrpcStore`. The internal
+      `Retrier` can't rewind a consumed stream, so client re-upload is today's
+      recovery. Also owed: `RESOURCE_EXHAUSTED` for capacity resets, and always
+      closing the RPC with well-formed gRPC trailers. `[session]` (bug 2026-07-18)
 
 ## Tier 3 — Observability the fork should close (P3)
 
