@@ -1383,16 +1383,18 @@ impl NixCacheInstance {
         //    canonical uncompressed blob (file_* left unset), so the
         //    re-rendered narinfo advertises Compression: none.
         let mut path_info = NixPathInfo::from_nar_info(&info);
+        // Dedup on the signature bytes, NOT the key name. Ed25519 (RFC 8032)
+        // signatures over the same fingerprint are deterministic, so a key
+        // that already signed reproduces its exact existing signature and is
+        // naturally deduped — while a foreign signature that merely shares our
+        // key NAME never matches, so it can no longer suppress our own
+        // authoritative signature. (Name-based dedup let a same-named foreign
+        // key poison the narinfo, leaving it signed only by an untrusted key.)
         let new_sigs: Vec<String> = self
             .signing_keys
             .iter()
-            .filter(|key| {
-                !path_info
-                    .signatures
-                    .iter()
-                    .any(|sig| sig.split(':').next() == Some(key.name()))
-            })
             .map(|key| key.sign(&fingerprint))
+            .filter(|our_sig| !path_info.signatures.contains(our_sig))
             .collect();
         path_info.signatures.extend(new_sigs);
         let record = path_info
@@ -1609,7 +1611,7 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
     };
     // A record that exists but does not decode is a server-side problem
     // (500), not a client error: never let it surface as a 400 or 404.
-    let path_info = NixPathInfo::decode_record(&record)
+    let mut path_info = NixPathInfo::decode_record(&record)
         .map_err(|err| make_err!(Code::Internal, "Corrupt narinfo record for '{hash}': {err}"))?;
     let nar_sha256: [u8; 32] = path_info.nar_sha256.as_slice().try_into().map_err(|_| {
         make_err!(
@@ -1617,6 +1619,24 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
             "Corrupt narinfo record for '{hash}': NAR hash is not 32 bytes"
         )
     })?;
+    // Stamp our authoritative signature on serve, so records stored before the
+    // dedup fix (signed only by a foreign same-named key) self-heal on the next
+    // fetch rather than needing a re-push. Dedup on signature bytes: a key that
+    // already signed reproduces its exact signature and is skipped. The
+    // fingerprint covers path/NarHash/NarSize/References, which the URL and
+    // Compression switch below never touch, so this stays valid for every
+    // rendered variant. A fingerprint failure is non-fatal — serve as stored.
+    if !instance.signing_keys.is_empty() {
+        if let Ok(fingerprint) = path_info.fingerprint() {
+            let new_sigs: Vec<String> = instance
+                .signing_keys
+                .iter()
+                .map(|key| key.sign(&fingerprint))
+                .filter(|our_sig| !path_info.signatures.contains(our_sig))
+                .collect();
+            path_info.signatures.extend(new_sigs);
+        }
+    }
     // Choose the served URL/Compression/FileHash/FileSize by precedence,
     // each guarded by "the referenced blob still exists in CAS" (else fall
     // through). The ed25519 fingerprint covers only path/NarHash/NarSize/
@@ -1840,16 +1860,13 @@ async fn put_narinfo_inner(
     let fingerprint = path_info
         .fingerprint()
         .err_tip(|| "Computing narinfo fingerprint for signing")?;
+    // Dedup on signature bytes, not key name — see the note at the upstream
+    // ingest site. A same-named foreign signature must not suppress ours.
     let new_sigs: Vec<String> = instance
         .signing_keys
         .iter()
-        .filter(|key| {
-            !path_info
-                .signatures
-                .iter()
-                .any(|sig| sig.split(':').next() == Some(key.name()))
-        })
         .map(|key| key.sign(&fingerprint))
+        .filter(|our_sig| !path_info.signatures.contains(our_sig))
         .collect();
     path_info.signatures.extend(new_sigs);
 

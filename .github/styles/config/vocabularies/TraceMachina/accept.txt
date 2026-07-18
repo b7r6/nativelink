@@ -423,3 +423,6 @@ iroh
 dirs
 tcp
 backend's
+agenix
+keypair
+keypairs
