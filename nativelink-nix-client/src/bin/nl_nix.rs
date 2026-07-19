@@ -90,6 +90,22 @@ enum Command {
         #[arg(long, env = "NL_PUSH_OUTPUTS", default_value = "packages devShells")]
         outputs: String,
     },
+    /// Check whether store paths — or, with `--recursive`, their whole
+    /// closures — are present in the cache, without transferring anything.
+    /// Accepts full store paths or bare 32-char hashes. Prints `present`/`absent`
+    /// per path and exits non-zero if any are absent, so it doubles as a shell
+    /// predicate: `nl-nix --to … has "$P" && echo cached`.
+    #[command(alias = "check")]
+    Has {
+        /// Store paths or 32-char nixbase32 hashes to check.
+        paths: Vec<String>,
+        /// Also check the entire reference closure of each local store path.
+        #[arg(long)]
+        recursive: bool,
+        /// Suppress per-path output; rely on the exit code only.
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Print the cache's `/nix-cache-info`.
     Info,
 }
@@ -142,6 +158,11 @@ async fn run(cli: Cli) -> Result<(), Error> {
             }
             Ok(())
         }
+        Command::Has {
+            paths,
+            recursive,
+            quiet,
+        } => has_all(&client, &cli.store, paths, recursive, quiet, cli.jobs).await,
         Command::Flake { flake, outputs } => {
             let system = nix_current_system().await?;
             eprintln!("nl-nix: flake={flake} system={system} outputs=[{outputs}]");
@@ -351,5 +372,106 @@ async fn push_all(
     println!(
         "done: {uploaded} uploaded, {skipped} already present, of {total} paths ({wire} wire bytes)"
     );
+    Ok(())
+}
+
+/// Probes the cache for each input, closure-expanded when `--recursive`, and
+/// reports `present`/`absent` per path (unless `quiet`). A `HEAD {hash}.narinfo`
+/// per path — the same dedup probe `push` uses — so it transfers no NAR data.
+/// Exits non-zero if any probed path is absent, making it a shell predicate.
+async fn has_all(
+    client: &Arc<CacheClient>,
+    store_dir: &str,
+    inputs: Vec<String>,
+    recursive: bool,
+    quiet: bool,
+    jobs: usize,
+) -> Result<(), Error> {
+    if inputs.is_empty() {
+        return Err(make_input_err!("no store paths or hashes given"));
+    }
+
+    // Resolve every input to a de-duplicated (display, hash) probe in a stable
+    // order. A full store path may expand to its whole closure; a bare hash is
+    // probed as-is (it has no local closure to expand).
+    let store = if recursive {
+        Some(NixStore::open(store_dir)?)
+    } else {
+        None
+    };
+    let mut probes: Vec<(String, String)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for input in &inputs {
+        if input.contains('/') {
+            let root = StorePath::from_full_path(store_dir, input)?;
+            let paths = match &store {
+                Some(store) => closure(store, vec![root])?,
+                None => vec![root],
+            };
+            for path in paths {
+                if seen.insert(path.hash_part().to_string()) {
+                    probes.push((path.full_path().to_string(), path.hash_part().to_string()));
+                }
+            }
+        } else {
+            if recursive {
+                return Err(make_input_err!(
+                    "--recursive needs a full store path; '{input}' is a bare hash with no local closure"
+                ));
+            }
+            // Validate the bare hash by round-tripping it through StorePath's
+            // parser (which enforces 32-char nixbase32) — no extra dependency.
+            let synthetic = format!("{store_dir}/{input}-probe");
+            let path = StorePath::from_full_path(store_dir, &synthetic).err_tip(|| {
+                format!("'{input}' is neither a store path nor a 32-char nixbase32 hash")
+            })?;
+            if seen.insert(path.hash_part().to_string()) {
+                probes.push((input.clone(), path.hash_part().to_string()));
+            }
+        }
+    }
+
+    // Probe with bounded concurrency, preserving input order for the report.
+    let jobs = jobs.max(1);
+    let mut results: Vec<bool> = vec![false; probes.len()];
+    let mut iter = probes.iter().enumerate();
+    let mut inflight = FuturesUnordered::new();
+    loop {
+        while inflight.len() < jobs {
+            let Some((idx, (_display, hash))) = iter.next() else {
+                break;
+            };
+            let client = Arc::clone(client);
+            let hash = hash.clone();
+            inflight.push(async move { (idx, client.has_path(&hash).await) });
+        }
+        let Some((idx, present)) = inflight.next().await else {
+            break;
+        };
+        results[idx] = present?;
+    }
+
+    let mut absent = 0u64;
+    for (present, (display, _hash)) in results.iter().zip(&probes) {
+        if !present {
+            absent += 1;
+        }
+        if !quiet {
+            println!("{} {display}", if *present { "present" } else { "absent " });
+        }
+    }
+    let total = probes.len();
+    if !quiet {
+        eprintln!(
+            "{}: {absent} of {total} absent",
+            if absent == 0 { "ok" } else { "missing" }
+        );
+    }
+    // Clean predicate exit: non-zero when anything is absent, without dumping a
+    // Rust error (which `run` -> `main` would print). stdout is line-buffered and
+    // already flushed by the per-path `println!`s above.
+    if absent > 0 {
+        std::process::exit(1);
+    }
     Ok(())
 }
