@@ -41,7 +41,12 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 rusqlite = { version = "0.37.0", default-features = false, features = [
   "bundled",
 ] }
-sha2 = { version = "0.10.8", default-features = false }
+# `asm` unlocks the aarch64 hardware SHA-2 backend (RustCrypto gates it behind
+# this feature); it then runtime-detects the HWCAP `sha2` bit via cpufeatures,
+# so one binary picks hardware SHA on any core that has it (GB10 X925/A725,
+# Grace Neoverse V2) and falls back to software elsewhere. Turns NAR hashing
+# from the ~100 MB/s software path into on-core hardware SHA-256.
+sha2 = { version = "0.10.8", default-features = false, features = ["asm"] }
 tokio = { version = "1.52.2", default-features = false, features = [
   "fs",
   "io-util",
