@@ -428,3 +428,6 @@ keypair
 keypairs
 sysroots
 fast_direction
+lossy
+dedups
+discardable

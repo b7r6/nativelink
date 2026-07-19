@@ -64,7 +64,7 @@ The Nix client is unforgiving in specific, documented ways. Each rule below is l
 | `Accept-Ranges: bytes` only where `Range` is honored | Nix resumes interrupted downloads. Advertise ranges, then answer a `Range` request with 200, and the client appends a full body to a partial file — a corrupt NAR and a hard failure. |
 | No `Content-Encoding` on NAR responses | NAR compression is application data, described by `Compression`/`FileHash`/`FileSize`. Transport-level recoding changes the bytes those fields describe. |
 | `Name: value` with exactly colon-space | Nix reads each value starting at `colon + 2`. Any other separator shifts every value by a byte. |
-| One `Sig` line per key, lines accumulate | Multiple signatures are additive; signing with old and new keys at once is how rotation works while clients migrate `trusted-public-keys`. |
+| One `Sig` line per key, lines accumulate | Multiple signatures are additive; signing with old and new keys at once is how rotation works while clients migrate `trusted-public-keys`. The facade dedups by signature *bytes*, not the key *name*: a `Sig` line whose `name:` matches ours but was produced by a **different** keypair never suppresses our own — otherwise a stray same-named signer poisons the record and every client rejects it. |
 
 ## Access Tokens
 
@@ -81,6 +81,8 @@ By default (`preserve_upload_compression: true`) the facade serves back exactly 
 Independently, `serve_compression: "zstd"` re-encodes *uncompressed* uploads on ingest: the NAR streams out of the CAS through a zstd encoder (`compression_level`, default 3), and the compressed blob is stored under its own digest with a real `FileHash`/`FileSize` measured at ingest, never guessed.
 
 The served narinfo chooses its advertised form by precedence — a preserved original, else a zstd re-encoding, else the canonical uncompressed NAR — each guarded by the blob still being present. Stored signatures survive every rendering: the fingerprint covers the uncompressed NAR — its hash, size, and references — never the URL or the compression.
+
+The facade also **re-signs on serve**. Every `GET .narinfo` stamps the record with the configured `signing_key_files` (deduped by bytes, so this is a no-op once our signature is present). Because the fingerprint is invariant to the URL/compression choice above, the added signature is valid for whichever form is rendered. Two consequences: a record ingested or pushed before a key was configured — or signed only by some foreign key — **self-heals** on the next fetch instead of needing a re-push; and a *clean* key rotation (retire the old key outright, publish the new public key to `trusted-public-keys`) works without re-pushing the store, because the re-sign stamps the new key on everything served. Signing is Ed25519 (deterministic), so the per-`GET` sign is a bounded, discardable few microseconds with no record write.
 
 The compressed digest, preserved or re-encoded, stays *out* of the record's `output_files` on purpose. Completeness must key on the uncompressed NAR alone: losing a compressed blob to eviction is recoverable, so the narinfo handler checks for it per request and falls back to the uncompressed rendering — a slower download, not a substitution miss. Listing it in `output_files` would let `completeness_checking` 404 the whole narinfo over derived data the facade can serve around (and a later re-upload of the path regenerates the blob, so it self-heals).
 

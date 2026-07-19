@@ -384,7 +384,14 @@ fn is_transport_status(status: &tonic::Status) -> bool {
         }
         source = err.source();
     }
-    status.message().contains("transport error")
+    // Fallback for a `Status` reconstructed from the wire, where the concrete
+    // transport error is no longer in the source chain and only the message
+    // survives. tonic renders these as exactly "transport error" or
+    // "transport error: <detail>", so anchor the match — an unanchored
+    // `contains` would reclassify any app-level `Unknown` whose message merely
+    // mentions "transport error" as retryable `Unavailable`.
+    let msg = status.message();
+    msg == "transport error" || msg.starts_with("transport error:")
 }
 
 impl From<Error> for tonic::Status {

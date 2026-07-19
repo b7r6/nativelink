@@ -89,6 +89,26 @@ provider-specific ones:
 `max_retries`, `delay` (seconds, base for exponential back-off), `jitter`
 (fractional), and an optional `retry_on_errors` code list.
 
+### Multipart sizing and memory bounds
+
+Above ~5 MiB, `S3Store` uploads via multipart. Parts are sized at a **64 MiB
+target** (`TARGET_MULTIPART_PART_SIZE`), grown only as needed to keep the count
+within S3's 10,000-part ceiling for very large objects — *not* at the 5 MiB
+floor. Sizing at the floor turns a multi-GiB blob into thousands of tiny
+concurrent `PUT`s, which churns and poisons the HTTP connection pool
+(`aws-smithy` "connection never set" storms) and makes large writes slow and
+flaky; on a lossy link the retries exhaust and the write fails outright. A
+12 GiB blob is ~192 parts, not ~2300.
+
+Two limits bound memory. `multipart_max_concurrent_uploads` (default 10) caps
+parallel parts **per upload** — peak per-upload footprint is roughly that count
+times the part size. A store-wide semaphore (`MAX_CONCURRENT_MULTIPART_UPLOADS`,
+4) then caps how many multipart uploads run **at once** across the whole store,
+so a burst of concurrent large writes can't multiply the per-upload footprint
+into an out-of-memory on a cache node. The store-wide permit is admission
+control — held for the whole upload, never per part — so it can't deadlock the
+inner part loop; a fifth concurrent large upload simply waits for a slot.
+
 ## AWS S3 (`provider: "aws"`)
 
 `ExperimentalAwsSpec` (`stores.rs:1088-1103`) adds only `region` and `bucket`

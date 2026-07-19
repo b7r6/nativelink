@@ -50,7 +50,7 @@ use nativelink_util::store_trait::{
     RemoveItemCallback, StoreDriver, StoreKey, StoreOptimizations, UploadSizeInfo,
 };
 use parking_lot::Mutex;
-use tokio::sync::mpsc;
+use tokio::sync::{Semaphore, mpsc};
 use tokio::time::sleep;
 use tracing::{error, info};
 
@@ -91,6 +91,15 @@ const DEFAULT_MAX_RETRY_BUFFER_PER_REQUEST: usize = 5 * 1024 * 1024; // 5MB.
 // Note: If you change this, adjust the docs in the config.
 const DEFAULT_MULTIPART_MAX_CONCURRENT_UPLOADS: usize = 10;
 
+// Store-wide admission cap on CONCURRENT multipart uploads. The per-upload
+// concurrency and part-size bound in-flight memory PER upload
+// (~multipart_max_concurrent_uploads * TARGET_MULTIPART_PART_SIZE); without a
+// store-wide limit, N simultaneous large writes multiply that into an OOM on a
+// cache node. This is admission control — a permit is held for the WHOLE upload
+// (not per part), so it cannot deadlock the inner part loop — bounding peak
+// multipart memory to roughly this * per-upload footprint.
+const MAX_CONCURRENT_MULTIPART_UPLOADS: usize = 4;
+
 #[derive(Debug, MetricsComponent)]
 pub struct S3Store<NowFn> {
     s3_client: Arc<Client>,
@@ -106,6 +115,9 @@ pub struct S3Store<NowFn> {
     max_retry_buffer_per_request: usize,
     #[metric(help = "The number of concurrent uploads allowed for multipart uploads")]
     multipart_max_concurrent_uploads: usize,
+    // Store-wide admission control for concurrent multipart uploads (see
+    // MAX_CONCURRENT_MULTIPART_UPLOADS). Bounds aggregate in-flight memory.
+    multipart_upload_slots: Arc<Semaphore>,
 
     remove_callbacks: Mutex<Vec<Arc<dyn RemoveItemCallback>>>,
 }
@@ -177,6 +189,7 @@ where
                 .common
                 .multipart_max_concurrent_uploads
                 .map_or(DEFAULT_MULTIPART_MAX_CONCURRENT_UPLOADS, |v| v),
+            multipart_upload_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_MULTIPART_UPLOADS)),
             remove_callbacks: Mutex::new(Vec::new()),
         }))
     }
@@ -376,6 +389,17 @@ where
                 }))
                 .await;
         }
+
+        // Admission control: cap CONCURRENT multipart uploads store-wide so a
+        // burst of large writes can't multiply per-upload memory into an OOM.
+        // Held (RAII) for the whole upload; released on drop when update returns.
+        // Acquired here (after the single-part early-return) so small blobs never
+        // consume a slot. This is whole-upload admission, never per-part, so it
+        // cannot deadlock the inner part loop.
+        let _multipart_slot = Arc::clone(&Pin::get_ref(self).multipart_upload_slots)
+            .acquire_owned()
+            .await
+            .map_err(|e| make_err!(Code::Internal, "multipart upload semaphore closed: {e}"))?;
 
         let upload_id = &self
             .retrier
