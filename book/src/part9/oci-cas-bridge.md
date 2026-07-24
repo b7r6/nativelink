@@ -32,8 +32,8 @@ The `nativelink-oci` crate implements the OCI → REAPI projection described in 
     │  (registry.rs)   │  │  (projection.rs) │
     │                  │  │                  │
     │  OCI Dist v2     │  │  tar → FsNode   │
-    │  Auth: Docker    │  │  FsNode → Dir   │
-    │   Hub only       │  │  BLAKE3 hash    │
+    │  Auth: config-   │  │  FsNode → Dir   │
+    │   driven creds   │  │  BLAKE3 hash    │
     │  Blob → RAM      │  │  (whole tree    │
     │   (buffered)     │  │   in RAM)       │
     └─────────────────┘  └─────────────────┘
@@ -42,9 +42,9 @@ The `nativelink-oci` crate implements the OCI → REAPI projection described in 
 The diagram matches the shipped code, not an aspiration: layer blobs are read
 whole into memory (`registry.rs:349-354`), the projection holds every file's
 content in RAM (`projection.rs:102`), only `gzip` layers decompress
-(`oci_client.rs:356-363`), and real registry authentication exists for Docker
-Hub alone (`registry.rs:230-237`). The [Limitations](#limitations) section
-spells out what each of these costs you.
+(`oci_client.rs:356-363`), and registry auth is per-instance static config
+resolved through the standard `WWW-Authenticate` challenge (`registry.rs`). The
+[Limitations](#limitations) section spells out what each of these costs you.
 
 ## The Projection Algorithm
 
@@ -193,7 +193,7 @@ Enable OCI support in your NativeLink config by adding `oci` to the fetch servic
 }
 ```
 
-Those three keys are the entire surface: `cas_store`, `dedup_check`, and `digest_function` (`OciFetchConfig`, `cas_server.rs:189-206`, with `deny_unknown_fields`). There is deliberately **no** credential or authentication field — the registry client only knows how to fetch a real token for Docker Hub and is anonymous everywhere else (see [Limitations](#limitations)). Likewise, `strict_hint_verification` exists on the internal `ImportConfig` but is fixed to `false` here (`fetch_server.rs:91`) and cannot be turned on from this config.
+The core keys are `cas_store`, `dedup_check`, and `digest_function` (`OciFetchConfig`, `cas_server.rs`, with `deny_unknown_fields`), plus a `registries` array that **fully specifies** each registry's scheme, TLS trust, and credentials (`OciRegistryConfig`) — matched by the image's registry host, with hosts that have no entry contacted anonymously over HTTPS. Credential fields are shell-expanded, so secrets come from the environment, not committed config. `strict_hint_verification` exists on the internal `ImportConfig` but is fixed to `false` here (`fetch_server.rs`) and cannot be turned on from this config.
 
 ## Conformance with the Spec
 
@@ -216,7 +216,7 @@ The bridge handles the happy path for conforming Standard OCI Toolchain images. 
 
 - **Everything is buffered in memory — twice.** `fetch_blob` reads each layer whole into a `Vec<u8>` (`resp.bytes().to_vec()`, `registry.rs:349-354`), and the projection keeps every file's content resident as `Bytes` in a `BTreeMap` for the entire import (`projection.rs:102`). Nothing streams. A multi-gigabyte toolchain image is held in RAM in its compressed form, its decompressed form, and again as the projected file set — so a large image or a memory-constrained instance can run out of memory. Size your `fetch` instance accordingly.
 - **`gzip` only; `zstd` is rejected.** Layers with a `+gzip` (or the legacy Docker `.tar.gzip`) media type decompress (`oci_client.rs:225-229`). A layer whose media type contains `+zstd` reaches `decompress_zstd`, which unconditionally returns an error — `"zstd decompression not yet implemented"` (`oci_client.rs:356-363`). Publish toolchain layers as `gzip`.
-- **Real authentication is Docker Hub only.** `authenticate` fetches a Bearer token exclusively for `registry-1.docker.io` (`registry.rs:230-237`); for every other registry it returns `Ok(None)` and the request goes out anonymously. There is no credential field in the config, so a **private** repository on `ghcr.io`, `ECR`, `quay.io`, or a self-hosted registry answers with `401`, which surfaces as `"Registry returned 401 ... for manifest"` (`registry.rs:290-294`). Only public images work off Docker Hub today.
+- **Registry auth is per-instance static config, not per-request.** `authenticate` follows the OCI Distribution `WWW-Authenticate` challenge for any registry: a `Bearer` realm token (optionally with HTTP Basic against the realm), a direct `Basic` credential, or a pre-issued `bearer_token` short-circuit (`registry.rs`). Scheme, TLS trust, and credentials come from `oci.registries` (`OciRegistryConfig`), matched by the image's registry host; a host with no entry is anonymous HTTPS. A **private** repository on `ghcr.io`, `ECR`, `quay.io`, or a self-hosted registry therefore pulls once its host is configured — but the client cannot supply credentials per request, and a private host with no entry still answers `401` (`"Registry returned 401 ... for manifest"`).
 - **Multi-architecture / manifest-list tags fail now, not later.** `OciManifest` requires non-optional `config` and `layers` fields (`registry.rs:133-137`), and the manifest `Accept` header advertises only the single-image manifest media types (`registry.rs:277-279`) — it does not request an image index or manifest list. Point the bridge at a multi-arch tag and manifest parsing fails outright. Pin a single-platform digest or a single-platform tag.
 - **Forward-referencing hard links error out.** A hard link whose target has not yet been seen in the tar stream is a hard error (`projection.rs:266-272`); there is no deferred resolution pass despite the code comment musing about one.
 - **`strict_hint_verification` is unreachable.** The field exists on `ImportConfig` (`oci_client.rs:76`) and, when set, would fail the import on a mismatched `dev.straylight.toolchain.reapi.root` hint. But `fetch_server.rs:91` wires it to `false` and `OciFetchConfig` exposes no knob for it, so hint mismatches are always downgraded to a warning and the hint is treated as absent (§6.5, `projection.rs:301-315`).

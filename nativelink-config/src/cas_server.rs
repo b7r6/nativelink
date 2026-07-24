@@ -203,6 +203,15 @@ pub struct OciFetchConfig {
     /// Must match what the execution service expects. Default: "BLAKE3".
     #[serde(default = "default_oci_digest_function")]
     pub digest_function: String,
+
+    /// Per-registry connection and credential settings, matched against the
+    /// registry host of a pulled image reference (the part before the first
+    /// `/` in `oci://<host>/<repo>@<digest>`). A registry with no matching
+    /// entry is contacted anonymously over HTTPS — the prior behavior. Use
+    /// this to point the fetch at a private/sovereign registry (e.g. an
+    /// in-fleet zot) and to supply its credentials and TLS trust.
+    #[serde(default)]
+    pub registries: Vec<OciRegistryConfig>,
 }
 
 const fn default_true() -> bool {
@@ -211,6 +220,67 @@ const fn default_true() -> bool {
 
 fn default_oci_digest_function() -> String {
     "BLAKE3".to_string()
+}
+
+/// Connection and credential configuration for a single OCI registry.
+///
+/// Fully specifies how to reach one registry host: the URL scheme, the TLS
+/// trust to use, and the credentials to authenticate a pull. Credential fields
+/// are shell-expanded, so secrets are supplied from the environment (e.g.
+/// `"${REGISTRY_PASSWORD}"`) rather than committed to config.
+///
+/// Authentication is resolved per the OCI Distribution v2 `WWW-Authenticate`
+/// challenge: a `Bearer` challenge is satisfied by fetching a token from the
+/// registry's realm (using `username`/`password` as HTTP Basic against the
+/// realm if present); a `Basic` challenge is satisfied with the same
+/// credentials directly. A pre-issued `bearer_token` short-circuits the
+/// challenge and is sent verbatim.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciRegistryConfig {
+    /// Registry host this entry applies to, matched exactly against the image
+    /// reference's registry component (e.g. `"registry.s4.gl"`,
+    /// `"registry-1.docker.io"`, `"ghcr.io"`, `"localhost:5000"`). Required.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub host: String,
+
+    /// URL scheme used to contact this registry: `"https"` (default) or
+    /// `"http"`. Use `"http"` only for an internal plain-HTTP registry on a
+    /// trusted network.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub scheme: Option<String>,
+
+    /// PEM CA-certificate bundle to trust for this registry's TLS, given as an
+    /// inline PEM (starting with `-----BEGIN CERTIFICATE-----`) or a path to a
+    /// PEM file. For a registry served with a private CA. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub root_certificates: Option<String>,
+
+    /// Skip TLS certificate verification for this registry. DANGEROUS — only
+    /// for an internal registry with a self-signed certificate on a trusted
+    /// network. Prefer `root_certificates`. Default: false.
+    #[serde(default)]
+    pub insecure_skip_verify: bool,
+
+    /// Basic-auth username. Combined with `password`, used to satisfy the
+    /// registry's `Bearer` token realm or a `Basic` challenge. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub username: Option<String>,
+
+    /// Basic-auth password. Required when `username` is set. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub password: Option<String>,
+
+    /// A pre-issued Bearer token, sent verbatim as `Authorization: Bearer`.
+    /// Mutually exclusive with `username`/`password`. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub bearer_token: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

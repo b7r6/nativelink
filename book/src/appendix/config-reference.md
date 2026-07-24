@@ -168,7 +168,17 @@ oci: {
   cas_store: "STORE_NAME",   // where projected blobs + Directory protos are uploaded.
                              //   Optional; defaults to the service's fetch_store.
   dedup_check: true,         // check for existing blobs before uploading. Default: true
-  digest_function: "BLAKE3"  // "BLAKE3" (default) or "SHA256"; validated at startup
+  digest_function: "BLAKE3", // "BLAKE3" (default) or "SHA256"; validated at startup
+  registries: [{             // per-registry connection + credentials. Optional; a host
+                             //   with no entry is anonymous HTTPS (the prior behavior).
+    host: "registry.s4.gl",  //   matched exactly against the image ref's registry. Required.
+    scheme: "https",         //   "https" (default) or "http" (internal plain-HTTP registry)
+    root_certificates: "${REGISTRY_CA}",   // inline PEM or path — trust a private CA. Optional
+    insecure_skip_verify: false,           // skip TLS verification (self-signed). DANGEROUS
+    username: "${REGISTRY_USER}",          // Basic-auth user; requires password. Optional
+    password: "${REGISTRY_PASSWORD}"       //   secrets via shell-expansion, never committed
+    // bearer_token: "${REGISTRY_TOKEN}"   // pre-issued token, verbatim; excludes user/pass
+  }]
 }
 ```
 
@@ -176,6 +186,8 @@ Notes:
 
 - `digest_function` is validated case-insensitively at service construction and accepts only `BLAKE3` or `SHA256`/`SHA-256`; any other value is a startup error (`fetch_server.rs:77`).
 - The projection digest function comes from this config, not from the request: the incoming request's `digest_function` is ignored for OCI fetches (`fetch_server.rs:250`).
+- `registries` **fully specifies** how to reach and authenticate to each registry. An entry is matched by exact `host` against the pulled image reference's registry component; the scheme, TLS trust, and credentials are applied to manifest and blob requests. Credential fields are shell-expanded, so tokens/passwords come from the environment rather than committed config.
+- Authentication follows the OCI Distribution v2 `WWW-Authenticate` challenge: a `Bearer` challenge is satisfied by fetching a token from the registry's realm (using `username`/`password` as HTTP Basic against the realm when set); a `Basic` challenge uses the same credentials directly; a configured `bearer_token` is sent verbatim and skips the challenge. `username` requires `password`, and `bearer_token` is mutually exclusive with `username`/`password` — violations are a startup error (`fetch_server.rs`).
 
 ### NixCacheConfig (`nix_cache`)
 

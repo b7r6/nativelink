@@ -33,7 +33,9 @@ use tracing::{debug, info};
 use crate::projection::{
     DigestPair, ProjectionDigestFunction, ProjectionResult, decompress_gzip, project_layers,
 };
-use crate::registry::{ImageReference, OciManifest, RegistryClient, ToolchainHints};
+use crate::registry::{
+    ImageReference, OciManifest, RegistryClient, RegistrySettings, ToolchainHints,
+};
 
 /// Result of a successful OCI toolchain import.
 #[derive(Debug)]
@@ -97,14 +99,21 @@ pub struct OciToolchainClient {
 }
 
 impl OciToolchainClient {
-    /// Create a new OCI toolchain client with default configuration.
+    /// Create a new OCI toolchain client with default configuration and no
+    /// configured registries (anonymous HTTPS to every host).
     pub fn new() -> Result<Self, Error> {
-        Self::with_config(ImportConfig::default())
+        Self::with_config(ImportConfig::default(), Vec::new())
     }
 
-    /// Create a new OCI toolchain client with custom configuration.
-    pub fn with_config(config: ImportConfig) -> Result<Self, Error> {
-        let registry = RegistryClient::new()?;
+    /// Create a new OCI toolchain client with custom projection configuration
+    /// and per-registry connection + credential settings. A pulled image whose
+    /// registry host matches a `RegistrySettings` entry uses that entry's
+    /// scheme, TLS trust, and credentials; unmatched hosts are anonymous HTTPS.
+    pub fn with_config(
+        config: ImportConfig,
+        registries: Vec<RegistrySettings>,
+    ) -> Result<Self, Error> {
+        let registry = RegistryClient::with_registries(registries)?;
         Ok(Self { registry, config })
     }
 

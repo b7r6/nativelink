@@ -15,10 +15,11 @@
 use core::convert::Into;
 use std::collections::HashMap;
 
-use nativelink_config::cas_server::{FetchConfig, WithInstanceName};
+use nativelink_config::cas_server::{FetchConfig, OciRegistryConfig, WithInstanceName};
 use nativelink_error::{Error, ResultExt, make_err, make_input_err};
 use nativelink_oci::oci_client::{ImportConfig, OciToolchainClient};
 use nativelink_oci::projection::ProjectionDigestFunction;
+use nativelink_oci::registry::{RegistryAuth, RegistrySettings};
 use nativelink_proto::build::bazel::remote::asset::v1::fetch_server::{
     Fetch, FetchServer as Server,
 };
@@ -37,13 +38,67 @@ use tracing::{Instrument, Level, error_span, info, instrument};
 
 use crate::remote_asset_proto::{RemoteAssetArtifact, RemoteAssetQuery};
 
+/// Resolved OCI runtime configuration for one instance: the projection knobs
+/// plus the per-registry connection + credential settings.
+#[derive(Debug, Clone)]
+struct OciRuntimeConfig {
+    import: ImportConfig,
+    registries: Vec<RegistrySettings>,
+}
+
 #[derive(Debug, Clone)]
 pub struct FetchStoreInfo {
     store: Store,
     /// Optional CAS store for OCI toolchain imports (may differ from `fetch_store`).
     oci_cas_store: Option<Store>,
-    /// OCI import config (None if OCI is not configured for this instance).
-    oci_config: Option<ImportConfig>,
+    /// OCI config (None if OCI is not configured for this instance).
+    oci_config: Option<OciRuntimeConfig>,
+}
+
+/// Convert an operator's `OciRegistryConfig` into the runtime `RegistrySettings`,
+/// validating the scheme and credential combination.
+fn registry_settings_from_config(cfg: &OciRegistryConfig) -> Result<RegistrySettings, Error> {
+    if cfg.host.trim().is_empty() {
+        return Err(make_input_err!(
+            "'oci.registries' entry has an empty 'host'"
+        ));
+    }
+    let scheme = match cfg.scheme.as_deref() {
+        None => "https".to_string(),
+        Some(s) => {
+            let s = s.to_lowercase();
+            if s != "http" && s != "https" {
+                return Err(make_input_err!(
+                    "'oci.registries[{}].scheme' must be 'http' or 'https', got '{s}'",
+                    cfg.host
+                ));
+            }
+            s
+        }
+    };
+    if cfg.bearer_token.is_some() && (cfg.username.is_some() || cfg.password.is_some()) {
+        return Err(make_input_err!(
+            "'oci.registries[{}]': 'bearer_token' is mutually exclusive with 'username'/'password'",
+            cfg.host
+        ));
+    }
+    if cfg.username.is_some() != cfg.password.is_some() {
+        return Err(make_input_err!(
+            "'oci.registries[{}]': 'username' and 'password' must be set together",
+            cfg.host
+        ));
+    }
+    Ok(RegistrySettings {
+        host: cfg.host.clone(),
+        scheme,
+        root_certificates: cfg.root_certificates.clone(),
+        insecure_skip_verify: cfg.insecure_skip_verify,
+        auth: RegistryAuth {
+            username: cfg.username.clone(),
+            password: cfg.password.clone(),
+            bearer_token: cfg.bearer_token.clone(),
+        },
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +146,19 @@ impl FetchServer {
                     strict_hint_verification: false,
                 };
 
-                (Some(cas_store), Some(import_config))
+                let registries = oci
+                    .registries
+                    .iter()
+                    .map(registry_settings_from_config)
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                (
+                    Some(cas_store),
+                    Some(OciRuntimeConfig {
+                        import: import_config,
+                        registries,
+                    }),
+                )
             } else {
                 (None, None)
             };
@@ -250,7 +317,7 @@ impl FetchServer {
         _digest_function_proto: i32,
     ) -> Result<Response<FetchDirectoryResponse>, Error> {
         // Verify OCI is configured for this instance
-        let oci_config = store_info.oci_config.as_ref().ok_or_else(|| {
+        let oci = store_info.oci_config.as_ref().ok_or_else(|| {
             make_err!(
                 Code::Unimplemented,
                 "OCI toolchain support not configured for this instance; \
@@ -266,7 +333,7 @@ impl FetchServer {
         info!(uri = uri, "Handling OCI FetchDirectory request");
 
         // Create the OCI client and run the import
-        let client = OciToolchainClient::with_config(*oci_config)
+        let client = OciToolchainClient::with_config(oci.import, oci.registries.clone())
             .err_tip(|| "Creating OCI toolchain client")?;
 
         let result = client
@@ -285,7 +352,7 @@ impl FetchServer {
         );
 
         // Map our digest function to the generated proto enum constants.
-        let proto_digest_func: i32 = match oci_config.digest_function {
+        let proto_digest_func: i32 = match oci.import.digest_function {
             ProjectionDigestFunction::Blake3 => ProtoDigestFunction::Blake3.into(),
             ProjectionDigestFunction::Sha256 => ProtoDigestFunction::Sha256.into(),
         };

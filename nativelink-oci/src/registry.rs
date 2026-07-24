@@ -199,57 +199,249 @@ impl ToolchainHints {
     }
 }
 
-/// Token response from registry auth endpoint.
+/// Token response from a registry's Bearer token realm. Registries return the
+/// token under `token`; some (older) implementations use `access_token`.
 #[derive(Deserialize)]
 struct TokenResponse {
+    #[serde(alias = "access_token")]
     token: String,
 }
 
+/// Credentials for authenticating to an OCI registry (runtime form of the
+/// operator's `OciRegistryConfig`). All-`None` means anonymous.
+#[derive(Debug, Clone, Default)]
+pub struct RegistryAuth {
+    pub username: Option<String>,
+    pub password: Option<String>,
+    /// A pre-issued Bearer token, sent verbatim (short-circuits the challenge).
+    pub bearer_token: Option<String>,
+}
+
+/// Fully-resolved connection + credential settings for one registry host — the
+/// runtime projection of `nativelink-config`'s `OciRegistryConfig`.
+#[derive(Debug, Clone)]
+pub struct RegistrySettings {
+    /// Registry host, matched against `ImageReference::registry`.
+    pub host: String,
+    /// URL scheme: "https" (default) or "http".
+    pub scheme: String,
+    /// Inline PEM, or path to a PEM CA bundle, to trust for this registry.
+    pub root_certificates: Option<String>,
+    /// Skip TLS verification (self-signed internal registries).
+    pub insecure_skip_verify: bool,
+    /// Credentials (anonymous if every field is `None`).
+    pub auth: RegistryAuth,
+}
+
+/// Authentication to apply to a registry request, resolved from the
+/// `WWW-Authenticate` challenge and the configured credentials.
+#[derive(Debug, Clone)]
+enum AuthMethod {
+    /// No credentials — send the request bare.
+    Anonymous,
+    /// `Authorization: Bearer <token>`.
+    Bearer(String),
+    /// `Authorization: Basic <base64(user:pass)>`.
+    Basic { username: String, password: String },
+}
+
+/// Build a reqwest client honoring a registry's TLS settings. `None` yields the
+/// default client (system roots, verification on) used for anonymous HTTPS.
+fn build_client(settings: Option<&RegistrySettings>) -> Result<Client, Error> {
+    let mut builder = Client::builder().user_agent("nativelink-oci/0.1");
+    if let Some(s) = settings {
+        if s.insecure_skip_verify {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        if let Some(ca) = &s.root_certificates {
+            let pem = if ca.contains("BEGIN CERTIFICATE") {
+                ca.clone().into_bytes()
+            } else {
+                std::fs::read(ca)
+                    .err_tip(|| format!("Reading registry root_certificates from '{ca}'"))?
+            };
+            let cert = reqwest::Certificate::from_pem(&pem)
+                .map_err(|e| make_input_err!("Parsing registry root_certificates: {e}"))?;
+            builder = builder.add_root_certificate(cert);
+        }
+    }
+    builder
+        .build()
+        .map_err(|e| make_input_err!("Failed to build HTTP client: {e}"))
+}
+
+/// Parse a `WWW-Authenticate: Bearer realm="…",service="…",scope="…"` header
+/// into `(realm, service)`. Returns `None` if it is not a Bearer challenge.
+fn parse_bearer_challenge(header: &str) -> Option<(String, Option<String>)> {
+    let rest = header
+        .strip_prefix("Bearer ")
+        .or_else(|| header.strip_prefix("bearer "))?;
+    let (mut realm, mut service) = (None, None);
+    for part in rest.split(',') {
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
+        let v = v.trim().trim_matches('"').to_string();
+        match k.trim() {
+            "realm" => realm = Some(v),
+            "service" => service = Some(v),
+            _ => {}
+        }
+    }
+    realm.map(|r| (r, service))
+}
+
+/// Apply a resolved `AuthMethod` to a request builder.
+fn apply_auth(req: reqwest::RequestBuilder, auth: &AuthMethod) -> reqwest::RequestBuilder {
+    match auth {
+        AuthMethod::Anonymous => req,
+        AuthMethod::Bearer(token) => req.bearer_auth(token),
+        AuthMethod::Basic { username, password } => req.basic_auth(username, Some(password)),
+    }
+}
+
 /// OCI registry client.
+///
+/// Holds a default client (anonymous HTTPS, system roots) plus a per-host
+/// client+settings for each configured registry, so scheme, TLS trust, and
+/// credentials are applied by matching the image's registry host.
 #[derive(Debug)]
 pub struct RegistryClient {
-    client: Client,
+    default_client: Client,
+    /// `(host, client, settings)` for each configured registry.
+    entries: Vec<(String, Client, RegistrySettings)>,
 }
 
 impl RegistryClient {
+    /// A client with no configured registries — every host is contacted
+    /// anonymously over HTTPS with system TLS roots.
     pub fn new() -> Result<Self, Error> {
-        let client = Client::builder()
-            .user_agent("nativelink-oci/0.1")
-            .build()
-            .map_err(|e| make_input_err!("Failed to build HTTP client: {e}"))?;
-        Ok(Self { client })
+        Self::with_registries(Vec::new())
     }
 
-    /// Fetch a Bearer token for the given scope.
-    async fn authenticate(
-        &self,
-        registry: &str,
-        repository: &str,
-    ) -> Result<Option<String>, Error> {
-        // Try the token endpoint (Docker Hub pattern)
-        let token_url = if registry == "registry-1.docker.io" {
-            format!(
-                "https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repository}:pull"
-            )
-        } else {
-            // For other registries, try anonymous first (return None)
-            return Ok(None);
-        };
+    /// A client carrying per-registry connection + credential settings.
+    pub fn with_registries(registries: Vec<RegistrySettings>) -> Result<Self, Error> {
+        let default_client = build_client(None)?;
+        let mut entries = Vec::with_capacity(registries.len());
+        for settings in registries {
+            let client = build_client(Some(&settings))?;
+            entries.push((settings.host.clone(), client, settings));
+        }
+        Ok(Self {
+            default_client,
+            entries,
+        })
+    }
 
-        let resp = self
-            .client
-            .get(&token_url)
-            .send()
-            .await
-            .err_tip(|| format!("Auth request to {token_url}"))?;
+    /// Settings configured for `host`, if any.
+    fn settings_for(&self, host: &str) -> Option<&RegistrySettings> {
+        self.entries
+            .iter()
+            .find(|(h, _, _)| h == host)
+            .map(|(_, _, s)| s)
+    }
 
-        if !resp.status().is_success() {
-            return Ok(None);
+    /// The client to use for `host` (its per-registry TLS, or the default).
+    fn client_for(&self, host: &str) -> &Client {
+        self.entries
+            .iter()
+            .find(|(h, _, _)| h == host)
+            .map_or(&self.default_client, |(_, c, _)| c)
+    }
+
+    /// The URL scheme for `host` ("https" unless overridden to "http").
+    fn scheme_for(&self, host: &str) -> &str {
+        self.settings_for(host)
+            .map(|s| s.scheme.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("https")
+    }
+
+    /// Resolve the authentication for pulling from `image`, following the OCI
+    /// Distribution v2 `WWW-Authenticate` challenge.
+    ///
+    /// - A configured `bearer_token` is returned verbatim (no challenge).
+    /// - Otherwise the registry's `/v2/` endpoint is probed: `200` means
+    ///   anonymous access; a `401` `Bearer` challenge triggers a token fetch
+    ///   from the realm (HTTP Basic with `username`/`password` if set); a
+    ///   `Basic` challenge with credentials is applied directly.
+    async fn authenticate(&self, image: &ImageReference) -> Result<AuthMethod, Error> {
+        let host = &image.registry;
+        let auth = self.settings_for(host).map(|s| &s.auth);
+
+        // A pre-issued token short-circuits the challenge.
+        if let Some(tok) = auth.and_then(|a| a.bearer_token.clone()) {
+            return Ok(AuthMethod::Bearer(tok));
         }
 
-        let token_resp: TokenResponse = resp.json().await.err_tip(|| "Parsing token response")?;
+        let client = self.client_for(host);
+        let base = format!("{}://{host}/v2/", self.scheme_for(host));
 
-        Ok(Some(token_resp.token))
+        let resp = client
+            .get(&base)
+            .send()
+            .await
+            .err_tip(|| format!("Probing registry auth at {base}"))?;
+
+        if resp.status() != reqwest::StatusCode::UNAUTHORIZED {
+            // 2xx: anonymous access. Any other non-401: not an auth problem —
+            // fall through and let the concrete request surface a precise error.
+            return Ok(AuthMethod::Anonymous);
+        }
+
+        let challenge = resp
+            .headers()
+            .get("WWW-Authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        // Bearer challenge → fetch a token from the realm.
+        if let Some((realm, service)) = parse_bearer_challenge(challenge) {
+            let scope = format!("repository:{}:pull", image.repository);
+            let mut token_req = client.get(&realm).query(&[("scope", scope.as_str())]);
+            if let Some(svc) = service.as_deref() {
+                token_req = token_req.query(&[("service", svc)]);
+            }
+            if let (Some(u), Some(p)) = (
+                auth.and_then(|a| a.username.as_deref()),
+                auth.and_then(|a| a.password.as_deref()),
+            ) {
+                token_req = token_req.basic_auth(u, Some(p));
+            }
+
+            let token_resp = token_req
+                .send()
+                .await
+                .err_tip(|| format!("Fetching registry token from {realm}"))?;
+            if !token_resp.status().is_success() {
+                return Err(make_input_err!(
+                    "Registry token endpoint {realm} returned {}",
+                    token_resp.status()
+                ));
+            }
+            let parsed: TokenResponse = token_resp
+                .json()
+                .await
+                .err_tip(|| "Parsing registry token response")?;
+            return Ok(AuthMethod::Bearer(parsed.token));
+        }
+
+        // Basic challenge → apply configured credentials directly.
+        if (challenge.starts_with("Basic") || challenge.starts_with("basic"))
+            && let (Some(u), Some(p)) = (
+                auth.and_then(|a| a.username.clone()),
+                auth.and_then(|a| a.password.clone()),
+            )
+        {
+            return Ok(AuthMethod::Basic {
+                username: u,
+                password: p,
+            });
+        }
+
+        // Unknown/absent challenge, or no credentials to satisfy it — proceed
+        // anonymously and let the concrete request report the failure.
+        Ok(AuthMethod::Anonymous)
     }
 
     /// Fetch the image manifest.
@@ -257,9 +449,7 @@ impl RegistryClient {
         &self,
         image: &ImageReference,
     ) -> Result<(OciManifest, String), Error> {
-        let token = self
-            .authenticate(&image.registry, &image.repository)
-            .await?;
+        let auth = self.authenticate(image).await?;
 
         let ref_str = match &image.reference {
             Reference::Tag(tag) => tag.clone(),
@@ -267,22 +457,20 @@ impl RegistryClient {
         };
 
         let url = format!(
-            "https://{}/v2/{}/manifests/{ref_str}",
-            image.registry, image.repository,
+            "{}://{}/v2/{}/manifests/{ref_str}",
+            self.scheme_for(&image.registry),
+            image.registry,
+            image.repository,
         );
 
         info!(%url, "Fetching OCI manifest");
 
-        let mut req = self.client.get(&url).header(
+        let req = self.client_for(&image.registry).get(&url).header(
             "Accept",
             "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
         );
 
-        if let Some(ref tok) = token {
-            req = req.bearer_auth(tok);
-        }
-
-        let resp = req
+        let resp = apply_auth(req, &auth)
             .send()
             .await
             .err_tip(|| format!("Fetching manifest from {url}"))?;
@@ -320,19 +508,16 @@ impl RegistryClient {
 
     /// Download a blob by digest, returning the raw bytes.
     pub async fn fetch_blob(&self, image: &ImageReference, digest: &str) -> Result<Vec<u8>, Error> {
-        let token = self
-            .authenticate(&image.registry, &image.repository)
-            .await?;
+        let auth = self.authenticate(image).await?;
 
         let url = format!(
-            "https://{}/v2/{}/blobs/{digest}",
-            image.registry, image.repository,
+            "{}://{}/v2/{}/blobs/{digest}",
+            self.scheme_for(&image.registry),
+            image.registry,
+            image.repository,
         );
 
-        let mut req = self.client.get(&url);
-        if let Some(ref tok) = token {
-            req = req.bearer_auth(tok);
-        }
+        let req = apply_auth(self.client_for(&image.registry).get(&url), &auth);
 
         let resp = req
             .send()
