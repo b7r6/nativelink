@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::stream::{FuturesUnordered, unfold};
 use futures::{Future, Stream, StreamExt, TryFutureExt, TryStreamExt, future};
 use nativelink_config::stores::GrpcSpec;
@@ -785,7 +785,17 @@ impl StoreDriver for GrpcStore {
             reader: DropCloserReadHalf,
             did_error: bool,
             bytes_received: i64,
+            pending: Bytes,
         }
+
+        // A ByteStream WriteRequest must stay under the gRPC max message size
+        // (tonic's 4 MiB default on the receiving shard). A reader chunk can be
+        // larger than that — `update_oneshot` delivers a whole blob in one chunk,
+        // so an OCI-projected toolchain file (e.g. a 5 MiB binary) would otherwise
+        // become one oversized message the peer rejects with "decoded message
+        // length too large". Cap each request well below the limit and split any
+        // larger pending buffer across successive requests.
+        const MAX_WRITE_CHUNK: usize = 2 * 1024 * 1024;
 
         let digest = key.into_digest();
         if matches!(self.store_type, nativelink_config::stores::StoreType::Ac) {
@@ -828,6 +838,7 @@ impl StoreDriver for GrpcStore {
             reader,
             did_error: false,
             bytes_received: 0,
+            pending: Bytes::new(),
         };
 
         let stream = Box::pin(unfold(local_state, |mut local_state| async move {
@@ -835,18 +846,28 @@ impl StoreDriver for GrpcStore {
                 error!("GrpcStore::update() polled stream after error was returned");
                 return None;
             }
-            let data = match local_state
-                .reader
-                .recv()
-                .await
-                .err_tip(|| "In GrpcStore::update()")
-            {
-                Ok(data) => data,
-                Err(err) => {
-                    local_state.did_error = true;
-                    return Some((Err(err), local_state));
+            // Refill from the reader only once the pending buffer is drained, so a
+            // large reader chunk is emitted across several capped WriteRequests.
+            if local_state.pending.is_empty() {
+                match local_state
+                    .reader
+                    .recv()
+                    .await
+                    .err_tip(|| "In GrpcStore::update()")
+                {
+                    Ok(data) => local_state.pending = data,
+                    Err(err) => {
+                        local_state.did_error = true;
+                        return Some((Err(err), local_state));
+                    }
                 }
-            };
+            }
+
+            // An empty pending buffer after a refill is EOF (the reader returned no
+            // data); emit the finishing request. Otherwise emit up to one chunk.
+            let is_eof = local_state.pending.is_empty();
+            let take = local_state.pending.len().min(MAX_WRITE_CHUNK);
+            let data = local_state.pending.split_to(take);
 
             let write_offset = local_state.bytes_received;
             local_state.bytes_received += data.len() as i64;
@@ -855,7 +876,7 @@ impl StoreDriver for GrpcStore {
                 Ok(WriteRequest {
                     resource_name: local_state.resource_name.clone(),
                     write_offset,
-                    finish_write: data.is_empty(), // EOF is when no data was polled.
+                    finish_write: is_eof,
                     data,
                 }),
                 local_state,
@@ -954,7 +975,7 @@ impl StoreDriver for GrpcStore {
                 loop {
                     let data = match stream.next().await {
                         // Create an empty response to represent EOF.
-                        None => bytes::Bytes::new(),
+                        None => Bytes::new(),
                         Some(Ok(message)) => message.data,
                         Some(Err(status)) => {
                             return Some((
