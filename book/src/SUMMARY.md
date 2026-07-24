@@ -10,6 +10,7 @@
 - [The 30-Second Model](./part1/thirty-seconds.md)
 - [NativeLink vs. Everything Else](./part1/vs-everything.md)
 - [Mental Model](./part1/mental-model.md)
+- [The CAS Is the Spine](./part1/the-cas-is-the-spine.md)
 
 ---
 

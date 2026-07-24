@@ -431,3 +431,12 @@ fast_direction
 lossy
 dedups
 discardable
+coeffect
+coeffects
+discharger
+packfile
+shardable
+refetch
+SBOM
+hermeticity
+[Rr]eachability
