@@ -786,6 +786,11 @@ impl StoreDriver for GrpcStore {
             did_error: bool,
             bytes_received: i64,
             pending: Bytes,
+            // Set once the finishing (finish_write=true) request has been emitted,
+            // so the next poll ends the stream instead of calling reader.recv()
+            // again after EOF — that second recv blocks forever, leaving the write
+            // RPC open and back-pressuring the client to a stall.
+            finished: bool,
         }
 
         // A ByteStream WriteRequest must stay under the gRPC max message size
@@ -839,11 +844,18 @@ impl StoreDriver for GrpcStore {
             did_error: false,
             bytes_received: 0,
             pending: Bytes::new(),
+            finished: false,
         };
 
         let stream = Box::pin(unfold(local_state, |mut local_state| async move {
             if local_state.did_error {
                 error!("GrpcStore::update() polled stream after error was returned");
+                return None;
+            }
+            // The finishing request was already emitted — end the stream. Do NOT
+            // fall through to reader.recv() again: after EOF that recv blocks
+            // forever and the upload hangs.
+            if local_state.finished {
                 return None;
             }
             // Refill from the reader only once the pending buffer is drained, so a
@@ -871,6 +883,9 @@ impl StoreDriver for GrpcStore {
 
             let write_offset = local_state.bytes_received;
             local_state.bytes_received += data.len() as i64;
+            // This (is_eof) request carries finish_write=true; the next poll must
+            // end the stream rather than poll the drained reader again.
+            local_state.finished = is_eof;
 
             Some((
                 Ok(WriteRequest {
