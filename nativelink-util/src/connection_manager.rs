@@ -34,7 +34,7 @@ use crate::retry::{self, Retrier, RetryResult};
 #[derive(Debug)]
 pub struct ConnectionManager {
     // The channel to request connections from the worker.
-    worker_tx: mpsc::Sender<(String, oneshot::Sender<Connection>)>,
+    worker_tx: mpsc::Sender<(String, oneshot::Sender<Result<Connection, Error>>)>,
 }
 
 /// The index into `ConnectionManagerWorker::endpoints`.
@@ -93,6 +93,13 @@ struct ConnectionManagerWorker {
     /// The endpoints to establish Channels and the identifier of the last
     /// connection attempt to that endpoint.
     endpoints: Vec<(ConnectionIndex, Endpoint)>,
+    /// Per-endpoint connect health: `true` once a connect retry cycle to
+    /// that endpoint has failed, cleared when a connect succeeds. When
+    /// every endpoint is marked failed and no channel is available, the
+    /// endpoint set is unreachable — requests fail fast with
+    /// `Unavailable` instead of queuing forever while the background
+    /// reconnect loop runs (the "dead peer wedges every RPC" hang).
+    endpoint_connect_failed: Vec<bool>,
     /// The channel used to communicate between a Connection and the worker.
     connection_tx: mpsc::UnboundedSender<ConnectionRequest>,
     /// Gates the maximum number of in-flight `Connection` objects.
@@ -107,7 +114,7 @@ struct ConnectionManagerWorker {
     /// Connected channels that are available for use.
     available_channels: VecDeque<EstablishedChannel>,
     /// Requests for a Channel when available - (reason, request)
-    waiting_connections: VecDeque<(String, oneshot::Sender<Connection>)>,
+    waiting_connections: VecDeque<(String, oneshot::Sender<Result<Connection, Error>>)>,
     /// The retry configuration for connecting to an Endpoint, on failure will
     /// restart the retrier after a 1 second delay.
     retrier: Retrier,
@@ -135,10 +142,11 @@ impl ConnectionManager {
         // which defeats the object since there would be no backpressure
         // applied. Therefore it makes sense for this to be unbounded.
         let (connection_tx, connection_rx) = mpsc::unbounded_channel();
-        let endpoints = endpoints
+        let endpoints: Vec<(ConnectionIndex, Endpoint)> = endpoints
             .into_iter()
             .map(|endpoint| (0, endpoint))
             .collect();
+        let endpoint_connect_failed = vec![false; endpoints.len()];
 
         if max_concurrent_requests == 0 {
             max_concurrent_requests = Semaphore::MAX_PERMITS;
@@ -150,6 +158,7 @@ impl ConnectionManager {
         }
         let worker = ConnectionManagerWorker {
             endpoints,
+            endpoint_connect_failed,
             available_connections: Arc::new(Semaphore::new(max_concurrent_requests)),
             connection_tx,
             connecting_channels: FuturesUnordered::new(),
@@ -179,7 +188,7 @@ impl ConnectionManager {
             .await
             .map_err(|err| make_err!(Code::Unavailable, "Requesting a new connection: {err:?}"))?;
         rx.await
-            .map_err(|err| make_err!(Code::Unavailable, "Waiting for a new connection: {err:?}"))
+            .map_err(|err| make_err!(Code::Unavailable, "Waiting for a new connection: {err:?}"))?
     }
 }
 
@@ -187,7 +196,7 @@ impl ConnectionManagerWorker {
     async fn service_requests(
         mut self,
         connections_per_endpoint: usize,
-        mut worker_rx: mpsc::Receiver<(String, oneshot::Sender<Connection>)>,
+        mut worker_rx: mpsc::Receiver<(String, oneshot::Sender<Result<Connection, Error>>)>,
         mut connection_rx: mpsc::UnboundedReceiver<ConnectionRequest>,
     ) {
         // Make the initial set of connections, connection failures will be
@@ -241,6 +250,12 @@ impl ConnectionManagerWorker {
     fn handle_connected(&mut self, connection_result: IndexedChannel) {
         match connection_result {
             Ok(established_channel) => {
+                if let Some(failed) = self
+                    .endpoint_connect_failed
+                    .get_mut(established_channel.identifier.endpoint_index)
+                {
+                    *failed = false;
+                }
                 self.available_channels.push_back(established_channel);
                 self.maybe_available_connection();
             }
@@ -248,8 +263,49 @@ impl ConnectionManagerWorker {
             // beginning of the retry period.  Never want to be in a
             // situation where we give up on an Endpoint forever.
             Err((identifier, _)) => {
+                if let Some(failed) = self
+                    .endpoint_connect_failed
+                    .get_mut(identifier.endpoint_index)
+                {
+                    *failed = true;
+                }
+                // If this failure means the whole endpoint set is now
+                // unreachable, waiting requests would hang until a peer
+                // comes back — fail them fast so the caller's retry/error
+                // machinery can handle it.
+                self.fail_requests_if_all_endpoints_down();
                 self.connect_endpoint(identifier.endpoint_index, Some(identifier.connection_index));
             }
+        }
+    }
+
+    /// True when no channel is available and the last connect attempt to
+    /// every endpoint failed: nothing can service a request until a
+    /// background reconnect succeeds.
+    fn all_endpoints_down(&self) -> bool {
+        self.available_channels.is_empty()
+            && !self.endpoint_connect_failed.is_empty()
+            && self.endpoint_connect_failed.iter().all(|failed| *failed)
+    }
+
+    fn unavailable_error(&self) -> Error {
+        make_err!(
+            Code::Unavailable,
+            "All {} gRPC endpoint(s) are unreachable (connect attempts failed); failing fast instead of queuing",
+            self.endpoints.len()
+        )
+    }
+
+    fn fail_requests_if_all_endpoints_down(&mut self) {
+        if !self.all_endpoints_down() {
+            return;
+        }
+        while let Some((reason, tx)) = self.waiting_connections.pop_front() {
+            warn!(
+                reason,
+                "ConnectionManager: all endpoints down, failing queued connection request"
+            );
+            drop(tx.send(Err(self.unavailable_error())));
         }
     }
 
@@ -315,13 +371,19 @@ impl ConnectionManagerWorker {
     }
 
     // This must never be made async otherwise the select may cancel it.
-    fn handle_worker(&mut self, reason: String, tx: oneshot::Sender<Connection>) {
+    fn handle_worker(&mut self, reason: String, tx: oneshot::Sender<Result<Connection, Error>>) {
         let maybe_permit = self.available_connections.clone().try_acquire_owned().ok();
         if let Some(permit) = maybe_permit
             && let Some(channel) = self.available_channels.pop_front()
         {
             debug!(reason, "ConnectionManager: request running");
             self.provide_channel(channel, tx, permit);
+        } else if self.all_endpoints_down() {
+            warn!(
+                reason,
+                "ConnectionManager: all endpoints down, failing connection request"
+            );
+            drop(tx.send(Err(self.unavailable_error())));
         } else {
             debug!(
                 available_permits = self.available_connections.available_permits(),
@@ -337,15 +399,15 @@ impl ConnectionManagerWorker {
     fn provide_channel(
         &self,
         channel: EstablishedChannel,
-        tx: oneshot::Sender<Connection>,
+        tx: oneshot::Sender<Result<Connection, Error>>,
         permit: OwnedSemaphorePermit,
     ) {
-        drop(tx.send(Connection {
+        drop(tx.send(Ok(Connection {
             tx: self.connection_tx.clone(),
             pending_channel: Some(channel.channel.clone()),
             channel,
             _permit: permit,
-        }));
+        })));
     }
 
     fn maybe_available_connection(&mut self) {
