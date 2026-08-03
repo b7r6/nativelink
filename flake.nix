@@ -51,6 +51,15 @@
         ./flake-module.nix
       ];
       flake = {
+        # The NixOS module: a full CAS/scheduler/worker + nix-cache + fetch-proxy
+        # service around this flake's binaries. The consumer supplies the fleet
+        # topology (`hyper-modern-nixos.nativelink.fleetDir`, a typed Dhall tree)
+        # and its own telemetry/state-registry wiring; everything else is here.
+        nixosModules.nativelink = moduleArgs: {
+          imports = [ ./nixos/module.nix ];
+          _module.args.nativelinkFlake = inputs.self;
+        };
+
         flakeModules = {
           default = ./flake-module.nix;
           darwin = ./tools/darwin/flake-module.nix;
