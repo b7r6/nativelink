@@ -32,3 +32,4 @@ nativelink_config.schema.json
 # build config that caps parallelism.
 /.cargo/*
 !/.cargo/config.toml
+.worktrees/

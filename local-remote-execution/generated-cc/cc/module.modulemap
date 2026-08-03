@@ -396,6 +396,7 @@ module "crosstool" [system] {
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/argp-ldbl.h"
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/atomic_wide_counter.h"
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/byteswap.h"
+  textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/cloexec.h"
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/cmathcalls.h"
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/confname.h"
   textual header "/nix/store/q5wv2ldpcv5w8yb2wmsngsygvlxb73fk-glibc-2.42-67-dev/include/bits/cpu-set.h"

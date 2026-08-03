@@ -23,13 +23,14 @@ use nativelink_util::buf_channel::{
     DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
 };
 use nativelink_util::common::PackedHash;
-use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, default_digest_hasher_func};
+use nativelink_util::digest_hasher::{
+    DigestHasher, DigestHasherFunc, digest_hasher_func_from_context,
+};
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
 use nativelink_util::metrics_utils::CounterWithTime;
 use nativelink_util::store_trait::{
-    RemoveItemCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
+    RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
 };
-use opentelemetry::context::Context;
 
 #[derive(Debug, MetricsComponent)]
 pub struct VerifyStore {
@@ -64,6 +65,7 @@ impl VerifyStore {
         mut rx: DropCloserReadHalf,
         maybe_expected_digest_size: Option<u64>,
         original_hash: &PackedHash,
+        digest_function: Option<DigestHasherFunc>,
         mut maybe_hasher: Option<&mut D>,
     ) -> Result<u64, Error> {
         let mut sum_size: u64 = 0;
@@ -120,8 +122,13 @@ impl VerifyStore {
                     let hash_result = digest.packed_hash();
                     if original_hash != hash_result {
                         self.hash_verification_failures.inc();
+                        let Some(digest_function) = digest_function else {
+                            return Err(make_input_err!(
+                                "Hash verification failed without a digest function"
+                            ));
+                        };
                         return Err(make_input_err!(
-                            "Hashes do not match, got: {original_hash} but digest hash was {hash_result}",
+                            "Hash verification using {digest_function} failed: client declared {digest_function}:{original_hash}, but the server computed {digest_function}:{hash_result}",
                         ));
                     }
                 }
@@ -183,16 +190,12 @@ impl StoreDriver for VerifyStore {
             ));
         }
 
-        let mut hasher = if self.verify_hash {
-            Some(
-                Context::current()
-                    .get::<DigestHasherFunc>()
-                    .map_or_else(default_digest_hasher_func, |v| *v)
-                    .hasher(),
-            )
+        let digest_function = if self.verify_hash {
+            Some(digest_hasher_func_from_context())
         } else {
             None
         };
+        let mut hasher = digest_function.map(|digest_function| digest_function.hasher());
 
         let maybe_digest_size = if self.verify_size {
             Some(digest_size)
@@ -207,6 +210,7 @@ impl StoreDriver for VerifyStore {
             reader,
             maybe_digest_size,
             digest.packed_hash(),
+            digest_function,
             hasher.as_mut(),
         );
 
@@ -241,10 +245,7 @@ impl StoreDriver for VerifyStore {
         self
     }
 
-    fn register_remove_callback(
-        self: Arc<Self>,
-        callback: Arc<dyn RemoveItemCallback>,
-    ) -> Result<(), Error> {
+    fn register_remove_callback(self: Arc<Self>, callback: RemoveCallback) -> Result<(), Error> {
         self.inner_store.register_remove_callback(callback)
     }
 }

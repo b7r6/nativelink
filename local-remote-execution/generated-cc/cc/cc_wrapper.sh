@@ -1,4 +1,4 @@
-#!/nix/store/zh1ijdhb6gng1509b1zrilb6xlzx60j6-bash-5.3p9/bin/bash
+#!/nix/store/x4xf1dbpn5q4lkx1a5c9mxy5300gacc1-bash/bin/bash
 #
 # Copyright 2015 The Bazel Authors. All rights reserved.
 #

@@ -35,9 +35,7 @@ use std::time::SystemTime;
 use bytes::{Bytes, BytesMut};
 use filetime::{FileTime, set_file_mtime};
 use formatx::Template;
-use futures::future::{
-    BoxFuture, Future, FutureExt, TryFutureExt, try_join, try_join_all, try_join3,
-};
+use futures::future::{BoxFuture, Future, FutureExt, TryFutureExt, try_join, try_join_all};
 use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
 use nativelink_config::cas_server::{
     EnvironmentSource, UploadActionResultConfig, UploadCacheResultsStrategy,
@@ -866,9 +864,11 @@ fn upload_directory<'a, P: AsRef<Path> + Debug + Send + Sync + Clone + 'a>(
             }
         }
 
-        let (mut file_nodes, dir_entries, mut symlinks) = try_join3(
+        let dir_entries = dir_futures
+            .try_collect::<Vec<(DirectoryNode, VecDeque<Directory>)>>()
+            .await?;
+        let (mut file_nodes, mut symlinks) = try_join(
             file_futures.try_collect::<Vec<FileNode>>(),
-            dir_futures.try_collect::<Vec<(DirectoryNode, VecDeque<Directory>)>>(),
             symlink_futures.try_collect::<Vec<SymlinkNode>>(),
         )
         .await?;
@@ -1459,23 +1459,26 @@ impl RunningActionImpl {
         #[cfg(target_os = "linux")]
         {
             let use_namespaces = self.running_actions_manager.use_namespaces;
-            let root_action_directory =
-                std::ffi::CString::new(self.running_actions_manager.root_action_directory.clone())
-                    .err_tip(|| "In RunningActionImpl::inner_execute()")?;
-            let action_directory = std::ffi::CString::new(self.action_directory.clone())
-                .err_tip(|| "In RunningActionImpl::inner_execute()")?;
 
-            // SAFETY: This function is specifically designed to operate in a async-signal-safe
-            // environment.
-            unsafe {
-                command_builder.pre_exec(move || match use_namespaces {
-                    UseNamespaces::No => Ok(()),
-                    _ => crate::namespace_utils::configure_namespace(
-                        matches!(use_namespaces, UseNamespaces::YesAndMount),
-                        &root_action_directory,
-                        &action_directory,
-                    ),
-                });
+            if !matches!(use_namespaces, UseNamespaces::No) {
+                let root_action_directory = std::ffi::CString::new(
+                    self.running_actions_manager.root_action_directory.clone(),
+                )
+                .err_tip(|| "In RunningActionImpl::inner_execute()")?;
+                let action_directory = std::ffi::CString::new(self.action_directory.clone())
+                    .err_tip(|| "In RunningActionImpl::inner_execute()")?;
+
+                // SAFETY: This function is specifically designed to operate in a async-signal-safe
+                // environment.
+                unsafe {
+                    command_builder.pre_exec(move || {
+                        crate::namespace_utils::configure_namespace(
+                            matches!(use_namespaces, UseNamespaces::YesAndMount),
+                            &root_action_directory,
+                            &action_directory,
+                        )
+                    });
+                }
             }
 
             // Run the action as its own process-group leader (pgid == child
@@ -2653,7 +2656,10 @@ impl RunningActionsManagerImpl {
             running_actions: Mutex::new(HashMap::new()),
             action_done_tx,
             callbacks,
-            metrics: Arc::new(Metrics::default()),
+            metrics: Arc::new(Metrics {
+                directory_cache: args.directory_cache.as_ref().map(Arc::downgrade),
+                ..Default::default()
+            }),
             cleaning_up_operations: Mutex::new(HashSet::new()),
             max_cleanup_wait: args.max_cleanup_wait,
             max_cleanup_backoff: args.max_cleanup_backoff,
@@ -2971,10 +2977,7 @@ impl RunningActionsManager for RunningActionsManagerImpl {
             .wrap_no_capture_result(async move {
                 let kill_operations: Vec<Arc<RunningActionImpl>> = {
                     let running_actions = self.running_actions.lock();
-                    running_actions
-                        .iter()
-                        .filter_map(|(_operation_id, action)| action.upgrade())
-                        .collect()
+                    running_actions.values().filter_map(Weak::upgrade).collect()
                 };
                 let mut kill_futures: FuturesUnordered<_> = kill_operations
                     .into_iter()
@@ -3048,4 +3051,8 @@ pub struct Metrics {
     upload_stderr: AsyncCounterWrapper,
     #[metric(help = "Total number of task timeouts.")]
     task_timeouts: CounterWithTime,
+    #[metric(
+        help = "Stats about the input-directory cache (hits, misses, subtree reuse, evictions, size)."
+    )]
+    directory_cache: Option<Weak<crate::directory_cache::DirectoryCache>>,
 }
