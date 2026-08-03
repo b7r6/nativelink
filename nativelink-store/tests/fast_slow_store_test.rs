@@ -2163,7 +2163,7 @@ async fn write_back_decouples_update_from_slow_store() -> Result<(), Error> {
         .send(())
         .map_err(|()| make_err!(Code::Internal, "failed to release the slow-store gate"))?;
     let mut waited = Duration::ZERO;
-    while slow.received_bytes.load(Ordering::Acquire) as usize != data.len() {
+    while slow.received_bytes.load(Ordering::Acquire) != data.len() as u64 {
         tokio::time::sleep(Duration::from_millis(10)).await;
         waited += Duration::from_millis(10);
         assert!(

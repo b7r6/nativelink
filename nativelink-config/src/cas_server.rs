@@ -3348,7 +3348,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod capabilities_tests {
     use super::*;
 
     #[test]

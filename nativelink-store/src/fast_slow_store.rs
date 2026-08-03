@@ -545,7 +545,7 @@ impl StoreDriver for FastSlowStore {
                         let get_fut = store.fast_store.get(key_owned.borrow(), tx);
                         let update_fut = store.slow_store.update(key_owned.borrow(), rx, size_info);
                         match try_join!(get_fut, update_fut) {
-                            Ok((_, slow_size)) => slow_in_flight_guard.complete(Some(slow_size)),
+                            Ok(((), slow_size)) => slow_in_flight_guard.complete(Some(slow_size)),
                             Err(e) => {
                                 warn!(
                                     ?e,
@@ -731,7 +731,7 @@ impl StoreDriver for FastSlowStore {
                             let update_fut =
                                 store.slow_store.update(key_owned.borrow(), rx, upload_size);
                             match try_join!(get_fut, update_fut) {
-                                Ok((_, slow_size)) => {
+                                Ok(((), slow_size)) => {
                                     slow_in_flight_guard.complete(Some(slow_size));
                                 }
                                 Err(e) => {

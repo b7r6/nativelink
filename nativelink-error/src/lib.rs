@@ -377,7 +377,7 @@ impl From<tonic::Status> for Error {
 /// when the concrete transport error is reachable in the source chain; falls
 /// back to tonic's "transport error" message otherwise.
 fn is_transport_status(status: &tonic::Status) -> bool {
-    let mut source = std::error::Error::source(status);
+    let mut source = core::error::Error::source(status);
     while let Some(err) = source {
         if err.is::<tonic::transport::Error>() {
             return true;
