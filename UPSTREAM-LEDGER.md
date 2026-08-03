@@ -14,8 +14,7 @@ Ordered by isolation and value; each wave is one reviewable PR.
 
 | wave | commits | subject | notes |
 | ---- | ------- | ------- | ----- |
-| 1 | `cc69bb54` | grpc_store: end the write stream after `finish_write` instead of re-polling | The write-path hang. Smallest, clearest, first. |
-| 2 | `5016e7d9` | grpc_store: cap WriteRequest chunk size (fix >4 MiB blob upload) | Same file, independent fix; second so wave 1 stays one-idea. |
+| 1 | `5016e7d9` | grpc_store: cap WriteRequest chunk size (fix >4 MiB blob upload) | **OPENED: TraceMachina/nativelink#2659** (2026-08-03) — ported to upstream shape (both `update()` and `update_compressed()`), with a draining-mock regression test that reproduces the exact production error against the uncapped client. |
 | 3 | `8b35998f` + `9432960a` | s3_store: 64 MiB multipart parts (>5 GiB write-through ceiling) | Bug report + fix pair; squash for the PR. |
 | 4 | `b2994285` | store: zero-length underflow panic; completeness backend error propagation | Two small correctness fixes; may split on review feedback. |
 | 5 | `478bdde2` | buf_channel: widen in-flight buffer 2 → 32 (write-stall resets) | Perf/correctness; needs a motivating benchmark in the PR text. |
@@ -57,3 +56,9 @@ split at PR time.
   upstream default handling before offering; book half stays LOCAL.
 - `fe931b61` (clippy sweep): point-in-time; superseded by upstream's own lint
   churn. Nothing to offer.
+- `cc69bb54` (grpc_store: end write stream after `finish_write`): SUPERSEDED —
+  current upstream terminates the stream in `WriteRequestStreamWrapper`
+  (`write_finished` guard in `poll_next`), proven by running our draining-mock
+  test against upstream with the inner guard removed: it passes. Our inner
+  guard stays as local defense-in-depth; the *test* went upstream with wave 1
+  (#2659) as `write_stream_terminates_after_finish_write`.
