@@ -55,8 +55,8 @@
         # service around this flake's binaries. The consumer supplies the fleet
         # topology (`hyper-modern-nixos.nativelink.fleetDir`, a typed Dhall tree)
         # and its own telemetry/state-registry wiring; everything else is here.
-        nixosModules.nativelink = moduleArgs: {
-          imports = [ ./nixos/module.nix ];
+        nixosModules.nativelink = _moduleArgs: {
+          imports = [./nixos/module.nix];
           _module.args.nativelinkFlake = inputs.self;
         };
 
@@ -188,10 +188,11 @@
               ];
             CARGO_BUILD_TARGET = targetArch;
           }
-          // (pkgs.lib.optionalAttrs (isLinuxTarget && !isCrossCompile) {
-            # customClang is only defined for the host compiler, so doesn't work for cross-compiling
-            TARGET_CC = "${pkgs.lre.clang}/bin/customClang"; # So mimalloc gets the right compiler not defaulting to gcc
-          })
+          // (pkgs.lib.optionalAttrs
+            (isLinuxTarget && !isCrossCompile && !p.stdenv.targetPlatform.isMusl) {
+              # customClang is only defined for the host compiler, so doesn't work for cross-compiling
+              TARGET_CC = "${pkgs.lre.clang}/bin/customClang"; # So mimalloc gets the right compiler not defaulting to gcc
+            })
           // (pkgs.lib.optionalAttrs isLinuxTarget {
             CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
             # FIXME(palfrey): Attempted workaround from https://github.com/llvm/llvm-project/issues/32849#issuecomment-2353071071 but doesn't work
