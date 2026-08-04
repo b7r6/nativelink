@@ -5,8 +5,10 @@ Every commit this fork carries over `TraceMachina/nativelink`, classified:
 or environment), or **SUPERSEDED** (upstream solved it another way). Maintained
 as part of the merge runbook; re-audit at every upstream sync.
 
-Baseline at last audit: upstream/main `56aa6f70`, fork `nix-cache` 68 ahead
-(2026-08-03).
+Baseline at last audit: upstream/main `4278d4b3`, fork `nix-cache` 76 ahead
+(2026-08-04, merge `7c342778`). The +7 sync (scheduler 1.6 patches, worker
+disconnect fix, Redis retryability #2657, FT.AGGREGATE expiry, bazel-retry,
+docs regen) superseded nothing we carry.
 
 ## PR waves
 
@@ -19,7 +21,7 @@ Ordered by isolation and value; each wave is one reviewable PR.
 | 3 | `8b35998f` + `9432960a` | s3_store: 64 MiB multipart parts (>5 GiB write-through ceiling) | Bug report + fix pair; squash for the PR. |
 | 4 | `b2994285` | store: zero-length underflow panic; completeness backend error propagation | Two small correctness fixes; may split on review feedback. |
 | 5 | `478bdde2` | buf_channel: widen in-flight buffer 2 → 32 (write-stall resets) | Perf/correctness; needs a motivating benchmark in the PR text. |
-| 6 | `5de7c286` + `7318d924` (transport half) | error: transport Unknown → retryable Unavailable, anchored match | Retry-semantics change; expect design discussion. |
+| 6 | `5de7c286` + `7318d924` (transport half) | error: transport Unknown → retryable Unavailable, anchored match | Retry-semantics change; expect design discussion. Pitch strengthened 2026-08-04: upstream's own #2657 reclassified transient Redis failures as retryable `Unavailable` on exactly the "Bazel treats non-retryable as permanent" argument — same thesis, adjacent (Redis vs tonic transport) surface, no overlap with our diff. |
 | 7 | `2f27ca68` | fast_slow_store: opt-in write-back for the slow tier | Feature (config-gated, default off). Our #35 payoff. |
 | 8 | `8fe8f2ed` | metrics: Prometheus /metrics endpoint | Feature; check upstream's own metrics plans first. |
 | 9 | `6512f60e` | nativelink `--check`: offline config validation | Small feature, high operator value. |
