@@ -1565,6 +1565,51 @@ impl ByteStream for ByteStreamServer {
             );
         }
 
+        // Determine if the client is sending wire-compressed data via compressed-blobs URI.
+        let wire_compressor = crate::wire_compression::resolve_wire_compressor(
+            stream.resource_info.compressor.as_deref(),
+            instance.remote_cache_compression_enabled,
+        )?;
+
+        // For compressed uploads, stream compressed wire bytes through the
+        // decoder and store the resulting raw bytes.
+        if wire_compressor != compressor::Value::Identity {
+            let result = self
+                .inner_write_compressed(instance, digest, digest_function, wire_compressor, stream)
+                .instrument(error_span!("bytestream_write_compressed"))
+                .await
+                .err_tip(|| "In ByteStreamServer::write_compressed");
+
+            // Track metrics based on result
+            #[allow(clippy::cast_possible_truncation)]
+            let elapsed_ns = start_time.elapsed().as_nanos() as u64;
+            instance
+                .metrics
+                .write_duration_ns
+                .fetch_add(elapsed_ns, Ordering::Relaxed);
+
+            match &result {
+                Ok(_) => {
+                    instance
+                        .metrics
+                        .write_requests_success
+                        .fetch_add(1, Ordering::Relaxed);
+                    instance
+                        .metrics
+                        .bytes_written_total
+                        .fetch_add(expected_size, Ordering::Relaxed);
+                }
+                Err(_) => {
+                    instance
+                        .metrics
+                        .write_requests_failure
+                        .fetch_add(1, Ordering::Relaxed);
+                }
+            }
+
+            return result.map_err(Into::into);
+        }
+
         // Check if store supports direct oneshot updates (bypasses channel overhead).
         // Use fast-path only when:
         // 1. Store supports oneshot optimization
