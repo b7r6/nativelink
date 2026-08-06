@@ -1,6 +1,11 @@
 # Appendix E: Nix Provisioning — Design Proposal
 
-**Status:** Proposal (seeking implementation feedback)
+**Status:** Partially shipped. The NixOS module layer exists in this
+repository (`nixosModules.nativelink`: `nixos/module.nix` + the §12
+`floor-entrypoint.sh`), and fleet hosts deploy from it — the fork owns
+its ops surface, and the downstream fleet config is thin imports plus
+host facts. The Dhall-typed configuration layer described below remains
+a proposal.
 
 This appendix describes the target architecture for correct-by-construction NativeLink provisioning via Nix, Dhall-typed configuration, and NixOS modules.
 

@@ -77,7 +77,7 @@ Semantics (`FastSlowStore` in `fast_slow_store.rs`):
   blob. The one exception: if the slow store is a `noop` store (which
   always answers 404), `has` checks the fast store instead.
 - **`get`** → tries fast first; on miss, reads from slow and populates fast concurrently. Unlike `has`, the read path *does* assume that a blob present in fast is present in slow.
-- **`update`** → writes to **both** fast and slow simultaneously (multiplexed stream).
+- **`update`** → writes to **both** fast and slow simultaneously (multiplexed stream). With `slow_store_write_back = true`, the slow-tier copy is deferred to a background write instead: the update completes when the fast tier has the bytes, and the slow store is populated asynchronously. This is the fleet posture for a NVMe-fast / object-storage-slow CAS — it exists because a stalled slow tier in the synchronous tee freezes the whole write (the multiplexed stream advances at the slower consumer's pace). Trade-off: a durability window in which the blob exists only in fast (see the option's doc in `nativelink-config/src/stores.rs`).
 
 The get path uses leader/follower deduplication: if multiple concurrent
 requests miss the fast cache for the same digest, only one — the

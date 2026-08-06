@@ -82,6 +82,7 @@
 
 - [The Standard OCI Toolchain](./part9/standard-oci-toolchain.md)
 - [The OCI → CAS Bridge](./part9/oci-cas-bridge.md)
+- [The CAS-Backed Registry](./part9/cas-registry.md)
 
 ---
 
@@ -102,3 +103,4 @@
 - [D: Glossary](./appendix/glossary.md)
 - [E: Nix Provisioning — Design Proposal](./appendix/nix-provisioning.md)
 - [F: Standard OCI Toolchain Specification](./appendix/standard-oci-toolchain-spec.md)
+- [G: Upstream as a Subscription](./appendix/upstream-sync.md)
