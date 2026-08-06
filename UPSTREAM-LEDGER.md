@@ -39,8 +39,27 @@ split at PR time.
   `a1839d64` `2de39afa` `43ec1bc0` `2e2b7ea8` `f3e2d7a8` `7316b864` `ea803264`
   `87e1b2d1` — the CAS-is-the-spine thesis; not offered upstream (for now).
 - **OCI→REAPI bridge** (`nativelink-oci`): `2a4cd2ed` `a8822ee3` `810bb8f7`
-  `48f3c51e` `ea7b0700` — candidate for a future feature offer once PROD-3
-  lands the Distribution API; too big for the current waves.
+  `48f3c51e` `ea7b0700` — PROD-3 has landed the Distribution API (below), so
+  the bridge + registry pair is now an ACTIONABLE feature-offer candidate;
+  still too big for the current waves, needs its own offer thread.
+- **OCI Distribution registry** (`nativelink-oci-registry`, `oci_registry`
+  service+config, the `oci://self` fetch short-circuit): `ef10cce2`
+  `b61a4cf0` `5c883bca` `1b8df58a` — the Distribution API (pull AND push,
+  conformance-suite green, referrers included) served from the stores;
+  blobs canonical under the deployment digest function with a sha256 alias
+  index. PROD-3 / `design/oci-registry-over-cas.md`.
+- **Upstream-relevant findings from the PROD-3 fleet cutover** (no fork
+  patch yet; candidates for issues/PRs):
+  - `GrpcStore` applies `rpc_timeout_s` to an ENTIRE streaming
+    read/write/query RPC, so a ring deadline caps transferable blob size at
+    (timeout × throughput) — a 2.7 GB layer can never land through a 60s
+    ring. The deadline should be idle-based (reset on stream progress).
+    Worked around in fleet config with a duplicate ring store at 900s.
+  - `fast_slow` `has()` consults the slow tier per fast-tier miss, so one
+    `FindMissingBlobs` over an N-file toolchain import amplifies into N
+    S3/R2 existence probes (observed: >900s for ~60k files). Worked around
+    with `dedup_check = false` on the import path; a batched or
+    fast-tier-only existence mode is the real fix.
 - **fetch proxy**: `08a15f69`.
 - **The book + fork docs**: `4d314f27` (book half) `0ec9a370` `5fcf05ce`
   `f5a847de` `a4a55bf6` `e8dadc32` `009172b6` `5731eb9e` `95db40bf` `178b56a7`
