@@ -240,9 +240,16 @@ pub struct ParsedManifest {
     /// Child MANIFESTS referenced by an index (`manifests[]`), which must
     /// exist as manifests before the index is accepted.
     pub manifest_references: Vec<ReferencedDescriptor>,
-    /// The `subject` descriptor digest, when present (OCI 1.1 referrers —
-    /// schema-reserved; no reverse index is maintained in v1).
+    /// The `subject` descriptor digest, when present (OCI 1.1 referrers).
     pub subject_sha256_hex: Option<String>,
+    /// Top-level `artifactType`, when declared.
+    pub artifact_type: Option<String>,
+    /// `config.mediaType`, when present — the referrers fallback for a
+    /// descriptor's `artifactType` per the spec.
+    pub config_media_type: Option<String>,
+    /// Top-level `annotations`, serialized back to a JSON object string;
+    /// `None` when absent. Copied verbatim into referrers descriptors.
+    pub annotations_json: Option<String>,
 }
 
 fn descriptor_from_value(value: &serde_json::Value) -> Result<ReferencedDescriptor, Error> {
@@ -277,6 +284,11 @@ pub fn parse_manifest(body: &[u8]) -> Result<ParsedManifest, Error> {
                 .map_err(|e| make_input_err!("in manifest 'config': {e}"))?,
         );
     }
+    let config_media_type = value
+        .get("config")
+        .and_then(|c| c.get("mediaType"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
     if let Some(layers) = value.get("layers") {
         let layers = layers
             .as_array()
@@ -315,10 +327,21 @@ pub fn parse_manifest(body: &[u8]) -> Result<ParsedManifest, Error> {
             "manifest declares neither 'config'/'layers' nor 'manifests'"
         ));
     }
+    let artifact_type = value
+        .get("artifactType")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let annotations_json = value
+        .get("annotations")
+        .filter(|a| a.is_object())
+        .map(std::string::ToString::to_string);
     Ok(ParsedManifest {
         media_type,
         blob_references,
         manifest_references,
         subject_sha256_hex,
+        artifact_type,
+        config_media_type,
+        annotations_json,
     })
 }

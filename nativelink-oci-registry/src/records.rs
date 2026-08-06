@@ -47,6 +47,9 @@ pub const OCI_TAG_RECORD_TYPE_URL: &str =
 /// `type_url` of [`OciRepoTagIndex`] payloads inside the envelope.
 pub const OCI_REPO_TAG_INDEX_TYPE_URL: &str =
     "type.googleapis.com/com.github.trace_machina.nativelink.oci.OciRepoTagIndex";
+/// `type_url` of [`OciReferrerList`] payloads inside the envelope.
+pub const OCI_REFERRER_LIST_TYPE_URL: &str =
+    "type.googleapis.com/com.github.trace_machina.nativelink.oci.OciReferrerList";
 /// Name of the single output file in blob-backed record envelopes.
 pub const RECORD_OUTPUT_FILE_NAME: &str = "blob";
 /// `worker` name stamped into every record envelope's metadata.
@@ -78,6 +81,14 @@ pub fn tag_key(name: &str, tag: &str) -> String {
 #[must_use]
 pub fn repo_tag_index_key(name: &str) -> String {
     format!("oci-tags:{}", encode_name(name))
+}
+
+/// Store key of the referrers list for subject `<sha256 hex>` in `<name>`
+/// (OCI 1.1 referrers: the reverse `subject` index maintained on manifest
+/// PUT).
+#[must_use]
+pub fn referrers_key(name: &str, subject_sha256_hex: &str) -> String {
+    format!("oci-referrers:{}:{subject_sha256_hex}", encode_name(name))
 }
 
 /// An immutable digest-alias record: OCI wire name → canonical storage
@@ -344,5 +355,72 @@ impl OciRepoTagIndex {
         if let Ok(pos) = self.tags.binary_search_by(|t| t.as_str().cmp(tag)) {
             self.tags.remove(pos);
         }
+    }
+}
+
+/// One referrer entry: the descriptor of a manifest whose `subject` names
+/// the record's subject digest, as served by the referrers API.
+#[derive(Clone, PartialEq, Eq, prost::Message)]
+pub struct OciReferrer {
+    /// Lowercase hex sha256 (wire name) of the REFERRING manifest.
+    #[prost(string, tag = "1")]
+    pub manifest_sha256_hex: String,
+    /// Size in bytes of the referring manifest body.
+    #[prost(uint64, tag = "2")]
+    pub size: u64,
+    /// Media type of the referring manifest.
+    #[prost(string, tag = "3")]
+    pub media_type: String,
+    /// The descriptor's `artifactType`: the manifest's own `artifactType`,
+    /// else its `config.mediaType`; empty when neither is declared.
+    #[prost(string, tag = "4")]
+    pub artifact_type: String,
+    /// The referring manifest's top-level `annotations`, serialized as a
+    /// JSON object string; empty when absent.
+    #[prost(string, tag = "5")]
+    pub annotations_json: String,
+}
+
+/// The referrers of one subject digest within one repository. Mutable, the
+/// tag-index discipline: idempotent set merge keyed on the referrer digest,
+/// discovery-only (the authoritative manifests are in the CAS).
+#[derive(Clone, PartialEq, Eq, prost::Message)]
+pub struct OciReferrerList {
+    /// Referrer descriptors, insertion-ordered, unique by digest.
+    #[prost(message, repeated, tag = "1")]
+    pub referrers: Vec<OciReferrer>,
+}
+
+impl OciReferrerList {
+    /// Encodes into the record envelope (no output files: served
+    /// descriptors point at manifests whose own lifetime is CAS-managed).
+    pub fn encode_record(&self) -> Result<Vec<u8>, Error> {
+        encode_envelope(OCI_REFERRER_LIST_TYPE_URL, self.encode_to_vec(), None)
+    }
+
+    /// Decodes from the record envelope.
+    pub fn decode_record(bytes: &[u8]) -> Result<Self, Error> {
+        let payload = decode_envelope(bytes, OCI_REFERRER_LIST_TYPE_URL)?;
+        Self::decode(payload.as_slice())
+            .map_err(|e| make_input_err!("OCI record payload is not a valid OciReferrerList: {e}"))
+    }
+
+    /// Inserts (or replaces) a referrer, idempotent by manifest digest.
+    pub fn upsert(&mut self, referrer: OciReferrer) {
+        if let Some(existing) = self
+            .referrers
+            .iter_mut()
+            .find(|r| r.manifest_sha256_hex == referrer.manifest_sha256_hex)
+        {
+            *existing = referrer;
+        } else {
+            self.referrers.push(referrer);
+        }
+    }
+
+    /// Removes a referrer by manifest digest; idempotent.
+    pub fn remove(&mut self, manifest_sha256_hex: &str) {
+        self.referrers
+            .retain(|r| r.manifest_sha256_hex != manifest_sha256_hex);
     }
 }

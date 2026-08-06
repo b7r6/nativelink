@@ -668,6 +668,13 @@
             oci-client-roundtrip = pkgs.callPackage ./tools/checks/oci-client-roundtrip.nix {
               inherit nativelink;
             };
+            # The OFFICIAL opencontainers/distribution-spec conformance
+            # suite (pinned v1.1.1) against a live oci_registry instance —
+            # all four workflow categories; the suite's JUnit report is the
+            # artifact (design 3, oracle 1).
+            oci-conformance = pkgs.callPackage ./tools/checks/oci-conformance.nix {
+              inherit nativelink;
+            };
           };
         pre-commit.settings = {
           hooks = import ./tools/pre-commit-hooks.nix {

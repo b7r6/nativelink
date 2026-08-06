@@ -56,11 +56,12 @@ use nativelink_config::cas_server::{OciRegistryServiceConfig, WithInstanceName};
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::MetricsComponent;
 use nativelink_oci_registry::records::{
-    OciDigestAlias, OciRepoTagIndex, OciTagRecord, alias_key, repo_tag_index_key, tag_key,
+    OciDigestAlias, OciReferrer, OciReferrerList, OciRepoTagIndex, OciTagRecord, alias_key,
+    referrers_key, repo_tag_index_key, tag_key,
 };
 use nativelink_oci_registry::wire::{
-    ManifestReference, OCI_MANIFEST_MEDIA_TYPE, OciErrorCode, error_body, is_valid_repository_name,
-    parse_digest, parse_manifest, parse_manifest_reference,
+    ManifestReference, OCI_INDEX_MEDIA_TYPE, OCI_MANIFEST_MEDIA_TYPE, OciErrorCode, error_body,
+    is_valid_repository_name, parse_digest, parse_manifest, parse_manifest_reference,
 };
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::{DropCloserReadHalf, make_buf_channel_pair};
@@ -340,7 +341,7 @@ enum Route {
     UploadSession { name: String, uuid: String },
     Manifest { name: String, reference: String },
     TagsList { name: String },
-    Referrers { name: String },
+    Referrers { name: String, digest: String },
 }
 
 /// Parses the request path (already stripped of the mount prefix) into a
@@ -367,6 +368,7 @@ fn parse_route(path: &str) -> Option<Route> {
     if n >= 3 && segments[n - 2] == "referrers" {
         return Some(Route::Referrers {
             name: segments[..n - 2].join("/"),
+            digest: segments[n - 1].to_string(),
         });
     }
     // `blobs/uploads/` with the trailing slash produces a trailing empty
@@ -739,6 +741,65 @@ impl OciRegistryInstance {
         ))
         .await
         .err_tip(|| format!("Storing OCI tag index for '{name}'"))
+    }
+
+    /// Reads the referrers list for `(name, subject)`, `None` on a miss.
+    async fn lookup_referrers(
+        &self,
+        name: &str,
+        subject_sha256_hex: &str,
+    ) -> Result<Option<OciReferrerList>, Error> {
+        let lookup = self
+            .with_canonical_ctx(self.ref_store.get_part_unchunked(
+                StoreKey::Str(Cow::Owned(referrers_key(name, subject_sha256_hex))),
+                0,
+                None,
+            ))
+            .await;
+        let raw = match lookup {
+            Ok(raw) => raw,
+            Err(err) if err.code == Code::NotFound => return Ok(None),
+            Err(err) => {
+                return Err(err).err_tip(|| {
+                    format!("Looking up OCI referrers for '{name}@{subject_sha256_hex}'")
+                });
+            }
+        };
+        if raw.is_empty() {
+            return Ok(None);
+        }
+        OciReferrerList::decode_record(&raw)
+            .map(Some)
+            .map_err(|e| make_err!(Code::Internal, "Corrupt OCI referrers record: {e}"))
+    }
+
+    /// Read-modify-merges the referrers list for `(name, subject)` — the
+    /// tag-index discipline: idempotent, discovery-only, repaired by the
+    /// next write.
+    async fn merge_referrers(
+        &self,
+        name: &str,
+        subject_sha256_hex: &str,
+        upsert: Option<OciReferrer>,
+        remove: Option<&str>,
+    ) -> Result<(), Error> {
+        let mut list = self
+            .lookup_referrers(name, subject_sha256_hex)
+            .await?
+            .unwrap_or_default();
+        if let Some(referrer) = upsert {
+            list.upsert(referrer);
+        }
+        if let Some(digest) = remove {
+            list.remove(digest);
+        }
+        let bytes = list.encode_record()?;
+        self.with_canonical_ctx(self.ref_store.update_oneshot(
+            StoreKey::Str(Cow::Owned(referrers_key(name, subject_sha256_hex))),
+            bytes.into(),
+        ))
+        .await
+        .err_tip(|| format!("Storing OCI referrers for '{name}@{subject_sha256_hex}'"))
     }
 
     /// Prunes sessions idle past the timeout; called opportunistically on
@@ -1254,11 +1315,14 @@ async fn resolve_manifest(
     name: &str,
     reference: &str,
 ) -> Result<(String, DigestInfo, String), Response> {
+    // A reference outside BOTH grammars names nothing that can exist, so
+    // reads answer 404 MANIFEST_UNKNOWN (the conformance suite's
+    // ".INVALID_MANIFEST_NAME" probe), never 400.
     let Ok(parsed) = parse_manifest_reference(reference) else {
         return Err(oci_error_response(
-            StatusCode::BAD_REQUEST,
-            OciErrorCode::ManifestInvalid,
-            "invalid manifest reference",
+            StatusCode::NOT_FOUND,
+            OciErrorCode::ManifestUnknown,
+            "manifest unknown to registry",
         ));
     };
     match parsed {
@@ -1503,6 +1567,27 @@ async fn handle_manifest_put(
             return backend_error_response("manifest_put tag index", &err);
         }
     }
+    // OCI 1.1 referrers: maintain the reverse subject index. The subject
+    // manifest need not exist yet — referrers may land first per the spec.
+    if let Some(subject) = &parsed.subject_sha256_hex {
+        let referrer = OciReferrer {
+            manifest_sha256_hex: sha256_hex.clone(),
+            size: canonical.size_bytes(),
+            media_type: media_type.clone(),
+            artifact_type: parsed
+                .artifact_type
+                .clone()
+                .or_else(|| parsed.config_media_type.clone())
+                .unwrap_or_default(),
+            annotations_json: parsed.annotations_json.clone().unwrap_or_default(),
+        };
+        if let Err(err) = instance
+            .merge_referrers(name, subject, Some(referrer), None)
+            .await
+        {
+            return backend_error_response("manifest_put referrers", &err);
+        }
+    }
     instance.manifest_puts.inc();
 
     let location = format!(
@@ -1510,8 +1595,8 @@ async fn handle_manifest_put(
         instance.mount_path
     );
     let mut response = created_blob_response(&location, &sha256_hex);
-    // OCI 1.1: acknowledge a subject so clients know referrers processing
-    // happened (the reverse index itself is schema-reserved, not built).
+    // OCI 1.1: acknowledge the subject so clients know referrers
+    // processing happened.
     if let Some(subject) = &parsed.subject_sha256_hex
         && let Ok(value) = HeaderValue::from_str(&format!("sha256:{subject}"))
     {
@@ -1632,8 +1717,8 @@ async fn handle_delete(
                 return empty_response(StatusCode::ACCEPTED);
             }
             Ok(ManifestReference::Digest(sha256_hex)) => {
-                match instance.lookup_alias(&sha256_hex).await {
-                    Ok(Some(_)) => {}
+                let alias = match instance.lookup_alias(&sha256_hex).await {
+                    Ok(Some(alias)) => alias,
                     Ok(None) => {
                         return oci_error_response(
                             StatusCode::NOT_FOUND,
@@ -1642,6 +1727,24 @@ async fn handle_delete(
                         );
                     }
                     Err(err) => return backend_error_response("delete manifest lookup", &err),
+                };
+                // Best-effort referrers upkeep: if the manifest being
+                // deleted had a subject, drop it from that subject's list.
+                // Failures here never block the delete — the list is
+                // discovery-only and self-repairing.
+                if let Ok(canonical) = DigestInfo::try_new(&alias.canonical_hex, alias.size)
+                    && let Ok(body) = instance
+                        .with_canonical_ctx(
+                            instance.cas_store.get_part_unchunked(canonical, 0, None),
+                        )
+                        .await
+                    && let Ok(parsed) = parse_manifest(&body)
+                    && let Some(subject) = &parsed.subject_sha256_hex
+                    && let Err(err) = instance
+                        .merge_referrers(name, subject, None, Some(&sha256_hex))
+                        .await
+                {
+                    warn!(?err, "Failed removing deleted manifest from referrers");
                 }
                 if let Err(err) = instance
                     .with_canonical_ctx(instance.index_store.update_oneshot(
@@ -1695,6 +1798,73 @@ async fn handle_delete(
     empty_response(StatusCode::ACCEPTED)
 }
 
+/// `GET /v2/<name>/referrers/<digest>` (OCI 1.1): the image index of
+/// manifests whose `subject` names `digest`, optionally filtered by
+/// `artifactType` (advertised via `OCI-Filters-Applied`).
+async fn handle_referrers(
+    instance: &OciRegistryInstance,
+    headers: &HeaderMap,
+    name: &str,
+    digest: &str,
+    query: Option<&str>,
+) -> Response {
+    if let Some(denied) = instance.authorize_read(headers) {
+        return denied;
+    }
+    let Ok(subject_hex) = parse_digest(digest) else {
+        return oci_error_response(
+            StatusCode::BAD_REQUEST,
+            OciErrorCode::DigestInvalid,
+            "unsupported or malformed digest",
+        );
+    };
+    let list = match instance.lookup_referrers(name, subject_hex).await {
+        Ok(list) => list.unwrap_or_default(),
+        Err(err) => return backend_error_response("referrers", &err),
+    };
+    let filter = query_param(query, "artifactType").map(|f| f.to_string());
+    let manifests: Vec<serde_json::Value> = list
+        .referrers
+        .iter()
+        .filter(|r| filter.as_deref().is_none_or(|f| r.artifact_type == f))
+        .map(|r| {
+            let mut descriptor = serde_json::json!({
+                "mediaType": r.media_type,
+                "digest": format!("sha256:{}", r.manifest_sha256_hex),
+                "size": r.size,
+            });
+            if !r.artifact_type.is_empty() {
+                descriptor["artifactType"] = serde_json::Value::String(r.artifact_type.clone());
+            }
+            if !r.annotations_json.is_empty()
+                && let Ok(annotations) =
+                    serde_json::from_str::<serde_json::Value>(&r.annotations_json)
+            {
+                descriptor["annotations"] = annotations;
+            }
+            descriptor
+        })
+        .collect();
+    let body = serde_json::json!({
+        "schemaVersion": 2,
+        "mediaType": OCI_INDEX_MEDIA_TYPE,
+        "manifests": manifests,
+    })
+    .to_string();
+    let mut response = Response::new(Body::from(body));
+    *response.status_mut() = StatusCode::OK;
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_static(OCI_INDEX_MEDIA_TYPE));
+    if filter.is_some() {
+        response.headers_mut().insert(
+            "OCI-Filters-Applied",
+            HeaderValue::from_static("artifactType"),
+        );
+    }
+    response
+}
+
 /// Routes one request under the mount to its handler.
 async fn dispatch(State(instance): State<Arc<OciRegistryInstance>>, request: Request) -> Response {
     let method = request.method().clone();
@@ -1716,7 +1886,7 @@ async fn dispatch(State(instance): State<Arc<OciRegistryInstance>>, request: Req
         | Route::UploadSession { name, .. }
         | Route::Manifest { name, .. }
         | Route::TagsList { name }
-        | Route::Referrers { name } => is_valid_repository_name(name),
+        | Route::Referrers { name, .. } => is_valid_repository_name(name),
     };
     if !name_ok {
         return oci_error_response(
@@ -1758,10 +1928,8 @@ async fn dispatch(State(instance): State<Arc<OciRegistryInstance>>, request: Req
         (&Method::GET, Route::TagsList { name }) => {
             handle_tags_list(&instance, &headers, &name, query).await
         }
-        (&Method::GET, Route::Referrers { .. }) => {
-            // OCI 1.1 referrers: schema-reserved, not implemented in v1;
-            // 404 tells clients to fall back to the tag schema.
-            empty_response(StatusCode::NOT_FOUND)
+        (&Method::GET, Route::Referrers { name, digest }) => {
+            handle_referrers(&instance, &headers, &name, &digest, query).await
         }
         _ => empty_response(StatusCode::METHOD_NOT_ALLOWED),
     }
