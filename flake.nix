@@ -639,7 +639,7 @@
                 testArgs
                 // {
                   cargoArtifacts = (craneLibFor pkgs).buildDepsOnly testArgs;
-                  cargoExtraArgs = "--locked -p nativelink-nix -p nativelink-service";
+                  cargoExtraArgs = "--locked -p nativelink-nix -p nativelink-oci-registry -p nativelink-service";
                 }
               );
             # Validate every example config with `nativelink --check`.
@@ -659,6 +659,13 @@
             # nativelink nix_cache service in a NixOS VM. Needs KVM, so it is
             # Linux-only.
             nix-substituter-e2e = pkgs.callPackage ./tools/checks/nix-substituter-vm-test.nix {
+              inherit nativelink;
+            };
+            # Independent-client round trips (skopeo + crane, byte-identical)
+            # against a live oci_registry instance in the build sandbox on
+            # loopback (design 3, oracle 2 of the OCI-registry-over-CAS
+            # design). No KVM needed, but the server binary is Linux-shaped.
+            oci-client-roundtrip = pkgs.callPackage ./tools/checks/oci-client-roundtrip.nix {
               inherit nativelink;
             };
           };

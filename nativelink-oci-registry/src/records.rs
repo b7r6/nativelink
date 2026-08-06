@@ -59,16 +59,25 @@ pub fn alias_key(sha256_hex: &str) -> String {
     format!("oci-digest:sha256:{sha256_hex}")
 }
 
+/// Encodes a repository name for use inside a store key. Repository names
+/// legally contain `/`, but string-keyed stores map keys to filesystem
+/// paths, where a `/` silently becomes a directory separator (an ENOENT on
+/// the first multi-segment repo, not a clean error). `%` is outside both
+/// the name and tag grammars, so `/` -> `%2F` is injective.
+fn encode_name(name: &str) -> String {
+    name.replace('/', "%2F")
+}
+
 /// Store key of the tag record for `<name>:<tag>`.
 #[must_use]
 pub fn tag_key(name: &str, tag: &str) -> String {
-    format!("oci-tag:{name}:{tag}")
+    format!("oci-tag:{}:{tag}", encode_name(name))
 }
 
 /// Store key of the per-repo tag index for `<name>`.
 #[must_use]
 pub fn repo_tag_index_key(name: &str) -> String {
-    format!("oci-tags:{name}")
+    format!("oci-tags:{}", encode_name(name))
 }
 
 /// An immutable digest-alias record: OCI wire name → canonical storage

@@ -118,9 +118,26 @@ fn repo_tag_index_merge_is_sorted_idempotent() {
 #[test]
 fn store_keys_are_prefixed_and_distinct() {
     assert_eq!(alias_key(HEX_A), format!("oci-digest:sha256:{HEX_A}"));
-    assert_eq!(tag_key("a/b", "latest"), "oci-tag:a/b:latest");
-    assert_eq!(repo_tag_index_key("a/b"), "oci-tags:a/b");
+    assert_eq!(tag_key("a/b", "latest"), "oci-tag:a%2Fb:latest");
+    assert_eq!(repo_tag_index_key("a/b"), "oci-tags:a%2Fb");
     assert_ne!(tag_key("a", "b"), repo_tag_index_key("a"));
+}
+
+#[test]
+fn store_keys_never_contain_path_separators() {
+    // Filesystem-backed string-keyed stores map keys to paths; a `/` in a
+    // key is a directory separator and an ENOENT at write time. Legal
+    // multi-segment repository names must therefore never leak `/` into a
+    // key (the Gate B skopeo `rt/skopeo` regression).
+    for key in [
+        tag_key("deeply/nested/repo", "v1"),
+        repo_tag_index_key("deeply/nested/repo"),
+        alias_key(HEX_A),
+    ] {
+        assert!(!key.contains('/'), "key contains '/': {key}");
+    }
+    // The encoding is injective across distinct names.
+    assert_ne!(tag_key("a/b", "c"), tag_key("a", "b/c"));
 }
 
 #[test]
