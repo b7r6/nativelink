@@ -46,6 +46,7 @@ use nativelink_service::execution_server::ExecutionServer;
 use nativelink_service::fetch_server::FetchServer;
 use nativelink_service::health_server::HealthServer;
 use nativelink_service::nix_cache_server::NixCacheServer;
+use nativelink_service::oci_registry_server::OciRegistryServer;
 use nativelink_service::push_server::PushServer;
 use nativelink_service::wire_compression::RemoteCacheCompressionInstances;
 use nativelink_service::worker_api_server::WorkerApiServer;
@@ -590,6 +591,28 @@ async fn inner_main(
             let nix_cache_server = NixCacheServer::new(nix_cache_cfgs, &store_manager)
                 .err_tip(|| "Could not create NixCache service")?;
             for (prefix, router) in nix_cache_server.routers() {
+                svc = svc.nest_service(&prefix, router);
+            }
+        }
+
+        if let Some(oci_registry_cfgs) = &services.oci_registry {
+            // Same cleartext-token warning as nix_cache: tokens on a bare
+            // HTTP listener travel in the clear.
+            if http_config.tls.is_none() {
+                for cfg in oci_registry_cfgs {
+                    if !cfg.read_token_files.is_empty() || !cfg.write_token_files.is_empty() {
+                        warn!(
+                            "oci_registry instance '{}' has auth tokens on a plaintext HTTP \
+                             listener; Bearer/Basic credentials will travel in cleartext — \
+                             terminate TLS on this listener or in front of it",
+                            cfg.instance_name
+                        );
+                    }
+                }
+            }
+            let oci_registry_server = OciRegistryServer::new(oci_registry_cfgs, &store_manager)
+                .err_tip(|| "Could not create OciRegistry service")?;
+            for (prefix, router) in oci_registry_server.routers() {
                 svc = svc.nest_service(&prefix, router);
             }
         }

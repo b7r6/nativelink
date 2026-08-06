@@ -1,0 +1,130 @@
+// OCI Distribution registry served directly from NativeLink stores.
+//
+// This serves the OCI Distribution Specification (pull AND push) from the
+// CAS itself: `skopeo copy oci:<layout> docker://localhost:50072/repo:tag`
+// pushes into the stores below, and any OCI client pulls back out. Blobs
+// are stored ONCE under the deployment's canonical digest function (BLAKE3
+// here) with a sha256 alias index answering OCI wire names — the graded-CAS
+// design in design/oci-registry-over-cas.md.
+//
+// Store composition rules for this service:
+//
+//  * Blob store (`cas_store`): digest-keyed; every blob (layer, config,
+//    manifest body) lives under DigestInfo(canonical_hash(bytes), size).
+//    Wrapped in `verify` with both verify_size and verify_hash so corrupt
+//    or truncated uploads are rejected at write time.
+//
+//  * Digest index (`index_store`): string-keyed alias records
+//    `oci-digest:sha256:<hex>` -> (canonical_hex, size). Immutable,
+//    content-derived facts. Wrapped in `completeness_checking` referencing
+//    the blob store so an alias whose blob has been evicted 404s instead of
+//    advertising a blob that can no longer be served. Do NOT wrap in
+//    `verify` or `size_partitioning` (string keys).
+//
+//  * Ref store (`ref_store`): string-keyed MUTABLE tag records
+//    (`oci-tag:<name>:<tag>`) and per-repo tag indexes (`oci-tags:<name>`).
+//    Do NOT wrap in `existence_cache`: it drops overwrites, and a tag that
+//    cannot be overwritten is not a tag. Do NOT wrap in `verify` or
+//    `size_partitioning` either.
+{
+  stores: [
+    {
+      name: "OCI_BLOB_STORE",
+      verify: {
+        verify_size: true,
+        verify_hash: true,
+        backend: {
+          filesystem: {
+            content_path: "/tmp/nativelink/oci-registry/blobs/content_path",
+            temp_path: "/tmp/nativelink/oci-registry/blobs/temp_path",
+            eviction_policy: {
+              // 50gb of blobs.
+              max_bytes: 50000000000,
+            },
+          },
+        },
+      },
+    },
+    {
+      name: "OCI_INDEX_STORE",
+      completeness_checking: {
+        backend: {
+          filesystem: {
+            content_path: "/tmp/nativelink/oci-registry/index/content_path",
+            temp_path: "/tmp/nativelink/oci-registry/index/temp_path",
+            eviction_policy: {
+              // Alias records are ~200 bytes; 100mb holds a lot of them.
+              max_bytes: 100000000,
+            },
+          },
+        },
+
+        // Confirm the blob still exists before answering for its alias.
+        cas_store: {
+          ref_store: {
+            name: "OCI_BLOB_STORE",
+          },
+        },
+      },
+    },
+    {
+      name: "OCI_REF_STORE",
+      filesystem: {
+        content_path: "/tmp/nativelink/oci-registry/refs/content_path",
+        temp_path: "/tmp/nativelink/oci-registry/refs/temp_path",
+        eviction_policy: {
+          max_bytes: 100000000,
+        },
+      },
+    },
+  ],
+  servers: [
+    {
+      name: "oci_registry",
+      listener: {
+        http: {
+          socket_address: "0.0.0.0:50072",
+        },
+      },
+      services: {
+        oci_registry: [
+          {
+            instance_name: "main",
+            cas_store: "OCI_BLOB_STORE",
+            index_store: "OCI_INDEX_STORE",
+            ref_store: "OCI_REF_STORE",
+
+            // The spec fixes the API root at /v2/ — one instance per
+            // listener with the default mount.
+            // path: "/v2",
+
+            // Canonical STORAGE identity; the wire always speaks sha256.
+            // Must match the digest function of the deployment's REAPI
+            // consumers (buck2 cannot mix functions per-blob).
+            digest_function: "BLAKE3",
+
+            // Upload sessions spool here; pruned (by prefix) at startup.
+            spool_path: "/tmp/nativelink/oci-registry/spool",
+
+            // Ingest caps and concurrency ceilings.
+            max_blob_size_bytes: "32gb",
+            max_manifest_size_bytes: "4mb",
+            upload_idle_timeout_s: 60,
+            max_concurrent_blob_streams: 256,
+            max_open_upload_sessions: 64,
+
+            // Mutation policy: writes open (trusted network), Content
+            // Management (DELETE) enabled so the conformance suite's
+            // fourth workflow category can run against this config.
+            read_only: false,
+            enable_delete: true,
+
+            // Token auth (nix_cache model): uncomment to require tokens.
+            // read_token_files: [],
+            // write_token_files: ["/run/secrets/oci-push-token"],
+          },
+        ],
+      },
+    },
+  ],
+}

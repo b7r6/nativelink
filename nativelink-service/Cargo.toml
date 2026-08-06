@@ -12,6 +12,7 @@ nativelink-error = { path = "../nativelink-error" }
 nativelink-metric = { path = "../nativelink-metric" }
 nativelink-nix = { path = "../nativelink-nix" }
 nativelink-oci = { path = "../nativelink-oci" }
+nativelink-oci-registry = { path = "../nativelink-oci-registry" }
 nativelink-proto = { path = "../nativelink-proto" }
 nativelink-scheduler = { path = "../nativelink-scheduler" }
 nativelink-store = { path = "../nativelink-store" }

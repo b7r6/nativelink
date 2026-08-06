@@ -3367,6 +3367,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nativelink-oci-registry"
+version = "1.5.2"
+dependencies = [
+ "nativelink-error",
+ "nativelink-proto",
+ "prost",
+ "prost-types",
+ "serde_json",
+]
+
+[[package]]
 name = "nativelink-proto"
 version = "1.6.3"
 dependencies = [
@@ -3452,6 +3463,7 @@ dependencies = [
  "nativelink-metric",
  "nativelink-nix",
  "nativelink-oci",
+ "nativelink-oci-registry",
  "nativelink-proto",
  "nativelink-scheduler",
  "nativelink-store",

@@ -15,6 +15,7 @@ members = [
   "nativelink-nix",
   "nativelink-nix-client",
   "nativelink-oci",
+  "nativelink-oci-registry",
   "nativelink-proto",
   "nativelink-redis-tester",
   "nativelink-scheduler",

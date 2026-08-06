@@ -1,0 +1,66 @@
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_doc",
+    "rust_doc_test",
+    "rust_library",
+    "rust_test",
+    "rust_test_suite",
+)
+
+rust_library(
+    name = "nativelink-oci-registry",
+    srcs = [
+        "src/lib.rs",
+        "src/records.rs",
+        "src/wire.rs",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//nativelink-error",
+        "//nativelink-proto",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test_suite(
+    name = "integration",
+    timeout = "short",
+    srcs = [
+        "tests/records_and_wire_test.rs",
+    ],
+    deps = [
+        ":nativelink-oci-registry",
+        "//nativelink-error",
+        "//nativelink-proto",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "unit_test",
+    timeout = "short",
+    crate = ":nativelink-oci-registry",
+    deps = [
+        "//nativelink-error",
+        "//nativelink-proto",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_doc(
+    name = "docs",
+    crate = ":nativelink-oci-registry",
+    visibility = ["//visibility:public"],
+)
+
+rust_doc_test(
+    name = "doc_test",
+    timeout = "short",
+    crate = ":nativelink-oci-registry",
+)

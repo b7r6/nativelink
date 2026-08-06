@@ -609,7 +609,7 @@ pub struct NixCacheConfig {
     /// value rather than letting the encoder silently clamp it at serve
     /// time.
     ///
-    /// There is no serde default: when unset, the service applies zstd
+    /// No serde default exists: when unset, the service applies zstd
     /// level 3 at serve time.
     #[serde(
         default,
@@ -785,6 +785,198 @@ pub struct NixUpstreamCacheConfig {
 
 fn default_nix_store_dir() -> String {
     "/nix/store".to_string()
+}
+
+/// Configuration for an OCI Distribution registry service — the OCI
+/// Distribution Specification (pull AND push) served directly from
+/// `NativeLink` stores, the same facade move `nix_cache` makes for the Nix
+/// binary-cache protocol. `skopeo`/`crane`/`docker` push to and pull from
+/// the CAS itself; blobs are stored ONCE under the deployment's canonical
+/// digest function with a sha256 alias index answering OCI wire names.
+///
+/// The service mounts an HTTP router at `path` (default `/v2` — the spec's
+/// fixed root) on the same listener as the gRPC services. Because the spec
+/// fixes the root at `/v2/`, run ONE instance per listener; a second
+/// instance needs its own listener (host-based routing is an open question
+/// in `design/oci-registry-over-cas.md`).
+///
+/// See `examples/oci_registry.json5` for a working deployment.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciRegistryServiceConfig {
+    /// The store name referenced in the `stores` map in the main config.
+    /// Digest-keyed: layer blobs, config blobs, and manifest bodies each
+    /// live under `DigestInfo(canonical_hash(bytes), size)` where the
+    /// canonical hash is `digest_function`. It is strongly recommended to
+    /// wrap this store in `verify` with both `verify_size` and
+    /// `verify_hash` enabled.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// String-keyed digest-alias records `oci-digest:sha256:<hex>` →
+    /// `(canonical_hex, size)` — immutable, content-derived facts.
+    ///
+    /// Recommended: wrap in `completeness_checking` with its `cas_store`
+    /// referencing the blob store above, so an alias whose blob was
+    /// evicted 404s instead of advertising a blob that cannot be served.
+    /// Never wrap in `verify` or `size_partitioning` (string keys).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub index_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// String-keyed MUTABLE tag records (`oci-tag:<name>:<tag>`) and
+    /// per-repo tag indexes (`oci-tags:<name>`).
+    ///
+    /// Never wrap this store in `existence_cache`: it drops overwrites,
+    /// and a tag that cannot be overwritten is not a tag. Never wrap in
+    /// `verify` or `size_partitioning` either (string keys). Wrapping in
+    /// `completeness_checking` against the blob store is recommended so a
+    /// tag whose manifest was evicted returns 404 (`MANIFEST_UNKNOWN`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ref_store: StoreRefName,
+
+    /// URL prefix under which this instance is mounted on the listener.
+    /// The OCI Distribution Specification fixes the API root at `/v2/`,
+    /// so with the default mount a client's registry reference is just
+    /// `<host>:<port>/<repository>`. Change this only for internal
+    /// deployments whose clients tolerate a path prefix (skopeo does; the
+    /// conformance suite does not).
+    ///
+    /// Default: "/v2"
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub path: Option<String>,
+
+    /// Canonical digest function blobs are STORED under: "BLAKE3" or
+    /// "SHA256". The OCI wire always speaks sha256 names; at ingest the
+    /// upload stream feeds both hashers and an alias record maps the wire
+    /// name to the canonical identity. With "SHA256" the two coincide and
+    /// the alias record degenerates to an identity map (still written, so
+    /// reads are uniform). Must match the digest function the deployment's
+    /// REAPI consumers use (buck2 detects the function by hex length, so a
+    /// deployment cannot mix them per-blob).
+    ///
+    /// Default: "BLAKE3"
+    #[serde(
+        default = "default_oci_digest_function",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub digest_function: String,
+
+    /// Staging directory for in-flight blob uploads. Upload sessions spool
+    /// to files here (prefix-scoped startup pruning, idle-timeout aborts),
+    /// so the filesystem behind it needs room for the largest blob in
+    /// flight times `max_open_upload_sessions`.
+    ///
+    /// Default: `<system temp>/nativelink-oci-spool/<instance_name>`
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub spool_path: Option<String>,
+
+    /// Maximum size in bytes of a single blob this registry will ingest.
+    /// A declared `Content-Length` over the limit is rejected before the
+    /// body is read, and a stream that grows past it is aborted mid-flight
+    /// (the spool file is deleted).
+    ///
+    /// Default: 34359738368 (32 GiB)
+    #[serde(
+        default = "default_max_nar_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_blob_size_bytes: u64,
+
+    /// Maximum size in bytes of a manifest body (`PUT`/`GET` on
+    /// `/v2/<name>/manifests/<ref>`). Manifests are small JSON documents;
+    /// the ecosystem norm caps them around 4 MiB.
+    ///
+    /// Default: 4194304 (4 MiB)
+    #[serde(
+        default = "default_max_manifest_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_manifest_size_bytes: u64,
+
+    /// Idle timeout, in seconds, on an upload session: if no new bytes
+    /// arrive within this window the in-flight request is aborted, and a
+    /// session idle past it is pruned (spool file deleted) — clients
+    /// retry per the spec's resumable-upload semantics.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_nar_upload_idle_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upload_idle_timeout_s: u64,
+
+    /// Maximum number of blob GET response bodies streamed concurrently
+    /// from this instance; requests over the limit get a retryable `503`.
+    ///
+    /// Default: 256
+    #[serde(
+        default = "default_max_concurrent_nar_streams",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_blob_streams: usize,
+
+    /// Maximum number of upload sessions open at once; session-opening
+    /// requests over the limit get a retryable `503`.
+    ///
+    /// Default: 64
+    #[serde(
+        default = "default_max_open_upload_sessions",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_open_upload_sessions: usize,
+
+    /// When true, all mutating requests (`POST`/`PATCH`/`PUT`/`DELETE`)
+    /// return `405 Method Not Allowed`. Set this on public-facing
+    /// listeners. A valid write token does NOT override this.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub read_only: bool,
+
+    /// Enables the Content Management endpoints (`DELETE` on manifests,
+    /// tags, and blobs). Registry DELETE removes NAMES (alias and tag
+    /// records); content lifetime belongs to CAS eviction — the lens has
+    /// no GC, so `skopeo delete` never reclaims backing bytes
+    /// synchronously.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub enable_delete: bool,
+
+    /// Paths to read-token files, `nix_cache` semantics verbatim: one
+    /// token per file, any listed token accepted, `Bearer <token>` or
+    /// HTTP Basic where the token is the PASSWORD (how docker/skopeo
+    /// send configured credentials). When non-empty, EVERY request on the
+    /// instance requires a valid read or write token; failures get `401`
+    /// with a `Basic` challenge.
+    ///
+    /// SECURITY: tokens travel in cleartext over a plaintext listener;
+    /// only enable on a TLS-terminated path.
+    ///
+    /// Default: [] (anonymous reads)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub read_token_files: Vec<String>,
+
+    /// Paths to write-token files, same semantics as `read_token_files`.
+    /// When any token auth is configured, every mutating request requires
+    /// a valid WRITE token — a read token alone is never sufficient, and
+    /// an instance with read tokens but no write tokens fails writes
+    /// closed. `read_only` wins over a valid write token.
+    ///
+    /// Default: [] (writes gated only by `read_only`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub write_token_files: Vec<String>,
+}
+
+const fn default_max_manifest_size_bytes() -> u64 {
+    4 * 1024 * 1024 // 4 MiB
+}
+
+const fn default_max_open_upload_sessions() -> usize {
+    64
 }
 
 /// Configuration for the CAS witness (caching HTTP forward proxy)
@@ -1129,6 +1321,18 @@ pub struct ServicesConfig {
         deserialize_with = "super::backcompat::opt_vec_with_instance_name"
     )]
     pub nix_cache: Option<Vec<WithInstanceName<NixCacheConfig>>>,
+
+    /// The OCI Distribution registry services. Each entry mounts the OCI
+    /// Distribution API (pull and push) on this listener, served directly
+    /// from the referenced stores — blobs stored once under the canonical
+    /// digest function, sha256 wire names answered via the alias index.
+    /// The spec fixes the API root at `/v2/`, so configure at most one
+    /// instance per listener with the default mount.
+    #[serde(
+        default,
+        deserialize_with = "super::backcompat::opt_vec_with_instance_name"
+    )]
+    pub oci_registry: Option<Vec<WithInstanceName<OciRegistryServiceConfig>>>,
 
     /// CAS witness (caching HTTP forward proxy, TLS-intercepting) that stores
     /// fetched bodies in a `NativeLink` CAS. A build client points `HTTPS_PROXY`/
@@ -2062,6 +2266,26 @@ impl CasConfig {
                     &mut checker.problems,
                 );
             }
+            for entry in services.oci_registry.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].cas_store"),
+                    &entry.cas_store,
+                );
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].index_store"),
+                    &entry.index_store,
+                );
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].ref_store"),
+                    &entry.ref_store,
+                );
+                validate_oci_registry_fields(
+                    &format!("{prefix}.oci_registry[{name}]"),
+                    &entry.config,
+                    &mut checker.problems,
+                );
+            }
             if let Some(worker_api) = &services.worker_api {
                 checker.scheduler(
                     &format!("{prefix}.worker_api.scheduler"),
@@ -2210,6 +2434,57 @@ fn validate_nix_cache_fields(path: &str, config: &NixCacheConfig, problems: &mut
         problems.push(format!(
             "{path}.max_concurrent_transcodes must be >= 1 (0 is coerced to 1 \
              at boot, so it does not mean unlimited)"
+        ));
+    }
+}
+
+/// Validates the scalar field values of a single [`OciRegistryServiceConfig`]
+/// instance, pushing a human-readable message onto `problems` for each
+/// violation — the [`validate_nix_cache_fields`] discipline applied to the
+/// OCI registry facade, so `nativelink --check` catches offline:
+///
+/// * `digest_function` must be `"BLAKE3"` or `"SHA256"` (the service
+///   rejects anything else at boot);
+/// * concurrency ceilings must be `>= 1` (the service coerces `0` to `1`
+///   via `.max(1)`, so `0` does not mean "unlimited");
+/// * `max_manifest_size_bytes` must not exceed `max_blob_size_bytes` —
+///   manifests are blobs too, and an inverted pair means the operator's
+///   manifest cap silently never binds.
+fn validate_oci_registry_fields(
+    path: &str,
+    config: &OciRegistryServiceConfig,
+    problems: &mut Vec<String>,
+) {
+    let digest_function = config.digest_function.to_uppercase();
+    if digest_function != "BLAKE3" && digest_function != "SHA256" {
+        problems.push(format!(
+            "{path}.digest_function must be \"BLAKE3\" or \"SHA256\", got '{}'",
+            config.digest_function
+        ));
+    }
+    if config.max_concurrent_blob_streams == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_blob_streams must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_open_upload_sessions == 0 {
+        problems.push(format!(
+            "{path}.max_open_upload_sessions must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_manifest_size_bytes == 0 {
+        problems.push(format!(
+            "{path}.max_manifest_size_bytes must be >= 1 (a zero cap rejects \
+             every manifest)"
+        ));
+    }
+    if config.max_manifest_size_bytes > config.max_blob_size_bytes {
+        problems.push(format!(
+            "{path}.max_manifest_size_bytes ({}) exceeds max_blob_size_bytes \
+             ({}); manifests are blobs and the smaller cap always binds",
+            config.max_manifest_size_bytes, config.max_blob_size_bytes
         ));
     }
 }
