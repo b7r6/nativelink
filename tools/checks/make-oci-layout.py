@@ -33,6 +33,20 @@ def main() -> None:
         info.size = len(payload)
         info.mtime = 0
         tar.addfile(info, io.BytesIO(payload))
+        # Toolchain shape: an executable in bin/ and a nested tree, so the
+        # projection differential exercises is_executable bits and
+        # directory recursion, not just one flat file.
+        tool = b"#!/bin/sh\necho toolchain\n"
+        info = tarfile.TarInfo("bin/tool")
+        info.size = len(tool)
+        info.mtime = 0
+        info.mode = 0o755
+        tar.addfile(info, io.BytesIO(tool))
+        lib = b"not really an archive\n"
+        info = tarfile.TarInfo("lib/deep/nested/libtool.a")
+        info.size = len(lib)
+        info.mtime = 0
+        tar.addfile(info, io.BytesIO(lib))
     layer_tar = tario.getvalue()
     layer_gz = gzip.compress(layer_tar, mtime=0)
     diff_id = "sha256:" + hashlib.sha256(layer_tar).hexdigest()

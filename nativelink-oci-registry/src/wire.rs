@@ -334,7 +334,7 @@ pub fn parse_manifest(body: &[u8]) -> Result<ParsedManifest, Error> {
     let annotations_json = value
         .get("annotations")
         .filter(|a| a.is_object())
-        .map(std::string::ToString::to_string);
+        .map(ToString::to_string);
     Ok(ParsedManifest {
         media_type,
         blob_references,

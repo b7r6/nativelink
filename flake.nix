@@ -675,6 +675,13 @@
             oci-conformance = pkgs.callPackage ./tools/checks/oci-conformance.nix {
               inherit nativelink;
             };
+            # The projection differential: FetchDirectory via the network
+            # client and via the oci://self local short-circuit must agree
+            # on the REAPI root digest for the same pushed image (design 3,
+            # oracle 3).
+            oci-projection-differential = pkgs.callPackage ./tools/checks/oci-projection-differential.nix {
+              inherit nativelink;
+            };
           };
         pre-commit.settings = {
           hooks = import ./tools/pre-commit-hooks.nix {

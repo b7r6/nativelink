@@ -333,6 +333,36 @@ pub struct OciFetchConfig {
     /// in-fleet zot) and to supply its credentials and TLS trust.
     #[serde(default)]
     pub registries: Vec<OciRegistryConfig>,
+
+    /// Local `oci_registry` short-circuit for the reserved `oci://self/...`
+    /// URI form. When set, a `FetchDirectory` of `oci://self/<name>:<tag>`
+    /// (or `@sha256:<digest>`) skips the network client entirely: the
+    /// manifest resolves through these stores' tag/alias records and layer
+    /// bytes are read from the blob store — the projection becomes a graph
+    /// walk over blobs already resident. Point the three stores at the SAME
+    /// stores the colocated `oci_registry` service instance uses.
+    #[serde(default)]
+    pub self_registry: Option<OciSelfRegistryConfig>,
+}
+
+/// Store references for the `oci://self/...` local-projection short-circuit
+/// (see [`OciFetchConfig::self_registry`]). These must reference the same
+/// stores as the colocated `oci_registry` service instance.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciSelfRegistryConfig {
+    /// The `oci_registry` instance's blob store (its `cas_store`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub blob_store: StoreRefName,
+
+    /// The `oci_registry` instance's digest-alias index store.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub index_store: StoreRefName,
+
+    /// The `oci_registry` instance's tag ref store.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ref_store: StoreRefName,
 }
 
 const fn default_true() -> bool {
@@ -2232,6 +2262,22 @@ impl CasConfig {
                     && let Some(cas_store) = &oci.cas_store
                 {
                     checker.store(&format!("{prefix}.fetch[{name}].oci.cas_store"), cas_store);
+                }
+                if let Some(oci) = &entry.oci
+                    && let Some(self_registry) = &oci.self_registry
+                {
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.blob_store"),
+                        &self_registry.blob_store,
+                    );
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.index_store"),
+                        &self_registry.index_store,
+                    );
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.ref_store"),
+                        &self_registry.ref_store,
+                    );
                 }
             }
             for entry in services.push.iter().flatten() {
