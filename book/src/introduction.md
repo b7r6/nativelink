@@ -1,5 +1,11 @@
 # Introduction
 
+> This book is the substrate-operator deep dive for the NativeLink fork.
+> The straylight build's front-door book — quickstart, concepts, rule
+> reference, fleet ops — lives at
+> [`straylight-mdbook`](https://git.s4.gl/straylight/straylight-mdbook);
+> its "The CAS is the spine" chapter is shared with this book's Part I.
+
 Content addressing is the best idea in build infrastructure, and almost nobody takes it all the way.
 
 The pitch is simple: name everything by the hash of its bytes, and identity stops being a guess. A source file, a compiler output, an action result — if the hash matches, the data is correct, and no clock, path, tag, or promise gets a vote. Build systems have understood this for a decade. What they keep missing is how far it goes. Your source tree is content. Your build outputs are content. Your *toolchain* is content. A Nix closure is content. The thing your registry calls an "image" is content wearing a costume. Push the idea to its conclusion and one truth falls out: there should be one content-addressed store under all of it, and everything else — execution, toolchain distribution, binary caching — should be a protocol that speaks to that store.
