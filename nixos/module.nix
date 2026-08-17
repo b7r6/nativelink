@@ -1017,6 +1017,18 @@ in
 
         serviceConfig = {
           Type = "oneshot";
+          ExecStartPre = pkgs.writeShellScript "wait-for-nativelink-nix-cache" ''
+            for attempt in $(seq 1 60); do
+              if ${lib.getExe pkgs.curl} --fail --silent --show-error \
+                "http://127.0.0.1:${nixCachePort}/nix/${cfg.nixCache.instanceName}/nix-cache-info" \
+                >/dev/null; then
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "NativeLink nix_cache did not become ready within 60 seconds" >&2
+            exit 1
+          '';
           ExecStart = lib.escapeShellArgs (
             [
               "${nixCacheClientPkg}/bin/nl-nix"
