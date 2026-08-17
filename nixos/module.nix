@@ -705,6 +705,17 @@ in
         '';
       };
 
+      reconcileInterval = lib.mkOption {
+        type = lib.types.str;
+        default = "1h";
+
+        description = ''
+          systemd interval for a complete Nix DB → cache reconciliation. This
+          heals paths that predate the event watcher, missed events, malformed
+          historical narinfos, and all outputs of multi-output derivations.
+        '';
+      };
+
       upstreamCaches = lib.mkOption {
         type = lib.types.listOf (
           lib.types.submodule {
@@ -996,6 +1007,43 @@ in
           # to read the store, db.sqlite, and the signing key; grant only that cap.
           AmbientCapabilities = [ "CAP_SYS_ADMIN" ];
           CapabilityBoundingSet = [ "CAP_SYS_ADMIN" ];
+        };
+      };
+
+      systemd.services.nativelink-nix-cache-reconcile = lib.mkIf cfg.nixCache.watchStore {
+        description = "Reconcile every valid local Nix path into NativeLink nix_cache";
+        after = [ "nativelink-nix-cache.service" ];
+        requires = [ "nativelink-nix-cache.service" ];
+
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.escapeShellArgs (
+            [
+              "${nixCacheClientPkg}/bin/nl-nix"
+              "--to"
+              "http://127.0.0.1:${nixCachePort}/nix/${cfg.nixCache.instanceName}"
+              "--store"
+              cfg.nixCache.storeDir
+              "--jobs"
+              (toString cfg.nixCache.watchConcurrency)
+            ]
+            ++ lib.optionals (cfg.nixCache.signingKeyFile != null) [
+              "--signing-key"
+              cfg.nixCache.signingKeyFile
+            ]
+            ++ [ "reconcile" ]
+          );
+        };
+      };
+
+      systemd.timers.nativelink-nix-cache-reconcile = lib.mkIf cfg.nixCache.watchStore {
+        description = "Periodic NativeLink Nix cache completeness gate";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2m";
+          OnUnitActiveSec = cfg.nixCache.reconcileInterval;
+          Persistent = true;
+          Unit = "nativelink-nix-cache-reconcile.service";
         };
       };
     })

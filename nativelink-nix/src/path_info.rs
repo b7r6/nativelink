@@ -301,6 +301,17 @@ impl NixPathInfo {
             validate_reference(reference)
                 .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
         }
+        if !self.deriver.is_empty() {
+            validate_reference(&self.deriver)
+                .err_tip(|| format!("invalid deriver in NixPathInfo for '{}'", self.store_path))?;
+            if !self.deriver.ends_with(".drv") {
+                return Err(make_input_err!(
+                    "deriver '{}' in NixPathInfo for '{}' is not a .drv basename",
+                    self.deriver,
+                    self.store_path
+                ));
+            }
+        }
         for sig in &self.signatures {
             validate_signature(sig)
                 .err_tip(|| format!("in NixPathInfo for '{}'", self.store_path))?;
@@ -818,7 +829,7 @@ mod tests {
         // Every mutation that makes `to_nar_info` fail must ALSO make
         // `encode_record` fail, so an unrenderable record can never be
         // persisted (the PUT/GET validation-asymmetry fix).
-        let cases: [FileFieldViolation; 7] = [
+        let cases: [FileFieldViolation; 9] = [
             (
                 // A zero nar_size is unrenderable (NarSize: 0 is corrupt to
                 // Nix), so encode_record must reject it too.
@@ -856,6 +867,17 @@ mod tests {
                 // NUL byte in the store-path name.
                 |i| i.store_path = "/nix/store/bvkx110ylicifcgl0xiid5f100hx3ar7-na\0me".to_string(),
                 "store path with NUL in name",
+            ),
+            (
+                |i| {
+                    i.deriver =
+                        "/nix/store/bvkx110ylicifcgl0xiid5f100hx3ar7-builder.drv".to_string();
+                },
+                "full-path deriver",
+            ),
+            (
+                |i| i.deriver = "bvkx110ylicifcgl0xiid5f100hx3ar7-builder".to_string(),
+                "deriver without .drv suffix",
             ),
         ];
         for (mutate, what) in cases {
@@ -1301,7 +1323,8 @@ mod proptests {
             // fits a Digest's i64 size_bytes and so still encodes.
             1u64..=0x7FFF_FFFF_FFFF_FFFF,
             proptest::collection::vec(reference(), 0..6),
-            proptest::option::of(reference()), // deriver (drv basename or absent)
+            proptest::option::of(reference().prop_map(|d| format!("{d}.drv"))),
+            // deriver (.drv basename or absent)
             proptest::option::of("[!-~]{1,20}"), // system
             proptest::collection::vec(signature(), 0..4),
             proptest::option::of("[!-~]{1,40}"), // ca

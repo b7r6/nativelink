@@ -82,6 +82,14 @@ by a sweep of the fork crates. `[session]` — surfaced while operating the fork
       **with references** and assert basename `References`/`Deriver`; pull +
       verify; `nl-watch-store` end-to-end against a live `nix_cache`; DB liveness
       under concurrent `nix-daemon` commits. `nativelink-nix-client/src/`. `[code]`
+- [x] **Reconcile the event watcher against Nix's source of truth.** `nl-nix
+      reconcile` scans every `ValidPaths` row with bounded concurrency; the
+      NixOS module runs it after boot and hourly. Validated narinfo dedup heals
+      malformed historical records, and row enumeration covers all outputs of
+      multi-output derivations. `[code]` `[session]`
+- [x] **Reject full-path `Deriver` metadata.** PUT and GET share strict
+      store-basename validation; a regression test falsifies the exact
+      `illegal base-32 character '/'` specimen. `[code]` `[session]`
 - [ ] **Tests for OCI `registry.rs` / `lib.rs`** — the network + entrypoint
       surface is untested (`oci_client.rs`/`projection.rs` do have tests). `[code]`
 - [ ] **Exercise the slow-store-write-failure path.** Does `cas_witness` still

@@ -90,8 +90,11 @@ enum Command {
         #[arg(long, env = "NL_PUSH_OUTPUTS", default_value = "packages devShells")]
         outputs: String,
     },
+    /// Reconcile every valid path in the local Nix database into the cache.
+    /// Covers paths predating the watcher and every multi-output result.
+    Reconcile,
     /// Check whether store paths — or, with `--recursive`, their whole
-    /// closures — are present in the cache, without transferring anything.
+    /// closures — have usable metadata in the cache, without transferring NARs.
     /// Accepts full store paths or bare 32-char hashes. Prints `present`/`absent`
     /// per path and exits non-zero if any are absent, so it doubles as a shell
     /// predicate: `nl-nix --to … has "$P" && echo cached`.
@@ -193,6 +196,12 @@ async fn run(cli: Cli) -> Result<(), Error> {
                 .collect::<Result<Vec<_>, _>>()?;
             let ordered = closure(&store, roots)?;
             push_all(&client, &store, ordered, cli.jobs).await
+        }
+        Command::Reconcile => {
+            let store = Arc::new(NixStore::open(&cli.store)?);
+            let paths = store.all_valid_paths()?;
+            eprintln!("nl-nix: reconciling {} valid store paths", paths.len());
+            push_all(&client, &store, paths, cli.jobs).await
         }
     }
 }
@@ -376,8 +385,9 @@ async fn push_all(
 }
 
 /// Probes the cache for each input, closure-expanded when `--recursive`, and
-/// reports `present`/`absent` per path (unless `quiet`). A `HEAD {hash}.narinfo`
-/// per path — the same dedup probe `push` uses — so it transfers no NAR data.
+/// reports `present`/`absent` per path (unless `quiet`). A validated
+/// `GET {hash}.narinfo` per path — the same dedup probe `push` uses — transfers
+/// metadata but no NAR data.
 /// Exits non-zero if any probed path is absent, making it a shell predicate.
 async fn has_all(
     client: &Arc<CacheClient>,

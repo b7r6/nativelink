@@ -50,7 +50,7 @@ pub struct CacheConfig {
     pub compression_level: i32,
     /// Maximum concurrent path pushes/pulls.
     pub concurrency: usize,
-    /// Skip a push when the cache already has the path (HEAD `.narinfo`).
+    /// Skip a push when the cache already has a structurally valid `.narinfo`.
     pub dedup: bool,
 }
 

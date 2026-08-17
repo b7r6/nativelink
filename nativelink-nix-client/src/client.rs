@@ -18,7 +18,7 @@
 //! A push serializes the store path to a NAR ([`crate::nar::dump_path`]), tees
 //! it through a SHA-256 hasher for the `NarHash`, zstd-compresses it (learning
 //! the `FileHash` of the compressed bytes and spooling them to a temp file),
-//! then — after a `HEAD {hash}.narinfo` dedup probe — `PUT`s
+//! then — after a validated `GET {hash}.narinfo` dedup probe — `PUT`s
 //! `nar/{FileHash}.nar.zst` followed by the signed `{hash}.narinfo`. A pull is
 //! the inverse: fetch + verify the narinfo signature, download + decompress the
 //! NAR, and restore it, checking the bytes against the signed `NarHash`.
@@ -34,6 +34,7 @@ use async_compression::Level;
 use async_compression::tokio::write::ZstdEncoder;
 use futures::StreamExt as _;
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
+use nativelink_nix::path_info::NixPathInfo;
 use nativelink_nix::signing::{NixPublicKey, NixSigningKey};
 use nativelink_nix::{nar_url, narinfo};
 use sha2::{Digest as _, Sha256};
@@ -55,7 +56,7 @@ pub enum PushOutcome {
         /// Compressed bytes sent on the wire.
         wire_bytes: u64,
     },
-    /// The cache already had the path (dedup `HEAD` hit); nothing sent.
+    /// The cache already had a structurally valid narinfo; nothing sent.
     AlreadyPresent,
 }
 
@@ -127,15 +128,24 @@ impl CacheClient {
         resp.text().await.err_tip(|| "reading nix-cache-info body")
     }
 
-    /// `HEAD /{hash}.narinfo` — whether the cache already has this path.
+    /// Whether the cache has a structurally valid narinfo for this path.
+    /// A poisoned historical record must be treated as absent so a subsequent
+    /// push overwrites it instead of deduplicating against unusable metadata.
     pub async fn has_path(&self, hash: &str) -> Result<bool, Error> {
         let url = format!("{}/{hash}.narinfo", self.base_url);
         let resp = self
-            .authed(self.http.head(&url))
+            .authed(self.http.get(&url))
             .send()
             .await
-            .err_tip(|| format!("HEAD {url}"))?;
-        Ok(resp.status().is_success())
+            .err_tip(|| format!("GET {url}"))?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        if !resp.status().is_success() {
+            return Ok(false);
+        }
+        let text = resp.text().await.err_tip(|| format!("reading {url}"))?;
+        Ok(narinfo_is_usable(&text))
     }
 
     /// Pushes one store path: dedup probe, then dump + hash + compress + spool +
@@ -360,6 +370,36 @@ impl CacheClient {
             ));
         }
         Ok(nar_size)
+    }
+}
+
+fn narinfo_is_usable(text: &str) -> bool {
+    let Ok(info) = narinfo::parse(text) else {
+        return false;
+    };
+    NixPathInfo::from_nar_info(&info).encode_record().is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::narinfo_is_usable;
+
+    const BASE: &str = concat!(
+        "StorePath: /nix/store/00000000000000000000000000000000-output\n",
+        "URL: nar/output.nar\n",
+        "Compression: none\n",
+        "NarHash: sha256:0000000000000000000000000000000000000000000000000000\n",
+        "NarSize: 1\n",
+    );
+
+    #[test]
+    fn dedup_rejects_poisoned_full_path_deriver() {
+        assert!(!narinfo_is_usable(&format!(
+            "{BASE}Deriver: /nix/store/11111111111111111111111111111111-builder.drv\n"
+        )));
+        assert!(narinfo_is_usable(&format!(
+            "{BASE}Deriver: 11111111111111111111111111111111-builder.drv\n"
+        )));
     }
 }
 

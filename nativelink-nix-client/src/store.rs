@@ -276,7 +276,7 @@ impl NixStore {
     pub fn all_valid_paths(&self) -> Result<Vec<StorePath>, Error> {
         let mut stmt = self
             .db
-            .prepare("SELECT path FROM ValidPaths")
+            .prepare("SELECT path FROM ValidPaths ORDER BY path")
             .map_err(|e| make_err!(Code::Internal, "preparing all-valid-paths query: {e}"))?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
@@ -572,6 +572,28 @@ mod tests {
             store_basename("/nix/store", "elsewhere".to_string()),
             "elsewhere"
         );
+    }
+
+    #[test]
+    fn reconciliation_enumerates_every_multi_output_row() {
+        let db = Connection::open_in_memory().expect("in-memory Nix DB");
+        db.execute("CREATE TABLE ValidPaths (path TEXT NOT NULL)", [])
+            .expect("schema");
+        for path in [
+            "/nix/store/00000000000000000000000000000000-package",
+            "/nix/store/11111111111111111111111111111111-package-dev",
+        ] {
+            db.execute("INSERT INTO ValidPaths(path) VALUES (?1)", [path])
+                .expect("valid path row");
+        }
+        let store = NixStore {
+            store_dir: "/nix/store".to_string(),
+            db,
+        };
+        let paths = store.all_valid_paths().expect("reconciliation snapshot");
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0].name(), "package");
+        assert_eq!(paths[1].name(), "package-dev");
     }
 
     #[test]

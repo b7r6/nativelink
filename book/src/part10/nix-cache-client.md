@@ -13,7 +13,7 @@ One design decision runs through both: **pure Rust, no `nix` subprocess.** The c
 
 | Binary | Role | Privilege |
 |---|---|---|
-| `nl-nix` | On-demand `push` / `pull` / `info` against a cache URL | none |
+| `nl-nix` | On-demand `push` / `pull` / `reconcile` / `info` against a cache URL | none |
 | `nl-watch-store` | Long-running daemon: auto-push on store commit | `CAP_SYS_ADMIN` for `fanotify` (or `--inotify`) |
 
 Both take `--to <URL>` (or `NL_NIX_CACHE`) and `--token <TOKEN>` (or `NL_NIX_TOKEN`), read the store named by `--store` (default `/nix/store`), and sign pushed narinfo with any number of `--signing-key <FILE>` Ed25519 secret keys.
@@ -34,11 +34,11 @@ nl-nix --to http://cache.example.com:50071 info
 # Error: GET http://cache.example.com:50071/nix-cache-info returned 404 Not Found
 ```
 
-Every request the client makes — the `/nix-cache-info` probe, the `HEAD`/`PUT` on `{hash}.narinfo`, the `GET`/`PUT` on `nar/<name>` — is relative to that base, so a missing prefix fails uniformly rather than subtly.
+Every request the client makes — the `/nix-cache-info` probe, the `GET`/`PUT` on `{hash}.narinfo`, the `GET`/`PUT` on `nar/<name>` — is relative to that base, so a missing prefix fails uniformly rather than subtly.
 
-## `nl-nix`: push, pull, info
+## `nl-nix`: push, pull, info, reconcile
 
-Global options precede the subcommand (`nl-nix [OPTIONS] --to <URL> <push|pull|info>`):
+Global options precede the subcommand (`nl-nix [OPTIONS] --to <URL> <push|pull|info|reconcile>`):
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -54,7 +54,7 @@ Global options precede the subcommand (`nl-nix [OPTIONS] --to <URL> <push|pull|i
 
 `nl-nix push <paths…> [--recursive]` uploads each path in one streaming pass co-designed with the facade's ingest:
 
-1. **Dedup probe.** A `HEAD {hash}.narinfo` skips a path the cache already has — reported as `skipped (present)`. This is always on.
+1. **Validated dedup probe.** A `GET {hash}.narinfo` skips a path only when the record parses and passes the same structural checks as admission — reported as `skipped (present)`. A malformed historical record is treated as absent and overwritten.
 2. **Stream once, hash twice.** The path is serialized to a NAR and the bytes are teed through SHA-256 for the `NarHash` while feeding a zstd encoder; the compressed bytes are teed through a second SHA-256 for the `FileHash` and spooled to a temp file. Dump, NarHash, compression, and FileHash all happen in a single pass — the NAR is never materialized uncompressed on disk.
 3. **`PUT nar/{FileHash}.nar.zst`** (or `nar/{nixbase32(NarHash)}-{NarSize}.nar` with `--no-compress`), then a **signed `PUT {hash}.narinfo`** describing it. The narinfo's fingerprint covers the store path, `NarHash`, `NarSize`, and references — never the URL or compression — so the server can re-render it around its canonical NAR while keeping the signatures ([Protocol Discipline](./nix-substituter.md#protocol-discipline)).
 
@@ -85,6 +85,18 @@ nl-nix --to http://cache.example.com:50071/nix/main \
 ### info
 
 `nl-nix info` prints the cache's `/nix-cache-info` verbatim — the fastest way to confirm the base URL, token, and mount prefix are right before a large push.
+
+### reconcile
+
+`nl-nix reconcile` takes a stable, path-sorted snapshot of every row in the
+local Nix `ValidPaths` database and pushes it with bounded concurrency. Unlike
+the event watcher, this includes paths committed before daemon startup, missed
+events, and every output of a multi-output derivation. The validated dedup probe
+also makes reconciliation self-heal poisoned historical narinfos.
+
+The NixOS module runs reconciliation two minutes after boot and hourly
+thereafter while `nixCache.watchStore` is enabled. `nixCache.reconcileInterval`
+changes the timer cadence.
 
 ## `nl-watch-store`: the auto-push daemon
 

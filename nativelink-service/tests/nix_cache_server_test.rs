@@ -1710,6 +1710,31 @@ async fn narinfo_with_malformed_reference_is_rejected_at_put() -> Result<(), Err
     Ok(())
 }
 
+/// A full store path in `Deriver` is invalid binary-cache metadata. Nix parses
+/// that slash as part of a store hash and reports "illegal base-32 character
+/// '/'"; reject it at admission so it can never poison substitution.
+#[nativelink_test]
+async fn narinfo_with_full_path_deriver_is_rejected_at_put() -> Result<(), Error> {
+    let fixture = CacheFixture::new("malformed-deriver");
+    let (mount, router) = fixture.server("main", false);
+    let payload = b"nar payload for malformed deriver";
+    let store_path = test_store_path("malformed-deriver-seed", "app-1.0");
+    let mut info = narinfo_for_payload(
+        &store_path,
+        format!("nar/{}", client_nar_basename(payload)),
+        payload,
+    );
+    info.deriver = Some("/nix/store/00000000000000000000000000000000-builder.drv".to_string());
+    put_nar(&router, &mount, payload).await;
+
+    assert_eq!(
+        put_narinfo(&router, &mount, &info).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(fixture.path_info_memory.len_for_test(), 0);
+    Ok(())
+}
+
 /// A narinfo whose `StorePath` name carries a NUL byte is rejected at PUT
 /// with `400` and never stored.
 #[nativelink_test]
