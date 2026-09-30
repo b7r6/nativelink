@@ -214,6 +214,23 @@ impl AwaitedAction {
         Arc::make_mut(&mut self.state).client_operation_id = client_operation_id;
     }
 
+    /// Public accessor for the worker id, needed by out-of-crate replicated
+    /// `AwaitedActionDb` backends (e.g. the raft spike) to build log commands.
+    pub fn worker_id_public(&self) -> Option<&WorkerId> {
+        self.worker_id.as_ref()
+    }
+
+    /// Public form of `set_client_operation_id` for out-of-crate subscribers
+    /// that must stamp the client operation id onto a borrowed action.
+    pub fn set_client_operation_id_public(&mut self, client_operation_id: OperationId) {
+        self.set_client_operation_id(client_operation_id);
+    }
+
+    /// Public form of `worker_keep_alive` for out-of-crate replicated backends.
+    pub fn worker_keep_alive_public(&mut self, now: SystemTime) {
+        self.worker_keep_alive(now);
+    }
+
     /// Sets the worker id that is currently processing this action.
     pub fn set_worker_id(&mut self, new_maybe_worker_id: Option<WorkerId>, now: SystemTime) {
         if self.worker_id != new_maybe_worker_id {

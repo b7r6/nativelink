@@ -1,0 +1,35 @@
+#:schema ../tools/cargo-with-detailed-deps.json
+lints.workspace = true
+
+[package]
+edition = "2024"
+name = "nativelink-raft"
+version = "1.7.2"
+
+[dependencies]
+nativelink-error = { path = "../nativelink-error" }
+nativelink-metric = { path = "../nativelink-metric" }
+nativelink-scheduler = { path = "../nativelink-scheduler" }
+nativelink-util = { path = "../nativelink-util" }
+
+async-trait = { version = "0.1.88", default-features = false }
+futures = { version = "0.3.31", default-features = false }
+openraft = { version = "0.9.25", default-features = false, features = [
+  "serde",
+  "storage-v2",
+] }
+serde = { version = "1.0.219", features = ["rc", "derive"], default-features = false }
+serde_json = { version = "1.0.140", default-features = false }
+tokio = { version = "1.52.2", features = [
+  "rt-multi-thread",
+  "sync",
+], default-features = false }
+tracing = { version = "0.1.41", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.52.2", features = [
+  "macros",
+  "rt-multi-thread",
+  "test-util",
+  "time",
+], default-features = false }
