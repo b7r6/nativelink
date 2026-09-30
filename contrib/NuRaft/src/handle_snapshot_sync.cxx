@@ -1,0 +1,914 @@
+/************************************************************************
+Modifications Copyright 2017-2019 eBay Inc.
+Author/Developer(s): Jung-Sang Ahn
+
+Original Copyright:
+See URL: https://github.com/datatechnology/cornerstone
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+**************************************************************************/
+
+#include "raft_server.hxx"
+
+#include "buffer_serializer.hxx"
+#include "cluster_config.hxx"
+#include "context.hxx"
+#include "error_code.hxx"
+#include "event_awaiter.hxx"
+#include "exit_handler.hxx"
+#include "peer.hxx"
+#include "snapshot.hxx"
+#include "snapshot_sync_ctx.hxx"
+#include "state_machine.hxx"
+#include "state_mgr.hxx"
+#include "tracer.hxx"
+
+#include <algorithm>
+#include <cassert>
+#include <limits>
+#include <sstream>
+
+namespace nuraft {
+
+/**
+ * Completion context for logical-object snapshot installs.
+ *
+ * Legacy payloads are a one-byte `LEGACY_NO_INDEX` marker. New payloads store the installed
+ * `last_log_idx` after a nonzero tag. The fixed prefix permits additive format extensions and
+ * lets leaders process late acknowledgements after their `snapshot_sync_ctx` has expired.
+ */
+struct snp_install_done_ctx {
+    enum format_tag : uint8_t {
+        LEGACY_NO_INDEX = 0,
+        WITH_SNAPSHOT_IDX = 1,
+    };
+
+    static ptr<buffer> serialize(ulong last_log_idx) {
+        ptr<buffer> result = buffer::alloc(sizeof(uint8_t) + sizeof(uint64_t));
+        buffer_serializer bs(*result);
+        bs.put_u8(WITH_SNAPSHOT_IDX);
+        bs.put_u64(last_log_idx);
+        result->pos(0);
+        return result;
+    }
+
+    /// Parses a terminal context; sets the index output only when present.
+    static bool parse(buffer& buf,
+                      ulong& last_log_idx_out,
+                      bool& has_last_log_idx_out)
+    {
+        has_last_log_idx_out = false;
+
+        if (buf.size() == sizeof(uint8_t)) {
+            // Only the legacy marker may be this short.
+            buffer_serializer bs(buf);
+            return bs.get_u8() == LEGACY_NO_INDEX;
+        }
+
+        if (buf.size() < sizeof(uint8_t) + sizeof(uint64_t)) return false;
+
+        buffer_serializer bs(buf);
+        // The legacy tag cannot carry an index.
+        if (bs.get_u8() == LEGACY_NO_INDEX) return false;
+
+        last_log_idx_out = bs.get_u64();
+        has_last_log_idx_out = true;
+        return true;
+    }
+};
+
+int32 raft_server::get_snapshot_sync_block_size() const {
+    int32 block_size = ctx_->get_params()->snapshot_block_size_;
+    return block_size == 0 ? default_snapshot_sync_block_size : block_size;
+}
+
+bool raft_server::check_snapshot_timeout(ptr<peer> pp) {
+    ptr<snapshot_sync_ctx> sync_ctx = pp->get_snapshot_sync_ctx();
+    if (!sync_ctx) return false;
+
+    if ( sync_ctx->get_timer().timeout() ) {
+        p_wn("snapshot install task for peer %d timed out: %" PRIu64 " ms, "
+             "reset snapshot sync context %p",
+             pp->get_id(), sync_ctx->get_timer().get_ms(), sync_ctx.get());
+        clear_snapshot_sync_ctx(*pp);
+        return true;
+    }
+    return false;
+}
+
+void raft_server::destroy_user_snp_ctx(ptr<snapshot_sync_ctx> sync_ctx) {
+    if (!sync_ctx) return;
+    sync_ctx->close_user_snp_ctx(*state_machine_);
+}
+
+void raft_server::clear_snapshot_sync_ctx(peer& pp) {
+    ptr<snapshot_sync_ctx> snp_ctx = pp.get_snapshot_sync_ctx();
+    if (snp_ctx) {
+        snp_ctx->finish_async_snapshot_transfer();
+        destroy_user_snp_ctx(snp_ctx);
+        p_tr("destroy snapshot sync ctx %p", snp_ctx.get());
+    }
+    pp.reset_cnt_backward_log_probe();
+    pp.set_snapshot_in_sync(nullptr);
+}
+
+ptr<req_msg> raft_server::create_sync_snapshot_req(ptr<peer>& pp,
+                                                   ulong last_log_idx,
+                                                   ulong term,
+                                                   ulong commit_idx,
+                                                   bool& succeeded_out) {
+    succeeded_out = false;
+    peer& p = *pp;
+    ptr<raft_params> params = ctx_->get_params();
+    std::unique_lock<std::mutex> guard(p.get_lock());
+    p.reset_cnt_backward_log_probe();
+    ptr<snapshot_sync_ctx> sync_ctx = p.get_snapshot_sync_ctx();
+    ptr<snapshot> snp = nullptr;
+    ulong prev_sync_snp_log_idx = 0;
+    if (sync_ctx) {
+        snp = sync_ctx->get_snapshot();
+        p_db( "previous sync_ctx exists %p, offset %" PRIu64 ", snp idx %" PRIu64,
+              sync_ctx.get(),
+              sync_ctx->get_offset(),
+              snp->get_last_log_idx() );
+        prev_sync_snp_log_idx = snp->get_last_log_idx();
+
+        if (sync_ctx->get_timer().timeout()) {
+            p_in("previous sync_ctx %p timed out, reset it", sync_ctx.get());
+            clear_snapshot_sync_ctx(p);
+            sync_ctx.reset();
+            snp.reset();
+        }
+    }
+
+    const bool async_snapshot_transfer_started =
+        params->use_bg_thread_for_snapshot_io_ &&
+        sync_ctx &&
+        sync_ctx->is_async_snapshot_transfer_started();
+
+    // Modified by Jung-Sang Ahn, May 15 2018:
+    //   Even though new snapshot has been created,
+    //   keep using existing snapshot, as new snapshot will reset
+    //   previous catching-up.
+    //
+    // if ( !snp /*||
+    //      ( last_snapshot_ &&
+    //        last_snapshot_->get_last_log_idx() > snp->get_last_log_idx() )*/ ) {
+    if ( !snp ||
+         ( sync_ctx &&
+           sync_ctx->get_offset() == 0 &&
+           !async_snapshot_transfer_started ) ) {
+        snp = get_last_snapshot();
+        if ( snp == nilptr ) {
+            static timer_helper msg_timer(5000000);
+            int log_lv = msg_timer.timeout_and_reset() ? L_WARN : L_TRACE;
+            p_lv( log_lv,
+                  "snapshot is not available for peer %d, will retry",
+                  p.get_id() );
+            clear_snapshot_sync_ctx(p);
+            return ptr<req_msg>();
+        }
+        if ( last_log_idx > snp->get_last_log_idx() ) {
+            p_wn( "peer %d's last log idx %" PRIu64 " is ahead of "
+                  "snapshot %" PRIu64 ", clearing snapshot sync state",
+                  p.get_id(), last_log_idx, snp->get_last_log_idx() );
+            // Peer has advanced past this snapshot — it doesn't need it.
+            // Clear sync state. If peer still needs catching up, the next
+            // call to request_append_entries will re-evaluate using the
+            // latest snapshot.
+            clear_snapshot_sync_ctx(p);
+            pp->set_snapshot_sync_is_needed(false);
+            return ptr<req_msg>();
+        }
+
+        if ( snp->get_type() == snapshot::raw_binary &&
+             snp->size() < 1L ) {
+            // LCOV_EXCL_START
+            p_er("invalid snapshot, this usually means a bug from state "
+                 "machine implementation, stop the system to prevent "
+                 "further errors");
+            ctx_->state_mgr_->system_exit(raft_err::N17_empty_snapshot);
+            _sys_exit(-1);
+            return ptr<req_msg>();
+            // LCOV_EXCL_STOP
+        }
+
+        if (snp->get_last_log_idx() != prev_sync_snp_log_idx) {
+            p_in( "trying to sync snapshot with last index %" PRIu64 " to peer %d, "
+                  "its last log idx %" PRIu64 ", my start index %" PRIu64
+                  ", my last log idx %" PRIu64,
+                  snp->get_last_log_idx(), p.get_id(), last_log_idx,
+                  log_store_->start_index(), log_store_->next_slot() - 1 );
+        }
+        if (sync_ctx) {
+            // If previous user context exists, should free it
+            // as it causes memory leak.
+            destroy_user_snp_ctx(sync_ctx);
+        }
+
+        p.set_snapshot_in_sync(snp, ulong(get_snapshot_sync_ctx_timeout()));
+    }
+
+    if (params->use_bg_thread_for_snapshot_io_) {
+        // If async snapshot IO, push the snapshot read request to the manager
+        // and immediately return here.
+        sync_ctx = p.get_snapshot_sync_ctx();
+        if (!sync_ctx)
+        {
+            return nullptr;
+        }
+
+        snp = sync_ctx->get_snapshot();
+        if (!snp)
+        {
+            return nullptr;
+        }
+
+        if (!sync_ctx->begin_async_snapshot_request())
+        {
+            succeeded_out = true;
+            snapshot_io_mgr::instance().invoke();
+            return nullptr;
+        }
+
+        if (!snapshot_io_mgr::instance().push( this->shared_from_this(),
+                                               pp,
+                                               ( (pp == srv_to_join_)
+                                                 ? ex_resp_handler_
+                                                 : resp_handler_ ) ))
+        {
+            clear_snapshot_sync_ctx(p);
+            return nullptr;
+        }
+        succeeded_out = true;
+        snapshot_io_mgr::instance().invoke();
+        return nullptr;
+    }
+    // Otherwise (sync snapshot IO), read the requested object here and then return.
+
+    sync_ctx = p.get_snapshot_sync_ctx();
+    if (!sync_ctx)
+    {
+        return nullptr;
+    }
+    snp = sync_ctx->get_snapshot();
+    if (!snp)
+    {
+        return nullptr;
+    }
+
+    bool last_request = false;
+    ptr<buffer> data = nullptr;
+    ulong data_idx = 0;
+    if (snp->get_type() == snapshot::raw_binary) {
+        // LCOV_EXCL_START
+        // Raw binary snapshot (original)
+        ulong offset = sync_ctx->get_offset();
+        ulong sz_left = ( snp->size() > offset ) ? ( snp->size() - offset ) : 0;
+        int32 blk_sz = get_snapshot_sync_block_size();
+        data = buffer::alloc((size_t)(std::min((ulong)blk_sz, sz_left)));
+        int32 sz_rd = state_machine_->read_snapshot_data(*snp, offset, *data);
+        if ((size_t)sz_rd < data->size()) {
+            p_er( "only %d bytes could be read from snapshot while %zu "
+                  "bytes are expected, must be something wrong, exit.",
+                  sz_rd, data->size() );
+            ctx_->state_mgr_->system_exit(raft_err::N18_partial_snapshot_block);
+            _sys_exit(-1);
+            return ptr<req_msg>();
+        }
+        last_request = (offset + (ulong)data->size()) >= snp->size();
+        data_idx = offset;
+        // LCOV_EXCL_STOP
+
+    } else {
+        // Logical object type snapshot
+        ulong obj_idx = sync_ctx->get_offset();
+        snapshot_sync_ctx::user_snp_ctx_io_guard user_ctx_guard(*sync_ctx, *state_machine_);
+        if (!user_ctx_guard)
+        {
+            return nullptr;
+        }
+        p_dv("peer: %d, obj_idx: %" PRIu64,
+             (int)p.get_id(), obj_idx);
+
+        int rc = state_machine_->read_logical_snp_obj( *snp, user_ctx_guard.get(), obj_idx,
+                                                       data, last_request );
+        const bool closed = user_ctx_guard.finish();
+        if (closed)
+        {
+            return nullptr;
+        }
+        if (rc < 0) {
+            p_wn( "reading snapshot (idx %" PRIu64 ", term %" PRIu64
+                  ", object %" PRIu64 ") failed: %d",
+                  snp->get_last_log_idx(),
+                  snp->get_last_log_term(),
+                  obj_idx,
+                  rc );
+            // Reset the `sync_ctx` so as to retry with the newer version.
+            clear_snapshot_sync_ctx(p);
+            return nullptr;
+        }
+        if (data) data->pos(0);
+        data_idx = obj_idx;
+    }
+
+    std::unique_ptr<snapshot_sync_req> sync_req
+        ( new snapshot_sync_req(snp, data_idx, data, last_request) );
+    ptr<req_msg> req( cs_new<req_msg>
+                      ( term,
+                        msg_type::install_snapshot_request,
+                        id_,
+                        p.get_id(),
+                        snp->get_last_log_term(),
+                        snp->get_last_log_idx(),
+                        commit_idx ) );
+    req->log_entries().push_back( cs_new<log_entry>
+                                  ( term,
+                                    sync_req->serialize(),
+                                    log_val_type::snp_sync_req ) );
+
+    succeeded_out = true;
+    return req;
+}
+
+ptr<resp_msg> raft_server::handle_install_snapshot_req(req_msg& req, std::unique_lock<std::recursive_mutex>& guard) {
+    if (req.get_term() == state_->get_term() && !state_->is_catching_up()) {
+        if (role_ == srv_role::candidate) {
+            become_follower();
+
+        } else if (role_ == srv_role::leader) {
+            // LCOV_EXCL_START
+            p_er( "Receive InstallSnapshotRequest from another leader(%d) "
+                  "with same term, there must be a bug, server exits",
+                  req.get_src() );
+            ctx_->state_mgr_->system_exit
+                ( raft_err::N10_leader_receive_InstallSnapshotRequest );
+            _sys_exit(-1);
+            return ptr<resp_msg>();
+            // LCOV_EXCL_STOP
+
+        } else {
+            restart_election_timer();
+        }
+    }
+
+    ptr<resp_msg> resp = cs_new<resp_msg>
+                         ( state_->get_term(),
+                           msg_type::install_snapshot_response,
+                           id_,
+                           req.get_src(),
+                           log_store_->next_slot() );
+
+    if (!state_->is_catching_up() && req.get_term() < state_->get_term()) {
+        p_wn("received an install snapshot request (%" PRIu64 ") which has lower term "
+             "than this server (%" PRIu64 "), decline the request",
+             req.get_term(), state_->get_term());
+        return resp;
+    }
+
+    std::vector<ptr<log_entry>>& entries(req.log_entries());
+    if ( entries.size() != 1 ||
+         entries[0]->get_val_type() != log_val_type::snp_sync_req ) {
+        p_wn("Receive an invalid InstallSnapshotRequest due to "
+             "bad log entries or bad log entry value");
+        return resp;
+    }
+
+    ptr<snapshot_sync_req> sync_req =
+        snapshot_sync_req::deserialize(entries[0]->get_buf());
+    if (sync_req->get_snapshot().get_last_log_idx() <= quick_commit_index_) {
+        p_wn( "received a snapshot (%" PRIu64 ") that is older than "
+              "current commit idx (%" PRIu64 "), last log idx %" PRIu64,
+              sync_req->get_snapshot().get_last_log_idx(),
+              quick_commit_index_.load(),
+              log_store_->next_slot() - 1);
+        // Put dummy CTX to end the snapshot sync.
+        ptr<buffer> done_ctx = buffer::alloc(1);
+        done_ctx->pos(0);
+        done_ctx->put((byte)0);
+        done_ctx->pos(0);
+        resp->set_ctx(done_ctx);
+        return resp;
+    }
+
+    if (handle_snapshot_sync_req(*sync_req, guard)) {
+        if (sync_req->get_snapshot().get_type() == snapshot::raw_binary) {
+            // LCOV_EXCL_START
+            // Raw binary: add received byte to offset.
+            resp->accept(sync_req->get_offset() + sync_req->get_data().size());
+            // LCOV_EXCL_STOP
+
+        } else {
+            // Object type: add one (next object index).
+            resp->accept(sync_req->get_offset());
+            if (sync_req->is_done()) {
+                // TODO: check if there is missing object.
+                // Carry the installed snapshot index for late acknowledgements.
+                resp->set_ctx( snp_install_done_ctx::serialize(
+                                   sync_req->get_snapshot().get_last_log_idx() ) );
+            }
+        }
+    }
+
+    return resp;
+}
+
+void raft_server::handle_install_snapshot_resp(resp_msg& resp) {
+    p_db("%s\n", resp.get_accepted() ? "accepted" : "not accepted");
+    peer_itor it = peers_.find(resp.get_src());
+    if (it == peers_.end()) {
+        p_in("the response is from an unknown peer %d", resp.get_src());
+        return;
+    }
+
+    // if there are pending logs to be synced or commit index need to be advanced,
+    // continue to send appendEntries to this peer
+    bool need_to_catchup = true;
+    ptr<peer> p = it->second;
+    if (resp.get_accepted()) {
+        std::lock_guard<std::mutex> guard(p->get_lock());
+        p->reset_cnt_backward_log_probe();
+
+        // A terminal context may identify the installed snapshot.
+        ulong acked_snp_idx = 0;
+        bool has_acked_snp_idx = false;
+        bool ctx_is_well_formed = true;
+        if (resp.get_ctx()) {
+            ctx_is_well_formed = snp_install_done_ctx::parse(
+                *resp.get_ctx(), acked_snp_idx, has_acked_snp_idx);
+        }
+
+        // Credit validated acknowledgements without moving progress backwards.
+        auto advance_peer_to_acked_idx = [&](ulong acked_idx) -> bool {
+            if (resp.get_term() != state_->get_term()) {
+                p_wn("ignore the install of snapshot idx %" PRIu64 " acknowledged by peer %d: "
+                     "response term %" PRIu64 " is not the current term %" PRIu64,
+                     acked_idx, p->get_id(), resp.get_term(), state_->get_term());
+                return false;
+            }
+            if (acked_idx == 0 ||
+                acked_idx == std::numeric_limits<ulong>::max()) {
+                // A snapshot index must be nonzero and incrementable.
+                p_wn("ignore the install acknowledged by peer %d: "
+                     "snapshot idx %" PRIu64 " is out of range",
+                     p->get_id(), acked_idx);
+                return false;
+            }
+            if (acked_idx > precommit_index_) {
+                // The leader cannot acknowledge an unwritten index.
+                p_wn("ignore the install of snapshot idx %" PRIu64 " acknowledged by peer %d: "
+                     "it is beyond this server's precommit index %" PRIu64,
+                     acked_idx, p->get_id(), precommit_index_.load());
+                return false;
+            }
+
+            p->set_matched_idx( std::max( p->get_matched_idx(), acked_idx ) );
+            p->set_next_log_idx_floor(
+                std::max( p->get_next_log_idx_floor(), acked_idx + 1 ) );
+            p->set_next_log_idx( std::max( p->get_next_log_idx(), acked_idx + 1 ) );
+            return true;
+        };
+
+        ptr<snapshot_sync_ctx> sync_ctx = p->get_snapshot_sync_ctx();
+        if (!ctx_is_well_formed) {
+            // Malformed contexts must not complete an in-flight install.
+            p_wn("peer %d sent an install snapshot response with a malformed terminal context "
+                 "of %zu bytes, drop the response",
+                 p->get_id(), resp.get_ctx()->size());
+            need_to_catchup = false;
+
+        } else if (sync_ctx == nullptr) {
+            if (has_acked_snp_idx && advance_peer_to_acked_idx(acked_snp_idx)) {
+                // Complete late, indexed acknowledgements without a sync context.
+                if (p->is_snapshot_sync_needed()) {
+                    p->set_snapshot_sync_is_needed(false);
+                    p_in("peer %d is no longer in snapshot sync mode", p->get_id());
+                }
+
+                need_to_catchup = p->clear_pending_commit() ||
+                                  p->get_next_log_idx() < log_store_->next_slot();
+                p_in("snapshot done %" PRIu64 ", %" PRIu64 ", %d "
+                     "(late acknowledgement of snapshot idx %" PRIu64
+                     ", the sync context was already gone)",
+                     p->get_next_log_idx(), p->get_matched_idx(), need_to_catchup,
+                     acked_snp_idx);
+            } else {
+                p_in("no snapshot sync context for this peer, drop the response");
+                need_to_catchup = false;
+            }
+
+        } else {
+            ptr<snapshot> snp = sync_ctx->get_snapshot();
+            if (snp->get_type() == snapshot::raw_binary) {
+                // LCOV_EXCL_START
+                p_db("resp.get_next_idx(): %" PRIu64 ", snp->size(): %" PRIu64,
+                     resp.get_next_idx(), snp->size());
+                // LCOV_EXCL_STOP
+            }
+
+            bool snp_install_done =
+                 ( snp->get_type() == snapshot::raw_binary &&
+                   resp.get_next_idx() >= snp->size() )           ||
+                 ( snp->get_type() == snapshot::logical_object &&
+                   resp.get_ctx() );
+
+            if ( snp_install_done && has_acked_snp_idx &&
+                 acked_snp_idx != snp->get_last_log_idx() ) {
+                // Credit the acknowledged snapshot without completing the newer transfer.
+                p_wn("peer %d acknowledged the install of snapshot idx %" PRIu64 " while "
+                     "snapshot idx %" PRIu64 " is in flight, "
+                     "do not treat the in-flight install as done",
+                     p->get_id(), acked_snp_idx, snp->get_last_log_idx());
+                advance_peer_to_acked_idx(acked_snp_idx);
+
+            } else if (snp_install_done) {
+                p_db("snapshot sync is done (raw type)");
+                p->set_next_log_idx(sync_ctx->get_snapshot()->get_last_log_idx() + 1);
+                p->set_matched_idx(sync_ctx->get_snapshot()->get_last_log_idx());
+                p->set_next_log_idx_floor(
+                    sync_ctx->get_snapshot()->get_last_log_idx() + 1);
+                clear_snapshot_sync_ctx(*p);
+
+                if (p->is_snapshot_sync_needed()) {
+                    p->set_snapshot_sync_is_needed(false);
+                    p_in("peer %d is no longer in snapshot sync mode",
+                         p->get_id());
+                }
+
+                need_to_catchup = p->clear_pending_commit() ||
+                                  p->get_next_log_idx() < log_store_->next_slot();
+                p_in("snapshot done %" PRIu64 ", %" PRIu64 ", %d",
+                     p->get_next_log_idx(), p->get_matched_idx(), need_to_catchup);
+            } else {
+                p_db("continue to sync snapshot at offset %" PRIu64,
+                     resp.get_next_idx());
+                sync_ctx->finish_async_snapshot_request();
+                sync_ctx->set_offset(resp.get_next_idx());
+            }
+        }
+
+    } else {
+        p_wn( "peer %d declined snapshot: p->get_next_log_idx(): %" PRIu64 ", "
+              "log_store_->next_slot(): %" PRIu64,
+              p->get_id(), p->get_next_log_idx(), log_store_->next_slot() );
+        p->set_next_log_idx(resp.get_next_idx());
+        p->set_next_log_idx_floor(0);
+
+        // Added by Jung-Sang Ahn (Oct 11 2017)
+        // Declining snapshot implies that the peer already has the up-to-date snapshot.
+        need_to_catchup = p->get_next_log_idx() < log_store_->next_slot();
+
+        // Should reset current snapshot context,
+        // to continue with more recent snapshot.
+        std::lock_guard<std::mutex> guard(p->get_lock());
+        clear_snapshot_sync_ctx(*p);
+    }
+
+    // This may not be a leader anymore, such as
+    // the response was sent out long time ago
+    // and the role was updated by UpdateTerm call
+    // Try to match up the logs for this peer
+    if (role_ == srv_role::leader && need_to_catchup) {
+        request_append_entries(p);
+    }
+}
+
+void raft_server::handle_install_snapshot_resp_new_member(resp_msg& resp) {
+    if (!srv_to_join_) {
+        p_in("no server to join, the response must be very old.");
+        return;
+    }
+
+    srv_to_join_->reset_cnt_backward_log_probe();
+    if (!resp.get_accepted()) {
+        p_wn("peer doesn't accept the snapshot installation request, "
+             "next log idx %" PRIu64 ", "
+             "but we can move forward",
+             resp.get_next_idx());
+        srv_to_join_->set_next_log_idx(resp.get_next_idx());
+    }
+    srv_to_join_->reset_resp_timer();
+
+    // A terminal context may identify the installed snapshot. Unlike an
+    // ordinary peer, a joining server is not in `peers_`, so it reaches this
+    // handler through `ex_resp_handler_`.
+    ulong acked_snp_idx = 0;
+    bool has_acked_snp_idx = false;
+    bool ctx_is_well_formed = true;
+    if (resp.get_ctx()) {
+        ctx_is_well_formed = snp_install_done_ctx::parse(
+            *resp.get_ctx(), acked_snp_idx, has_acked_snp_idx);
+    }
+
+    // Credit a terminal acknowledgement only when it belongs to the current
+    // leader term and describes a valid, already-written snapshot boundary.
+    auto advance_joiner_to_acked_idx = [&](ulong acked_idx) -> bool {
+        if (resp.get_term() != state_->get_term()) {
+            p_wn("ignore the install of snapshot idx %" PRIu64 " acknowledged by joining peer %d: "
+                 "response term %" PRIu64 " is not the current term %" PRIu64,
+                 acked_idx, srv_to_join_->get_id(), resp.get_term(), state_->get_term());
+            return false;
+        }
+        if (acked_idx == 0 ||
+            acked_idx == std::numeric_limits<ulong>::max()) {
+            p_wn("ignore the install acknowledged by joining peer %d: "
+                 "snapshot idx %" PRIu64 " is out of range",
+                 srv_to_join_->get_id(), acked_idx);
+            return false;
+        }
+        if (acked_idx > precommit_index_) {
+            p_wn("ignore the install of snapshot idx %" PRIu64 " acknowledged by joining peer %d: "
+                 "it is beyond this server's precommit index %" PRIu64,
+                 acked_idx, srv_to_join_->get_id(), precommit_index_.load());
+            return false;
+        }
+
+        srv_to_join_->set_matched_idx(
+            std::max(srv_to_join_->get_matched_idx(), acked_idx));
+        srv_to_join_->set_next_log_idx_floor(
+            std::max(srv_to_join_->get_next_log_idx_floor(), acked_idx + 1));
+        srv_to_join_->set_next_log_idx(
+            std::max(srv_to_join_->get_next_log_idx(), acked_idx + 1));
+        return true;
+    };
+
+    ptr<snapshot_sync_ctx> sync_ctx = srv_to_join_->get_snapshot_sync_ctx();
+    if (!ctx_is_well_formed) {
+        p_wn("joining peer %d sent an install snapshot response with a malformed terminal context "
+             "of %zu bytes, drop the response",
+             srv_to_join_->get_id(), resp.get_ctx()->size());
+        return;
+    }
+
+    if (sync_ctx == nullptr) {
+        if (has_acked_snp_idx && advance_joiner_to_acked_idx(acked_snp_idx)) {
+            p_in("snapshot install is done for joining peer %d: "
+                 "late acknowledgement of snapshot idx %" PRIu64
+                 ", the sync context was already gone",
+                 srv_to_join_->get_id(), acked_snp_idx);
+            sync_log_to_new_srv(srv_to_join_->get_next_log_idx());
+        } else {
+            p_in("no snapshot sync context for joining peer %d, drop the response",
+                 srv_to_join_->get_id());
+        }
+        return;
+    }
+
+    if (!resp.get_accepted()) {
+        clear_snapshot_sync_ctx(*srv_to_join_);
+        sync_log_to_new_srv(srv_to_join_->get_next_log_idx());
+        return;
+    }
+
+    ptr<snapshot> snp = sync_ctx->get_snapshot();
+    bool snp_install_done =
+        ( snp->get_type() == snapshot::raw_binary &&
+          resp.get_next_idx() >= snp->size() )         ||
+        ( snp->get_type() == snapshot::logical_object &&
+          resp.get_ctx() );
+
+    if ( snp_install_done && has_acked_snp_idx &&
+         acked_snp_idx != snp->get_last_log_idx() ) {
+        p_wn("joining peer %d acknowledged the install of snapshot idx %" PRIu64 " while "
+             "snapshot idx %" PRIu64 " is in flight, "
+             "do not treat the in-flight install as done",
+             srv_to_join_->get_id(), acked_snp_idx, snp->get_last_log_idx());
+        advance_joiner_to_acked_idx(acked_snp_idx);
+
+    } else if (snp_install_done) {
+        // snapshot is done
+        p_in("snapshot install is done\n");
+        srv_to_join_->set_next_log_idx
+            ( sync_ctx->get_snapshot()->get_last_log_idx() + 1 );
+        srv_to_join_->set_matched_idx
+            ( sync_ctx->get_snapshot()->get_last_log_idx() );
+        srv_to_join_->set_next_log_idx_floor
+            ( sync_ctx->get_snapshot()->get_last_log_idx() + 1 );
+
+        clear_snapshot_sync_ctx(*srv_to_join_);
+
+        p_in( "snapshot has been copied and applied to new server, "
+              "continue to sync logs after snapshot, "
+              "next log idx %" PRIu64 ", matched idx %" PRIu64 "",
+              srv_to_join_->get_next_log_idx(),
+              srv_to_join_->get_matched_idx() );
+    } else {
+        sync_ctx->finish_async_snapshot_request();
+        sync_ctx->set_offset(resp.get_next_idx());
+        p_db( "continue to send snapshot to new server at offset %" PRIu64 "",
+              resp.get_next_idx() );
+    }
+
+    sync_log_to_new_srv(srv_to_join_->get_next_log_idx());
+}
+
+bool raft_server::handle_snapshot_sync_req(snapshot_sync_req& req, std::unique_lock<std::recursive_mutex>& guard) {
+ const auto handle_install_failure = [&]
+ {
+    ctx_->state_mgr_->system_exit(raft_err::N13_snapshot_install_failed);
+    _sys_exit(-1);
+ };
+
+ try {
+    // if offset == 0, it is the first object.
+    bool is_first_obj = (req.get_offset()) ? false : true;
+    bool is_last_obj = req.is_done();
+    if (is_first_obj || is_last_obj) {
+        // INFO level: log only first and last object.
+        p_in("save snapshot (idx %" PRIu64 ", term %" PRIu64 ") offset 0x%" PRIx64
+             ", %s %s",
+             req.get_snapshot().get_last_log_idx(),
+             req.get_snapshot().get_last_log_term(),
+             req.get_offset(),
+             (is_first_obj) ? "first obj" : "",
+             (is_last_obj)  ? "last obj"  : "" );
+    } else {
+        // above DEBUG: log all.
+        p_db("save snapshot (idx %" PRIu64 ", term %" PRIu64 ") offset 0x%" PRIx64
+             ", %s %s",
+             req.get_snapshot().get_last_log_idx(),
+             req.get_snapshot().get_last_log_term(),
+             req.get_offset(),
+             (is_first_obj) ? "first obj" : "",
+             (is_last_obj)  ? "last obj"  : "" );
+    }
+
+    cb_func::Param param(id_, leader_);
+    param.ctx = &req;
+    CbReturnCode rc = ctx_->cb_func_.call(cb_func::SaveSnapshot, &param);
+    if (rc == CbReturnCode::ReturnNull) {
+        p_wn("by callback, return false");
+        return false;
+    }
+
+    // Set flag to avoid initiating election by this node.
+    if (!state_->is_receiving_snapshot()) {
+        state_->set_receiving_snapshot(true);
+        ctx_->state_mgr_->save_state(*state_);
+        p_in("set receiving snapshot flag");
+    }
+    et_cnt_receiving_snapshot_ = 0;
+
+    // Set initialized flag
+    if (!initialized_) initialized_ = true;
+
+    if (req.get_snapshot().get_type() == snapshot::raw_binary) {
+        // LCOV_EXCL_START
+        // Raw binary type (original).
+        state_machine_->save_snapshot_data(req.get_snapshot(),
+                                           req.get_offset(),
+                                           req.get_data());
+        // LCOV_EXCL_STOP
+
+    } else {
+        // Logical object type.
+        ulong obj_id = req.get_offset();
+        buffer& buf = req.get_data();
+        buf.pos(0);
+        state_machine_->save_logical_snp_obj(req.get_snapshot(),
+                                             obj_id,
+                                             buf,
+                                             is_first_obj,
+                                             is_last_obj);
+        req.set_offset(obj_id);
+    }
+
+    if (is_last_obj) {
+        // let's pause committing in backgroud so it doesn't access logs
+        // while they are being compacted
+        guard.unlock();
+        pause_state_machine_execution();
+        size_t wait_count = 0;
+        while (!wait_for_state_machine_pause(500)) {
+            p_in("waiting for state machine pause before applying snapshot: count %zu",
+                 ++wait_count);
+        }
+        
+        guard.lock();
+
+        struct ExecAutoResume {
+            explicit ExecAutoResume(std::function<void()> func) : clean_func_(func) {}
+            ~ExecAutoResume() { clean_func_(); }
+            std::function<void()> clean_func_;
+        } exec_auto_resume([this](){ resume_state_machine_execution(); });
+
+        if (req.get_snapshot().get_last_log_idx() <= quick_commit_index_) {
+            p_wn( "snapshot (idx %" PRIu64 ", term %" PRIu64 ") is already "
+                  "covered by current commit idx %" PRIu64 ", skip applying it",
+                  req.get_snapshot().get_last_log_idx(),
+                  req.get_snapshot().get_last_log_term(),
+                  quick_commit_index_.load() );
+            return true;
+        }
+
+        state_->set_receiving_snapshot(false);
+        ctx_->state_mgr_->save_state(*state_);
+        p_in("clear receiving snapshot flag");
+
+        // Only follower will run this piece of code, but let's check it again
+        if (role_ != srv_role::follower) {
+            // LCOV_EXCL_START
+            p_er("bad server role for applying a snapshot, exit for debugging");
+            ctx_->state_mgr_->system_exit(raft_err::N11_not_follower_for_snapshot);
+            _sys_exit(-1);
+            // LCOV_EXCL_STOP
+        }
+
+        p_in( "successfully receive a snapshot (idx %" PRIu64 " term %" PRIu64
+              ") from leader",
+              req.get_snapshot().get_last_log_idx(),
+              req.get_snapshot().get_last_log_term() );
+        if (log_store_->compact(req.get_snapshot().get_last_log_idx())) {
+            // The state machine will not be able to commit anything before the
+            // snapshot is applied, so make this synchronously with election
+            // timer stopped as usually applying a snapshot may take a very
+            // long time
+            stop_election_timer();
+            p_in("successfully compact the log store, will now ask the "
+                 "statemachine to apply the snapshot");
+            if (!state_machine_->apply_snapshot(req.get_snapshot())) {
+                // LCOV_EXCL_START
+                p_er("failed to apply the snapshot after log compacted, "
+                     "to ensure the safety, will shutdown the system");
+                ctx_->state_mgr_->system_exit(raft_err::N12_apply_snapshot_failed);
+                _sys_exit(-1);
+                return false;
+                // LCOV_EXCL_STOP
+            }
+
+            auto snap_conf = req.get_snapshot().get_last_config();
+            ptr<cluster_config> c_conf = get_config();
+            if (snap_conf->get_log_idx() > c_conf->get_log_idx()) {
+                ctx_->state_mgr_->save_config(*snap_conf);
+                reconfigure(snap_conf);
+                c_conf = get_config();
+            } else {
+                p_in("snapshot config idx %" PRIu64 " prev idx %" PRIu64
+                     " is not newer than "
+                     "current config idx %" PRIu64 " prev idx %" PRIu64
+                     ", will not apply it",
+                     snap_conf->get_log_idx(),
+                     snap_conf->get_prev_log_idx(),
+                     c_conf->get_log_idx(),
+                     c_conf->get_prev_log_idx());
+            }
+
+            precommit_index_ = req.get_snapshot().get_last_log_idx();
+            sm_commit_index_ = req.get_snapshot().get_last_log_idx();
+            quick_commit_index_ = req.get_snapshot().get_last_log_idx();
+            lagging_sm_target_index_ = req.get_snapshot().get_last_log_idx();
+
+            ctx_->state_mgr_->save_state(*state_);
+
+            ptr<snapshot> new_snp = cs_new<snapshot>
+                                    ( req.get_snapshot().get_last_log_idx(),
+                                      req.get_snapshot().get_last_log_term(),
+                                      c_conf,
+                                      req.get_snapshot().size(),
+                                      req.get_snapshot().get_type() );
+            set_last_snapshot(new_snp);
+
+            restart_election_timer();
+            p_in("snapshot idx %" PRIu64 " term %" PRIu64 " is successfully applied, "
+                 "log start %" PRIu64 " last idx %" PRIu64,
+                 new_snp->get_last_log_idx(),
+                 new_snp->get_last_log_term(),
+                 log_store_->start_index(),
+                 log_store_->next_slot() - 1);
+
+        } else {
+            p_er("failed to compact the log store after a snapshot is received, "
+                 "will ask the leader to retry");
+            return false;
+        }
+    }
+
+ } catch (const std::exception & e) {
+    // LCOV_EXCL_START
+    p_er("failed to handle snapshot installation due to error: %s", e.what());
+    handle_install_failure();
+    return false;
+    // LCOV_EXCL_STOP
+ } catch (...) {
+    // LCOV_EXCL_START
+    p_er("failed to handle snapshot installation due to system errors");
+    handle_install_failure();
+    return false;
+    // LCOV_EXCL_STOP
+ }
+
+    return true;
+}
+
+} // namespace nuraft;

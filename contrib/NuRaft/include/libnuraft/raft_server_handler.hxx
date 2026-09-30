@@ -1,0 +1,188 @@
+/************************************************************************
+Copyright 2017-present eBay Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+**************************************************************************/
+
+#pragma once
+
+#include "raft_server.hxx"
+
+namespace nuraft {
+
+/**
+ * Class to handle the internal feature of `raft_server`.
+ * Any internal class that wants to call `process_req` API should inherit this class.
+ * It should not be used externally.
+ */
+class raft_server_handler {
+protected:
+    /**
+     * Call `process_req` of the given raft server.
+     *
+     * @param srv `raft_server` instance.
+     * @param req Request.
+     * @param ext_params Extended parameters.
+     * @return ptr<resp_msg> Response.
+     */
+    static ptr<resp_msg> process_req(raft_server* srv,
+                                     req_msg& req,
+                                     const raft_server::req_ext_params& ext_params =
+                                         raft_server::req_ext_params()) {
+        return srv->process_req(req, ext_params);
+    }
+
+    /**
+     * Get the peers map from a raft_server (for testing).
+     */
+    static std::unordered_map<int32, ptr<peer>>& get_peers(raft_server* srv) {
+        return srv->peers_;
+    }
+
+    /**
+     * Sets a pending server removal (for testing).
+     */
+    static void set_srv_to_leave(raft_server* srv,
+                                 const ptr<peer>& peer,
+                                 ulong target_idx) {
+        srv->srv_to_leave_ = peer;
+        srv->srv_to_leave_target_idx_ = target_idx;
+    }
+
+    /**
+     * Gets a pending server removal (for testing).
+     */
+    static ptr<peer> get_srv_to_leave(raft_server* srv) {
+        return srv->srv_to_leave_;
+    }
+
+    /**
+     * Checks if a configuration change is pending (for testing).
+     */
+    static bool is_config_changing(raft_server* srv) {
+        return srv->config_changing_;
+    }
+
+    /**
+     * Gets the pending configuration (for testing).
+     */
+    static ptr<cluster_config> get_uncommitted_config(raft_server* srv) {
+        return srv->uncommitted_config_;
+    }
+
+    /**
+     * Starts the normal leader-side removal operation (for testing).
+     */
+    static void remove_server_from_cluster(raft_server* srv, int32 srv_id) {
+        srv->rm_srv_from_cluster(srv_id);
+    }
+
+    /**
+     * Gets the number of voting members (for testing).
+     */
+    static int32 get_num_voting_members(raft_server* srv) {
+        return srv->get_num_voting_members();
+    }
+
+    /**
+     * Gets the remaining self-removal timeout steps (for testing).
+     */
+    static int32 get_steps_to_down(raft_server* srv) {
+        return srv->steps_to_down_;
+    }
+
+    /**
+     * Clear the last snapshot pointer in a raft_server (for testing).
+     */
+    static void clear_last_snapshot(raft_server* srv) {
+        srv->set_last_snapshot(nullptr);
+    }
+
+    /**
+     * Check if the server believes it is out of log range (for testing).
+     */
+    static bool is_out_of_log_range(raft_server* srv) {
+        return srv->out_of_log_range_;
+    }
+
+    /**
+     * Get the last snapshot from a raft_server (for testing).
+     */
+    static ptr<snapshot> get_last_snapshot(raft_server* srv) {
+        return srv->get_last_snapshot();
+    }
+
+    /**
+     * Set the last snapshot pointer in a raft_server (for testing).
+     */
+    static void set_last_snapshot(raft_server* srv, const ptr<snapshot>& snp) {
+        srv->set_last_snapshot(snp);
+    }
+
+    static ptr<req_msg> create_append_entries_req(raft_server* srv,
+                                                  ptr<peer>& pp,
+                                                  ulong custom_last_log_idx = 0) {
+        return srv->create_append_entries_req(pp, custom_last_log_idx);
+    }
+
+    /// Runs a peer's snapshot-install timeout check (for testing).
+    static bool check_snapshot_timeout(raft_server* srv, ptr<peer>& pp) {
+        return srv->check_snapshot_timeout(pp);
+    }
+
+    /// Gets the server pre-commit index (for testing).
+    static ulong get_precommit_index(raft_server* srv) {
+        return srv->precommit_index_;
+    }
+
+    /// Invokes the joining-server snapshot response handler (for testing).
+    static void handle_install_snapshot_resp_new_member(raft_server* srv,
+                                                        resp_msg& resp) {
+        srv->handle_install_snapshot_resp_new_member(resp);
+    }
+
+    /// Invokes the extended response handler (for testing).
+    static void handle_ext_resp(raft_server* srv,
+                                ptr<resp_msg>& resp,
+                                ptr<rpc_exception>& err) {
+        srv->handle_ext_resp(resp, err);
+    }
+
+    /// Gets the server currently being added to the cluster (for testing).
+    static ptr<peer> get_srv_to_join(raft_server* srv) {
+        return srv->srv_to_join_;
+    }
+
+    /// Forces a server to become a follower (for testing).
+    static void become_follower(raft_server* srv) {
+        srv->become_follower();
+    }
+
+    /// Forces a server to become a leader (for testing).
+    static void become_leader(raft_server* srv) {
+        srv->become_leader();
+    }
+
+    /// Starts a pre-vote round (for testing).
+    static void request_prevote(raft_server* srv) {
+        srv->request_prevote();
+    }
+
+    /// Models a callback that has deferred release of a peer's busy flag.
+    static uint64_t mark_peer_deferred_free(ptr<peer>& pp);
+
+    /// Forces RPC-client recreation for a current peer (for testing).
+    static bool force_recreate_peer_rpc(raft_server* srv, ptr<peer>& pp);
+};
+
+}

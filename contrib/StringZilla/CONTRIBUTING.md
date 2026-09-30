@@ -1,0 +1,821 @@
+# Contributing to StringZilla
+
+Thank you for coming here!
+It's always nice to have third-party contributors 🤗
+Depending on the type of contribution, you may need to follow different steps.
+
+---
+
+Before building the first time, please pull `git` submodules.
+That's how we bring in `forkunion` and other optional dependencies to test all of the available functionality.
+
+
+```sh
+git submodule update --init --recursive
+```
+
+## Project Structure
+
+The project is split into the following parts:
+
+- `include/stringzilla/stringzilla.h` - single-header C implementation.
+- `include/stringzilla/stringzilla.hpp` - single-header C++ wrapper.
+- `include/stringzillas/*` - parallel CPU/GPU header-only backends.
+- `c/*` - [C, C++, and CUDA](#c-and-c) sources for dynamic dispatch and parallel backends.
+- `rust/*` - [Rust](#rust) crate sources.
+- `python/*` - [Python](#python) bindings.
+- `swift/*` - [Swift](#swift) package sources and tests.
+- `javascript/*` - [JavaScript](#javascript) bindings.
+- `golang/*` - [Go](#golang) bindings.
+- `test/*` and `bench/*` - per-kernel test and benchmark sources.
+- `cli/*` - SIMD-accelerated CLI utilities.
+
+For minimal test coverage, check the following scripts:
+
+- `test/stringzilla.cpp` - tests C++ API (not underlying C) against STL.
+- `test/*.py` - tests the Python API against native strings, split per kernel family (`test_string.py`, `test_find.py`, `test_sort.py`, `test_hash.py`, `test_uncased.py`, `test_utf8_*.py`) mirroring the C++ translation units, with shared helpers in `test_helpers.py` / `test_utf8_helpers.py`.
+- `test/stringzilla.js`.
+
+At the C++ level all benchmarks also validate the results against the STL baseline, serving as tests on real-world data.
+They have the broadest coverage of the library, and are the most important to keep up-to-date:
+
+- `bench/token.cpp` - token-level ops, like hashing, ordering, equality checks.
+- `bench/find.cpp` - bidirectional substring search, both exact and fuzzy.
+- `bench/sequence.cpp` - sorting, partitioning, merging.
+- `bench/container.cpp` - STL containers with different string keys.
+- `bench/similarities.cpp` - benchmark all edit distance backends.
+- `bench/fingerprints.cpp` - benchmark all Min-Hash fingerprinting backends.
+
+The role of Python benchmarks is less to provide absolute number, but to compare against popular tools in the Python ecosystem.
+
+- `bench/find.(py|ipynb)` - compares against native Python `str`.
+- `bench/sequence.(py|ipynb)` - compares against `pandas`.
+- `bench/similarities.(ipynb)` - compares against `jellyfish`, `editdistance`, etc.
+
+## Benchmarking Datasets
+
+It's not always easy to find good datasets for benchmarking strings workloads.
+I use several ASCII and UTF-8 international datasets, all of them mirrored on the HuggingFace dataset hub, in the [StringKilla](https://huggingface.co/datasets/ashvardanian/StringKilla) repository.
+You can download them using the following commands:
+
+```sh
+wget --no-clobber -O utf8.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/utf8.txt?download=true
+wget --no-clobber -O leipzig1M.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/leipzig1M.txt?download=true
+wget --no-clobber -O enwik9.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/enwik9.txt?download=true
+wget --no-clobber -O xlsum.csv https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/xlsum.csv?download=true
+```
+
+For bioinformatics workloads, I use the following datasets with increasing string lengths:
+
+```sh
+wget --no-clobber -O acgt_100.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_100.txt?download=true
+wget --no-clobber -O acgt_1k.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_1k.txt?download=true
+wget --no-clobber -O acgt_10k.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_10k.txt?download=true
+wget --no-clobber -O acgt_100k.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_100k.txt?download=true
+wget --no-clobber -O acgt_1m.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_1m.txt?download=true
+wget --no-clobber -O acgt_10m.txt https://huggingface.co/datasets/ashvardanian/StringKilla/resolve/main/acgt_10m.txt?download=true
+```
+
+## IDE Integrations
+
+The project was originally developed in VS Code, and contains a set of configuration files for that IDE under `.vscode/`.
+
+- `tasks.json` - build tasks for CMake.
+- `launch.json` - debugger launchers for CMake.
+- `extensions.json` - recommended extensions for VS Code, including:
+    - `ms-vscode.cpptools-themes` - C++ language support.
+    - `ms-vscode.cmake-tools`, `cheshirekow.cmake-format` - CMake integration.
+    - `ms-python.python`, `ms-python.black-formatter` - Python language support.
+    - `yzhang.markdown-all-in-one` - formatting Markdown.
+    - `aaron-bond.better-comments` - color-coded comments.
+
+## Code Styling
+
+The project uses `.clang-format` to enforce a consistent code style.
+Modern IDEs, like VS Code, can be configured to automatically format the code on save.
+
+- East const over const West.
+  Write `char const*` instead of `const char*`.
+- For color-coded comments start the line with `!` for warnings or `?` for questions.
+- Sort the includes: standard libraries, third-party libraries, and only then internal project headers.
+
+For C++ code:
+
+- Explicitly use `std::` or `sz::` namespaces over global `memcpy`, `uint64_t`, etc.
+- Explicitly mark `noexcept` or `noexcept(false)` for all library interfaces, except for `__global__` CUDA functions.
+- Document all possible exceptions of an interface using `@throw` in Doxygen.
+- Avoid C-style variadic arguments in favor of templates.
+- Avoid C-style casts in favor of `static_cast`, `reinterpret_cast`, and `const_cast`, except for places where a C function is called.
+- Use lower-case names for everything, except settings/conditions macros.
+  Function-like macros, that take arguments, should be lowercase as well.
+- In templates prefer `typename` over `class`.
+- Prepend "private" symbols with `_` underscore.
+
+For Python code:
+
+- Use lower-case names for functions and variables.
+
+## C++ and C
+
+The primary C implementation and the C++ wrapper are built with CMake.
+Assuming the extensive use of new SIMD intrinsics and recent C++ language features, using a recent compiler is recommended.
+We prefer GCC 12 or newer, which is available from default Ubuntu repositories with Ubuntu 22.04 LTS onwards.
+If this is your first experience with CMake, use the following commands to get started on Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install build-essential
+sudo apt-get install cmake              # Consider pulling a newer version from PyPI
+sudo apt-get install g++-12 gcc-12      # You may already have a newer version on Ubuntu 24
+sudo apt install libstdc++6-12-dbg      # STL debugging symbols for GCC 12
+```
+
+On Linux, after that, if you want to compile the mninmal set of tests:
+
+```bash
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_TEST=1 -B build_release
+cmake --build build_release --config Release --target stringzilla_test_cpp20 --parallel
+build_release/stringzilla_test_cpp20
+```
+
+On macOS it's recommended to use Homebrew and install Clang, as opposed to "Apple Clang".
+Replacing the default compiler is not recommended, as it may break the system, but you can pass it as an environment variable:
+
+```bash
+brew install llvm
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_TEST=1 \
+    -D CMAKE_C_COMPILER="$(brew --prefix llvm)/bin/clang" \
+    -D CMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++" \
+    -B build_release
+cmake --build build_release --config Release --parallel
+```
+
+On Windows you can build with either MSVC (Visual Studio) or MinGW (GCC).
+Pick one.
+For MSVC (Developer Prompt):
+
+```bat
+cmake -B build_release -G "Visual Studio 17 2022" -A x64 -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Release
+cmake --build build_release --config Release --parallel
+build_release\\Release\\stringzilla_test_cpp20.exe
+```
+
+For MinGW (MSYS2):
+
+```bash
+pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake make
+cmake -G "MinGW Makefiles" -B build_release -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Release
+cmake --build build_release --config Release --parallel
+./build_release/stringzilla_test_cpp20.exe
+```
+
+### Testing
+
+Using modern syntax, this is how you build and run the test suite:
+
+```bash
+cmake -D STRINGZILLA_BUILD_TEST=1 -D STRINGZILLA_USE_SANITIZERS=0 -D CMAKE_BUILD_TYPE=Debug -B build_debug
+cmake --build build_debug --config Debug --parallel   # Which will produce the following targets:
+build_debug/stringzilla_test_cpp20            # Unit test for the entire library compiled for current hardware
+build_debug/stringzilla_test_cpp20_serial     # x86 variant compiled for IvyBridge - last arch. before AVX2
+build_debug/stringzilla_test_cpp20_serial     # Arm variant compiled without Neon
+```
+
+Note, that Address Sanitizers have a hard time with masked load and store instructions in AVX-512 and SVE.
+
+The C++ and Python test suites support environment variables for reproducible stress testing and CI fuzzing:
+
+| Variable              | Description                                         | Default |
+| :-------------------- | :-------------------------------------------------- | ------: |
+| `SZ_TESTS_SEED`       | Seed for the random number generator                |  Random |
+| `SZ_TESTS_MULTIPLIER` | Scales all baseline iteration counts proportionally |     1.0 |
+| `SZ_TESTS_FILTER`     | ECMAScript regex over test names; only matches run  |   (all) |
+
+Each test has its own baseline iteration count tuned for its operation complexity.
+The multiplier scales all baselines proportionally - use `0.1` for quick smoke tests or `10` for thorough stress testing.
+Each top-level test is also wall-clock timed and reported as `- name ... ok (N.NN s)`, so slow tests are obvious.
+
+```bash
+# Run with a specific seed for reproducibility
+SZ_TESTS_SEED=42 build_debug/stringzilla_test_cpp20
+
+# Quick smoke test (10% of normal iterations)
+SZ_TESTS_MULTIPLIER=0.1 build_debug/stringzilla_test_cpp20
+
+# Fast inner loop: only the UTF-8 tests, at 10% iterations, reproducibly
+SZ_TESTS_FILTER=utf8 SZ_TESTS_MULTIPLIER=0.1 SZ_TESTS_SEED=42 build_debug/stringzilla_test_cpp20
+
+# Thorough CI stress test (10x normal iterations)
+SZ_TESTS_MULTIPLIER=10 build_debug/stringzilla_test_cpp20
+
+# Combine both for CI fuzzing
+SZ_TESTS_SEED=12345 SZ_TESTS_MULTIPLIER=5 build_debug/stringzilla_test_cpp20
+
+# Python tests also respect SZ_TESTS_SEED
+SZ_TESTS_SEED=42 pytest test/ --ignore=test/stringzillas.py -v
+```
+
+When a test fails, note the seed from the output and re-run with that exact seed to reproduce the issue.
+This is particularly useful for debugging SIMD edge cases that only manifest with specific input patterns.
+
+The scalable-vector backends must stay correct at every hardware vector length, and the CI `test_cross_qemu` matrix sweeps them all.
+The same sweep runs locally with user-mode QEMU - on an Arm host that covers NEON-only dispatch plus SVE at 128/256/512 bits, and cross-compilers unlock the RISC-V, x86, LoongArch, and POWER backends too:
+
+```bash
+sudo apt install qemu-user gcc-x86-64-linux-gnu gcc-riscv64-linux-gnu gcc-loongarch64-linux-gnu gcc-powerpc64le-linux-gnu
+
+# Sweep SVE vector lengths on the native Arm binary (sve-max-vq is VL/128)
+for vq in 1 2 4; do
+  SZ_TESTS_FILTER=utf8 SZ_TESTS_MULTIPLIER=0.1 qemu-aarch64 -cpu max,sve-max-vq=$vq build_release/stringzilla_test_cpp20
+done
+
+# NEON-only dispatch (otherwise SVE2 always wins and NEON is never exercised)
+qemu-aarch64 -cpu max,sve=off build_release/stringzilla_test_cpp20
+
+# Cross-compile a single-TU probe against another backend and run it emulated
+x86_64-linux-gnu-gcc -O2 -mavx2 -mbmi -mbmi2 -mpopcnt -DSZ_USE_HASWELL=1 -Iinclude probe.c -o probe -static
+qemu-x86_64 -cpu max ./probe
+```
+
+Note that QEMU's TCG cannot execute AVX-512, so the Ice Lake and Skylake backends are compile-checked only under emulation and need real x86 hardware to run.
+
+To use CppCheck for static analysis make sure to export the compilation commands.
+Overall, CppCheck and Clang-Tidy are extremely noisy and not suitable for CI, but may be useful for local development.
+
+```bash
+sudo apt install cppcheck clang-tidy-11
+
+cmake -B build_artifacts \
+  -D CMAKE_BUILD_TYPE=RelWithDebInfo \
+  -D CMAKE_EXPORT_COMPILE_COMMANDS=1 \
+  -D STRINGZILLA_BUILD_BENCHMARK=1 \
+  -D STRINGZILLA_BUILD_TEST=1
+
+cppcheck --project=build_artifacts/compile_commands.json --enable=all
+
+clang-tidy-11 -p build_artifacts
+```
+
+I'd recommend putting the following breakpoints:
+
+- `__asan::ReportGenericError` - to detect illegal memory accesses.
+- `__GI_exit` - to stop at exit points - the end of running any executable.
+- `__builtin_unreachable` - to catch unexpected code paths.
+- `sz_assert_failure_` - to catch StringZilla logic assertions.
+
+### Benchmarking
+
+For benchmarks, you can use the following commands:
+
+```bash
+cmake -D STRINGZILLA_BUILD_BENCHMARK=1 -B build_release
+cmake --build build_release --config Release --parallel    # Produces the following targets:
+build_release/stringzilla_bench_memory_cpp20    # - for string copies and fills
+build_release/stringzilla_bench_find_cpp20      # - for substring search
+build_release/stringzilla_bench_token_cpp20     # - for hashing, equality comparisons, etc.
+build_release/stringzilla_bench_sequence_cpp20  # - for sorting arrays of strings
+build_release/stringzilla_bench_container_cpp20 # - for STL containers with string keys
+```
+
+There are also parallel algorithms that need a very different benchmarking setup:
+
+```sh
+build_release/stringzillas_bench_fingerprints_cpp20     # - for parallel multi-pattern search on CPU
+build_release/stringzillas_bench_fingerprints_cu20      # - for parallel multi-pattern search on GPU
+build_release/stringzillas_bench_similarities_cpp20     # - for parallel edit distances and alignment scores on CPU
+build_release/stringzillas_bench_similarities_cu20      # - for parallel edit distances and alignment scores on GPU
+```
+
+All of them support customization via environment variables.
+Let's say you want to benchmark large-batch DNA similarity scoring kernels:
+
+```sh
+cmake -D STRINGZILLA_BUILD_BENCHMARK=1 -B build_release
+cmake --build build_release --config Release --target stringzillas_bench_fingerprints_cpp20 --parallel # CPU
+cmake --build build_release --config Release --target stringzillas_bench_similarities_cu20 --parallel  # GPU
+STRINGWARS_FILTER=32768 STRINGWARS_DATASET="acgt_1k.txt" build_release/stringzillas_bench_similarities_cpp20
+STRINGWARS_FILTER=1 STRINGWARS_DATASET="acgt_100k.txt" build_release/stringzillas_bench_similarities_cu20
+
+STRINGWARS_FILTER="(cuda|kepler|hopper).*:batch32768" STRINGWARS_DATASET="acgt_1k.txt" build_release/stringzillas_bench_similarities_cu20
+STRINGWARS_STRESS=0 STRINGWARS_FILTER="(cuda|kepler|hopper).*:batch1" STRINGWARS_DATASET="acgt_100k.txt" build_release/stringzillas_bench_similarities_cu20
+```
+
+The benchmark harness reads these environment variables:
+
+| Variable                | Description                                                   |              Default |
+| :---------------------- | :------------------------------------------------------------ | -------------------: |
+| `STRINGWARS_DATASET`    | Path to the input corpus                                      |             required |
+| `STRINGWARS_FILTER`     | Regex over benchmark names; only matching backends run        |                (all) |
+| `STRINGWARS_DURATION`   | Seconds per benchmark (longer = steadier numbers)             | 1 debug / 10 release |
+| `STRINGWARS_MAX_TOKENS` | Cap on tokens kept, for faster, smaller runs                  |            unlimited |
+| `STRINGWARS_BATCH`      | Comma-separated batch-size override (skips the largest sweep) |      backend default |
+| `STRINGWARS_STRESS`     | Run the correctness stress phase (`0` to skip while timing)   |                   on |
+| `STRINGWARS_SEED`       | Non-zero shuffles tokens; `0` keeps deterministic order       |                    0 |
+
+For a fast inner loop, scope to one backend on a small dataset, cap tokens, skip the stress phase, and use short runs:
+
+```bash
+STRINGWARS_FILTER='sz_find' STRINGWARS_DATASET=leipzig1M.txt \
+    STRINGWARS_MAX_TOKENS=65536 STRINGWARS_BATCH=1024 \
+    STRINGWARS_STRESS=0 STRINGWARS_DURATION=1 \
+    build_release/stringzilla_bench_find_cpp20
+```
+
+Throughput is a time-bounded measurement: absolute GiB/s drifts ±10-15% on a loaded machine, while the ratio between two backends in the _same_ run stays stable.
+Compare A/B within one run; raise `STRINGWARS_DURATION` and use a quiet machine when you need stable absolute numbers.
+The work itself is deterministic at seed 0.
+
+Each benchmark originates from an identically named single-source file in the `bench/` directory.
+All of them feature file-level documentation, and are designed to be self-explanatory.
+You can easily log their descriptions until the first `*/` with the following `sed` and `awk` commands:
+
+```sh
+sed '/\*\//q' bench/memory.cpp
+awk '/\*\// { exit } { print }' bench/memory.cpp
+```
+
+### Benchmarking Hardware-Specific Optimizations
+
+Running on modern hardware, you may want to compile the code for older generations to compare the relative performance.
+The assumption would be that newer ISA extensions would provide better performance.
+On x86_64, you can use the following commands to compile for Sandy Bridge, Haswell, and Sapphire Rapids:
+
+```bash
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_BENCHMARK=1 \
+    -D STRINGZILLA_TARGET_ARCH="ivybridge" -B build_release/ivybridge && \
+    cmake --build build_release/ivybridge --config Release --parallel
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_BENCHMARK=1 \
+    -D STRINGZILLA_TARGET_ARCH="haswell" -B build_release/haswell && \
+    cmake --build build_release/haswell --config Release --parallel
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_BENCHMARK=1 \
+    -D STRINGZILLA_TARGET_ARCH="sapphirerapids" -B build_release/sapphirerapids && \
+    cmake --build build_release/sapphirerapids --config Release --parallel
+```
+
+### Benchmarking Compiler-Specific Optimizations
+
+Alternatively, you may want to compare the performance of the code compiled with different compilers.
+On x86_64, you may want to compare GCC, Clang, and ICX.
+
+```bash
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_BENCHMARK=1 -D STRINGZILLA_BUILD_SHARED=1 \
+    -D CMAKE_CXX_COMPILER=g++-12 -D CMAKE_C_COMPILER=gcc-12 \
+    -B build_release/gcc && cmake --build build_release/gcc --config Release --parallel
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_BENCHMARK=1 -D STRINGZILLA_BUILD_SHARED=1 \
+    -D CMAKE_CXX_COMPILER=clang++-14 -D CMAKE_C_COMPILER=clang-14 \
+    -B build_release/clang && cmake --build build_release/clang --config Release --parallel
+```
+
+### Profiling
+
+To simplify tracing and profiling, build with symbols using the `RelWithDebInfo` configuration.
+Here is an example for profiling one target - `stringzilla_bench_token_cpp20`.
+
+```bash
+cmake -D STRINGZILLA_BUILD_BENCHMARK=1 \
+    -D STRINGZILLA_BUILD_TEST=1 \
+    -D STRINGZILLA_BUILD_SHARED=1 \
+    -D CMAKE_BUILD_TYPE=RelWithDebInfo \
+    -B build_profile
+cmake --build build_profile --config Release --target stringzilla_bench_token_cpp20 --parallel
+
+# Check that the debugging symbols are there with your favorite tool
+readelf --sections build_profile/stringzilla_bench_token_cpp20 | grep debug
+objdump -h build_profile/stringzilla_bench_token_cpp20 | grep debug
+
+# Profile
+sudo perf record -g build_profile/stringzilla_bench_token_cpp20 ./leipzig1M.txt
+sudo perf report
+```
+
+### Testing in Docker
+
+It might be a good idea to check the compatibility against the most popular Linux distributions.
+Docker is the goto-choice for that.
+
+#### Alpine
+
+Alpine is one of the most popular Linux distributions for containers, due to its size.
+The base image is only ~3 MB, and it's based on musl libc, which is different from glibc.
+
+```bash
+sudo docker run -it --rm -v "$(pwd)":/workspace/StringZilla alpine:latest /bin/ash
+cd /workspace/StringZilla
+apk add --update make cmake g++ gcc
+cmake -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Debug -B build_debug
+cmake --build build_debug --config Debug --parallel
+build_debug/stringzilla_test_cpp20
+```
+
+#### Intel Clear Linux
+
+Clear Linux is a distribution optimized for Intel hardware, and is known for its performance.
+It has rolling releases, and is based on `glibc`.
+It might be a good choice for compiling with Intel oneAPI compilers.
+
+```bash
+sudo docker run -it --rm -v "$(pwd)":/workspace/StringZilla clearlinux:latest /bin/bash
+cd /workspace/StringZilla
+swupd update
+swupd bundle-add c-basic dev-utils
+cmake -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Debug -B build_debug
+cmake --build build_debug --config Debug --parallel
+build_debug/stringzilla_test_cpp20
+```
+
+For benchmarks:
+
+```bash
+cmake -D STRINGZILLA_BUILD_TEST=1 -D STRINGZILLA_BUILD_BENCHMARK=1 -B build_release
+cmake --build build_release --config Release --parallel
+```
+
+#### Amazon Linux
+
+For CentOS-based __Amazon Linux 2023__:
+
+```bash
+sudo docker run -it --rm -v "$(pwd)":/workspace/StringZilla amazonlinux:2023 bash
+cd /workspace/StringZilla
+yum install -y make cmake3 gcc g++
+cmake3 -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Debug \
+    -D CMAKE_CXX_COMPILER=g++ -D CMAKE_C_COMPILER=gcc -D STRINGZILLA_TARGET_ARCH="ivybridge" \
+    -B build_debug
+cmake3 --build build_debug --config Debug --target stringzilla_test_cpp11
+build_debug/stringzilla_test_cpp11
+```
+
+The CentOS-based __Amazon Linux 2__ is still used in older AWS Lambda functions.
+Sadly, the newest GCC version it supports is 10, and it can't handle AVX-512 instructions.
+
+```bash
+sudo docker run -it --rm -v "$(pwd)":/workspace/StringZilla amazonlinux:2 bash
+cd /workspace/StringZilla
+yum install -y make cmake3 gcc10 gcc10-c++
+cmake3 -D STRINGZILLA_BUILD_TEST=1 -D CMAKE_BUILD_TYPE=Debug \
+    -D CMAKE_CXX_COMPILER=g++ -D CMAKE_C_COMPILER=gcc -D STRINGZILLA_TARGET_ARCH="ivybridge" \
+    -B build_debug
+cmake3 --build build_debug --config Debug --target stringzilla_test_cpp11
+build_debug/stringzilla_test_cpp11
+```
+
+> [!CAUTION]
+> 
+> Even with GCC 10 the tests compilation will fail, as the STL implementation of the `insert` function doesn't conform to standard.
+> The `s.insert(s.begin() + 1, {'a', 'b', 'c'}) == (s.begin() + 1)` expression is illformed, as the `std::string::insert` return `void`.
+
+---
+
+Don't forget to clean up Docker afterwards.
+
+```bash
+docker system prune -a --volumes
+```
+
+### Cross Compilation
+
+Unlike GCC, LLVM handles cross compilation very easily.
+You just need to pass the right `TARGET_ARCH` and `BUILD_ARCH` to CMake.
+The [list includes](https://packages.ubuntu.com/search?keywords=crossbuild-essential&searchon=names):
+
+- `crossbuild-essential-amd64` for 64-bit x86
+- `crossbuild-essential-arm64` for 64-bit Arm
+- `crossbuild-essential-armhf` for 32-bit ARM hard-float
+- `crossbuild-essential-armel` for 32-bit ARM soft-float (emulates `float`)
+- `crossbuild-essential-riscv64` for RISC-V
+- `crossbuild-essential-powerpc` for PowerPC
+- `crossbuild-essential-s390x` for IBM Z
+- `crossbuild-essential-mips` for MIPS
+- `crossbuild-essential-ppc64el` for PowerPC 64-bit little-endian
+
+Here is an example for cross-compiling for Arm64 on an x86_64 machine:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y clang lld make crossbuild-essential-arm64 crossbuild-essential-armhf
+export CC="clang"
+export CXX="clang++"
+export AR="llvm-ar"
+export NM="llvm-nm"
+export RANLIB="llvm-ranlib"
+export TARGET_ARCH="aarch64-linux-gnu" # Or "x86_64-linux-gnu"
+export BUILD_ARCH="arm64" # Or "amd64"
+
+cmake -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_C_COMPILER_TARGET=${TARGET_ARCH} \
+    -D CMAKE_CXX_COMPILER_TARGET=${TARGET_ARCH} \
+    -D CMAKE_SYSTEM_NAME=Linux \
+    -D CMAKE_SYSTEM_PROCESSOR=${BUILD_ARCH} \
+    -B build_artifacts
+cmake --build build_artifacts --config Release --parallel
+```
+
+## Parallel C++ and CUDA
+
+```sh
+cmake -D CMAKE_BUILD_TYPE=Debug -D STRINGZILLA_BUILD_TEST=1 -B build_debug
+cmake --build build_debug --config Debug --target stringzillas_test_cpp20 --parallel
+cmake --build build_debug --config Debug --target stringzillas_test_cu20 --parallel
+```
+
+```sh
+cmake -D CMAKE_BUILD_TYPE=Release -D STRINGZILLA_BUILD_TEST=1 -B build_release
+cmake --build build_release --config Release --target stringzillas_test_cpp20 --parallel
+cmake --build build_release --config Release --target stringzillas_test_cu20 --parallel
+```
+
+```sh
+cuda-gdb ./build_debug/stringzillas_test_cu20
+cuda-memcheck ./build_debug/stringzillas_test_cu20
+```
+
+## Python
+
+Python bindings are implemented using pure CPython, so you wouldn't need to install SWIG, PyBind11, or any other third-party library.
+Still, you need a virtual environment, and it's recommended to use `uv` to create one.
+
+```bash
+uv venv --python 3.12                   # or your preferred Python version
+source .venv/bin/activate               # to activate the virtual environment
+uv pip install setuptools wheel         # to pull the latest build tools
+uv pip install -e . --force-reinstall   # to build locally from source
+```
+
+To check the installed version and capabilities, try:
+
+```bash
+uv run --no-project python -c "import stringzilla as sz; print(sz.__capabilities__)"
+```
+
+To build parallel StringZillas CPUs & CUDA backends, try:
+
+```bash
+uv pip install setuptools wheel numpy
+SZ_TARGET=stringzillas-cpus uv pip install -e . --force-reinstall --no-build-isolation
+SZ_TARGET=stringzillas-cuda uv pip install -e . --force-reinstall --no-build-isolation
+```
+
+To clean up code before pushing:
+
+```bash
+uv pip install ruff mypy bandit flake8
+uv run --no-project ruff check test/*.py --fix
+uv run --no-project mypy test/*.py --ignore-missing-imports
+uv run --no-project bandit test/*.py -s B101
+uv run --no-project flake8 test/*.py --max-line-length=120
+```
+
+### Testing
+
+For testing we use PyTest, which may not be installed on your system.
+
+```bash
+uv pip install pytest pytest-repeat numpy pyarrow                                       # for repeated fuzzy tests
+uv run --no-project python -m pytest test/ --ignore=test/stringzillas.py                      # default settings
+uv run --no-project python -m pytest test/ --ignore=test/stringzillas.py -s -x -p no:warnings # custom settings
+uv run --no-project python -m pytest test/doctests.py                           # to run the docstring examples
+uv run --no-project python -c 'from stringzilla import hash as sz_hash; print(sz_hash("abc", 100))'
+```
+
+StringZilla for Python seems to cover more OS and hardware combinations, than NumPy.
+That's why NumPy isn't a required dependency.
+Still, many tests may use NumPy, so consider installing it on mainstream platforms.
+Also considering the other optional dependencies for benchmarking and other scripts:
+
+```bash
+uv pip install -r scripts/requirements.txt 
+```
+
+### Packaging
+
+For source distributions, make sure `MANIFEST.in` is up-to-date.
+When building `sdist`-s for the variant packages, you must set `SZ_TARGET` so the `sdist` metadata `Name` matches the package on PyPI.
+Use the backend helper to build all three correctly named `sdist`-s into `dist/`:
+
+```bash
+uv pip install build
+uv build --sdist --out-dir dist # defaults to `stringzilla`
+SZ_TARGET=stringzilla uv run --no-project python build_backend.py build-sdists
+SZ_TARGET=stringzillas-cpus uv run --no-project python build_backend.py build-sdists
+SZ_TARGET=stringzillas-cuda uv run --no-project python build_backend.py build-sdists
+```
+
+Before you ship, please make sure the `cibuilwheel` packaging works and tests pass on other platforms.
+Don't forget to use the right [CLI arguments][cibuildwheel-cli] to avoid overloading your Docker runtime.
+
+```bash
+cibuildwheel
+cibuildwheel --platform linux                   # works on any OS and builds all Linux backends
+cibuildwheel --platform linux --archs x86_64    # 64-bit x86, the most common on desktop and servers
+cibuildwheel --platform linux --archs aarch64   # 64-bit Arm for mobile devices, Apple M-series, and AWS Graviton
+cibuildwheel --platform linux --archs i686      # 32-bit Linux
+cibuildwheel --platform linux --archs s390x     # emulating big-endian IBM Z
+cibuildwheel --platform macos                   # works only on macOS
+cibuildwheel --platform windows                 # works only on Windows
+```
+
+You may need root privileges for multi-architecture builds:
+
+```bash
+sudo $(which cibuildwheel) --platform linux
+```
+
+To avoid QEMU issues on SVE and some other uncommon instructions, you can inform the PyTest suite, that it's running in an emulated environment:
+
+```bash
+SZ_IS_QEMU_=1 sudo $(which cibuildwheel) --platform linux --archs s390x
+```
+
+On Windows and macOS, to avoid frequent path resolution issues, you may want to use:
+
+```bash
+python -m cibuildwheel --platform windows
+```
+
+All together, for one version of Python, OS, hardware platform:
+
+```bash
+CIBW_BUILD=cp312-* CIBW_ARCHS_LINUX=x86_64 SZ_TARGET=stringzillas-cuda cibuildwheel --platform linux
+CIBW_BUILD=cp312-* CIBW_ARCHS_MACOS=arm64 SZ_TARGET=stringzillas-cpus python3 -m cibuildwheel --platform macos
+$env:CIBW_BUILD = "cp312-*"; $env:CIBW_ARCHS_WINDOWS = "AMD64"; $env:SZ_TARGET = "stringzillas-cpus"; python -m cibuildwheel --platform windows
+```
+
+[cibuildwheel-cli]: https://cibuildwheel.readthedocs.io/en/stable/options/#command-line
+
+If you want to run benchmarks against third-party implementations, check out the [`ashvardanian/StringWars`](https://github.com/ashvardanian/StringWars/) repository.
+
+## JavaScript
+
+```bash
+npm install
+npm test
+```
+
+Log capabilities:
+
+```bash
+npm link stringzilla
+node --input-type=module -e "import('stringzilla').then(m=>console.log(m.default.capabilities))"
+```
+
+Check files that would be included in the package:
+
+```bash
+npm pack --dry-run
+```
+
+## Swift
+
+```bash
+swift build && swift test
+```
+
+Running Swift on Linux requires a couple of extra steps - [`swift.org/install` page](https://www.swift.org/install).
+Alternatively, on Linux, the official Swift Docker image can be used for builds and tests:
+
+```bash
+sudo docker run --rm -v "$PWD:/workspace" -w /workspace swift:6.0 /bin/bash -cl "swift build -c release --static-swift-stdlib && swift test -c release"
+```
+
+To format the code on Linux:
+
+```bash
+sudo docker run --rm -v "$PWD:/workspace" -w /workspace swift:6.0 /bin/bash -c "swift format . -i -r --configuration .swift-format"
+```
+
+## Rust
+
+StringZilla's Rust crate supports both `std` and `no_std` builds.
+Other options include:
+
+- `std` (default): enables standard library support.
+- `cpus`: multi-threaded CPU backend (implies `std`).
+- `cuda`: CUDA backend (implies `cpus` and `std`).
+- `rocm`: ROCm backend (implies `cpus` and `std`).
+
+```bash
+cargo test --no-default-features                # verify `no_std` build
+cargo test --no-default-features --features std # only test with `std`
+cargo test                                      # default tests with `std`
+cargo test --features cpus                      # for parallel multi-CPU backends
+cargo test --features cuda                      # for parallel Nvidia GPU backend
+```
+
+If you need to isolate a failing test:
+
+```bash
+export RUST_BACKTRACE=full
+cargo test -- --test-threads=1 --nocapture
+```
+
+To polish code before pushing:
+
+```bash
+cargo clippy --lib                  # check the library code
+cargo clippy --lib -- -D warnings   # to fail on warnings
+cargo clean && cargo build --lib    # to force a clean build
+```
+
+If you are updating the package contents, you can validate the list of included files using the following command:
+
+```bash
+cargo package --list --allow-dirty
+```
+
+If you want to run benchmarks against third-party implementations, check out the [`ashvardanian/StringWars`](https://github.com/ashvardanian/StringWars/) repository.
+
+## GoLang
+
+First, precompile the C library:
+
+```bash
+cmake -D STRINGZILLA_BUILD_SHARED=1 -D STRINGZILLA_BUILD_TEST=0 -D STRINGZILLA_BUILD_BENCHMARK=0 -B build_golang
+cmake --build build_golang --parallel
+```
+
+Then, navigate to the GoLang module root directory and run the tests from there:
+
+```bash
+cd golang
+CGO_CFLAGS="-I$(pwd)/../include" \
+CGO_LDFLAGS="-L$(pwd)/../build_golang -lstringzilla_shared" \
+LD_LIBRARY_PATH="$(pwd)/../build_golang:$LD_LIBRARY_PATH" \
+go test
+```
+
+To benchmark:
+
+```bash
+cd golang
+CGO_CFLAGS="-I$(pwd)/../include" \
+CGO_LDFLAGS="-L$(pwd)/../build_golang -lstringzilla_shared" \
+LD_LIBRARY_PATH="$(pwd)/../build_golang:$LD_LIBRARY_PATH" \
+go run ../bench/stringzilla.go --input ../leipzig1M.txt
+```
+
+Alternatively:
+
+```bash
+export GO111MODULE="off"
+go run scripts/test.go
+go run bench/stringzilla.go
+```
+
+## General Recommendations
+
+### Operations Not Worth Optimizing
+
+One of the hardest things to learn in HPC is when to stop optimizing, and where not to start.
+
+It doesn't make sense to optimize `sz_order`, because almost always, the relative order of two strings depends on the first bytes.
+Fetching more bytes is not worth it.
+In `sz_equal`, however, in rare cases, SIMD can help, if the user is comparing two mostly similar strings with identical hashes or checksums.
+
+### Unaligned Loads
+
+One common surface of attack for performance optimizations is minimizing unaligned loads.
+Such solutions are beautiful from the algorithmic perspective, but often lead to worse performance.
+It's often cheaper to issue two interleaving wide-register loads, than try minimizing those loads at the cost of juggling registers.
+Unaligned stores are a different story, especially on x86, where multiple reads can be issued in parallel, but only one write can be issued at a time.
+
+### Register Pressure
+
+Byte-level comparisons are simpler and often faster, than n-gram comparisons with subsequent interleaving.
+In the following example we search for 4-byte needles in a haystack, loading at different offsets, and comparing then as arrays of 32-bit integers.
+
+```c
+h0_vec.zmm = _mm512_loadu_epi8(h);
+h1_vec.zmm = _mm512_loadu_epi8(h + 1);
+h2_vec.zmm = _mm512_loadu_epi8(h + 2);
+h3_vec.zmm = _mm512_loadu_epi8(h + 3);
+matches0 = _mm512_cmpeq_epi32_mask(h0_vec.zmm, n_vec.zmm);
+matches1 = _mm512_cmpeq_epi32_mask(h1_vec.zmm, n_vec.zmm);
+matches2 = _mm512_cmpeq_epi32_mask(h2_vec.zmm, n_vec.zmm);
+matches3 = _mm512_cmpeq_epi32_mask(h3_vec.zmm, n_vec.zmm);
+if (matches0 | matches1 | matches2 | matches3)
+    return h + sz_u64_ctz(_pdep_u64(matches0, 0x1111111111111111) | //
+                          _pdep_u64(matches1, 0x2222222222222222) | //
+                          _pdep_u64(matches2, 0x4444444444444444) | //
+                          _pdep_u64(matches3, 0x8888888888888888));
+```
+
+A simpler solution would be to compare byte-by-byte, but in that case we would need to populate multiple registers, broadcasting different letters of the needle into them.
+That may not be noticeable on a micro-benchmark, but it would be noticeable on real-world workloads, where the CPU will speculatively interleave those search operations with something else happening in that context.
+
+### Working on Alternative Hardware Backends
+
+It's important to keep compiler support in mind when extending to new instruction sets.
+Check the most recent CI pipeline configurations in `prerelease.yml` and `release.yml` to see which compilers are used.
+When implementing dynamic dispatch, avoid compiler intrinsics and OS-specific APIs, as they may not be available on all platforms.
+Instead, use inline assembly to check feature flags and dispatch them to the proper implementation.
+
+### Working on Faster Edit Distances
+
+When dealing with non-trivial algorithms, like edit distances, it's advisory to provide pseudo-code or a reference implementation in addition to the optimized one.
+Ideally, include it in `bench/` as a Python Jupyter Notebook with explanations and visualizations.
+
+### Working on Sequence Processing and Sorting
+
+Sorting algorithms for strings are a deeply studied area.
+In general, string sorting algorithms discourage the use of comparisons, as they are expensive for variable-length data and also require pointer-chasing for most array layouts.
+They are also harder to accelerate with SIMD, as most layouts imply 16-byte entries, which are often too big to benefit from simple SIMD techniques.

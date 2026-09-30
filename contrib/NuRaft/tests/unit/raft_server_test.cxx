@@ -1,0 +1,3092 @@
+/************************************************************************
+Copyright 2017-present eBay Inc.
+Author/Developer(s): Jung-Sang Ahn
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+**************************************************************************/
+
+#include "debugging_options.hxx"
+#include "fake_network.hxx"
+#include "raft_package_fake.hxx"
+#include "fake_executer.hxx"
+
+#include "event_awaiter.hxx"
+#include "raft_params.hxx"
+#include "test_common.h"
+
+#include <stdio.h>
+#include <string>
+
+using namespace nuraft;
+using namespace raft_functional_common;
+
+using raft_result = cmd_result< ptr<buffer> >;
+
+namespace raft_server_test {
+
+ptr<buffer> make_buffer(size_t size, char ch = 'x') {
+    ptr<buffer> msg = buffer::alloc(size);
+    if (size) {
+        std::string payload(size, ch);
+        msg->put_raw(reinterpret_cast<const byte*>(payload.data()), payload.size());
+    }
+    msg->pos(0);
+    return msg;
+}
+
+void set_uncommitted_limits(const std::vector<RaftPkg*>& pkgs, uint64_t entries) {
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.leadership_expiry_ = -1;
+        param.max_uncommitted_log_entries_ = entries;
+        pp->raftServer->update_params(param);
+    }
+}
+
+ptr<raft_result> append_one(RaftPkg& leader, size_t size) {
+    return leader.raftServer->append_entries( {make_buffer(size)} );
+}
+
+ptr<raft_result> append_batch(RaftPkg& leader, const std::vector<size_t>& sizes) {
+    std::vector<ptr<buffer>> messages;
+    for (size_t size: sizes) {
+        messages.push_back(make_buffer(size));
+    }
+    return leader.raftServer->append_entries(messages);
+}
+
+int drain_and_commit(RaftPkg& leader, const std::vector<RaftPkg*>& pkgs) {
+    for (size_t ii = 0; ii < 6; ++ii) {
+        leader.fNet->execReqResp();
+    }
+    return wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC);
+}
+
+int make_group_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Now all servers should know each other.
+    for (auto& entry: pkgs) {
+        RaftPkg* pkg = entry;
+        std::vector< ptr<srv_config> > configs;
+        pkg->raftServer->get_srv_config_all(configs);
+        CHK_EQ(3, configs.size());
+
+        for (int ii=1; ii<=3; ++ii) {
+            // DC ID should be 1.
+            CHK_EQ( 1, s1.raftServer->get_dc_id(ii) );
+
+            // Aux should be `server <ID>`.
+            std::string exp = "server " + std::to_string(ii);
+            CHK_EQ( exp, s1.raftServer->get_aux(ii) );
+        }
+    }
+
+    ExecArgs exec_args(&s1);
+    TestSuite::ThreadHolder hh(&exec_args, fake_executer, fake_executer_killer);
+
+    // Append a message using separate thread.
+    std::string test_msg = "test";
+    ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+    msg->put(test_msg);
+    {   std::lock_guard<std::mutex> l(exec_args.msgToWriteLock);
+        exec_args.msgToWrite = msg;
+    }
+    exec_args.eaExecuter.invoke();
+    TestSuite::sleep_ms(EXECUTOR_WAIT_MS, "wait for synchronous executor");
+
+    {   std::lock_guard<std::mutex> l(exec_args.msgToWriteLock);
+        CHK_NULL( exec_args.msgToWrite.get() );
+    }
+    // Packet for pre-commit.
+    s1.fNet->execReqResp();
+    // Packet for commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Test message should be the same.
+    uint64_t last_idx = s1.getTestSm()->last_commit_index();
+    CHK_GT(last_idx, 0);
+    ptr<buffer> buf = s1.getTestSm()->getData(last_idx);
+    CHK_NONNULL( buf.get() );
+    buf->pos(0);
+    CHK_Z( memcmp(buf->data(), test_msg.data(), test_msg.size()) );
+
+    // State machine should be identical.
+    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    fake_executer_killer(&exec_args);
+    hh.join();
+    CHK_Z( hh.getResult() );
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int init_options_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    size_t num_srvs = pkgs.size();
+    CHK_GT(num_srvs, 0);
+
+    raft_server::init_options opt(false, true, true);
+
+    for (size_t ii = 0; ii < num_srvs; ++ii) {
+        RaftPkg* ff = pkgs[ii];
+
+        // For s2 and s3, initialize Raft servers with
+        // election timer skip option.
+        opt.skip_initial_election_timeout_ = (ii > 0);
+        opt.raft_callback_ = cb_default;
+        ff->initServer(nullptr, opt);
+        ff->fNet->listen(ff->raftServer);
+        ff->fTimer->invoke( timer_task_type::election_timer );
+    }
+
+    // s2 and s3 should never be a leader.
+    for (size_t ii = 0; ii < num_srvs; ++ii) {
+        RaftPkg* ff = pkgs[ii];
+        if (ii == 0) {
+            CHK_TRUE( ff->raftServer->is_leader() );
+        } else {
+            CHK_FALSE( ff->raftServer->is_leader() );
+        }
+    }
+
+    // Make group should succeed as long as s1 is the current leader.
+    CHK_Z( make_group( pkgs ) );
+    for (RaftPkg* ff: pkgs) {
+        CHK_EQ(1, ff->raftServer->get_leader());
+    }
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int update_params_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        int old_value = param.election_timeout_upper_bound_;
+        param.with_election_timeout_upper( old_value + 1 );
+        pp->raftServer->update_params(param);
+
+        param = pp->raftServer->get_current_params();
+        CHK_EQ( old_value + 1, param.election_timeout_upper_bound_ );
+    }
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int add_node_error_cases_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+    // Hard to make a server really non-existent as to fail an rpc req with a FakeNetwork
+    // you need to actually have a recipient. So we simulate a nonexistent server with an
+    // offline one
+    std::string nonexistent_addr = "nonexistent";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    RaftPkg nonexistent(f_base, 4, nonexistent_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3, &nonexistent};
+
+    bool join_error_callback_fired = false;
+    int join_error_srv_id = -1;
+    auto join_error_callback = [&](cb_func::Type type, cb_func::Param* param) {
+        if (type == cb_func::Type::ServerJoinFailed) {
+            join_error_callback_fired = true;
+            join_error_srv_id = param->peerId;
+            return cb_func::ReturnCode::Ok;
+        }
+        return cb_default(type, param);
+    };
+
+    CHK_Z( launch_servers( pkgs, nullptr, false, join_error_callback) );
+    nonexistent.fNet->goesOffline();
+
+    size_t num_srvs = pkgs.size();
+    CHK_GT(num_srvs, 0);
+
+    ptr<FakeNetwork> c_net = cs_new<FakeNetwork>("client", f_base);
+    f_base->addNetwork(c_net);
+    c_net->create_client(s1_addr);
+    c_net->create_client(s2_addr);
+
+    std::atomic<bool> invoked(false);
+    rpc_handler bad_req_handler = [&invoked]( ptr<resp_msg>& resp,
+                                              ptr<rpc_exception>& err ) -> int {
+        invoked.store(true);
+        CHK_EQ( cmd_result_code::BAD_REQUEST, resp->get_result_code() );
+        return 0;
+    };
+
+    {   // Attempt to add more than one server at once.
+        ptr<req_msg> req = cs_new<req_msg>
+                           ( (ulong)0, msg_type::add_server_request, 0, 0,
+                             (ulong)0, (ulong)0, (ulong)0 );
+        for (size_t ii=1; ii<num_srvs; ++ii) {
+            RaftPkg* ff = pkgs[ii];
+            ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
+            ptr<buffer> buf(srv->serialize());
+            ptr<log_entry> log( cs_new<log_entry>
+                                ( 0, buf, log_val_type::cluster_server ) );
+            req->log_entries().push_back(log);
+        }
+        c_net->findClient(s1_addr)->send( req, bad_req_handler );
+        c_net->execReqResp();
+    }
+    CHK_TRUE(invoked.load());
+    invoked = false;
+
+    {   // Attempt to add server with wrong message type.
+        ptr<req_msg> req = cs_new<req_msg>
+                           ( (ulong)0, msg_type::add_server_request, 0, 0,
+                             (ulong)0, (ulong)0, (ulong)0 );
+        RaftPkg* ff = pkgs[1];
+        ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
+        ptr<buffer> buf(srv->serialize());
+        ptr<log_entry> log( cs_new<log_entry>
+                            ( 0, buf, log_val_type::conf ) );
+        req->log_entries().push_back(log);
+        c_net->findClient(s1_addr)->send( req, bad_req_handler );
+        c_net->execReqResp();
+    }
+    CHK_TRUE(invoked.load());
+    invoked = false;
+
+    {   // Attempt to add server while previous one is in progress.
+
+        // Add S2 to S1.
+        s1.raftServer->add_srv( *(s2.getTestMgr()->get_srv_config()) );
+
+        // Now adding S2 is in progress, add S3 to S1.
+        ptr<raft_result> ret =
+            s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+
+        // Should fail.
+        CHK_EQ( cmd_result_code::SERVER_IS_JOINING, ret->get_result_code() );
+
+        // Join req/resp.
+        s1.fNet->execReqResp();
+
+        // Now config change is in progress, add S3 to S1.
+        ret = s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+
+        // May fail (depends on commit thread wake-up timing).
+        size_t expected_cluster_size = 2;
+        if (ret->get_result_code() == cmd_result_code::OK) {
+            // If succeed, S3 is also a member of group.
+            expected_cluster_size = 3;
+        } else {
+            // If not, error code should be CONFIG_CHANGNING.
+            CHK_EQ( cmd_result_code::CONFIG_CHANGING, ret->get_result_code() );
+        }
+
+        // Finish adding S2 task.
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // Heartbeat.
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        std::vector< ptr< srv_config > > configs_out;
+        s1.raftServer->get_srv_config_all(configs_out);
+
+        CHK_EQ(expected_cluster_size, configs_out.size());
+    }
+
+    {   // Attempt to add S2 again.
+        ptr<raft_result> ret =
+            s1.raftServer->add_srv( *(s2.getTestMgr()->get_srv_config()) );
+        CHK_EQ( cmd_result_code::SERVER_ALREADY_EXISTS, ret->get_result_code() );
+    }
+
+    {   // Attempt to add S3 to S2 (non-leader).
+        ptr<raft_result> ret =
+            s2.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+        CHK_EQ( cmd_result_code::NOT_LEADER, ret->get_result_code() );
+    }
+
+    rpc_handler nl_handler = [&invoked]( ptr<resp_msg>& resp,
+                                         ptr<rpc_exception>& err ) -> int {
+        invoked.store(true);
+        CHK_EQ( cmd_result_code::NOT_LEADER, resp->get_result_code() );
+        return 0;
+    };
+    {   // Attempt to add S3 to S2 (non-leader), through RPC.
+        ptr<req_msg> req = cs_new<req_msg>
+                           ( (ulong)0, msg_type::add_server_request, 0, 0,
+                             (ulong)0, (ulong)0, (ulong)0 );
+        ptr<srv_config> srv = s3.getTestMgr()->get_srv_config();
+        ptr<buffer> buf(srv->serialize());
+        ptr<log_entry> log( cs_new<log_entry>
+                            ( 0, buf, log_val_type::cluster_server ) );
+        req->log_entries().push_back(log);
+        c_net->findClient(s2_addr)->send( req, nl_handler );
+        c_net->execReqResp();
+    }
+    CHK_TRUE(invoked.load());
+    invoked = false;
+
+    {   // Now, normally add S3 to S1.
+        s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // Heartbeat.
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        std::vector< ptr< srv_config > > configs_out;
+        s1.raftServer->get_srv_config_all(configs_out);
+
+        // All 3 servers should exist.
+        CHK_EQ(3, configs_out.size());
+    }
+
+    {   // Add a non-existent server to S1, check that a callback is fired on timers expiry.
+        s1.raftServer->add_srv({nonexistent.myId, nonexistent_addr});
+        s1.fNet->execReqResp(nonexistent_addr);
+        s1.fNet->execReqResp(nonexistent_addr);
+
+        CHK_TRUE(join_error_callback_fired);
+        CHK_EQ(nonexistent.myId, join_error_srv_id);
+    }
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int add_node_race_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2};
+
+    CHK_Z( launch_servers( pkgs ) );
+
+    // Wait enough time to commit the latest config.
+    // This is needed for `add_srv` to proceed without
+    // being blocked by previous config change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Call `add_srv` at the same time.
+    s1.raftServer->add_srv( *(s2.getTestMgr()->get_srv_config()) );
+    s2.raftServer->add_srv( *(s1.getTestMgr()->get_srv_config()) );
+
+    // Deliver message each other (S1 -> S2 and S2 -> S1) at the same time.
+    s1.fNet->delieverReqTo(s2_addr);
+
+    // As a result of S1's message, S2 may create a new connection,
+    // and the previous request (by `add_srv` call) pending in the
+    // previous connection may be lost.
+    //
+    // We need to deliver the stale request to make this race condition happen.
+    s2.fNet->delieverStaleReqTo(s1_addr);
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Handle responses simultaneously.
+    s1.fNet->handleRespFrom(s2_addr);
+    s2.fNet->handleRespFrom(s1_addr);
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Repeat communication for a few more times.
+    for (size_t ii = 0; ii < 5; ++ii) {
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        s2.fTimer->invoke( timer_task_type::heartbeat_timer );
+        s1.fNet->delieverReqTo(s2_addr);
+        s2.fNet->delieverReqTo(s1_addr);
+        s1.fNet->handleRespFrom(s2_addr);
+        s2.fNet->handleRespFrom(s1_addr);
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    }
+
+    // In the race condition, S1 (smaller ID) should be the leader.
+    TestSuite::_msg("s1: %s\n", s1.raftServer->is_leader() ? "leader" : "follower");
+    TestSuite::_msg("s2: %s\n", s2.raftServer->is_leader() ? "leader" : "follower");
+    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int remove_node_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Try to remove s3 from non leader, should return error.
+    ptr< cmd_result< ptr<buffer> > > ret =
+        s2.raftServer->remove_srv( s3.getTestMgr()->get_srv_config()->get_id() );
+    CHK_FALSE( ret->get_accepted() );
+    CHK_EQ( cmd_result_code::NOT_LEADER, ret->get_result_code() );
+
+    // Remove s3 from leader.
+    s1.dbgLog(" --- remove ---");
+    s1.raftServer->remove_srv( s3.getTestMgr()->get_srv_config()->get_id() );
+
+    // Leave req/resp.
+    s1.fNet->execReqResp();
+    // Leave done, notify to peers.
+    s1.fNet->execReqResp();
+    // Notify new commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // All servers should see S1 and S2 only.
+    for (auto& entry: pkgs) {
+        RaftPkg* pkg = entry;
+        std::vector< ptr<srv_config> > configs;
+        pkg->raftServer->get_srv_config_all(configs);
+
+        TestSuite::setInfo("id = %d", pkg->myId);
+        CHK_EQ(2, configs.size());
+    }
+
+    // Invoke election timer for S3, to make it step down.
+    s3.fTimer->invoke( timer_task_type::election_timer );
+    s3.fTimer->invoke( timer_task_type::election_timer );
+    // Pending timer task should be zero in S3.
+    CHK_Z( s3.fTimer->getNumPendingTasks() );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int remove_node_error_cases_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    size_t num_srvs = pkgs.size();
+    CHK_GT(num_srvs, 0);
+
+    ptr<FakeNetwork> c_net = cs_new<FakeNetwork>("client", f_base);
+    f_base->addNetwork(c_net);
+    c_net->create_client(s1_addr);
+    c_net->create_client(s2_addr);
+
+    std::atomic<bool> invoked(false);
+    rpc_handler bad_req_handler = [&invoked]( ptr<resp_msg>& resp,
+                                              ptr<rpc_exception>& err ) -> int {
+        invoked.store(true);
+        CHK_EQ( cmd_result_code::BAD_REQUEST, resp->get_result_code() );
+        return 0;
+    };
+
+    {   // Attempt to remove more than one server at once.
+        ptr<req_msg> req = cs_new<req_msg>
+                           ( (ulong)0, msg_type::remove_server_request, 0, 0,
+                             (ulong)0, (ulong)0, (ulong)0 );
+        for (size_t ii=1; ii<num_srvs; ++ii) {
+            RaftPkg* ff = pkgs[ii];
+            ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
+            ptr<buffer> buf(srv->serialize());
+            ptr<log_entry> log( cs_new<log_entry>
+                                ( 0, buf, log_val_type::cluster_server ) );
+            req->log_entries().push_back(log);
+        }
+        c_net->findClient(s1_addr)->send( req, bad_req_handler );
+        c_net->execReqResp();
+    }
+    CHK_TRUE(invoked.load());
+    invoked = false;
+
+    {   // Attempt to remove S3 from S2 (non-leader).
+        ptr<raft_result> ret = s2.raftServer->remove_srv(s3.myId);
+        CHK_EQ( cmd_result_code::NOT_LEADER, ret->get_result_code() );
+    }
+
+    rpc_handler nl_handler = [&invoked]( ptr<resp_msg>& resp,
+                                         ptr<rpc_exception>& err ) -> int {
+        invoked.store(true);
+        CHK_EQ( cmd_result_code::NOT_LEADER, resp->get_result_code() );
+        return 0;
+    };
+    {   // Attempt to remove S3 to S2 (non-leader), through RPC.
+        ptr<req_msg> req = cs_new<req_msg>
+                           ( (ulong)0, msg_type::remove_server_request, 0, 0,
+                             (ulong)0, (ulong)0, (ulong)0 );
+        ptr<buffer> buf(buffer::alloc(sz_int));
+        buf->put(s3.myId);
+        buf->pos(0);
+        ptr<log_entry> log(cs_new<log_entry>(0, buf, log_val_type::cluster_server));
+        req->log_entries().push_back(log);
+        c_net->findClient(s2_addr)->send( req, nl_handler );
+        c_net->execReqResp();
+    }
+    CHK_TRUE(invoked.load());
+    invoked = false;
+
+    {   // Attempt to remove non-existing server ID.
+        ptr<raft_result> ret = s1.raftServer->remove_srv(9999);
+        CHK_EQ( cmd_result_code::SERVER_NOT_FOUND, ret->get_result_code() );
+    }
+
+    {   // Attempt to remove leader itself.
+        ptr<raft_result> ret = s1.raftServer->remove_srv(s1.myId);
+        CHK_EQ( cmd_result_code::CANNOT_REMOVE_LEADER, ret->get_result_code() );
+    }
+
+    {   // Attempt to remove server while previous one is in progress.
+
+        // Remove S2 from S1.
+        s1.raftServer->remove_srv(s2.myId);
+
+        // Leave req/resp.
+        s1.fNet->execReqResp();
+
+        // Now config change is in progress, remove S3.
+        ptr<raft_result> ret = s1.raftServer->remove_srv(s3.myId);
+
+        // May fail (depends on commit thread wake-up timing).
+        size_t expected_cluster_size = 2;
+        if (ret->get_result_code() == cmd_result_code::OK) {
+            // If succeed, S3 is also removed.
+            expected_cluster_size = 1;
+        }
+
+        // Finish the task.
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // Heartbeat.
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        s1.fNet->execReqResp();
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        std::vector< ptr< srv_config > > configs_out;
+        s1.raftServer->get_srv_config_all(configs_out);
+        CHK_EQ(expected_cluster_size, configs_out.size());
+
+        // If S3 still exists, remove it here.
+        if (expected_cluster_size > 1) {
+            s1.raftServer->remove_srv(s3.myId);
+            s1.fNet->execReqResp();
+            s1.fNet->execReqResp();
+            CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+            s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+            s1.fNet->execReqResp();
+            s1.fNet->execReqResp();
+            CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+            configs_out.clear();
+            s1.raftServer->get_srv_config_all(configs_out);
+            CHK_EQ(1, configs_out.size());
+        }
+    }
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int remove_and_then_add_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        pp->raftServer->update_params(param);
+    }
+
+    // Make a group using S1 and S2 only.
+    CHK_Z( make_group( {&s1, &s2} ) );
+
+    // Append logs to create a snapshot and then compact logs.
+    const size_t NUM = 10;
+    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    for (size_t ii=0; ii<NUM; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        ptr< cmd_result< ptr<buffer> > > ret =
+            s1.raftServer->append_entries( {msg} );
+
+        CHK_TRUE( ret->get_accepted() );
+
+        handlers.push_back(ret);
+    }
+    // Pre-commit and commit.
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // All handlers should be OK.
+    for (auto& entry: handlers) {
+        CHK_TRUE( entry->has_result() );
+        CHK_EQ( cmd_result_code::OK, entry->get_result_code() );
+    }
+
+    // Remove S2 from leader.
+    s1.dbgLog(" --- remove ---");
+    s1.raftServer->remove_srv( s2.getTestMgr()->get_srv_config()->get_id() );
+
+    // Leave req/resp.
+    s1.fNet->execReqResp();
+    // Leave done, notify to peers.
+    s1.fNet->execReqResp();
+    // Notify new commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Now add S3 to leader.
+    s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+    s1.fNet->execReqResp();
+    // Send the entire snapshot.
+    do {
+        s1.fNet->execReqResp();
+    } while (s3.raftServer->is_receiving_snapshot());
+    // Commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // First HB.
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Second HB.
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // S3 should see S1 and itself.
+    CHK_EQ(2, s3.raftServer->get_config()->get_servers().size());
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int rejoin_clears_busy_peers_before_leadership_takeover_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Leave a pre-vote response pending on S2's current RPC client. It must
+    // become stale when the rejoin request replaces that busy client.
+    ulong stale_prevote_term = s2.raftServer->get_term();
+    s2.fNet->requestPreVote(s2.raftServer.get());
+    CHK_TRUE( s2.fNet->delieverReqTo(s1.myEndpoint) );
+    ptr<resp_msg> stale_prevote_resp = cs_new<resp_msg>(
+        stale_prevote_term,
+        msg_type::pre_vote_response,
+        s1.myId,
+        s2.myId);
+    stale_prevote_resp->accept(1);
+    CHK_TRUE( s2.fNet->replaceLastPendingResp(
+        s1.myEndpoint, stale_prevote_resp) );
+
+    // Model the window in the real callback where try_set_free() has run,
+    // but handle_peer_resp() is still blocked on raft_server::lock_. The
+    // response remains attached to the old client despite no peer being busy.
+    s2.fNet->setPeerFree(s2.raftServer.get(), s1.myId);
+    s2.fNet->setPeerFree(s2.raftServer.get(), s3.myId);
+
+    ptr<peer> old_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> old_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(old_s1_peer.get());
+    CHK_NONNULL(old_s3_peer.get());
+    CHK_FALSE(old_s1_peer->is_abandoned());
+    CHK_FALSE(old_s3_peer->is_abandoned());
+
+    // A leave request can outlive the leadership epoch that created it even
+    // if it has not advanced far enough to populate `srv_to_leave_`.
+    old_s3_peer->set_leave_flag();
+    CHK_TRUE(old_s3_peer->is_leave_flag_set());
+
+    // Remove S2, but keep its process and peer objects alive.
+    s1.raftServer->remove_srv(s2.myId);
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Re-add the still-running S2. The accepted `join_cluster_request` must
+    // replace its old peer clients before log synchronization continues.
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    s1.fNet->execReqResp();
+
+    ptr<peer> new_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> new_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(new_s1_peer.get());
+    CHK_NONNULL(new_s3_peer.get());
+    CHK_TRUE(old_s1_peer != new_s1_peer);
+    CHK_TRUE(old_s3_peer != new_s3_peer);
+    CHK_FALSE(new_s1_peer->is_busy());
+    CHK_FALSE(new_s3_peer->is_busy());
+    CHK_FALSE(new_s3_peer->is_leave_flag_set());
+
+    // The delayed response belongs to the election epoch before rejoin. It
+    // must not initiate a vote while S2 is catching up with the cluster.
+    CHK_TRUE( s2.raftServer->is_catching_up() );
+    ulong rejoin_term = s2.raftServer->get_term();
+    CHK_TRUE( s2.fNet->handleStaleRespFrom(s1.myEndpoint) );
+    CHK_EQ( rejoin_term, s2.raftServer->get_term() );
+    CHK_TRUE( s2.raftServer->is_catching_up() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+
+    // Finish log synchronization and commit the new configuration.
+    for (size_t ii = 0; ii < 4; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    for (size_t ii = 0; ii < 2; ++ii)
+    {
+        s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    }
+    CHK_EQ(3, s2.raftServer->get_config()->get_servers().size());
+
+    // A later forced takeover must be able to send votes and win quorum.
+    s1.raftServer->yield_leadership(false, s2.myId);
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    s2.fNet->execReqResp();
+    CHK_TRUE( s2.raftServer->is_leader() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int rejoin_replaces_abandoned_peers_before_leadership_takeover_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Remove S2, but keep its process and peer objects alive.
+    s1.raftServer->remove_srv(s2.myId);
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    ptr<peer> old_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> old_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(old_s1_peer.get());
+    CHK_NONNULL(old_s3_peer.get());
+
+    // Drive both self-removal timeouts. The second one runs
+    // `cancel_schedulers`, abandons every retained peer, and resets the
+    // server scheduler.
+    CHK_EQ(2, s2.fNet->getStepsToDown(s2.raftServer.get()));
+    s2.fTimer->invoke(timer_task_type::election_timer);
+    CHK_EQ(1, s2.fNet->getStepsToDown(s2.raftServer.get()));
+    s2.fTimer->invoke(timer_task_type::election_timer);
+    CHK_EQ(0, s2.fNet->getStepsToDown(s2.raftServer.get()));
+    CHK_TRUE(old_s1_peer->is_abandoned());
+    CHK_TRUE(old_s3_peer->is_abandoned());
+
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    s1.fNet->execReqResp();
+
+    ptr<peer> new_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> new_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(new_s1_peer.get());
+    CHK_NONNULL(new_s3_peer.get());
+    CHK_TRUE(old_s1_peer != new_s1_peer);
+    CHK_TRUE(old_s3_peer != new_s3_peer);
+    CHK_FALSE(new_s1_peer->is_abandoned());
+    CHK_FALSE(new_s3_peer->is_abandoned());
+
+    // Finish log synchronization and commit the new configuration.
+    for (size_t ii = 0; ii < 4; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    for (size_t ii = 0; ii < 2; ++ii)
+    {
+        s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    }
+    CHK_EQ(3, s2.raftServer->get_config()->get_servers().size());
+
+    // The new peer epoch must be able to request votes and win quorum.
+    s1.raftServer->yield_leadership(false, s2.myId);
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    s2.fNet->execReqResp();
+    CHK_TRUE( s2.raftServer->is_leader() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int rejoin_clears_pending_self_removal_timeout_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    s1.raftServer->remove_srv(s2.myId);
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_EQ(2, s2.fNet->getStepsToDown(s2.raftServer.get()));
+
+    // Enter the interval between the two removal timeouts. The next election
+    // timeout would call `cancel_schedulers` if the join did not cancel the
+    // pending self-removal.
+    s2.fTimer->invoke(timer_task_type::election_timer);
+    CHK_EQ(1, s2.fNet->getStepsToDown(s2.raftServer.get()));
+
+    ptr<peer> old_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> old_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(old_s1_peer.get());
+    CHK_NONNULL(old_s3_peer.get());
+    CHK_FALSE(old_s1_peer->is_abandoned());
+    CHK_FALSE(old_s3_peer->is_abandoned());
+
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    s1.fNet->execReqResp();
+
+    CHK_EQ(0, s2.fNet->getStepsToDown(s2.raftServer.get()));
+    ptr<peer> new_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    ptr<peer> new_s3_peer = s2.fNet->getPeer(s2.raftServer.get(), s3.myId);
+    CHK_NONNULL(new_s1_peer.get());
+    CHK_NONNULL(new_s3_peer.get());
+    CHK_TRUE(old_s1_peer != new_s1_peer);
+    CHK_TRUE(old_s3_peer != new_s3_peer);
+
+    // Fire the already scheduled timeout from the removal epoch. It must not
+    // abandon either replacement peer.
+    s2.fTimer->invoke(timer_task_type::election_timer);
+    CHK_FALSE(new_s1_peer->is_abandoned());
+    CHK_FALSE(new_s3_peer->is_abandoned());
+
+    for (size_t ii = 0; ii < 4; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    for (size_t ii = 0; ii < 2; ++ii)
+    {
+        s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    }
+    CHK_EQ(3, s2.raftServer->get_config()->get_servers().size());
+
+    s1.raftServer->yield_leadership(false, s2.myId);
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    s2.fNet->execReqResp();
+    CHK_TRUE( s2.raftServer->is_leader() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int rejoin_replaces_stale_leave_peer_before_leadership_takeover_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Remove S2, but keep its process and peer objects alive.
+    s1.raftServer->remove_srv(s2.myId);
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Model an unfinished removal that S2 started while it was leader. The
+    // target survives S2's leadership loss and aliases the current peer.
+    ptr<peer> old_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    CHK_NONNULL(old_s1_peer.get());
+    s2.fNet->setSrvToLeave(s2.raftServer.get(), s1.myId,
+                           s2.raftServer->get_last_log_idx());
+    CHK_TRUE(s2.fNet->getSrvToLeave(s2.raftServer.get()) == old_s1_peer);
+
+    // A pending removal can also own a state-machine snapshot cursor. It must
+    // be closed before the old peer is detached.
+    ptr<snapshot> snp = cs_new<snapshot>(
+        s2.raftServer->get_last_log_idx(),
+        s2.raftServer->get_term(),
+        s2.raftServer->get_config());
+    s2.fNet->setPeerSnapshotInSync(s2.raftServer.get(), s1.myId, snp);
+    ptr<snapshot_sync_ctx> sync_ctx = old_s1_peer->get_snapshot_sync_ctx();
+    CHK_NONNULL(sync_ctx.get());
+    {
+        snapshot_sync_ctx::user_snp_ctx_io_guard user_ctx_guard(
+            *sync_ctx, *s2.getTestSm());
+        CHK_TRUE(user_ctx_guard);
+        ptr<buffer> snapshot_data;
+        bool is_last_object = false;
+        CHK_Z(s2.getTestSm()->read_logical_snp_obj(
+            *snp,
+            user_ctx_guard.get(),
+            0,
+            snapshot_data,
+            is_last_object));
+        CHK_FALSE(user_ctx_guard.finish());
+    }
+    CHK_EQ(1, s2.getTestSm()->getNumOpenedUserCtxs());
+
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    s1.fNet->execReqResp();
+
+    ptr<peer> new_s1_peer = s2.fNet->getPeer(s2.raftServer.get(), s1.myId);
+    CHK_NONNULL(new_s1_peer.get());
+    CHK_TRUE(old_s1_peer != new_s1_peer);
+    CHK_FALSE(new_s1_peer->is_abandoned());
+    CHK_NULL(s2.fNet->getSrvToLeave(s2.raftServer.get()).get());
+    CHK_EQ(3, s2.fNet->getNumVotingMembers(s2.raftServer.get()));
+    CHK_EQ(0, s2.getTestSm()->getNumOpenedUserCtxs());
+
+    // Finish log synchronization and commit the new configuration.
+    for (size_t ii = 0; ii < 4; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    for (size_t ii = 0; ii < 2; ++ii)
+    {
+        s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+        s1.fNet->execReqResp();
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    }
+    CHK_EQ(3, s2.raftServer->get_config()->get_servers().size());
+
+    // The new peer epoch must be able to request votes and win quorum.
+    s1.raftServer->yield_leadership(false, s2.myId);
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    s2.fNet->execReqResp();
+    CHK_TRUE( s2.raftServer->is_leader() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int rejoin_discards_pending_removal_config_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Start the same leader-side removal path that handles a leave response.
+    // It couples srv_to_leave_, config_changing_, and uncommitted_config_,
+    // but does not replicate the removal before the join arrives.
+    s2.fNet->removeServerFromCluster(s2.raftServer.get(), s3.myId);
+
+    CHK_TRUE(s2.fNet->getSrvToLeave(s2.raftServer.get()) != nullptr);
+    CHK_TRUE(s2.fNet->isConfigChanging(s2.raftServer.get()));
+    ptr<cluster_config> pending_removal =
+        s2.fNet->getUncommittedConfig(s2.raftServer.get());
+    CHK_NONNULL(pending_removal.get());
+    CHK_NULL(pending_removal->get_server(s3.myId).get());
+
+    // S1's committed configuration still includes S3. Deliver a join request
+    // from that membership epoch to S2 without committing S2's removal.
+    ptr<buffer> join_conf_buf = s1.raftServer->get_config()->serialize();
+    ptr<req_msg> join_req = cs_new<req_msg>(
+        s2.raftServer->get_term(),
+        msg_type::join_cluster_request,
+        s1.myId,
+        s2.myId,
+        0,
+        s1.raftServer->get_last_log_idx(),
+        s1.raftServer->get_target_committed_log_idx());
+    join_req->log_entries().push_back(
+        cs_new<log_entry>(s2.raftServer->get_term(),
+                          join_conf_buf,
+                          log_val_type::conf));
+    rpc_handler ignore_join_response =
+        [](ptr<resp_msg>&, ptr<rpc_exception>&) { return 0; };
+    s1.fNet->findClient(s2.myEndpoint)->send(join_req, ignore_join_response);
+    CHK_TRUE(s1.fNet->delieverReqTo(s2.myEndpoint));
+
+    CHK_NULL(s2.fNet->getSrvToLeave(s2.raftServer.get()).get());
+    CHK_FALSE(s2.fNet->isConfigChanging(s2.raftServer.get()));
+    CHK_NULL(s2.fNet->getUncommittedConfig(s2.raftServer.get()).get());
+
+    // The next removal must derive its configuration from the join request,
+    // not from S2's stale removal of S3. Thus it keeps S3 while removing S1.
+    s2.fNet->removeServerFromCluster(s2.raftServer.get(), s1.myId);
+    ptr<cluster_config> next_removal =
+        s2.fNet->getUncommittedConfig(s2.raftServer.get());
+    CHK_NONNULL(next_removal.get());
+    CHK_NULL(next_removal->get_server(s1.myId).get());
+    CHK_NONNULL(next_removal->get_server(s2.myId).get());
+    CHK_NONNULL(next_removal->get_server(s3.myId).get());
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int deferred_free_from_replaced_rpc_cannot_free_new_request_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Model a non-streamed append response that has deferred its release of
+    // busy_flag_, followed by recreation of its RPC client before the stale
+    // callback completes.
+    s1.fNet->setPeerFree(s1.raftServer.get(), s2.myId);
+    CHK_TRUE( s1.fNet->makePeerBusy(s1.raftServer.get(), s2.myId) );
+    uint64_t old_rpc_id =
+        s1.fNet->markPeerDeferredFree(s1.raftServer.get(), s2.myId);
+    CHK_TRUE(old_rpc_id);
+    CHK_TRUE( s1.fNet->forceRecreatePeerRpc(s1.raftServer.get(), s2.myId) );
+
+    // A new request owns the deferred release on the replacement client. A
+    // late callback from the old client must not clear its busy flag.
+    CHK_TRUE( s1.fNet->makePeerBusy(s1.raftServer.get(), s2.myId) );
+    uint64_t new_rpc_id =
+        s1.fNet->markPeerDeferredFree(s1.raftServer.get(), s2.myId);
+    CHK_TRUE(new_rpc_id);
+    CHK_TRUE(old_rpc_id != new_rpc_id);
+    CHK_FALSE( s1.fNet->consumePeerDeferredFree(
+        s1.raftServer.get(), s2.myId, old_rpc_id) );
+    CHK_TRUE( s1.fNet->isPeerBusy(s1.raftServer.get(), s2.myId) );
+    CHK_TRUE( s1.fNet->consumePeerDeferredFree(
+        s1.raftServer.get(), s2.myId, new_rpc_id) );
+    CHK_FALSE( s1.fNet->isPeerBusy(s1.raftServer.get(), s2.myId) );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int removed_peer_response_during_rejoin_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Keep an accepted pre-vote response from S3 in flight on S2's original
+    // peer object. S3 will later be removed from S2's configuration.
+    ulong stale_prevote_term = s2.raftServer->get_term();
+    s2.fNet->requestPreVote(s2.raftServer.get());
+    CHK_TRUE( s2.fNet->delieverReqTo(s3.myEndpoint) );
+    ptr<resp_msg> stale_prevote_resp = cs_new<resp_msg>(
+        stale_prevote_term,
+        msg_type::pre_vote_response,
+        s3.myId,
+        s2.myId);
+    stale_prevote_resp->accept(1);
+    CHK_TRUE( s2.fNet->replaceLastPendingResp(
+        s3.myEndpoint, stale_prevote_resp) );
+
+    // Remove S2, then S3, so S1's active configuration becomes {S1} while
+    // S2 retains its old peer object for S3.
+    s1.raftServer->remove_srv(s2.myId);
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    s1.raftServer->remove_srv(s3.myId);
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Rejoin S2 into {S1, S2}. The join request reconfigures S2 and removes
+    // S3 from peers_, but the callback above still owns the old S3 object.
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    s1.fNet->execReqResp();
+    CHK_TRUE( s2.raftServer->is_catching_up() );
+
+    // Start a pre-vote in the rejoined configuration without delivering S1's
+    // request. An accepted response from removed S3 must not complete it and
+    // start an election while S2 is catching up.
+    s2.fNet->requestPreVote(s2.raftServer.get());
+    ulong rejoin_term = s2.raftServer->get_term();
+    CHK_TRUE( s2.fNet->handleRespFrom(s3.myEndpoint) );
+    CHK_EQ( rejoin_term, s2.raftServer->get_term() );
+    CHK_TRUE( s2.raftServer->is_catching_up() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int stale_joiner_response_after_role_change_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Create enough committed log entries for adding S2 to require a
+    // sync_log_request instead of immediately proposing the new config.
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    CHK_TRUE( s1.fNet->delieverReqTo(s2.myEndpoint) );
+    CHK_TRUE( s1.fNet->handleRespFrom(s2.myEndpoint) );
+    CHK_TRUE( s1.fNet->delieverReqTo(s2.myEndpoint) );
+    CHK_EQ(1, s1.fNet->getNumPendingResps(s2.myEndpoint));
+
+    // Abandon the S2 join while its sync_log_response is still pending, then
+    // regain leadership and start adding S3.
+    s1.fNet->forceBecomeFollower(s1.raftServer.get());
+    s1.fNet->forceBecomeLeader(s1.raftServer.get());
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    ptr<raft_result> add_s3 =
+        s1.raftServer->add_srv(*s3.getTestMgr()->get_srv_config());
+    CHK_TRUE( add_s3->get_accepted() );
+    ulong s3_next_log_idx =
+        s1.fNet->getServerToJoinNextLogIdx(s1.raftServer.get());
+    ulong s3_matched_idx =
+        s1.fNet->getServerToJoinMatchedIdx(s1.raftServer.get());
+
+    // The response retained S2's old peer object. It must be rejected instead
+    // of applying S2's progress to the current S3 join.
+    CHK_TRUE( s1.fNet->handleRespFrom(s2.myEndpoint) );
+    CHK_EQ( s3_next_log_idx,
+            s1.fNet->getServerToJoinNextLogIdx(s1.raftServer.get()) );
+    CHK_EQ( s3_matched_idx,
+            s1.fNet->getServerToJoinMatchedIdx(s1.raftServer.get()) );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int completed_join_response_cannot_affect_later_join_test()
+{
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers(pkgs) );
+
+    // Retain the temporary peer object used to add S2. Committing the
+    // membership change replaces it with a different peer in `peers_`.
+    s1.raftServer->add_srv(*s2.getTestMgr()->get_srv_config());
+    ptr<peer> completed_joiner =
+        s1.fNet->getServerToJoin(s1.raftServer.get());
+    CHK_NONNULL(completed_joiner.get());
+
+    // Join request/response, configuration commit, then notify S2.
+    for (size_t ii = 0; ii < 3; ++ii)
+    {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_TRUE(completed_joiner->is_abandoned());
+
+    // Start adding S3. It is now the only peer that an extended log-sync
+    // response is allowed to update.
+    ptr<raft_result> add_s3 =
+        s1.raftServer->add_srv(*s3.getTestMgr()->get_srv_config());
+    CHK_TRUE(add_s3->get_accepted());
+    ulong s3_next_log_idx =
+        s1.fNet->getServerToJoinNextLogIdx(s1.raftServer.get());
+    ulong s3_matched_idx =
+        s1.fNet->getServerToJoinMatchedIdx(s1.raftServer.get());
+
+    // Model a delayed sync response from the completed S2 join. The peer
+    // object is detached, but its RPC generation may still be current.
+    ptr<resp_msg> delayed_resp = cs_new<resp_msg>(
+        s1.raftServer->get_term(),
+        msg_type::sync_log_response,
+        s2.myId,
+        s1.myId,
+        s3_next_log_idx + 1);
+    delayed_resp->accept(s3_next_log_idx + 1);
+    delayed_resp->set_peer(completed_joiner);
+    s1.fNet->handleExtendedResp(s1.raftServer.get(), delayed_resp);
+
+    CHK_EQ(s3_next_log_idx,
+           s1.fNet->getServerToJoinNextLogIdx(s1.raftServer.get()));
+    CHK_EQ(s3_matched_idx,
+           s1.fNet->getServerToJoinMatchedIdx(s1.raftServer.get()));
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+
+    return 0;
+}
+
+int multiple_config_change_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+    std::string s4_addr = "S4";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    RaftPkg s4(f_base, 4, s4_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3, &s4};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Remove two nodes without waiting commit.
+    s1.raftServer->remove_srv( s3.getTestMgr()->get_srv_config()->get_id() );
+
+    // Cannot remove multiple servers at once, should return error.
+    ptr<raft_result> ret =
+        s1.raftServer->remove_srv( s4.getTestMgr()->get_srv_config()->get_id() );
+    CHK_GT(0, ret->get_result_code());
+
+    // Priority change is OK.
+    CHK_EQ(
+        raft_server::PrioritySetResult::SET,
+        s1.raftServer->set_priority(s4.getTestMgr()->get_srv_config()->get_id(), 10));
+
+    // Leave req/resp.
+    s1.fNet->execReqResp();
+    // Leave done, notify to peers.
+    s1.fNet->execReqResp();
+    // Probably one more.
+    s1.fNet->execReqResp();
+    // Notify new commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // S3 should be removed.
+    for (RaftPkg* pp: pkgs) {
+        if (pp->getTestMgr()->get_srv_config()->get_id() == 3) continue;
+
+        std::vector< ptr< srv_config > > configs_out;
+        pp->raftServer->get_srv_config_all(configs_out);
+
+        // Only S1, S2, and S4 should exist.
+        CHK_EQ(3, configs_out.size());
+        for (auto& entry: configs_out) {
+            ptr<srv_config>& s_conf = entry;
+            CHK_TRUE( s_conf->get_id() == 1 ||
+                      s_conf->get_id() == 2 ||
+                      s_conf->get_id() == 4 );
+        }
+
+        // S4's priority should be 10.
+        ptr<cluster_config> c_conf = pp->raftServer->get_config();
+        ptr<srv_config> s4_conf = c_conf->get_server(4);
+        CHK_EQ(10, s4_conf->get_priority());
+    }
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    s4.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int check_priorities(const std::vector<RaftPkg*>& pkgs,
+                     const std::vector<int>& priorities) {
+    for (auto& entry: pkgs)
+        for (size_t ii=1; ii<=pkgs.size(); ++ii)
+            CHK_EQ( priorities[ii - 1],
+                    entry->raftServer->get_srv_config(ii)->get_priority() );
+    return 0;
+}
+
+int priority_broadcast_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Set the priority of S2 to 100.
+    CHK_EQ( raft_server::PrioritySetResult::SET, s1.raftServer->set_priority(2, 100) );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Set the priority of S3 to 50.
+    CHK_EQ( raft_server::PrioritySetResult::SET, s1.raftServer->set_priority(3, 50) );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Trigger election timer of S2.
+    s2.dbgLog(" --- invoke election timer of S2 ---");
+    s2.fTimer->invoke( timer_task_type::election_timer );
+    // Send pre-vote requests, and probably rejected by S1 and S3.
+    s2.fNet->execReqResp();
+
+    // Trigger election timer of S3.
+    s3.dbgLog(" --- invoke election timer of S3 ---");
+    // It will not initiate vote due to priority.
+    s3.fTimer->invoke( timer_task_type::election_timer );
+
+    // Trigger election timer of S3 again.
+    s3.dbgLog(" --- invoke election timer of S3 ---");
+    // Now it will initiate vote by help of priority decay.
+    s3.fTimer->invoke( timer_task_type::election_timer );
+
+    // Send pre-vote requests, it will be rejected by S1, accepted by S2.
+    // As a part of resp handling, it will initiate vote request.
+    s3.fNet->execReqResp();
+    // Send vote requests, S2 will deny due to priority.
+    s3.fNet->execReqResp();
+
+    // S1 should be still leader.
+    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+    CHK_FALSE( s3.raftServer->is_leader() );
+
+    CHK_TRUE( s1.raftServer->is_leader_alive() );
+    CHK_FALSE( s2.raftServer->is_leader_alive() );
+    CHK_FALSE( s3.raftServer->is_leader_alive() );
+
+    // Follower to leader broadcast
+    CHK_EQ( raft_server::PrioritySetResult::BROADCAST,
+            s2.raftServer->set_priority(1, 101) );
+    s2.fNet->execReqResp();
+    CHK_Z( check_priorities(pkgs, {101, 100, 50}) );
+
+    // Follower to follower broadcast
+    CHK_EQ( raft_server::PrioritySetResult::BROADCAST,
+            s3.raftServer->set_priority(2, 102) );
+    s3.fNet->execReqResp();
+    CHK_Z( check_priorities(pkgs, {101, 102, 50}) );
+
+    // Follower to self broadcast
+    CHK_EQ( raft_server::PrioritySetResult::BROADCAST,
+            s3.raftServer->set_priority(3, 103) );
+    s3.fNet->execReqResp();
+    CHK_Z( check_priorities(pkgs, {101, 102, 103}) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int priority_v2_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& pp: pkgs) {
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.auto_forwarding_ = true;
+        pp->raftServer->update_params(param);
+    }
+
+    CHK_Z( check_priorities(pkgs, {50, 50, 50}) );
+
+    // Set the priority of S2 to 100.
+    CHK_TRUE( s1.raftServer->set_priority_v2(2, 100) );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_Z( check_priorities(pkgs, {50, 100, 50}) );
+
+    // Set the priority of S3 to 50.
+    CHK_TRUE( s1.raftServer->set_priority_v2(3, 42) );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_Z( check_priorities(pkgs, {50, 100, 42}) );
+
+    // Send HeartBeat to force is_leader_alive on all peers
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    s1.fNet->execReqResp();
+
+    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+    CHK_FALSE( s3.raftServer->is_leader() );
+    CHK_TRUE( s1.raftServer->is_leader_alive() );
+    CHK_TRUE( s2.raftServer->is_leader_alive() );
+    CHK_TRUE( s3.raftServer->is_leader_alive() );
+
+    // Follower to leader broadcast
+    CHK_FALSE( s2.raftServer->set_priority_v2(1, 101) );
+    // Forward set priority change request
+    s2.fNet->execReqResp();
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_Z( check_priorities(pkgs, {101, 100, 42}) );
+
+    // Follower to self broadcast
+    CHK_FALSE( s3.raftServer->set_priority_v2(3, 103) );
+    // Forward set priority change request
+    s3.fNet->execReqResp();
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+    CHK_Z( check_priorities(pkgs, {101, 100, 103}) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int priority_broadcast_with_live_leader_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    CHK_EQ( raft_server::PrioritySetResult::SET, s1.raftServer->set_priority(1, 100) );
+    s1.fNet->execReqResp(); // Send priority change reqs.
+    s1.fNet->execReqResp(); // Send reqs again for commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    CHK_EQ( raft_server::PrioritySetResult::IGNORED,
+            s2.raftServer->set_priority(1, 1000) );
+    CHK_EQ( raft_server::PrioritySetResult::IGNORED,
+            s3.raftServer->set_priority(1, 1000) );
+
+    CHK_EQ( raft_server::PrioritySetResult::BROADCAST,
+            s2.raftServer->set_priority(3, 100, true) );
+    s2.fNet->execReqResp();
+
+    CHK_EQ( raft_server::PrioritySetResult::BROADCAST,
+            s3.raftServer->set_priority(2, 100, true) );
+    s3.fNet->execReqResp();
+
+    CHK_Z( check_priorities(pkgs, {100, 100, 100}) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int custom_user_context_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Set custom context into Raft cluster config.
+    const std::string CUSTOM_CTX = "hello world";
+    s1.raftServer->set_user_ctx(CUSTOM_CTX);
+    // Replicate and commit.
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Get from followers.
+    CHK_EQ( CUSTOM_CTX, s2.raftServer->get_user_ctx() );
+    CHK_EQ( CUSTOM_CTX, s3.raftServer->get_user_ctx() );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int follower_reconnect_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    // Follower 1 (server 2) requests reconnect.
+    s2.raftServer->send_reconnect_request();
+    s2.fNet->execReqResp();
+    // Wait for reconnect timer.
+    TestSuite::sleep_ms(3500, "wait for reconnect");
+
+    // Now leader send heartbeat.
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    s1.fNet->execReqResp();
+
+    ExecArgs exec_args(&s1);
+    TestSuite::ThreadHolder hh(&exec_args, fake_executer, fake_executer_killer);
+
+    // Append a message using separate thread.
+    std::string test_msg = "test";
+    ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+    msg->put(test_msg);
+    exec_args.setMsg(msg);
+    exec_args.eaExecuter.invoke();
+
+    // Wait for executer thread.
+    TestSuite::sleep_ms(EXECUTOR_WAIT_MS);
+
+    CHK_NULL( exec_args.getMsg().get() );
+    // Packet for pre-commit.
+    s1.fNet->execReqResp();
+    // Packet for commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Test message should be the same.
+    uint64_t last_idx = s1.getTestSm()->last_commit_index();
+    CHK_GT(last_idx, 0);
+    ptr<buffer> buf = s1.getTestSm()->getData(last_idx);
+    CHK_NONNULL( buf.get() );
+    buf->pos(0);
+    CHK_Z( memcmp(buf->data(), test_msg.data(), test_msg.size()) );
+
+    // State machine should be identical.
+    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    fake_executer_killer(&exec_args);
+    hh.join();
+    CHK_Z( hh.getResult() );
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int join_empty_node_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+    CHK_Z( launch_servers( pkgs ) );
+
+    // Organize group by using S1 and S2 only.
+    CHK_Z( make_group( {&s1, &s2} ) );
+
+    // Append a message using separate thread.
+    ExecArgs exec_args(&s1);
+    TestSuite::ThreadHolder hh(&exec_args, fake_executer, fake_executer_killer);
+
+    for (size_t ii=0; ii<5; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        exec_args.setMsg(msg);
+        exec_args.eaExecuter.invoke();
+
+        // Wait for executer thread.
+        TestSuite::sleep_ms(EXECUTOR_WAIT_MS);
+
+        CHK_NULL( exec_args.getMsg().get() );
+
+        // NOTE: Send it to S2 only, S3 will be lagging behind.
+        s1.fNet->execReqResp("S2"); // replication.
+        s1.fNet->execReqResp("S2"); // commit.
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) ); // commit execution.
+    }
+
+    // Now add S3 to leader.
+    s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+    s1.fNet->execReqResp(); // join req/resp.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) ); // S1 & S3: commit config.
+
+    s1.fNet->execReqResp(); // req to S2 for new config.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) ); // S2: commit config.
+
+    // First heartbeat to S3, it will initiate snapshot transmission.
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp();
+
+    // Send the entire snapshot.
+    do {
+        s1.fNet->execReqResp();
+    } while (s3.raftServer->is_receiving_snapshot());
+
+    // Configuration change.
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp(); // replication.
+    s1.fNet->execReqResp(); // commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) ); // commit execution.
+
+    s1.fTimer->invoke(timer_task_type::heartbeat_timer);
+    s1.fNet->execReqResp(); // replication.
+    s1.fNet->execReqResp(); // commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) ); // commit execution.
+    print_stats(pkgs);
+
+    // State machine should be identical.
+    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    // For S3, do not check pre-commit list.
+    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    fake_executer_killer(&exec_args);
+    hh.join();
+    CHK_Z( hh.getResult() );
+
+    f_base->destroy();
+
+    return 0;
+}
+
+static int async_handler(std::list<ulong>* idx_list,
+                         ptr< cmd_result< ptr<buffer> > >& cmd_result,
+                         cmd_result_code expected_code,
+                         ptr<buffer>& result,
+                         ptr<std::exception>& err)
+{
+    CHK_EQ( expected_code, cmd_result->get_result_code() );
+
+    if (expected_code == cmd_result_code::OK) {
+        result->pos(0);
+        ulong idx = result->get_ulong();
+        if (idx_list) {
+            idx_list->push_back(idx);
+        }
+
+    } else {
+        CHK_NULL( result.get() );
+    }
+    return 0;
+}
+
+int async_append_handler_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        pp->raftServer->update_params(param);
+    }
+
+    const size_t NUM = 10;
+
+    // Append messages asynchronously.
+    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    for (size_t ii=0; ii<NUM; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        ptr< cmd_result< ptr<buffer> > > ret =
+            s1.raftServer->append_entries( {msg} );
+
+        CHK_TRUE( ret->get_accepted() );
+
+        handlers.push_back(ret);
+    }
+
+    // Packet for pre-commit.
+    s1.fNet->execReqResp();
+    // Packet for commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // One more time to make sure.
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Now all async handlers should have result.
+    std::list<ulong> idx_list;
+    for (auto& entry: handlers) {
+        ptr< cmd_result< ptr<buffer> > > result = entry;
+        cmd_result< ptr<buffer> >::handler_type my_handler =
+            std::bind( async_handler,
+                       &idx_list,
+                       result,
+                       cmd_result_code::OK,
+                       std::placeholders::_1,
+                       std::placeholders::_2 );
+        result->when_ready( my_handler );
+    }
+
+    // Check if all messages are committed.
+    for (size_t ii=0; ii<NUM; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        uint64_t idx = s1.getTestSm()->isCommitted(test_msg);
+        CHK_GT(idx, 0);
+    }
+
+    // State machine should be identical.
+    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int async_append_handler_cancel_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        pp->raftServer->update_params(param);
+    }
+
+    const size_t NUM = 10;
+
+    // Append messages asynchronously.
+    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    for (size_t ii=0; ii<NUM; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        ptr< cmd_result< ptr<buffer> > > ret =
+            s1.raftServer->append_entries( {msg} );
+
+        CHK_TRUE( ret->get_accepted() );
+
+        handlers.push_back(ret);
+    }
+
+    // Make append request failed.
+    s1.fNet->makeReqFail("S2");
+    s1.fNet->makeReqFail("S3");
+
+    // S2 initiates leader election.
+    // Trigger election timer of S2.
+    s2.dbgLog(" --- invoke election timer of S2 ---");
+    s2.fTimer->invoke( timer_task_type::election_timer );
+    // Send pre-vote requests, and probably rejected by S1 and S3.
+    s2.fNet->execReqResp();
+
+    // Trigger election timer of S3.
+    s3.dbgLog(" --- invoke election timer of S3 ---");
+    s3.fTimer->invoke( timer_task_type::election_timer );
+
+    // Send pre-vote requests, it will be rejected by S1, accepted by S2.
+    // As a part of resp handling, it will initiate vote request.
+    s3.fNet->execReqResp();
+    // Send vote requests, S3 will be elected as a leader.
+    s3.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Send new config as a new leader.
+    s3.fNet->execReqResp();
+    // Follow-up: commit.
+    s3.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Now all async handlers should have been cancelled.
+    std::list<ulong> idx_list;
+    for (auto& entry: handlers) {
+        ptr< cmd_result< ptr<buffer> > > result = entry;
+        cmd_result< ptr<buffer> >::handler_type my_handler =
+            std::bind( async_handler,
+                       &idx_list,
+                       result,
+                       cmd_result_code::CANCELLED,
+                       std::placeholders::_1,
+                       std::placeholders::_2 );
+        result->when_ready( my_handler );
+    }
+
+    // Append message to the old leader should fail immediately.
+    {
+        std::string test_msg = "test" + std::to_string(999);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        ptr< cmd_result< ptr<buffer> > > ret =
+            s1.raftServer->append_entries( {msg} );
+
+        auto fail_handler = [&](cmd_result< ptr<buffer> >& res,
+                                ptr<std::exception>& exp) -> int {
+            CHK_EQ( cmd_result_code::NOT_LEADER, res.get_result_code() );
+            return 0;
+        };
+        ret->when_ready( fail_handler );
+    }
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int apply_config_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    raft_params custom_params;
+    custom_params.election_timeout_lower_bound_ = 0;
+    custom_params.election_timeout_upper_bound_ = 1000;
+    custom_params.heart_beat_interval_ = 500;
+    custom_params.snapshot_distance_ = 100;
+    CHK_Z( launch_servers( pkgs, &custom_params ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        pp->raftServer->update_params(param);
+    }
+
+    // Make S3 offline.
+    s3.fNet->goesOffline();
+
+    // Append some logs.
+    const size_t NUM = 10;
+    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    for (size_t ii=0; ii<NUM; ++ii) {
+        std::string test_msg = "test" + std::to_string(ii);
+        ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+        msg->put(test_msg);
+        ptr< cmd_result< ptr<buffer> > > ret =
+            s1.raftServer->append_entries( {msg} );
+
+        CHK_TRUE( ret->get_accepted() );
+
+        handlers.push_back(ret);
+    }
+
+    // Packet for pre-commit.
+    s1.fNet->execReqResp();
+    // Packet for commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // One more time to make sure.
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // All handlers should be OK.
+    for (auto& entry: handlers) {
+        CHK_TRUE( entry->has_result() );
+        CHK_EQ( cmd_result_code::OK, entry->get_result_code() );
+    }
+
+    // Add S4.
+    std::string s4_addr = "S4";
+    RaftPkg s4(f_base, 4, s4_addr);
+    CHK_Z( launch_servers( {&s4} ) );
+
+    // Add to leader.
+    s1.raftServer->add_srv( *(s4.getTestMgr()->get_srv_config()) );
+
+    // Join req/resp.
+    s1.fNet->execReqResp();
+    // Add new server, notify existing peers.
+    // After getting response, it will make configuration commit.
+    s1.fNet->execReqResp();
+    // Notify new commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Now heartbeat to new node is enabled.
+
+    // Heartbeat.
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    // Heartbeat req/resp, to finish the catch-up phase.
+    s1.fNet->execReqResp();
+    // Need one-more req/resp.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for new node.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Set the priority of S3 to 85.
+    CHK_EQ( s1.raftServer->set_priority(3, 85), raft_server::PrioritySetResult::SET );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Set the priority of S4 to 100.
+    CHK_EQ( s1.raftServer->set_priority(4, 100), raft_server::PrioritySetResult::SET );
+    // Send priority change reqs.
+    s1.fNet->execReqResp();
+    // Send reqs again for commit.
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Remove S2.
+    s1.raftServer->remove_srv( s2.getTestMgr()->get_srv_config()->get_id() );
+
+    // Leave req/resp.
+    s1.fNet->execReqResp();
+    // Leave done, notify to peers.
+    s1.fNet->execReqResp();
+    // Notify new commit.
+    s1.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Heartbeat.
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    s1.fNet->execReqResp();
+    s1.fNet->execReqResp();
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    print_stats(pkgs);
+
+    // Shutdown S3, and do offline replay of pending configs.
+
+    std::string err_msg;
+    {   // NULL argument should fail.
+        ptr<log_entry> le;
+        ptr<state_mgr> smgr;
+        CHK_FALSE( raft_server::apply_config_log_entry( le, smgr, err_msg ) );
+    }
+
+    size_t last_s3_commit = s3.sm->last_commit_index();
+    ptr<log_store> s1_log_store = s1.sMgr->load_log_store();
+    size_t last_log_idx = s1_log_store->next_slot() - 1;
+
+    s3.raftServer->shutdown();
+    for (size_t ii=last_s3_commit+1; ii<=last_log_idx; ++ii) {
+        ptr<log_entry> le = s1_log_store->entry_at(ii);
+        bool expected_ok = (le->get_val_type() == log_val_type::conf);
+
+        bool ret_ok = raft_server::apply_config_log_entry(le, s3.sMgr, err_msg);
+        CHK_EQ(expected_ok, ret_ok);
+    }
+
+    // S3 and S1 (leader) should have exactly the same config.
+    ptr<cluster_config> s1_conf = s1.sMgr->load_config();
+    ptr<cluster_config> s3_conf = s3.sMgr->load_config();
+    ptr<buffer> s1_conf_buf = s1_conf->serialize();
+    ptr<buffer> s3_conf_buf = s3_conf->serialize();
+    CHK_EQ( s1_conf_buf->size(), s3_conf_buf->size() );
+    CHK_Z( memcmp( s1_conf_buf->data_begin(),
+                   s3_conf_buf->data_begin(),
+                   s1_conf_buf->size() ) );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s4.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int custom_term_counter_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    auto custom_term = [](ulong cur_term) -> ulong {
+        // Increase by 10.
+        return (cur_term / 10) + 10;
+    };
+    for (RaftPkg* rp: pkgs) {
+        rp->raftServer->set_inc_term_func(custom_term);
+    }
+
+    // Trigger election timer of S2.
+    s2.dbgLog(" --- invoke election timer of S2 ---");
+    s2.fTimer->invoke( timer_task_type::election_timer );
+    // Send pre-vote requests, and probably rejected by S1 and S3.
+    s2.fNet->execReqResp();
+
+    // Trigger election timer of S3.
+    s3.dbgLog(" --- invoke election timer of S3 ---");
+    s3.fTimer->invoke( timer_task_type::election_timer );
+
+    // Send pre-vote requests, it will be rejected by S1, accepted by S2.
+    // As a part of resp handling, it will initiate vote request.
+    s3.fNet->execReqResp();
+    // Send vote requests, S3 will be elected as a leader.
+    s3.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Send new config as a new leader.
+    s3.fNet->execReqResp();
+    // Follow-up: commit.
+    s3.fNet->execReqResp();
+    // Wait for bg commit for configuration change.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    CHK_FALSE( s1.raftServer->is_leader() );
+    CHK_FALSE( s2.raftServer->is_leader() );
+    CHK_TRUE( s3.raftServer->is_leader() );
+
+    // Check S3's term. It should be 10.
+    CHK_EQ( 10, s3.raftServer->get_term() );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int config_log_replay_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    removed_servers.clear();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+    std::string s4_addr = "S4";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    RaftPkg s4(f_base, 4, s4_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3, &s4};
+    std::vector<RaftPkg*> pkgs_123 = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.snapshot_distance_ = 10000;
+        param.reserved_log_items_ = 10000;
+        param.log_sync_stop_gap_ = 10000;
+        param.max_append_size_ = 100;
+        pp->raftServer->update_params(param);
+    }
+
+    const size_t NUM = 10;
+
+    for (auto ss: {&s2, &s3}) {
+        // Add each server.
+        s1.raftServer->add_srv( *(ss->getTestMgr()->get_srv_config()) );
+        for (size_t ii = 0; ii < NUM; ++ii) {
+            s1.fNet->execReqResp();
+        }
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // A few heartbeats.
+        for (size_t ii = 0; ii < NUM; ++ii) {
+            s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+            for (size_t jj = 0; jj < 3; ++jj) {
+                s1.fNet->execReqResp();
+            }
+        }
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // Append a few logs.
+        std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+        for (size_t ii=0; ii<NUM; ++ii) {
+            std::string test_msg = "test" + std::to_string(ii);
+            ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+            msg->put(test_msg);
+            ptr< cmd_result< ptr<buffer> > > ret =
+                s1.raftServer->append_entries( {msg} );
+
+            CHK_TRUE( ret->get_accepted() );
+
+            handlers.push_back(ret);
+        }
+
+        for (size_t ii = 0; ii < NUM; ++ii) {
+            s1.fNet->execReqResp();
+        }
+        CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+        // All handlers should be OK.
+        for (auto& entry: handlers) {
+            CHK_TRUE( entry->has_result() );
+            CHK_EQ( cmd_result_code::OK, entry->get_result_code() );
+        }
+    }
+
+    // S1-3 should have the same data.
+    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    // Remember the log index of S4.
+    uint64_t last_committed_index = s4.raftServer->get_committed_log_idx();
+
+    // Also remember the last config of the leader.
+    uint64_t last_config_index = s1.raftServer->get_config()->get_log_idx();
+
+    {   // Reduce the batch size of the leader.
+        raft_params param = s1.raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.max_append_size_ = 1;
+        s1.raftServer->update_params(param);
+    }
+
+    // Add S4 to S1, and do log catch-up until the last config index.
+    s1.raftServer->add_srv( *(s4.getTestMgr()->get_srv_config()) );
+    for (size_t ii = 0; ii < 3; ++ii) {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Send just one heartbeat (so as not to reach the config index).
+    s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+    for (size_t jj = 0; jj < 3; ++jj) {
+        s1.fNet->execReqResp();
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Now stop S4 and rollback state machine.
+    s4.raftServer->shutdown();
+    TestSuite::_msgt("truncate");
+    s4.getTestSm()->truncateData(last_committed_index);
+    launch_servers({&s4}, nullptr, true);
+
+    // Send heartbeat.
+    for (size_t ii = 0; ii < NUM * 100; ++ii) {
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        for (size_t jj = 0; jj < 3; ++jj) {
+            s1.fNet->execReqResp();
+        }
+
+        uint64_t s4_idx = s4.raftServer->get_last_log_idx();
+        if (s4_idx >= last_config_index) {
+            break;
+        }
+    }
+
+    // Remove server shouldn't have happened.
+    CHK_Z(removed_servers.size());
+
+    // More heartbeats.
+    for (size_t ii = 0; ii < NUM; ++ii) {
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        for (size_t jj = 0; jj < 3; ++jj) {
+            s1.fNet->execReqResp();
+        }
+    }
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Confirm the data consistency.
+    CHK_OK( s4.getTestSm()->isSame( *s1.getTestSm() ) );
+
+    // S4 should have all peer info.
+    std::vector<ptr<srv_config>> configs_out;
+    s4.raftServer->get_srv_config_all(configs_out);
+    CHK_EQ(pkgs.size(), configs_out.size());
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    s4.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int full_consensus_synth_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+    std::string s4_addr = "S4";
+    std::string s5_addr = "S5";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    RaftPkg s4(f_base, 4, s4_addr);
+    RaftPkg s5(f_base, 5, s5_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3, &s4, &s5};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.use_full_consensus_among_healthy_members_ = true;
+        param.leadership_expiry_ = -1; // Leadership never expires.
+        pp->raftServer->update_params(param);
+    }
+
+    const size_t NUM = 10;
+
+    // Append messages asynchronously.
+    auto append_msg = [&]() {
+        std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+        for (size_t ii=0; ii<NUM; ++ii) {
+            std::string test_msg = "test" + std::to_string(ii);
+            ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+            msg->put(test_msg);
+            ptr< cmd_result< ptr<buffer> > > ret =
+                s1.raftServer->append_entries( {msg} );
+
+            CHK_TRUE( ret->get_accepted() );
+
+            handlers.push_back(ret);
+        }
+        return 0;
+    };
+    append_msg();
+
+    // Send messages to S2-4 only.
+    for (size_t ii = 0; ii < NUM; ++ii) {
+        for (auto addr: {s2_addr, s3_addr, s4_addr}) {
+            s1.fNet->execReqResp(addr);
+        }
+    }
+    // Wait for bg commit.
+    CHK_Z( wait_for_sm_exec(pkgs, COMMIT_TIMEOUT_SEC) );
+
+    // Above messages shouldn't be committed, as S5 is still considered healthy,
+    // and it needs the consensus from all members.
+    CHK_GT( s1.raftServer->get_last_log_idx(),
+            s1.raftServer->get_target_committed_log_idx() );
+
+    // Set short heartbeat.
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.heart_beat_interval_ = 10;
+        pp->raftServer->update_params(param);
+    }
+
+    // Mimic 25 heartbeats (S2-4 only).
+    for (size_t ii = 0; ii < 25; ++ii) {
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        for (auto addr: {s2_addr, s3_addr, s4_addr}) {
+            s1.fNet->execReqResp(addr);
+            s1.fNet->execReqResp(addr);
+        }
+        TestSuite::sleep_ms(10);
+    }
+
+    // Now above messages should be committed, as S5 is unhealthy.
+    CHK_EQ( s1.raftServer->get_last_log_idx(),
+            s1.raftServer->get_target_committed_log_idx() );
+
+    // Mimic 25 heartbeats (S2 only).
+    for (size_t ii = 0; ii < 25; ++ii) {
+        s1.fTimer->invoke( timer_task_type::heartbeat_timer );
+        for (auto addr: {s2_addr}) {
+            s1.fNet->execReqResp(addr);
+            s1.fNet->execReqResp(addr);
+        }
+        TestSuite::sleep_ms(10);
+    }
+
+    // Append entries.
+    append_msg();
+
+    // Send messages to S2 only.
+    for (size_t ii = 0; ii < NUM; ++ii) {
+        for (auto addr: {s2_addr}) {
+            s1.fNet->execReqResp(addr);
+        }
+    }
+
+    // Commit shouldn't happen.
+    CHK_GT( s1.raftServer->get_last_log_idx(),
+            s1.raftServer->get_target_committed_log_idx() );
+
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    s4.raftServer->shutdown();
+    s5.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int extended_append_entries_api_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    std::string s1_addr = "S1";
+    std::string s2_addr = "S2";
+    std::string s3_addr = "S3";
+
+    RaftPkg s1(f_base, 1, s1_addr);
+    RaftPkg s2(f_base, 2, s2_addr);
+    RaftPkg s3(f_base, 3, s3_addr);
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+
+    for (auto& entry: pkgs) {
+        RaftPkg* pp = entry;
+        raft_params param = pp->raftServer->get_current_params();
+        param.return_method_ = raft_params::async_handler;
+        param.leadership_expiry_ = -1; // Leadership never expires.
+        pp->raftServer->update_params(param);
+    }
+
+    const size_t NUM = 10;
+
+    uint64_t cur_term = s1.raftServer->get_term();
+    uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
+    void* context = static_cast< void * >(&s1);
+
+    uint64_t num_cb_invoked = 0;
+    uint64_t num_log_idx_mismatch = 0;
+    uint64_t num_context_mismatch = 0;
+    auto ext_callback = [&](const raft_server::req_ext_cb_params& params) {
+        if ( last_log_idx + 1 != params.log_idx ||
+             cur_term != params.log_term ) {
+            num_log_idx_mismatch++;
+        }
+
+        if (context != params.context) { ++num_context_mismatch; }
+
+        last_log_idx++;
+        num_cb_invoked++;
+    };
+
+    auto append_msg = [&](uint64_t exp_term, bool exp_accepted) {
+        std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+        for (size_t ii=0; ii<NUM; ++ii) {
+            std::string test_msg = "test" + std::to_string(ii);
+            ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
+            msg->put(test_msg);
+
+            raft_server::req_ext_params ext_params;
+            ext_params.expected_term_ = exp_term;
+            ext_params.after_precommit_ = ext_callback;
+            ext_params.context_ = context;
+
+            ptr< cmd_result< ptr<buffer> > > ret =
+                s1.raftServer->append_entries_ext( {msg}, ext_params );
+
+            CHK_EQ( exp_accepted, ret->get_accepted() );
+
+            handlers.push_back(ret);
+        }
+        return 0;
+    };
+
+    // Append messages with different expected term.
+    CHK_Z( append_msg(cur_term + 1, false) );
+
+    // Callback should not have been invoked.
+    CHK_Z( num_cb_invoked );
+
+    // Append messages with correct term.
+    CHK_Z( append_msg(cur_term, true) );
+
+    // Callback should have been invoked.
+    CHK_EQ( NUM, num_cb_invoked );
+    // Log index should match.
+    CHK_Z( num_log_idx_mismatch );
+    // Callback should have invoked with correct context
+    CHK_Z( num_context_mismatch );
+    print_stats(pkgs);
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+
+    f_base->destroy();
+
+    return 0;
+}
+
+int uncommitted_log_entry_limit_rejects_client_appends_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+    set_uncommitted_limits(pkgs, 2);
+
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
+    ptr<raft_result> rejected = append_one(s1, 1);
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+    CHK_EQ( last_log_idx, s1.raftServer->get_last_log_idx() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+    return 0;
+}
+
+int uncommitted_log_entry_limit_rejects_whole_batch_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+    set_uncommitted_limits(pkgs, 2);
+
+    uint64_t callback_count = 0;
+    raft_server::req_ext_params ext_params;
+    ext_params.after_precommit_ = [&](const raft_server::req_ext_cb_params&) {
+        callback_count++;
+    };
+
+    std::vector<ptr<buffer>> batch = {make_buffer(1), make_buffer(1), make_buffer(1)};
+    uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
+    ptr<raft_result> rejected = s1.raftServer->append_entries_ext(batch, ext_params);
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+    CHK_EQ( last_log_idx, s1.raftServer->get_last_log_idx() );
+    CHK_Z( callback_count );
+
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    rejected = append_one(s1, 1);
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+    return 0;
+}
+
+int uncommitted_log_entry_limit_accepts_after_commit_catches_up_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+    set_uncommitted_limits(pkgs, 2);
+
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+    ptr<raft_result> rejected = append_one(s1, 1);
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+
+    CHK_Z( drain_and_commit(s1, pkgs) );
+    CHK_TRUE( append_one(s1, 1)->get_accepted() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+    return 0;
+}
+
+int uncommitted_log_limit_allows_control_append_and_counts_it_test() {
+    reset_log_files();
+    ptr<FakeNetworkBase> f_base = cs_new<FakeNetworkBase>();
+
+    RaftPkg s1(f_base, 1, "S1");
+    RaftPkg s2(f_base, 2, "S2");
+    RaftPkg s3(f_base, 3, "S3");
+    std::vector<RaftPkg*> pkgs = {&s1, &s2, &s3};
+
+    CHK_Z( launch_servers( pkgs ) );
+    CHK_Z( make_group( pkgs ) );
+    set_uncommitted_limits(pkgs, 2);
+
+    CHK_TRUE( append_one(s1, 8)->get_accepted() );
+    uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
+    ptr<raft_result> rejected = append_batch(s1, {8, 8});
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+    CHK_EQ( last_log_idx, s1.raftServer->get_last_log_idx() );
+
+    s1.raftServer->set_user_ctx("ctx");
+    CHK_EQ( last_log_idx + 1, s1.raftServer->get_last_log_idx() );
+
+    rejected = append_one(s1, 8);
+    CHK_FALSE( rejected->get_accepted() );
+    CHK_EQ( cmd_result_code::TIMEOUT, rejected->get_result_code() );
+    CHK_EQ( last_log_idx + 1, s1.raftServer->get_last_log_idx() );
+
+    CHK_Z( drain_and_commit(s1, pkgs) );
+    CHK_TRUE( append_one(s1, 8)->get_accepted() );
+
+    s1.raftServer->shutdown();
+    s2.raftServer->shutdown();
+    s3.raftServer->shutdown();
+    f_base->destroy();
+    return 0;
+}
+
+}  // namespace raft_server_test;
+using namespace raft_server_test;
+
+int main(int argc, char** argv) {
+    TestSuite ts(argc, argv);
+
+    ts.options.printTestMessage = true;
+
+    // Disable reconnection timer for deterministic test.
+    debugging_options::get_instance().disable_reconn_backoff_ = true;
+
+    ts.doTest( "make group test",
+               make_group_test );
+
+    ts.doTest( "init options test",
+               init_options_test );
+
+    ts.doTest( "update params test",
+               update_params_test );
+
+    ts.doTest( "add node error cases test",
+               add_node_error_cases_test );
+
+    ts.doTest( "add node race test",
+               add_node_race_test );
+
+    ts.doTest( "remove node test",
+               remove_node_test );
+
+    ts.doTest( "remove node error cases test",
+               remove_node_error_cases_test );
+
+    ts.doTest( "remove and then add test",
+               remove_and_then_add_test );
+
+    ts.doTest( "rejoin clears busy peers before leadership takeover test",
+               rejoin_clears_busy_peers_before_leadership_takeover_test );
+
+    ts.doTest( "rejoin replaces abandoned peers before leadership takeover test",
+               rejoin_replaces_abandoned_peers_before_leadership_takeover_test );
+
+    ts.doTest( "rejoin clears pending self removal timeout test",
+               rejoin_clears_pending_self_removal_timeout_test );
+
+    ts.doTest( "rejoin replaces stale leave peer before leadership takeover test",
+               rejoin_replaces_stale_leave_peer_before_leadership_takeover_test );
+
+    ts.doTest( "rejoin discards pending removal config test",
+               rejoin_discards_pending_removal_config_test );
+
+    ts.doTest( "deferred free from replaced RPC cannot free new request test",
+               deferred_free_from_replaced_rpc_cannot_free_new_request_test );
+
+    ts.doTest( "removed peer response during rejoin test",
+               removed_peer_response_during_rejoin_test );
+
+    ts.doTest( "stale joiner response after role change test",
+               stale_joiner_response_after_role_change_test );
+
+    ts.doTest( "completed join response cannot affect later join test",
+               completed_join_response_cannot_affect_later_join_test );
+
+    ts.doTest( "multiple config change test",
+               multiple_config_change_test );
+
+    ts.doTest( "priority broadcast test",
+               priority_broadcast_test );
+
+    ts.doTest( "priority broadcast with live leader test",
+               priority_broadcast_with_live_leader_test );
+
+    ts.doTest( "custom user context test",
+               custom_user_context_test );
+
+    ts.doTest( "follower reconnect test",
+               follower_reconnect_test );
+
+    ts.doTest( "join empty node test",
+               join_empty_node_test );
+
+    ts.doTest( "async append handler test",
+               async_append_handler_test );
+
+    ts.doTest( "async append handler cancel test",
+               async_append_handler_cancel_test );
+
+    ts.doTest( "apply config log entry test",
+               apply_config_test );
+
+    ts.doTest( "custom term counter test",
+               custom_term_counter_test );
+
+    ts.doTest( "config log replay test",
+               config_log_replay_test );
+
+    ts.doTest( "full consensus test",
+               full_consensus_synth_test );
+
+    ts.doTest( "extended append_entries API test",
+               extended_append_entries_api_test );
+
+    ts.doTest( "uncommitted log entry limit rejects client appends test",
+               uncommitted_log_entry_limit_rejects_client_appends_test );
+
+    ts.doTest( "uncommitted log entry limit rejects whole batch test",
+               uncommitted_log_entry_limit_rejects_whole_batch_test );
+
+    ts.doTest( "uncommitted log entry limit accepts after commit catches up test",
+               uncommitted_log_entry_limit_accepts_after_commit_catches_up_test );
+
+    ts.doTest( "uncommitted log limit allows control append and counts it test",
+               uncommitted_log_limit_allows_control_append_and_counts_it_test );
+
+    ts.doTest( "priority v2 test",
+               priority_v2_test );
+
+#ifdef ENABLE_RAFT_STATS
+    _msg("raft stats: ENABLED\n");
+#else
+    _msg("raft stats: DISABLED\n");
+#endif
+    _msg("num allocs: %zu\n"
+         "amount of allocs: %zu bytes\n"
+         "num active buffers: %zu\n"
+         "amount of active buffers: %zu bytes\n",
+         raft_server::get_stat_counter("num_buffer_allocs"),
+         raft_server::get_stat_counter("amount_buffer_allocs"),
+         raft_server::get_stat_counter("num_active_buffers"),
+         raft_server::get_stat_counter("amount_active_buffers"));
+
+    return 0;
+}

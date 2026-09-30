@@ -1,0 +1,36 @@
+name: Ubuntu-C23-CI
+
+'on':
+  - push
+  - pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ubuntu-c23-${{ matrix.compiler.cc }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
+
+    env:
+      CC: ${{ matrix.compiler.cc }}
+      CXX: ${{ matrix.compiler.cxx }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and Test (C23 / C++23)
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_C_STANDARD=23 -DCMAKE_CXX_STANDARD=23 -DCMAKE_INSTALL_PREFIX:PATH=destination -DENABLE_ROARING_TESTS=ON -DROARING_UNSAFE_FROZEN_TESTS=ON ..
+          cmake --build .
+          ctest . --output-on-failure
+          cmake --install .
+          cd ../tests/installation/find && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX:PATH=../../../build/destination .. && cmake --build .

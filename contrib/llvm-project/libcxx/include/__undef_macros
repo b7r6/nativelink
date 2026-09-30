@@ -1,0 +1,64 @@
+// -*- C++ -*-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifdef min
+#  undef min
+#endif
+
+#ifdef max
+#  undef max
+#endif
+
+#ifdef refresh
+#  undef refresh
+#endif
+
+#ifdef move
+#  undef move
+#endif
+
+#ifdef erase
+#  undef erase
+#endif
+
+// illumos: sys/ccompile.h defines __sentinel as a macro for GCC's sentinel
+// attribute, which conflicts with libc++ using __sentinel as an identifier
+#ifdef __sun
+#  undef __sentinel
+#endif
+
+// illumos: wctype_iso.h defines _E1-_E24 as character class constants
+// which pollute libc++ template parameters like _E2
+// Note: _B and _C are kept because they're needed by __locale for ctype_base
+#ifdef __sun
+#  undef _E1
+#  undef _E2
+#  undef _E3
+#  undef _E4
+#  undef _E5
+#  undef _E6
+#  undef _E7
+#  undef _E8
+#  undef _E9
+#  undef _E10
+#  undef _E11
+#  undef _E12
+#  undef _E13
+#  undef _E14
+#  undef _E15
+#  undef _E16
+#  undef _E17
+#  undef _E18
+#  undef _E19
+#  undef _E20
+#  undef _E21
+#  undef _E22
+#  undef _E23
+#  undef _E24
+#endif

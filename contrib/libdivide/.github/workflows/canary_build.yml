@@ -1,0 +1,44 @@
+name: Canary Build and Test
+
+on:
+  push:
+  pull_request:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  
+env:
+  build_type: Release
+  cpp_compiler: g++
+  output_folder: ${{github.workspace}}/build/
+
+jobs:
+  Canary-Build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Configure CMake & Build
+      env:
+        C_COMPILER: gcc
+      run: |
+        cmake -B "$output_folder" \
+          "-DCMAKE_C_COMPILER=$C_COMPILER" \
+          "-DCMAKE_CXX_COMPILER=$cpp_compiler" \
+          -DLIBDIVIDE_BUILD_TESTS=ON \
+          "-DCMAKE_BUILD_TYPE=$build_type"
+        cmake --build "$output_folder" -t tester
+
+    - name: Test
+      working-directory: ${{env.output_folder}}
+      run: ctest --build-config ${{env.build_type}} --verbose --tests-regex tester
+
+  # Kick off the full build if everything above succeeded
+  Full-Build:
+    needs: Canary-Build
+    uses: ./.github/workflows/full_build.yml
+
+  # Kick off the full build if everything above succeeded
+  AVR-Build:
+    needs: Canary-Build
+    uses: ./.github/workflows/avr_build_test.yml

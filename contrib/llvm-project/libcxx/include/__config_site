@@ -1,0 +1,21 @@
+/*
+ * ClickHouse specific options.
+ * Unstable ABI to provide better performance
+ * Availability annotations are not supported.
+ * _LIBCPP_ABI_NAMESPACE to preserve namespace compatibility
+ */
+#define _LIBCPP_ABI_VERSION 999
+#define _LIBCPP_ABI_UNSTABLE
+#define _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS
+#define _LIBCPP_ABI_NAMESPACE __1
+#define _LIBCPP_HARDENING_MODE_DEFAULT 2
+#define _LIBCPP_ASSERTION_SEMANTIC_DEFAULT 2 /* _LIBCPP_ASSERTION_SEMANTIC_HARDENING_DEPENDENT */
+#define _LIBCPP_PSTL_BACKEND_SERIAL 1
+#define _LIBCPP_HAS_THREADS 1
+#define _LIBCPP_HAS_MONOTONIC_CLOCK 1
+#define _LIBCPP_HAS_FILESYSTEM 1
+#define _LIBCPP_HAS_RANDOM_DEVICE 1
+#define _LIBCPP_HAS_LOCALIZATION 1
+#define _LIBCPP_HAS_UNICODE 1
+#define _LIBCPP_HAS_WIDE_CHARACTERS 1
+#define _LIBCPP_HAS_NO_STD_MODULES
