@@ -3078,3 +3078,70 @@ async fn test_count_by_index_prefix_reads_a_resp3_reply() -> Result<(), Error> {
     assert_eq!(count, 7);
     Ok(())
 }
+
+/// Reproduces a race in `RedisStore::get_part`: the value is read in
+/// `read_chunk_size` slices via independent GETRANGE round-trips, and
+/// end-of-data is inferred purely from `chunk.len() < read_chunk_size`.
+/// GETRANGE on a missing key returns an empty string (not an error), so if
+/// the key's TTL fires (or a concurrent `update()` RENAMEs over it) between
+/// two chunk round-trips, the next GETRANGE returns empty, the loop breaks,
+/// and — because `bytes_written > 0` skips the NotFound/exists guard —
+/// `send_eof()` reports a *successful* read of a truncated blob.
+///
+/// The mock deterministically scripts that interleaving: chunk 0 returns a
+/// full `READ_CHUNK_SIZE` slice; the key then expires server-side; chunk 1's
+/// GETRANGE returns the empty string. A correct implementation must either
+/// return an error or the full 2048 bytes; current code returns Ok with
+/// 1024 bytes.
+#[nativelink_test]
+async fn test_get_part_key_expiry_between_chunks_silently_truncates() -> Result<(), Error> {
+    const READ_CHUNK_SIZE: usize = 1024; // == DEFAULT_READ_CHUNK_SIZE
+    let data = Bytes::from(vec![0xABu8; READ_CHUNK_SIZE * 2]);
+
+    let digest = DigestInfo::try_new(VALID_HASH1, data.len() as u64)?;
+    let real_key = format!("{digest}");
+
+    let commands = vec![
+        // Chunk 0: reader gets a full chunk of the (still-live) 2048-byte value.
+        MockCmd::new(
+            redis::cmd("GETRANGE")
+                .arg(real_key.clone())
+                .arg(0)
+                .arg(i64::try_from(READ_CHUNK_SIZE).unwrap() - 1),
+            Ok(Value::BulkString(data.slice(..READ_CHUNK_SIZE).into())),
+        ),
+        // <-- Between these two round-trips the key's TTL fires (or a
+        //     concurrent update() RENAMEs the value away). GETRANGE on a
+        //     missing key returns the empty string, not an error.
+        MockCmd::new(
+            redis::cmd("GETRANGE")
+                .arg(real_key)
+                .arg(i64::try_from(READ_CHUNK_SIZE).unwrap())
+                .arg(i64::try_from(data.len()).unwrap() - 1),
+            Ok(Value::BulkString(Vec::new())),
+        ),
+    ];
+
+    let store = make_mock_store(commands).await;
+
+    let result = store
+        .get_part_unchunked(digest, 0, Some(data.len() as u64))
+        .await;
+
+    // A correct store must not silently deliver a truncated blob as success:
+    // either it errors, or it delivers all the bytes.
+    match result {
+        Err(_) => Ok(()),
+        Ok(bytes) => {
+            assert_eq!(
+                bytes.len(),
+                data.len(),
+                "get_part reported success but delivered a truncated blob \
+                 ({} of {} bytes) after mid-read key expiry",
+                bytes.len(),
+                data.len(),
+            );
+            Ok(())
+        }
+    }
+}
