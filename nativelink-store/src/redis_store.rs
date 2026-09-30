@@ -2550,3 +2550,224 @@ where
         ))
     }
 }
+
+#[cfg(test)]
+mod psubscribe_reconnect_race_tests {
+    use core::time::Duration;
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::sync::Notify;
+
+    use super::{RedisManager, StandardRedisManager};
+
+    /// Reads one CRLF-terminated line from the stream.
+    async fn read_line(stream: &mut TcpStream) -> Option<String> {
+        let mut line = Vec::new();
+        let mut byte = [0u8; 1];
+        loop {
+            if stream.read_exact(&mut byte).await.is_err() {
+                return None;
+            }
+            if byte[0] == b'\n' {
+                break;
+            }
+            if byte[0] != b'\r' {
+                line.push(byte[0]);
+            }
+        }
+        Some(String::from_utf8_lossy(&line).into_owned())
+    }
+
+    /// Parses one RESP command (array of bulk strings) from the client.
+    async fn parse_command(stream: &mut TcpStream) -> Option<Vec<String>> {
+        let header = read_line(stream).await?;
+        if !header.starts_with('*') {
+            return Some(vec![header]);
+        }
+        let count: usize = header[1..].parse().ok()?;
+        let mut parts = Vec::with_capacity(count);
+        for _ in 0..count {
+            let len_line = read_line(stream).await?;
+            let len: usize = len_line.strip_prefix('$')?.parse().ok()?;
+            let mut data = vec![0u8; len + 2]; // include trailing CRLF
+            stream.read_exact(&mut data).await.ok()?;
+            parts.push(String::from_utf8_lossy(&data[..len]).into_owned());
+        }
+        Some(parts)
+    }
+
+    struct FakeServerState {
+        /// Sha1 to return for SCRIPT LOAD (must match the client's own hash).
+        script_hash: String,
+        /// Patterns each connection (by accept order) was PSUBSCRIBEd to.
+        patterns_per_conn: parking_lot::Mutex<Vec<Vec<String>>>,
+        /// Signalled when conn #1 (the reconnect connection) receives its
+        /// first PSUBSCRIBE (the replay of the pre-existing pattern).
+        replay_psubscribe_arrived: Notify,
+        /// The server holds conn #1's first PSUBSCRIBE reply until this is
+        /// notified, keeping reconnect() parked inside its replay loop.
+        release_replay_reply: Notify,
+    }
+
+    async fn handle_conn(mut stream: TcpStream, conn_idx: usize, state: Arc<FakeServerState>) {
+        let mut first_psubscribe_on_this_conn = true;
+        while let Some(cmd) = parse_command(&mut stream).await {
+            let name = cmd.first().map(|c| c.to_ascii_uppercase()).unwrap_or_default();
+            match name.as_str() {
+                "HELLO" => {
+                    stream
+                        .write_all(
+                            b"%3\r\n$6\r\nserver\r\n$5\r\nredis\r\n$7\r\nversion\r\n$5\r\n7.4.0\r\n$5\r\nproto\r\n:3\r\n",
+                        )
+                        .await
+                        .unwrap();
+                }
+                "SCRIPT" => {
+                    let reply = format!(
+                        "${}\r\n{}\r\n",
+                        state.script_hash.len(),
+                        state.script_hash
+                    );
+                    stream.write_all(reply.as_bytes()).await.unwrap();
+                }
+                "PSUBSCRIBE" => {
+                    let pattern = cmd.get(1).cloned().unwrap_or_default();
+                    state.patterns_per_conn.lock()[conn_idx].push(pattern.clone());
+                    if conn_idx == 1 && first_psubscribe_on_this_conn {
+                        first_psubscribe_on_this_conn = false;
+                        // Tell the test that reconnect() is now parked awaiting
+                        // this reply inside its replay loop, then hold the
+                        // reply until the test releases it.
+                        state.replay_psubscribe_arrived.notify_one();
+                        state.release_replay_reply.notified().await;
+                    }
+                    let reply = format!(
+                        ">3\r\n$10\r\npsubscribe\r\n${}\r\n{}\r\n:1\r\n",
+                        pattern.len(),
+                        pattern
+                    );
+                    stream.write_all(reply.as_bytes()).await.unwrap();
+                }
+                _ => {
+                    stream.write_all(b"+OK\r\n").await.unwrap();
+                }
+            }
+        }
+    }
+
+    /// Deterministic repro: a `psubscribe` that interleaves with a `reconnect`
+    /// whose subscription snapshot was taken before the insert lands only on
+    /// the old (about-to-be-replaced) connection. The new live connection is
+    /// never subscribed, yet the pattern is recorded as active in
+    /// `self.subscriptions`, so notifications are silently lost until an
+    /// unrelated future reconnect replays the set.
+    ///
+    /// Choreography (all real await points, no timing races):
+    ///   1. Manager connects (conn #0) and psubscribes "pre".
+    ///   2. Task B calls reconnect(): connects conn #1, snapshots
+    ///      subscriptions = {"pre"}, and parks in the replay loop because the
+    ///      fake server withholds conn #1's PSUBSCRIBE "pre" reply.
+    ///   3. The test (task A) calls psubscribe("pat"): get_connection still
+    ///      returns conn #0 (reconnect has not published yet), the pattern is
+    ///      inserted into `subscriptions`, and PSUBSCRIBE succeeds on conn #0.
+    ///   4. The server releases the reply; reconnect publishes conn #1.
+    ///   5. Conn #1 — now the live connection — was never subscribed to "pat".
+    #[test]
+    fn psubscribe_lost_across_reconnect() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let state = Arc::new(FakeServerState {
+                script_hash: redis::Script::new(super::LUA_VERSION_SET_SCRIPT)
+                    .get_hash()
+                    .to_string(),
+                patterns_per_conn: parking_lot::Mutex::new(Vec::new()),
+                replay_psubscribe_arrived: Notify::new(),
+                release_replay_reply: Notify::new(),
+            });
+
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            {
+                let state = state.clone();
+                tokio::spawn(async move {
+                    let mut conn_idx = 0usize;
+                    loop {
+                        let (stream, _) = listener.accept().await.unwrap();
+                        state.patterns_per_conn.lock().push(Vec::new());
+                        tokio::spawn(handle_conn(stream, conn_idx, state.clone()));
+                        conn_idx += 1;
+                    }
+                });
+            }
+
+            // Keep the push receiver alive for the whole test.
+            let (push_tx, _push_rx) = tokio::sync::mpsc::unbounded_channel();
+            let url = format!("redis://127.0.0.1:{port}/?protocol=resp3");
+            let connect_func = Box::new(move || {
+                let url = url.clone();
+                let push_tx = push_tx.clone();
+                Box::pin(async move {
+                    let client = redis::Client::open(url.as_str()).unwrap();
+                    let config = ConnectionManagerConfig::new()
+                        .set_number_of_retries(0)
+                        .set_connection_timeout(Some(Duration::from_secs(5)))
+                        .set_response_timeout(Some(Duration::from_secs(5)))
+                        .set_push_sender(push_tx);
+                    ConnectionManager::new_with_config(client, config)
+                        .await
+                        .map_err(Into::into)
+                }) as core::pin::Pin<Box<_>>
+            });
+
+            let manager = Arc::new(StandardRedisManager::new(connect_func).await.unwrap());
+
+            // Step 1: a pre-existing subscription so reconnect's replay loop
+            // has an await point we can park it on.
+            manager.psubscribe("pre").await.unwrap();
+            let (_conn, uuid0) = manager.get_connection().await.unwrap();
+
+            // Step 2: start reconnect; it will connect conn #1, snapshot
+            // subscriptions (= {"pre"}), and park replaying "pre".
+            let reconnect_task = {
+                let manager = manager.clone();
+                tokio::spawn(async move { manager.reconnect(uuid0).await })
+            };
+            tokio::time::timeout(
+                Duration::from_secs(5),
+                state.replay_psubscribe_arrived.notified(),
+            )
+            .await
+            .expect("reconnect never reached its subscription replay loop");
+
+            // Step 3: concurrent psubscribe while reconnect is parked
+            // post-snapshot, pre-publish. It succeeds — on the old connection.
+            manager.psubscribe("pat").await.unwrap();
+
+            // Step 4: let reconnect finish and publish conn #1.
+            state.release_replay_reply.notify_one();
+            let (_new_conn, new_uuid) = reconnect_task.await.unwrap().unwrap();
+            assert_ne!(uuid0, new_uuid, "reconnect must have published a new connection");
+
+            // The manager believes "pat" is an active subscription...
+            let recorded: HashSet<String> = manager.subscriptions.lock().clone();
+            assert!(recorded.contains("pat"), "sanity: pattern recorded as active");
+
+            // ...but the live connection (conn #1) was never subscribed to it.
+            let conn1_patterns = state.patterns_per_conn.lock()[1].clone();
+            assert!(
+                conn1_patterns.contains(&"pat".to_string()),
+                "RACE REPRODUCED: pattern \"pat\" is recorded as an active \
+                 subscription but the live post-reconnect connection was only \
+                 subscribed to {conn1_patterns:?}; keyspace notifications for \
+                 \"pat\" are silently lost until the next reconnect",
+            );
+        });
+    }
+}
