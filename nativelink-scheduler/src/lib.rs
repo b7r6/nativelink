@@ -33,3 +33,5 @@ pub mod worker;
 pub mod worker_capability_index;
 pub mod worker_registry;
 pub mod worker_scheduler;
+
+// CI affected-lanes validation: scheduler-only touch.
