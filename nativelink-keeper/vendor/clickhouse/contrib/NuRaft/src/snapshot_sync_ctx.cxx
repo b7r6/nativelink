@@ -1,0 +1,585 @@
+/************************************************************************
+Modifications Copyright 2017-present eBay Inc.
+Author/Developer(s): Jung-Sang Ahn
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+**************************************************************************/
+
+#include "snapshot_sync_ctx.hxx"
+
+#include "event_awaiter.hxx"
+#include "peer.hxx"
+#include "raft_server.hxx"
+#include "state_machine.hxx"
+#include "tracer.hxx"
+
+#include <cassert>
+
+namespace nuraft {
+
+class raft_server;
+
+class snapshot_io_mgr_singleton {
+public:
+    static snapshot_io_mgr_singleton& get_instance() {
+        static snapshot_io_mgr_singleton instance;
+        return instance;
+    }
+
+    snapshot_io_mgr& instance() {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (!internal_) {
+            internal_ = new snapshot_io_mgr();
+        }
+        return *internal_;
+    }
+
+    void clear() {
+        snapshot_io_mgr* internal = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(lock_);
+            internal = internal_;
+            internal_ = nullptr;
+        }
+        delete internal;
+    }
+
+private:
+    snapshot_io_mgr_singleton() : internal_(nullptr) {}
+
+    ~snapshot_io_mgr_singleton() {
+        clear();
+    }
+
+    std::mutex lock_;
+    snapshot_io_mgr* internal_;
+};
+
+snapshot_sync_ctx::snapshot_sync_ctx(const ptr<snapshot>& s,
+                                     int peer_id,
+                                     ulong timeout_ms,
+                                     ulong offset)
+    : peer_id_(peer_id)
+    , snapshot_(s)
+    , offset_(offset)
+    , user_snp_ctx_(nullptr)
+{
+    // 10 seconds by default.
+    timer_.set_duration_ms(timeout_ms);
+}
+
+void snapshot_sync_ctx::set_offset(ulong offset) {
+    if (offset_ != offset) timer_.reset();
+    offset_ = offset;
+}
+
+bool snapshot_sync_ctx::begin_async_snapshot_request()
+{
+    async_snapshot_transfer_started_.store(true, std::memory_order_release);
+    bool expected = false;
+    return async_snapshot_request_in_progress_.compare_exchange_strong(
+        expected, true, std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void snapshot_sync_ctx::finish_async_snapshot_request()
+{
+    async_snapshot_request_in_progress_.store(false, std::memory_order_release);
+}
+
+void snapshot_sync_ctx::finish_async_snapshot_transfer()
+{
+    async_snapshot_request_in_progress_.store(false, std::memory_order_release);
+    async_snapshot_transfer_started_.store(false, std::memory_order_release);
+}
+
+bool snapshot_sync_ctx::is_async_snapshot_request_in_progress() const
+{
+    return async_snapshot_request_in_progress_.load(std::memory_order_acquire);
+}
+
+bool snapshot_sync_ctx::is_async_snapshot_transfer_started() const
+{
+    return async_snapshot_transfer_started_.load(std::memory_order_acquire);
+}
+
+bool snapshot_sync_ctx::begin_user_snp_ctx_io()
+{
+    std::lock_guard<std::mutex> lock(user_snp_ctx_lock_);
+    if (user_snp_ctx_closed_)
+    {
+        return false;
+    }
+    if (user_snp_ctx_io_active_)
+    {
+        assert(false && "logical snapshot user context IO is already active");
+        return false;
+    }
+    user_snp_ctx_io_active_ = true;
+    return true;
+}
+
+bool snapshot_sync_ctx::finish_user_snp_ctx_io(state_machine& sm)
+{
+    void* ctx_to_free = nullptr;
+    bool closed = false;
+    {
+        std::lock_guard<std::mutex> lock(user_snp_ctx_lock_);
+        assert(user_snp_ctx_io_active_);
+        user_snp_ctx_io_active_ = false;
+        closed = user_snp_ctx_closed_;
+        if (closed && user_snp_ctx_)
+        {
+            ctx_to_free = user_snp_ctx_;
+            user_snp_ctx_ = nullptr;
+        }
+    }
+
+    if (ctx_to_free)
+    {
+        sm.free_user_snp_ctx(ctx_to_free);
+    }
+    return closed;
+}
+
+void snapshot_sync_ctx::close_user_snp_ctx(state_machine& sm)
+{
+    void* ctx_to_free = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(user_snp_ctx_lock_);
+        if (user_snp_ctx_closed_)
+        {
+            return;
+        }
+        user_snp_ctx_closed_ = true;
+        if (!user_snp_ctx_io_active_ && user_snp_ctx_)
+        {
+            ctx_to_free = user_snp_ctx_;
+            user_snp_ctx_ = nullptr;
+        }
+    }
+
+    if (ctx_to_free)
+    {
+        sm.free_user_snp_ctx(ctx_to_free);
+    }
+}
+
+snapshot_sync_ctx::user_snp_ctx_io_guard::user_snp_ctx_io_guard(snapshot_sync_ctx& ctx,
+                                                               state_machine& sm)
+    : ctx_(&ctx)
+    , sm_(&sm)
+    , active_(ctx.begin_user_snp_ctx_io())
+{
+}
+
+snapshot_sync_ctx::user_snp_ctx_io_guard::~user_snp_ctx_io_guard() noexcept
+{
+    if (!active_)
+    {
+        return;
+    }
+
+    try
+    {
+        finish();
+    }
+    catch (...)
+    {
+    }
+}
+
+void*& snapshot_sync_ctx::user_snp_ctx_io_guard::get()
+{
+    assert(active_);
+    return ctx_->user_snp_ctx_;
+}
+
+bool snapshot_sync_ctx::user_snp_ctx_io_guard::finish()
+{
+    if (!active_)
+    {
+        return false;
+    }
+
+    active_ = false;
+    return ctx_->finish_user_snp_ctx_io(*sm_);
+}
+
+snapshot_io_mgr& snapshot_io_mgr::instance() {
+    return snapshot_io_mgr_singleton::get_instance().instance();
+}
+
+struct snapshot_io_mgr::io_queue_elem {
+    io_queue_elem( ptr<raft_server> r,
+                   ptr<snapshot> s,
+                   ptr<snapshot_sync_ctx> c,
+                   ptr<peer> p,
+                   std::function< void(ptr<resp_msg>&, ptr<rpc_exception>&) >& h )
+        : raft_(r)
+        , snapshot_(s)
+        , sync_ctx_(c)
+        , dst_(p)
+        , handler_(h)
+        {}
+    ptr<raft_server> raft_;
+    ptr<snapshot> snapshot_;
+    ptr<snapshot_sync_ctx> sync_ctx_;
+    ptr<peer> dst_;
+    std::function< void(ptr<resp_msg>&, ptr<rpc_exception>&) > handler_;
+};
+
+
+snapshot_io_mgr::snapshot_io_mgr()
+    : io_thread_ea_(new EventAwaiter())
+    , terminating_(false)
+{
+    io_thread_ = nuraft_thread(&snapshot_io_mgr::async_io_loop, this);
+}
+
+snapshot_io_mgr::~snapshot_io_mgr() {
+    shutdown();
+}
+
+void snapshot_io_mgr::shutdown_instance() {
+    snapshot_io_mgr_singleton::get_instance().clear();
+}
+
+bool snapshot_io_mgr::push(ptr<snapshot_io_mgr::io_queue_elem>& elem) {
+    auto_lock(queue_lock_);
+    logger* l_ = elem->raft_->l_.get();
+
+    // If there is existing one for the same peer, ignore it.
+    for (auto& entry: queue_) {
+        if ( entry->raft_ == elem->raft_ &&
+             entry->dst_->get_id() == elem->dst_->get_id() ) {
+            p_tr("snapshot request for peer %d already exists, do nothing",
+                 elem->dst_->get_id());
+            return false;
+        }
+    }
+    queue_.push_back(elem);
+    p_tr("added snapshot request for peer %d", elem->dst_->get_id());
+
+    return true;
+}
+
+bool snapshot_io_mgr::push(ptr<raft_server> r,
+                           ptr<peer> p,
+                           std::function< void(ptr<resp_msg>&, ptr<rpc_exception>&) >& h)
+{
+    ptr<snapshot_sync_ctx> sync_ctx = p->get_snapshot_sync_ctx();
+    if (!sync_ctx)
+    {
+        logger* l_ = r->l_.get();
+        p_tr("cannot queue snapshot request for peer %d: no snapshot sync context",
+             p->get_id());
+        return false;
+    }
+
+    ptr<snapshot> snp = sync_ctx->get_snapshot();
+    if (!snp)
+    {
+        logger* l_ = r->l_.get();
+        p_tr("cannot queue snapshot request for peer %d: no snapshot",
+             p->get_id());
+        return false;
+    }
+
+    ptr<io_queue_elem> elem =
+        cs_new<io_queue_elem>( r,
+                               snp,
+                               sync_ctx,
+                               p,
+                               h );
+    return push(elem);
+}
+
+void snapshot_io_mgr::invoke() {
+    io_thread_ea_->invoke();
+}
+
+void snapshot_io_mgr::clear_dropped_request(ptr<io_queue_elem>& elem) {
+    if (elem->dst_->get_snapshot_sync_ctx() == elem->sync_ctx_) {
+        elem->raft_->clear_snapshot_sync_ctx(*elem->dst_);
+    } else {
+        elem->sync_ctx_->finish_async_snapshot_transfer();
+    }
+}
+
+void snapshot_io_mgr::drop_reqs(raft_server* r) {
+    std::list< ptr<io_queue_elem> > reqs_to_drop;
+    {
+        auto_lock(queue_lock_);
+        logger* l_ = r->l_.get();
+        auto entry = queue_.begin();
+        while (entry != queue_.end()) {
+            if ((*entry)->raft_.get() == r) {
+                p_tr("drop snapshot request for peer %d, raft server %p",
+                     (*entry)->dst_->get_id(), r);
+                reqs_to_drop.push_back(*entry);
+                entry = queue_.erase(entry);
+            } else {
+                entry++;
+            }
+        }
+    }
+
+    for (auto& elem: reqs_to_drop) {
+        clear_dropped_request(elem);
+    }
+}
+
+bool snapshot_io_mgr::has_pending_request(raft_server* r, int srv_id) {
+    auto_lock(queue_lock_);
+    for (auto& entry: queue_) {
+        if ( entry->raft_.get() == r &&
+             entry->dst_->get_id() == srv_id ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void snapshot_io_mgr::shutdown() {
+    terminating_ = true;
+    if (io_thread_.joinable()) {
+        io_thread_ea_->invoke();
+        io_thread_.join();
+    }
+
+    std::list< ptr<io_queue_elem> > reqs_to_drop;
+    {
+        auto_lock(queue_lock_);
+        reqs_to_drop.splice(reqs_to_drop.end(), queue_);
+    }
+
+    for (auto& elem: reqs_to_drop) {
+        clear_dropped_request(elem);
+    }
+}
+
+void snapshot_io_mgr::async_io_loop() {
+    std::string thread_name = "nuraft_snp_io";
+#ifdef __linux__
+    pthread_setname_np(pthread_self(), thread_name.c_str());
+#elif __APPLE__
+    pthread_setname_np(thread_name.c_str());
+#endif
+
+    do {
+        io_thread_ea_->wait_ms(1000);
+        io_thread_ea_->reset();
+
+        std::list< ptr<io_queue_elem> > reqs;
+        std::list< ptr<io_queue_elem> > reqs_to_return;
+        if (!terminating_) {
+            auto_lock(queue_lock_);
+            reqs = queue_;
+        }
+
+        for (ptr<io_queue_elem>& elem: reqs) {
+            class async_snapshot_request_guard
+            {
+            public:
+                async_snapshot_request_guard(snapshot_io_mgr& owner, ptr<io_queue_elem> elem)
+                    : owner_(owner)
+                    , elem_(elem)
+                {
+                }
+
+                ~async_snapshot_request_guard()
+                {
+                    if (active_)
+                    {
+                        elem_->sync_ctx_->finish_async_snapshot_request();
+                    }
+                }
+
+                void disarm()
+                {
+                    active_ = false;
+                }
+
+                void clear_context_if_current()
+                {
+                    if (!active_)
+                    {
+                        return;
+                    }
+
+                    recur_lock(elem_->raft_->lock_);
+                    owner_.clear_dropped_request(elem_);
+                    active_ = false;
+                }
+
+            private:
+                snapshot_io_mgr& owner_;
+                ptr<io_queue_elem> elem_;
+                bool active_ = true;
+            } request_guard(*this, elem);
+
+            if (terminating_) {
+                request_guard.clear_context_if_current();
+                continue;
+            }
+            if (!elem->raft_->is_leader()) {
+                request_guard.clear_context_if_current();
+                continue;
+            }
+
+            int dst_id = elem->dst_->get_id();
+
+            std::unique_lock<std::mutex> lock(elem->dst_->get_lock());
+            // ---- lock acquired
+            logger* l_ = elem->raft_->l_.get();
+            ulong obj_idx = elem->sync_ctx_->get_offset();
+            ulong snp_log_idx = elem->snapshot_->get_last_log_idx();
+            ulong snp_log_term = elem->snapshot_->get_last_log_term();
+            snapshot_sync_ctx::user_snp_ctx_io_guard user_ctx_guard(
+                *elem->sync_ctx_, *elem->raft_->state_machine_);
+            p_db("peer: %d, obj_idx: %" PRIu64 ", snp idx %" PRIu64
+                 ", snp term %" PRIu64,
+                 dst_id, obj_idx, snp_log_idx, snp_log_term);
+            if (!user_ctx_guard)
+            {
+                p_tr("drop stale snapshot request for peer %d, object %" PRIu64
+                     ", snapshot idx %" PRIu64 ", term %" PRIu64,
+                     dst_id, obj_idx, snp_log_idx, snp_log_term);
+                continue;
+            }
+            // ---- lock released
+            lock.unlock();
+
+            ptr<buffer> data = nullptr;
+            bool is_last_request = false;
+
+            int rc = elem->raft_->state_machine_->read_logical_snp_obj
+                     ( *elem->snapshot_, user_ctx_guard.get(), obj_idx,
+                       data, is_last_request );
+            const bool closed = user_ctx_guard.finish();
+            if (closed)
+            {
+                p_tr("drop snapshot data for closed context, peer %d, object %" PRIu64
+                     ", snapshot idx %" PRIu64 ", term %" PRIu64,
+                     dst_id, obj_idx, snp_log_idx, snp_log_term);
+                continue;
+            }
+            if (rc < 0) {
+                // Snapshot read failed.
+                p_wn( "reading snapshot (idx %" PRIu64 ", term %" PRIu64
+                      ", object %" PRIu64 ") "
+                      "for peer %d failed: %d",
+                      snp_log_idx, snp_log_term, obj_idx, dst_id, rc );
+
+                recur_lock(elem->raft_->lock_);
+                auto entry = elem->raft_->peers_.find(dst_id);
+                if (entry != elem->raft_->peers_.end()) {
+                    if (elem->dst_->get_snapshot_sync_ctx() == elem->sync_ctx_) {
+                        // If normal member (already in the peer list):
+                        //   reset the `sync_ctx` so as to retry with the newer version.
+                        elem->raft_->clear_snapshot_sync_ctx(*elem->dst_);
+                        request_guard.disarm();
+                    } else {
+                        request_guard.clear_context_if_current();
+                    }
+                } else if ( elem->raft_->srv_to_join_.get() &&
+                            elem->raft_->srv_to_join_ == elem->dst_ &&
+                            elem->dst_->get_snapshot_sync_ctx() == elem->sync_ctx_ ) {
+                    // If it is joing the server (not in the peer list),
+                    // enable HB temporarily to retry the request.
+                    elem->raft_->srv_to_join_snp_retry_required_ = true;
+                    elem->raft_->enable_hb_for_peer(*elem->raft_->srv_to_join_);
+                } else {
+                    // This means this server has been removed from the cluster,
+                    // but a stale snapshot request is still in the queue.
+                    // Ignore it.
+                    p_wn("stale snapshot request in queue for peer %d, ignore it",
+                         dst_id);
+                    request_guard.clear_context_if_current();
+                }
+
+                continue;
+            }
+            if (data) data->pos(0);
+
+            // Send snapshot message with the given response handler.
+            recur_lock(elem->raft_->lock_);
+            if ( terminating_ ||
+                 !elem->raft_->is_leader() ||
+                 elem->dst_->get_snapshot_sync_ctx() != elem->sync_ctx_ ) {
+                p_tr("drop stale snapshot request for peer %d after read, "
+                     "object %" PRIu64 ", snapshot idx %" PRIu64
+                     ", term %" PRIu64,
+                     dst_id, obj_idx, snp_log_idx, snp_log_term);
+                request_guard.clear_context_if_current();
+                continue;
+            }
+
+            ulong term = elem->raft_->state_->get_term();
+            ulong commit_idx = elem->raft_->quick_commit_index_;
+
+            std::unique_ptr<snapshot_sync_req> sync_req(
+                new snapshot_sync_req( elem->snapshot_, obj_idx,
+                                       data, is_last_request ) );
+            ptr<req_msg> req( cs_new<req_msg>
+                              ( term,
+                                msg_type::install_snapshot_request,
+                                elem->raft_->id_,
+                                dst_id,
+                                elem->snapshot_->get_last_log_term(),
+                                elem->snapshot_->get_last_log_idx(),
+                                commit_idx ) );
+            req->log_entries().push_back( cs_new<log_entry>
+                                          ( term,
+                                            sync_req->serialize(),
+                                            log_val_type::snp_sync_req ) );
+            if (elem->dst_->make_busy()) {
+                elem->dst_->set_rsv_msg(nullptr, nullptr);
+                elem->dst_->send_req(elem->dst_, req, elem->handler_);
+                elem->dst_->reset_ls_timer();
+                p_tr("bg thread sent message to peer %d", dst_id);
+                if (elem->dst_->is_busy()) {
+                    request_guard.disarm();
+                }
+
+            } else {
+                p_db("peer %d is busy, push the request back to queue", dst_id);
+                reqs_to_return.push_back(elem);
+                request_guard.disarm();
+            }
+        }
+
+        {
+            auto_lock(queue_lock_);
+            // Remove elements in `reqs` from `queue_`.
+            for (auto& entry: reqs) {
+                auto e2 = queue_.begin();
+                while (e2 != queue_.end()) {
+                    if (*e2 == entry) {
+                        e2 = queue_.erase(e2);
+                        break;
+                    } else {
+                        e2++;
+                    }
+                }
+            }
+            // Return elements in `reqs_to_return` to `queue_` for retrying.
+            for (auto& entry: reqs_to_return) {
+                queue_.push_back(entry);
+            }
+        }
+
+    } while (!terminating_);
+}
+
+}

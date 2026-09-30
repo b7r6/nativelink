@@ -1,0 +1,13 @@
+prefix=@ZXC_PKGCONFIG_PREFIX@
+exec_prefix=${prefix}
+libdir=@ZXC_PKGCONFIG_LIBDIR@
+includedir=@ZXC_PKGCONFIG_INCLUDEDIR@
+
+Name: libzxc
+Description: High-performance asymmetric lossless compression
+URL: https://github.com/hellobertrand/zxc
+License: BSD 3-Clause
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lzxc
+Libs.private: @ZXC_PC_LIBS_PRIVATE@
+Cflags: -I${includedir} @ZXC_PC_CFLAGS@

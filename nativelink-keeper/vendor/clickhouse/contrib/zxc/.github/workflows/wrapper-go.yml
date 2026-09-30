@@ -1,0 +1,127 @@
+name: Wrapper Go
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+          - os: macos-26
+          - os: windows-latest
+          - os: windows-11-arm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Latest Compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "CC=gcc-14" >> $GITHUB_ENV
+          echo "CXX=g++-14" >> $GITHUB_ENV
+          gcc-14 --version
+
+      - name: Select Latest Xcode (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app
+          clang --version
+
+      - name: Install llvm-mingw (Windows ARM64)
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          $LLVM_MINGW_URL = "https://github.com/mstorsjo/llvm-mingw/releases/download/20260407/llvm-mingw-20260407-ucrt-aarch64.zip"
+          Invoke-WebRequest -Uri $LLVM_MINGW_URL -OutFile llvm-mingw.zip
+          Expand-Archive llvm-mingw.zip -DestinationPath C:\llvm-mingw
+          $MINGW_BIN = "C:\llvm-mingw\llvm-mingw-20260407-ucrt-aarch64\bin"
+          echo "$MINGW_BIN" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "CC=aarch64-w64-mingw32-gcc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.21'
+          cache: false
+
+      - name: Build ZXC Core Library (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DZXC_BUILD_CLI=OFF -DZXC_BUILD_TESTS=OFF
+          cmake --build build --parallel
+
+      - name: Build ZXC Core Library (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DZXC_BUILD_CLI=OFF -DZXC_BUILD_TESTS=OFF
+          cmake --build build --parallel
+
+      - name: Run Go Tests (Unix)
+        if: runner.os != 'Windows'
+        working-directory: ./wrappers/go
+        run: CGO_ENABLED=1 CGO_LDFLAGS="-L../../build -lzxc -lpthread" go test -v -count=1 ./...
+
+      - name: Run Go Tests (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ./wrappers/go
+        env:
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-L../../build -lzxc"
+        run: go test -v -count=1 ./...
+
+      - name: Run Go Benchmarks (Unix)
+        if: runner.os != 'Windows'
+        working-directory: ./wrappers/go
+        run: CGO_ENABLED=1 CGO_LDFLAGS="-L../../build -lzxc -lpthread" go test -bench=. -benchmem -count=1 ./...
+
+      - name: Run Go Benchmarks (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ./wrappers/go
+        env:
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-L../../build -lzxc"
+        run: go test -bench=. -benchmem -count=1 ./...
+
+  tag-module:
+    name: Tag Go Module
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Tag the Go submodule
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          # Go resolves versions of a submodule from tags prefixed with the
+          # module directory. Without this tag, `go get ...@v0.13.3` fails and
+          # consumers are stuck on pseudo-versions of the default branch.
+          MODULE_TAG="wrappers/go/${RELEASE_TAG}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${MODULE_TAG}" > /dev/null 2>&1; then
+            echo "${MODULE_TAG} already exists, nothing to do"
+            exit 0
+          fi
+
+          # Lightweight tag on the release commit: no tagger identity needed.
+          git tag "${MODULE_TAG}" HEAD
+          git push origin "${MODULE_TAG}"
+
+          echo "Tagged ${MODULE_TAG} -> $(git rev-parse --short HEAD)"

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" data-app-version="APP_VERSION-unknown-from-vite-config">
+
+<head>
+  <script>self["MonacoEnvironment"] = (function (paths) {
+          return {
+            globalAPI: false,
+            getWorkerUrl : function (moduleId, label) {
+              var result =  paths[label];
+              if (/^((http:)|(https:)|(file:)|(\/\/))/.test(result)) {
+                var currentUrl = String(window.location);
+                var currentOrigin = currentUrl.substr(0, currentUrl.length - window.location.hash.length - window.location.search.length - window.location.pathname.length);
+                if (result.substring(0, currentOrigin.length) !== currentOrigin) {
+                  var js = '/*' + label + '*/importScripts("' + result + '");';
+                  var blob = new Blob([js], { type: 'application/javascript' });
+                  return URL.createObjectURL(blob);
+                }
+              }
+              return result;
+            }
+          };
+        })({
+  "editorWorkerService": "/ui/monacoeditorwork/editor.worker.bundle.js"
+});</script>
+
+  <title>ClickHouse SQL Console</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Standalone SQL Console for ClickHouse">
+
+  <link id="standalone-favicon" rel="icon" type="image/png" />
+
+  <style>
+    /* Inter */
+    @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 300;
+        font-display: swap;
+        src: url("/ui/assets/Inter-300-BXF1tPR-.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("/ui/assets/Inter-400-B7ia0BOz.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("/ui/assets/Inter-500-CR8hRDQ3.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("/ui/assets/Inter-600-CYOlcO97.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url("/ui/assets/Inter-700-BfGwuJ4y.woff2") format("woff2");
+    }
+
+    /* Inconsolata */
+    @font-face {
+        font-family: "Inconsolata";
+        font-style: normal;
+        font-weight: 300;
+        font-display: swap;
+        src: url("/ui/assets/Inconsolata-300-DXcVWPXv.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inconsolata";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("/ui/assets/Inconsolata-400-Bi4PjdUK.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inconsolata";
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("/ui/assets/Inconsolata-500-17nMkOBT.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inconsolata";
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("/ui/assets/Inconsolata-600-BDPepyOS.woff2") format("woff2");
+    }
+
+    @font-face {
+        font-family: "Inconsolata";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url("/ui/assets/Inconsolata-700-Ddcx5qPW.woff2") format("woff2");
+    }
+  </style>
+  <script type="text/javascript">
+    window.global = window;
+    window._env = {};
+  </script>
+  <style>
+    html, body, #root {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+  <script type="module" crossorigin src="/ui/assets/index-60rskG7o.js"></script>
+  <link rel="stylesheet" crossorigin href="/ui/assets/index-DPXAKDy1.css">
+</head>
+
+<body>
+  <script src="/ui/env.js" type="text/javascript"></script>
+  <div id="root"></div>
+</body>
+
+</html>

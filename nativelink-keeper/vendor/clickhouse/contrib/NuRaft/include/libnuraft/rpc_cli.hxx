@@ -1,0 +1,67 @@
+/************************************************************************
+Modifications Copyright 2017-2019 eBay Inc.
+Author/Developer(s): Jung-Sang Ahn
+
+Original Copyright:
+See URL: https://github.com/datatechnology/cornerstone
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+**************************************************************************/
+
+#ifndef _RPC_CLI_HXX_
+#define _RPC_CLI_HXX_
+
+#include "async.hxx"
+#include "req_msg.hxx"
+#include "resp_msg.hxx"
+#include "rpc_exception.hxx"
+
+#include <cstdint>
+
+namespace nuraft {
+
+class resp_msg;
+
+using rpc_result = async_result<ptr<resp_msg>, ptr<rpc_exception>>;
+
+using rpc_handler = rpc_result::handler_type;
+
+class rpc_client {
+    __interface_body__(rpc_client);
+
+public:
+    // When streaming mode is disabled, the caller must ensure that
+    // at most one request is in flight. I.e. second send() call is
+    // only allowed after the first call's when_done callback is called.
+    // When streaming mode is enabled, no such requirement exists, and
+    // requests can be pipelined, and their `when_done` callbacks are
+    // called in the same order as the corresponding send() calls.
+    //
+    // On error, when_done may be called inline and/or in parallel with other when_done calls.
+    virtual void send(ptr<req_msg>& req,
+                      rpc_handler& when_done,
+                      uint64_t send_timeout_ms = 0) = 0;
+
+    virtual uint64_t get_id() const = 0;
+
+    virtual bool is_abandoned() const = 0;
+
+    // If true, `send` may be called again before the previous send's
+    // handler has fired. In the main asio implementation, this
+    // corresponds to asio_service_options::streaming_mode_.
+    virtual bool supports_pipelining() const { return false; }
+};
+
+}
+
+#endif //_RPC_CLI_HXX_
