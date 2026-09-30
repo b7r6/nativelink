@@ -849,3 +849,169 @@ async fn listed_subscriber_borrows_without_reading_the_record_again() -> Result<
     );
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Repro: concurrent `add_action` recreation of an abandoned action forks
+// duplicate operations (un-CASed check-then-act at
+// store_awaited_action_db.rs:1034-1044 / 1210-1214).
+// ---------------------------------------------------------------------------
+
+/// Store that serves one abandoned executing record under the qualifier
+/// index, records every write, and rendezvous-gates `search_by_index_prefix`
+/// on a 2-party barrier so both racing `add_action` calls complete their
+/// read of the old record before either performs its write — exactly the
+/// window a real RediSearch-backed store leaves open, since neither write
+/// deletes or version-checks the old `aa_` record.
+struct RaceRecordingStore {
+    barrier: tokio::sync::Barrier,
+    encoded_action: Bytes,
+    writes: Arc<Mutex<Vec<Bytes>>>,
+}
+
+impl SchedulerStore for RaceRecordingStore {
+    type SubscriptionManager = PendingSubscriptionManager;
+
+    fn subscription_manager(
+        &self,
+    ) -> impl Future<Output = Result<Arc<Self::SubscriptionManager>, Error>> {
+        std::future::ready(Ok(Arc::new(PendingSubscriptionManager)))
+    }
+
+    async fn update_data<T>(
+        &self,
+        data: T,
+        _expiry: Option<Duration>,
+    ) -> Result<Option<i64>, Error>
+    where
+        T: SchedulerStoreDataProvider
+            + SchedulerStoreKeyProvider
+            + SchedulerCurrentVersionProvider
+            + Send,
+    {
+        // Mirrors the real store for this scenario: the recreated action is
+        // written under a brand-new `aa_<operation_id>` key at version 0, so
+        // the CAS trivially succeeds — there is nothing at that key to
+        // conflict with, and the old record is never touched.
+        self.writes.lock().await.push(data.try_into_bytes()?);
+        Ok(Some(1))
+    }
+
+    fn search_by_index_prefix<K>(
+        &self,
+        _index: K,
+    ) -> impl Future<
+        Output = Result<
+            impl Stream<Item = Result<<K as SchedulerStoreDecodeTo>::DecodeOutput, Error>> + Send,
+            Error,
+        >,
+    >
+    where
+        K: SchedulerIndexProvider + SchedulerStoreDecodeTo + Send,
+        <K as SchedulerStoreDecodeTo>::DecodeOutput: Send,
+    {
+        async move {
+            // Both racing calls must finish the read before either writes.
+            self.barrier.wait().await;
+            Ok(stream::iter(vec![K::decode(1, self.encoded_action.clone())]))
+        }
+    }
+
+    async fn count_by_index_prefix<K>(&self, _index: K) -> Result<u64, Error>
+    where
+        K: SchedulerIndexProvider + Send,
+    {
+        Ok(0)
+    }
+
+    async fn get_and_decode<K>(
+        &self,
+        _key: K,
+    ) -> Result<Option<<K as SchedulerStoreDecodeTo>::DecodeOutput>, Error>
+    where
+        K: SchedulerStoreKeyProvider + SchedulerStoreDecodeTo + Send,
+    {
+        todo!("not exercised by add_action")
+    }
+}
+
+#[nativelink_test]
+async fn concurrent_add_action_on_abandoned_action_must_not_fork_duplicates()
+-> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    // The executing worker belongs to a peer scheduler: this instance's
+    // registry has never seen it, so liveness is Unknown and only the
+    // ORPHANED_ACTION_TIMEOUT ceiling applies.
+    let worker_id = WorkerId::from("worker-on-peer".to_string());
+    let registry = Arc::new(WorkerRegistry::new());
+
+    let old_action = make_executing_awaited_action(&worker_id);
+    let action_info = old_action.action_info().clone();
+    let encoded =
+        Bytes::from(serde_json::to_vec(&old_action).expect("serialize AwaitedAction"));
+
+    let writes = Arc::new(Mutex::new(Vec::new()));
+    let store = Arc::new(RaceRecordingStore {
+        barrier: tokio::sync::Barrier::new(2),
+        encoded_action: encoded,
+        writes: writes.clone(),
+    });
+
+    let op_counter = Arc::new(AtomicUsize::new(0));
+    let op_id_fn = {
+        let op_counter = op_counter.clone();
+        move || OperationId::from(format!("op-{}", op_counter.fetch_add(1, Ordering::SeqCst)))
+    };
+    let now_fn: fn() -> MockInstantWrapped = MockInstantWrapped::default;
+    let mut db = StoreAwaitedActionDb::new(
+        store,
+        Arc::new(Notify::new()),
+        now_fn,
+        op_id_fn,
+        60,
+        60,
+        false,
+    )
+    .await
+    .expect("construct test db");
+    db.set_worker_registry(registry);
+
+    // Long enough that even the orphaned-action ceiling has expired: both
+    // schedulers will judge the executing action abandoned.
+    MockClock::advance(ORPHANED_ACTION_TIMEOUT * 2);
+
+    let (a, b) = futures::join!(
+        db.add_action(
+            OperationId::from("client-x"),
+            action_info.clone(),
+            WORKER_TIMEOUT,
+        ),
+        db.add_action(
+            OperationId::from("client-y"),
+            action_info.clone(),
+            WORKER_TIMEOUT,
+        ),
+    );
+    a?;
+    b?;
+
+    // Collect the operation ids of every `aa_` record written. If the
+    // recreation were properly CAS-linked to the old record, exactly one of
+    // the two racing calls would win and both clients would end up joined to
+    // a single new operation.
+    let writes = writes.lock().await;
+    let mut new_operation_ids = std::collections::HashSet::new();
+    for bytes in writes.iter() {
+        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+            if value.get("action_info").is_some() {
+                new_operation_ids.insert(value["operation_id"].to_string());
+            }
+        }
+    }
+    assert_eq!(
+        new_operation_ids.len(),
+        1,
+        "two concurrent add_action calls for the same qualifier forked duplicate \
+         operations for the same action: {new_operation_ids:?}",
+    );
+    Ok(())
+}
