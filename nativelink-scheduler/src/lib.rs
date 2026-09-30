@@ -24,6 +24,8 @@ pub mod match_outcome;
 pub mod memory_awaited_action_db;
 pub mod mock_scheduler;
 pub mod platform_property_manager;
+#[cfg(feature = "postgres")]
+pub mod postgres_awaited_action_db;
 pub mod property_modifier_scheduler;
 pub mod simple_scheduler;
 pub mod simple_scheduler_state_manager;

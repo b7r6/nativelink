@@ -39,6 +39,7 @@ tokio = { version = "1.52.2", features = [
   "rt-multi-thread",
   "signal",
 ], default-features = false }
+tokio-postgres = { version = "0.7", optional = true }
 tokio-stream = { version = "0.1.17", features = [
   "fs",
 ], default-features = false }
@@ -51,6 +52,9 @@ uuid = { version = "1.16.0", default-features = false, features = [
   "serde",
   "v4",
 ] }
+
+[features]
+postgres = ["dep:tokio-postgres", "tokio/time", "tokio/macros", "tokio/sync"]
 
 [dev-dependencies]
 nativelink-macro = { path = "../nativelink-macro" }
