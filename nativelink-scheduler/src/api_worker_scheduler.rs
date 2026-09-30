@@ -1219,6 +1219,14 @@ pub struct ApiWorkerScheduler {
 
     /// Woken when a worker joins or leaves this scheduler.
     local_fleet_change_notify: Arc<Notify>,
+
+    /// Test-only rendezvous: `remove_timedout_workers` parks here between its
+    /// liveness snapshot and re-acquiring the eviction lock, at an existing
+    /// await boundary, so tests can deterministically interleave a keepalive.
+    /// `.0` is signalled when the sweep reaches the boundary, `.1` lets it
+    /// proceed.
+    #[cfg(test)]
+    test_evict_gate: std::sync::OnceLock<Arc<(Notify, Notify)>>,
 }
 
 impl ApiWorkerScheduler {
@@ -1274,6 +1282,8 @@ impl ApiWorkerScheduler {
             maybe_origin_event_tx,
             local_fleet_change_notify,
             capacity_generation,
+            #[cfg(test)]
+            test_evict_gate: std::sync::OnceLock::new(),
         })
     }
 
@@ -1779,6 +1789,15 @@ impl WorkerScheduler for ApiWorkerScheduler {
             return Ok(());
         }
 
+        // Test-only hold at this pre-existing await boundary (the inner lock
+        // was dropped after the snapshot and is only re-acquired below); lets
+        // a test run a concurrent keepalive here deterministically.
+        #[cfg(test)]
+        if let Some(gate) = self.test_evict_gate.get() {
+            gate.0.notify_one();
+            gate.1.notified().await;
+        }
+
         let mut inner = self.inner.lock().await;
         let mut result = Ok(());
 
@@ -2052,5 +2071,134 @@ mod peer_census_trusted_tests {
             TTL,
             at(100)
         ));
+    }
+}
+
+#[cfg(test)]
+mod timedout_worker_eviction_race_tests {
+    use nativelink_metric::{
+        MetricFieldData, MetricKind, MetricPublishKnownKindData, MetricsComponent,
+    };
+    use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::UpdateForWorker;
+
+    use super::*;
+    use crate::worker_registry::WorkerRegistry;
+
+    #[derive(Debug, Default)]
+    struct NoopWorkerStateManager;
+
+    impl MetricsComponent for NoopWorkerStateManager {
+        fn publish(
+            &self,
+            _kind: MetricKind,
+            _field_metadata: MetricFieldData,
+        ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+            Ok(MetricPublishKnownKindData::Component)
+        }
+    }
+
+    #[async_trait]
+    impl WorkerStateManager for NoopWorkerStateManager {
+        async fn update_operation(
+            &self,
+            _operation_id: &OperationId,
+            _worker_id: &WorkerId,
+            _update: UpdateOperationType,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn is_executing_on_worker(
+            &self,
+            _operation_id: &OperationId,
+            _worker_id: &WorkerId,
+        ) -> Result<bool, Error> {
+            Ok(true)
+        }
+    }
+
+    /// repro: `remove_timedout_workers` evicts a worker whose keepalive
+    /// arrived between the liveness snapshot and the eviction lock.
+    ///
+    /// The sweep snapshots `last_update_timestamp` under the inner lock,
+    /// drops the lock across the registry await, then re-locks and calls
+    /// `immediate_evict_worker` without re-checking the timestamp. A
+    /// keepalive that lands in that window (a real await boundary crossed by
+    /// every sweep) refreshes the worker under the same mutex, yet the
+    /// worker is still evicted. The test parks the sweep at that boundary
+    /// via a test-only gate, delivers the keepalive, and asserts the worker
+    /// survives; on current code the worker is evicted despite being
+    /// provably alive.
+    #[tokio::test]
+    async fn keepalive_between_snapshot_and_evict_lock_still_evicts() {
+        const WORKER_TIMEOUT_S: u64 = 100;
+        const OLD_TS: WorkerTimestamp = 1_000;
+        const NOW_TS: WorkerTimestamp = 2_000;
+        // Fresh relative to NOW_TS: NOW_TS - FRESH_TS < WORKER_TIMEOUT_S.
+        const FRESH_TS: WorkerTimestamp = 1_999;
+
+        let registry = Arc::new(WorkerRegistry::new());
+        let scheduler = ApiWorkerScheduler::new(
+            Arc::new(NoopWorkerStateManager),
+            Arc::new(PlatformPropertyManager::new(HashMap::new())),
+            WorkerAllocationStrategy::default(),
+            None,
+            Arc::new(Notify::new()),
+            WORKER_TIMEOUT_S,
+            10,
+            0,
+            registry,
+            None,
+            false,
+            Duration::from_secs(15),
+        );
+        let gate = Arc::new((Notify::new(), Notify::new()));
+        scheduler
+            .test_evict_gate
+            .set(gate.clone())
+            .expect("gate set once");
+
+        let worker_id = WorkerId::from(String::from("worker1"));
+        // Keep rx alive so eviction's Disconnect send would succeed.
+        let (tx, _rx) = mpsc::channel::<UpdateForWorker>(16);
+        let worker = Worker::new(
+            worker_id.clone(),
+            PlatformProperties::default(),
+            tx,
+            OLD_TS,
+            1,
+        );
+        scheduler.add_worker(worker).await.expect("add worker");
+
+        // Start the sweep; it snapshots local_alive=false (OLD_TS is past
+        // the timeout), finds the registry stale too, and parks at the gate
+        // just before re-acquiring the inner lock to evict.
+        let sweep_scheduler = scheduler.clone();
+        let sweep =
+            tokio::spawn(async move { sweep_scheduler.remove_timedout_workers(NOW_TS).await });
+        gate.0.notified().await;
+
+        // The worker's keepalive arrives now: it acquires the inner lock,
+        // advances last_update_timestamp to FRESH_TS, and updates the
+        // registry heartbeat. The worker is provably alive.
+        scheduler
+            .worker_keep_alive_received(&worker_id, FRESH_TS, None)
+            .await
+            .expect("keepalive");
+        assert!(scheduler.contains_worker_for_test(&worker_id).await);
+
+        // Let the sweep proceed to its eviction lock.
+        gate.1.notify_one();
+        sweep.await.expect("join").expect("sweep result");
+
+        // A correct sweep re-checks liveness under the lock and keeps the
+        // worker; current code evicts it unconditionally.
+        assert!(
+            scheduler.contains_worker_for_test(&worker_id).await,
+            "worker was evicted by remove_timedout_workers even though its \
+             keepalive (timestamp {FRESH_TS}, well within the {WORKER_TIMEOUT_S}s \
+             timeout at now={NOW_TS}) was fully processed before the eviction \
+             lock was taken"
+        );
     }
 }
