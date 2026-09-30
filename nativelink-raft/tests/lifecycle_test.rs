@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_raft::RaftAwaitedActionDb;
+use nativelink_raft::{CommandResponse, RaftAwaitedActionDb};
 use nativelink_scheduler::awaited_action_db::{
     AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedActionState,
 };
@@ -244,27 +244,24 @@ async fn worker_death_requeues_through_the_log() {
     let queued = sub.borrow().await.expect("borrow");
     let operation_id = queued.operation_id().clone();
 
-    // Worker claims the action -> Executing (this also records a fresh lease).
-    let mut executing = queued.clone();
-    executing.worker_set_state(
-        Arc::new(ActionState {
-            stage: ActionStage::Executing,
-            client_operation_id: operation_id.clone(),
-            action_digest: action_info.unique_qualifier.digest(),
-            last_transition_timestamp: SystemTime::now(),
-        }),
-        SystemTime::now(),
-    );
-    db.update_awaited_action(executing)
-        .await
-        .expect("update to Executing");
+    // A worker session registers and claims the action -> Executing (this also
+    // records a fresh lease and sets ownership at attempt 1).
+    let worker = WorkerId("liveness-worker".to_string());
+    db.worker_join(worker.clone(), 1).await.expect("join");
+    drive_to_executing(&db, &queued, &worker, 1).await;
     let observed = sub.changed().await.expect("sees Executing");
     assert_eq!(observed.state().stage, ActionStage::Executing);
 
-    // The worker keeps heartbeating: an Expire with a generous lease is a no-op.
-    db.heartbeat(operation_id.clone())
+    // The worker keeps heartbeating (naming its owning attempt): an Expire with
+    // a generous lease is a no-op.
+    let hb = db
+        .heartbeat(operation_id.clone(), worker.clone(), 1, 1)
         .await
         .expect("heartbeat through the log");
+    assert!(
+        matches!(hb, CommandResponse::Applied { .. }),
+        "a heartbeat from the owning attempt is accepted"
+    );
     let requeued = db
         .expire(Duration::from_secs(3600))
         .await
@@ -324,29 +321,30 @@ async fn worker_death_requeues_through_the_log() {
     );
 }
 
-/// Move an already-added, queued action to Executing under `worker`, through
-/// the log, and return the resulting AwaitedAction.
+/// Assign an already-added, queued action to `worker` at `session_epoch`
+/// through the validated `AssignToWorker` command (which sets ownership).
+/// Asserts the assignment was accepted.
 async fn drive_to_executing(
     db: &RaftAwaitedActionDb,
     queued: &nativelink_scheduler::awaited_action_db::AwaitedAction,
     worker: &WorkerId,
+    session_epoch: u64,
 ) {
     let operation_id = queued.operation_id().clone();
-    let action_digest = queued.action_info().unique_qualifier.digest();
-    let mut executing = queued.clone();
-    executing.set_worker_id(Some(worker.clone()), SystemTime::now());
-    executing.worker_set_state(
-        Arc::new(ActionState {
-            stage: ActionStage::Executing,
-            client_operation_id: operation_id.clone(),
-            action_digest,
-            last_transition_timestamp: SystemTime::now(),
-        }),
-        SystemTime::now(),
-    );
-    db.update_awaited_action(executing)
+    let expected_revision = queued.version_public();
+    let resp = db
+        .assign_to_worker(
+            operation_id,
+            expected_revision,
+            worker.clone(),
+            session_epoch,
+        )
         .await
-        .expect("update to Executing through the log");
+        .expect("assign through the log");
+    assert!(
+        matches!(resp, CommandResponse::Applied { .. }),
+        "assignment must be accepted, got {resp:?}"
+    );
 }
 
 /// CROSSED-OFF #7 — orphan-free re-registration.
@@ -385,15 +383,15 @@ async fn same_id_rejoin_supersedes_without_orphan() {
     let queued = sub.borrow().await.expect("borrow");
     let operation_id = queued.operation_id().clone();
 
-    drive_to_executing(&db, &queued, &worker).await;
+    drive_to_executing(&db, &queued, &worker, 1).await;
     let observed = sub.changed().await.expect("sees Executing");
     assert_eq!(observed.state().stage, ActionStage::Executing);
 
-    // Ownership now points at session epoch 1.
+    // Ownership now points at session epoch 1, attempt 1.
     assert_eq!(
         db.operation_owner(&operation_id).await,
-        Some((worker.clone(), 1)),
-        "the executing op is owned by session epoch 1"
+        Some((worker.clone(), 1, 1)),
+        "the executing op is owned by session epoch 1, attempt 1"
     );
 
     // The SAME worker id re-registers with a new epoch (crash + reconnect).

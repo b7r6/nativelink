@@ -95,6 +95,31 @@ pub struct AwaitedAction {
     pub attempts: usize,
 }
 
+/// Read the origin metadata out of the ambient tracing context/baggage.
+///
+/// This is the ONLY place that touches `Context::current()`; call it on the
+/// request path (where the client's baggage is in scope) and pass the result to
+/// [`AwaitedAction::new_with_metadata`] so the record construction itself stays
+/// a pure function of its inputs.
+pub fn capture_origin_metadata() -> Option<OriginMetadata> {
+    let ctx = Context::current();
+    let baggage = ctx.baggage();
+    if baggage.is_empty() {
+        None
+    } else {
+        let bazel_metadata = baggage
+            .get(BAZEL_METADATA_KEY)
+            .and_then(|value| request_metadata_from_baggage(value.as_str()).ok());
+        Some(OriginMetadata {
+            identity: baggage
+                .get(ENDUSER_ID)
+                .map(|v| v.as_str().to_string())
+                .unwrap_or_default(),
+            bazel_metadata,
+        })
+    }
+}
+
 impl AwaitedAction {
     pub fn new(operation_id: OperationId, action_info: Arc<ActionInfo>, now: SystemTime) -> Self {
         let sort_key = PersistedSortKey::from_action_info(&action_info);
@@ -110,23 +135,7 @@ impl AwaitedAction {
             last_transition_timestamp: now,
         });
 
-        let ctx = Context::current();
-        let baggage = ctx.baggage();
-
-        let maybe_origin_metadata = if baggage.is_empty() {
-            None
-        } else {
-            let bazel_metadata = baggage
-                .get(BAZEL_METADATA_KEY)
-                .and_then(|value| request_metadata_from_baggage(value.as_str()).ok());
-            Some(OriginMetadata {
-                identity: baggage
-                    .get(ENDUSER_ID)
-                    .map(|v| v.as_str().to_string())
-                    .unwrap_or_default(),
-                bazel_metadata,
-            })
-        };
+        let maybe_origin_metadata = capture_origin_metadata();
 
         Self {
             version: AwaitedActionVersion(0),
@@ -140,6 +149,64 @@ impl AwaitedAction {
             worker_id: None,
             state: action_state,
         }
+    }
+
+    /// A pure constructor: identical to [`Self::new`] but the origin metadata is
+    /// supplied explicitly rather than read from the ambient tracing context.
+    ///
+    /// A replicated backend (the raft spike) must build the record from command
+    /// bytes only — if `new` reads `Context::current()` inside `apply`, the same
+    /// log entry could produce different records on different replicas (or on
+    /// replay), and the originating request's baggage would be lost entirely
+    /// because apply runs on a scheduler task with no client baggage in scope.
+    /// The caller captures the metadata with [`capture_origin_metadata`] before
+    /// proposing and passes it here. See Astra premortem S6d.
+    pub fn new_with_metadata(
+        operation_id: OperationId,
+        action_info: Arc<ActionInfo>,
+        now: SystemTime,
+        maybe_origin_metadata: Option<OriginMetadata>,
+    ) -> Self {
+        let sort_key = PersistedSortKey::from_action_info(&action_info);
+        let action_state = Arc::new(ActionState {
+            stage: ActionStage::Queued,
+            client_operation_id: operation_id.clone(),
+            action_digest: action_info.unique_qualifier.digest(),
+            last_transition_timestamp: now,
+        });
+        Self {
+            version: AwaitedActionVersion(0),
+            action_info,
+            operation_id,
+            sort_key,
+            attempts: 0,
+            last_worker_updated_timestamp: now,
+            last_client_keepalive_timestamp: now,
+            maybe_origin_metadata,
+            worker_id: None,
+            state: action_state,
+        }
+    }
+
+    /// Public read of the origin metadata, so a replicated backend can round-trip
+    /// it explicitly instead of re-reading ambient context.
+    pub fn origin_metadata(&self) -> Option<&OriginMetadata> {
+        self.maybe_origin_metadata.as_ref()
+    }
+
+    /// Public read of the record version/revision. A replicated backend uses
+    /// this as the caller's expected revision for a validated update: it is the
+    /// revision the caller last observed, and apply rejects the update if the
+    /// current record has moved on. Same role the version plays in the memory
+    /// and store backends, exposed for an out-of-crate backend.
+    pub const fn version_public(&self) -> i64 {
+        self.version.0
+    }
+
+    /// Public set of the record version/revision, so a replicated backend can
+    /// stamp the applied revision onto the record it publishes.
+    pub const fn set_version_public(&mut self, version: i64) {
+        self.version = AwaitedActionVersion(version);
     }
 
     pub(crate) const fn version(&self) -> i64 {

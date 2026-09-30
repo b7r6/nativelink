@@ -2,6 +2,86 @@
 
 > "It's not your fault."
 
+---
+> **ERRATA (Astra adversarial premortem, 2026-09-30).** This document over-claimed.
+> The log crosses off the *storage choreography* (version-CAS-as-glue, search-index
+> visibility, the 20ms dedup re-search, replica-local clock disagreement) — that part
+> holds. It does **not** by itself cross off transition *validation*. The current
+> `UpdateAwaitedAction` command carries a precomputed state with no expected
+> revision/stage/attempt and apply installs it unconditionally (seam **S0**), which
+> **reintroduces N2 and N3 and can resurrect a completed op through N7**. The CAS is not
+> deleted; it must move *into apply as a semantic guard* (Assign-if-eligible,
+> Finish-names-attempt, terminal-rejects-stale). Honest scorecard:
+>
+> | Item | Was claimed | Astra verdict |
+> |---|---|---|
+> | N7 atomic qualifier claim (#6) | dies | **DIES** — only if S0 is fixed so a stale update can't resurrect the claimed-away op |
+> | wall-clock liveness → `Expire` (#3) | dies (test) | improvement real, but **NEEDS-CARE**: lease needs attempt/session identity + no-backward + cross-leader clock policy |
+> | version-CAS (#1), keepalive retry (#2), abandoned-sweep (#4) | dies | **NEEDS-CARE**: die only once apply validates predecessors |
+> | fleet-generation (#5), orphan healing (#7) | demonstrated | membership-in-log is right; **NEEDS-CARE** for connection handoff + effect reconciliation across real failover |
+> | apply-vs-worker-dispatch (S1) | (flagged) | **SURVIVES** — highest priority; commit does not make cancellation effective at the worker |
+>
+> Concrete code defects found (all actionable): S0 unchecked update; adapter **drops the
+> attempts counter** (retry limit evadable); subscriber can **publish a revision backward**
+> and wedge at a stale value; `build_snapshot` **fails to serialize**
+> `HashMap<ActionUniqueKey, _>` as JSON (snapshot breaks after any cacheable action);
+> heartbeat overwrites lease unconditionally and names only the operation, not the attempt;
+> `AwaitedAction::new` reads **ambient tracing baggage**, so apply is not purely a function
+> of command bytes — undercutting the determinism claim this argument rests on. Full detail:
+> `/tmp/nativelink-astra-openraft-premortem.md`.
+>
+> Corrected thesis: **the log is necessary, not sufficient.** It removes the distributed-
+> storage choreography; the replacement must additionally make illegal transitions
+> impossible *in apply* and make external effects recoverable. Original claims below are
+> retained as written, each graded by the table above.
+---
+
+## HARDEN PASS — landed fixes (2026-09-30, single-node)
+
+Astra's six bounded, high-confidence code defects are now fixed in apply and
+covered by tests (`nativelink-raft/tests/harden_test.rs`, all green; fail→pass
+verified for S0, attempts, heartbeat by temporarily reverting the guard). The
+command alphabet gained validated transitions: `AssignToWorker` (revision +
+predecessor + session checks), a revision-guarded `UpdateAwaitedAction`, an
+attempt/session-named `Heartbeat`, and an explicit `CommandResponse::Rejected`
+— so **"client_write succeeded" no longer means "assignment accepted".**
+
+| Astra item | Fix in apply | Test | fail→pass captured |
+|---|---|---|---|
+| **S0** unchecked update / double-assign | `AssignToWorker` validates revision + Queued predecessor + current session; loser gets `RevisionConflict` | `s0_two_assignments_one_queued_revision_exactly_one_wins` | yes (both guards reverted → `a_ok=true b_ok=true`) |
+| **S0** completed resurrection (N7) | terminal op rejects a nonterminal update (`AlreadyTerminal`) | `s0_completed_rejects_stale_nonterminal_update` | — (covered by S0 guard) |
+| **attempts** counter dropped | command carries `attempts`; apply preserves it; retry cap enforced in the transition (`RetryCapExceeded`) | `attempts_counter_survives_and_hits_retry_cap` | yes (preserve line reverted → stored stays 0) |
+| **subscriber** publish-backward | `Watchers::publish` is revision-guarded; both pump and `subscribe_op` route through it | `subscriber_never_regresses_revision` | — (guard is the mechanism) |
+| **snapshot** serde on struct/enum map keys | `AppliedState::{to_portable,from_portable}` — every map a pair-sequence; snapshot uses it | `snapshot_roundtrips_nonempty_cacheable_state` | proven raw-JSON errors, portable succeeds |
+| **heartbeat** identity + monotonic lease | `Heartbeat` names worker/session/attempt, rejects non-owning senders, never lowers the lease | `heartbeat_identity_and_monotonic_lease` | yes (monotonic guard reverted → lease regresses) |
+| **ambient context** determinism | `capture_origin_metadata()` on the request path → `AwaitedAction::new_with_metadata`; apply reads no `Context::current()` | `add_action_origin_metadata_is_from_command_not_ambient` | — (constructor is pure by construction) |
+
+**Deliberately deferred to the next phase** (as Astra scoped them — not
+improvised here):
+
+- **S1** worker-side cancellation + effect-reconciliation dispatcher. Hooks in
+  where a committed assignment/cancel would record a *recoverable effect
+  obligation* alongside the state transition (a new field on the applied op or a
+  side `pending_effects` log fact), with a dispatcher reconciling it against
+  worker-acknowledged state. Nothing in the current apply sends RPCs, so this is
+  additive, not a rewrite.
+- **Real multi-node `RaftNetwork` + durable storage.** The `SingleNodeNetwork`
+  stub and RAM log remain; crash-durability, leadership transfer, and
+  minority-partition behavior are unproven. Hooks in at `store.rs` (durable
+  `RaftLogStorage`) and `db.rs` (`SingleNodeNetwork` → a real transport).
+- **S6a** connection handoff on membership change. Needs worker-session
+  connection ownership + reconnection, separate from the membership log fact
+  already built (#5/#7). Hooks in at the worker-scheduler boundary, not the DB.
+- **S6c** request-dedup cache across failover. Needs a stable logical request id
+  reused across retries with the accepted result recorded in applied state and
+  retained through snapshots. Hooks in at `AddAction` (add a `request_id` field
+  and a `request_id -> operation_id/result` map in `AppliedState`).
+
+The single-node caveat still applies to everything: what is proven is a property
+of the *deterministic apply*, identical for one voter and a quorum. Durable
+failover is the unbuilt plumbing, not an unproven state-machine claim.
+---
+
 Every piece below exists to *mitigate* a race that the current design lets
 happen. In the raft-log model the race cannot be represented in the first
 place: there is one totally-ordered log, one writer (the leader appends), and

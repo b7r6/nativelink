@@ -26,7 +26,7 @@ use nativelink_error::{Code, Error, make_err};
 use nativelink_metric::MetricsComponent;
 use nativelink_scheduler::awaited_action_db::{
     AwaitedAction, AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedAction,
-    SortedAwaitedActionState,
+    SortedAwaitedActionState, capture_origin_metadata,
 };
 use nativelink_util::action_messages::{ActionInfo, ActionState, OperationId, WorkerId};
 use openraft::error::{InstallSnapshotError, NetworkError, RPCError, RaftError};
@@ -136,9 +136,39 @@ impl AwaitedActionSubscriber for RaftAwaitedActionSubscriber {
 /// The watch channels the db layer keeps to notify subscribers, mirroring
 /// `operation_id_to_awaited_action` in the memory backend. Fed from the state
 /// machine's applied output — never a source of truth, just a notification bus.
+///
+/// The published value carries its own revision (`AwaitedAction::version_public`).
+/// Publication is guarded so it never regresses: a stale value captured before a
+/// newer one committed cannot overwrite the channel (Astra premortem S2/S3).
 #[derive(Debug, Default)]
 struct Watchers {
     txs: BTreeMap<OperationId, watch::Sender<AwaitedAction>>,
+}
+
+impl Watchers {
+    /// Publish `action` for `op_id`, but only if its revision is not older than
+    /// what the channel already holds. Creating a fresh channel always seeds it.
+    /// Returns true if the channel value advanced.
+    fn publish(&mut self, op_id: &OperationId, action: &AwaitedAction) -> bool {
+        match self.txs.get(op_id) {
+            Some(tx) => {
+                let current_rev = tx.borrow().version_public();
+                if action.version_public() < current_rev {
+                    // A publication for an older revision than already delivered:
+                    // drop it. Nondecreasing revision, not stage order — an
+                    // Executing->Queued retry has a HIGHER revision and is kept.
+                    return false;
+                }
+                tx.send_replace(action.clone());
+                true
+            }
+            None => {
+                let (tx, _rx) = watch::channel(action.clone());
+                self.txs.insert(op_id.clone(), tx);
+                true
+            }
+        }
+    }
 }
 
 /// The raft-backed database.
@@ -216,15 +246,7 @@ impl RaftAwaitedActionDb {
                 let mut w = watchers.lock().await;
                 for op_id in op_ids {
                     if let Some(action) = state.operations.get(&op_id) {
-                        match w.txs.get(&op_id) {
-                            Some(tx) => {
-                                let _ = tx.send_replace(action.clone());
-                            }
-                            None => {
-                                let (tx, _rx) = watch::channel(action.clone());
-                                w.txs.insert(op_id.clone(), tx);
-                            }
-                        }
+                        w.publish(&op_id, action);
                     }
                 }
             }
@@ -254,12 +276,14 @@ impl RaftAwaitedActionDb {
             return Ok(None);
         };
         let mut w = self.watchers.lock().await;
+        // Guarded publish: if a newer revision was already delivered by the pump
+        // while we were between the snapshot read and this lock, do NOT regress
+        // the channel to our captured (older) value (Astra premortem S3).
+        w.publish(op_id, action);
         let tx = w
             .txs
-            .entry(op_id.clone())
-            .or_insert_with(|| watch::channel(action.clone()).0);
-        // Refresh to the latest applied value.
-        tx.send_replace(action.clone());
+            .get(op_id)
+            .expect("publish inserts the channel if absent");
         let mut rx = tx.subscribe();
         rx.mark_changed();
         Ok(Some(RaftAwaitedActionSubscriber {
@@ -282,14 +306,75 @@ impl RaftAwaitedActionDb {
         }
     }
 
-    /// Test/driver helper: record a worker heartbeat through the log.
-    pub async fn heartbeat(&self, operation_id: OperationId) -> Result<(), Error> {
-        self.propose(Command::Heartbeat {
+    /// Assign a currently-eligible (Queued) operation to a worker session,
+    /// through the log with validation in apply. Returns the applied response so
+    /// callers can see acceptance vs. a `RevisionConflict` — "client_write
+    /// succeeded" does NOT mean "assignment accepted" (Astra premortem S0).
+    pub async fn assign_to_worker(
+        &self,
+        operation_id: OperationId,
+        expected_revision: i64,
+        worker_id: WorkerId,
+        session_epoch: u64,
+    ) -> Result<CommandResponse, Error> {
+        self.propose(Command::AssignToWorker {
             operation_id,
+            expected_revision,
+            worker_id,
+            session_epoch,
             now_unix_nanos: now_unix_nanos(),
         })
-        .await?;
-        Ok(())
+        .await
+    }
+
+    /// Record a worker heartbeat that names its owning attempt/session, through
+    /// the log. The identity is read from current ownership. A heartbeat that no
+    /// longer owns the op (superseded attempt) is rejected in apply (S6d).
+    pub async fn heartbeat(
+        &self,
+        operation_id: OperationId,
+        worker_id: WorkerId,
+        session_epoch: u64,
+        attempt: u64,
+    ) -> Result<CommandResponse, Error> {
+        self.propose(Command::Heartbeat {
+            operation_id,
+            worker_id,
+            session_epoch,
+            attempt,
+            now_unix_nanos: now_unix_nanos(),
+        })
+        .await
+    }
+
+    /// Like [`Self::heartbeat`] but with an explicit timestamp, for tests that
+    /// need to construct heartbeat reordering deterministically.
+    pub async fn heartbeat_at(
+        &self,
+        operation_id: OperationId,
+        worker_id: WorkerId,
+        session_epoch: u64,
+        attempt: u64,
+        now_unix_nanos: u128,
+    ) -> Result<CommandResponse, Error> {
+        self.propose(Command::Heartbeat {
+            operation_id,
+            worker_id,
+            session_epoch,
+            attempt,
+            now_unix_nanos,
+        })
+        .await
+    }
+
+    /// The current lease timestamp recorded for an operation, for tests.
+    pub async fn lease_of(&self, operation_id: &OperationId) -> Option<u128> {
+        self.sm
+            .snapshot_state()
+            .await
+            .leases
+            .get(operation_id)
+            .copied()
     }
 
     /// Register (or re-register) a worker session under `worker_id` at
@@ -340,16 +425,37 @@ impl RaftAwaitedActionDb {
         self.sm.snapshot_state().await.sessions
     }
 
-    /// The owning `(worker_id, session_epoch)` of an in-flight operation, from
-    /// the same applied snapshot as the worker-set. Never disagrees with
-    /// `worker_sessions_snapshot`: both are one function of the log.
-    pub async fn operation_owner(&self, operation_id: &OperationId) -> Option<(WorkerId, u64)> {
+    /// The owning `(worker_id, session_epoch, attempt)` of an in-flight
+    /// operation, from the same applied snapshot as the worker-set. Never
+    /// disagrees with `worker_sessions_snapshot`: both are one function of the
+    /// log.
+    pub async fn operation_owner(
+        &self,
+        operation_id: &OperationId,
+    ) -> Option<(WorkerId, u64, u64)> {
         self.sm
             .snapshot_state()
             .await
             .operation_owner
             .get(operation_id)
-            .cloned()
+            .map(|o| (o.worker_id.clone(), o.session_epoch, o.attempt))
+    }
+
+    /// The current revision recorded for an operation, for callers that need an
+    /// `expected_revision` without holding a subscriber.
+    pub async fn revision_of(&self, operation_id: &OperationId) -> Option<i64> {
+        self.sm
+            .snapshot_state()
+            .await
+            .operation_revision
+            .get(operation_id)
+            .copied()
+    }
+
+    /// A clone of the current applied state, for tests that exercise the
+    /// snapshot serialization path directly.
+    pub async fn applied_state_for_test(&self) -> AppliedState {
+        self.sm.snapshot_state().await
     }
 }
 
@@ -423,13 +529,29 @@ impl AwaitedActionDb for RaftAwaitedActionDb {
         let operation_id = new_awaited_action.operation_id().clone();
         let new_state: Arc<ActionState> = new_awaited_action.state().clone();
         let worker_id: Option<WorkerId> = new_awaited_action.worker_id_public().cloned();
-        self.propose(Command::UpdateAwaitedAction {
-            operation_id,
-            new_state,
-            worker_id,
-            now_unix_nanos: now_unix_nanos(),
-        })
-        .await?;
+        // The caller's record carries the revision it last observed and the
+        // attempt counter it just incremented; both travel with the command so
+        // apply can validate the CAS and preserve the counter (S0).
+        let expected_revision = new_awaited_action.version_public();
+        let attempts = new_awaited_action.attempts;
+        let resp = self
+            .propose(Command::UpdateAwaitedAction {
+                operation_id,
+                expected_revision,
+                new_state,
+                worker_id,
+                attempts,
+                now_unix_nanos: now_unix_nanos(),
+            })
+            .await?;
+        // A rejected update is committed but not applied; surface it as an error
+        // so a caller cannot mistake "client_write succeeded" for "accepted".
+        if let CommandResponse::Rejected { reason } = resp {
+            return Err(make_err!(
+                Code::Aborted,
+                "update_awaited_action rejected: {reason:?}"
+            ));
+        }
         Ok(())
     }
 
@@ -440,12 +562,18 @@ impl AwaitedActionDb for RaftAwaitedActionDb {
         _no_event_action_timeout: Duration,
     ) -> Result<Self::Subscriber, Error> {
         let operation_id = OperationId::default();
+        // Capture the request's ambient origin metadata HERE (on the request
+        // path, where the client's tracing baggage is in scope) and pass it in
+        // the command, so apply never reads Context::current() and stays a pure
+        // function of the command bytes (Astra premortem S6d).
+        let origin_metadata = capture_origin_metadata();
         let resp = self
             .propose(Command::AddAction {
                 client_operation_id: client_operation_id.clone(),
                 operation_id: operation_id.clone(),
                 action_info,
                 now_unix_nanos: now_unix_nanos(),
+                origin_metadata,
             })
             .await?;
         // The applied command may have joined an existing operation, so read the

@@ -34,4 +34,4 @@ pub mod store;
 pub mod types;
 
 pub use db::{RaftAwaitedActionDb, RaftAwaitedActionSubscriber};
-pub use types::{Command, CommandResponse, NodeId, TypeConfig};
+pub use types::{Command, CommandResponse, NodeId, RejectReason, TypeConfig};

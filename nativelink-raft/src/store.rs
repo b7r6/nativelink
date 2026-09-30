@@ -33,7 +33,7 @@ use openraft::{
 };
 use tokio::sync::{RwLock, mpsc};
 
-use crate::state::AppliedState;
+use crate::state::{AppliedState, PortableState};
 use crate::types::{CommandResponse, Entry, NodeId, TypeConfig};
 
 type StorageResult<T> = Result<T, StorageError<NodeId>>;
@@ -154,7 +154,9 @@ struct StateMachineInner {
 struct SnapshotPayload {
     last_applied: Option<LogId<NodeId>>,
     last_membership: StoredMembership<NodeId, openraft::BasicNode>,
-    state: AppliedState,
+    // Snapshot-safe pair-sequence encoding: the applied state has maps keyed by
+    // ActionUniqueKey / OperationId that cannot be JSON object keys (S6b).
+    state: PortableState,
 }
 
 #[derive(Debug, Clone)]
@@ -185,7 +187,7 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
             let payload = SnapshotPayload {
                 last_applied: inner.last_applied,
                 last_membership: inner.last_membership.clone(),
-                state: inner.state.clone(),
+                state: inner.state.to_portable(),
             };
             let snapshot_id = format!(
                 "{}-{}",
@@ -245,6 +247,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 EntryPayload::Blank => {
                     responses.push(CommandResponse::Applied {
                         awaited_action: None,
+                        revision: 0,
                     });
                 }
                 EntryPayload::Normal(cmd) => {
@@ -258,6 +261,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     inner.last_membership = StoredMembership::new(Some(log_id), mem);
                     responses.push(CommandResponse::Applied {
                         awaited_action: None,
+                        revision: 0,
                     });
                 }
             }
@@ -292,7 +296,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         let mut inner = self.inner.write().await;
         inner.last_applied = payload.last_applied;
         inner.last_membership = payload.last_membership;
-        inner.state = payload.state;
+        inner.state = AppliedState::from_portable(payload.state);
         inner.current_snapshot = Some(StoredSnapshot {
             meta: meta.clone(),
             data,

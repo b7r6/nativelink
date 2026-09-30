@@ -17,7 +17,9 @@ use core::ops::Bound;
 use core::time::Duration;
 use std::sync::Arc;
 
-pub use awaited_action::{AwaitedAction, AwaitedActionSortKey, PersistedSortKey};
+pub use awaited_action::{
+    AwaitedAction, AwaitedActionSortKey, PersistedSortKey, capture_origin_metadata,
+};
 use futures::{Future, Stream};
 use nativelink_error::{Error, ResultExt, make_input_err};
 use nativelink_metric::MetricsComponent;
