@@ -2054,3 +2054,148 @@ mod peer_census_trusted_tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod keepalive_eviction_race_tests {
+    //! Deterministic reproduction of the check-then-act race in
+    //! `remove_timedout_workers`: a keepalive that lands after the sweep's
+    //! unlocked registry check but before it re-acquires the inner lock is
+    //! never re-consulted, so a demonstrably live worker is evicted.
+
+    use super::{
+        ApiWorkerScheduler, Arc, Duration, Error, HashMap, MetricFieldData, MetricKind,
+        MetricPublishKnownKindData, MetricsComponent, Notify, OperationId, PlatformProperties,
+        UNIX_EPOCH, UpdateOperationType, Worker, WorkerId, WorkerScheduler, WorkerStateManager,
+        async_trait, mpsc,
+    };
+    use crate::platform_property_manager::PlatformPropertyManager;
+    use crate::worker_registry::WorkerRegistry;
+    use nativelink_config::schedulers::WorkerAllocationStrategy;
+
+    #[derive(Debug)]
+    struct NoopWorkerStateManager;
+
+    impl MetricsComponent for NoopWorkerStateManager {
+        fn publish(
+            &self,
+            _kind: MetricKind,
+            _field_metadata: MetricFieldData,
+        ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+            Ok(MetricPublishKnownKindData::Component)
+        }
+    }
+
+    #[async_trait]
+    impl WorkerStateManager for NoopWorkerStateManager {
+        async fn update_operation(
+            &self,
+            _operation_id: &OperationId,
+            _worker_id: &WorkerId,
+            _update: UpdateOperationType,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn is_executing_on_worker(
+            &self,
+            _operation_id: &OperationId,
+            _worker_id: &WorkerId,
+        ) -> Result<bool, Error> {
+            Ok(true)
+        }
+    }
+
+    const WORKER_TIMEOUT_S: u64 = 100;
+    /// Worker registered (locally and in the registry) at t=0.
+    const REGISTERED_AT: u64 = 0;
+    /// The sweep and the keepalive both happen at t=200, i.e. one full
+    /// timeout past expiry, so both liveness sources initially say "dead".
+    const NOW: u64 = 200;
+
+    #[tokio::test]
+    async fn keepalive_between_registry_check_and_eviction_lock_is_ignored() {
+        let registry = Arc::new(WorkerRegistry::new());
+        let scheduler = ApiWorkerScheduler::new(
+            Arc::new(NoopWorkerStateManager),
+            Arc::new(PlatformPropertyManager::new(HashMap::new())),
+            WorkerAllocationStrategy::default(),
+            None,
+            Arc::new(Notify::new()),
+            WORKER_TIMEOUT_S,
+            60, // unacknowledged_kill_timeout_s
+            0,  // dispatch_ack_timeout_s
+            registry.clone(),
+            None,
+            false,                   // has_peers
+            Duration::from_secs(15), // record_ttl
+        );
+
+        let worker_id = WorkerId("stale_then_alive_worker".to_string());
+        let (tx, _rx) = mpsc::channel(64);
+        scheduler
+            .add_worker(Worker::new(
+                worker_id.clone(),
+                PlatformProperties::default(),
+                tx,
+                REGISTERED_AT,
+                4,
+            ))
+            .await
+            .expect("add_worker failed");
+
+        // Gate 1: hold the registry lock so the sweep, after snapshotting the
+        // (stale) local state and RELEASING the inner lock, parks at its
+        // unlocked `is_worker_alive` await.
+        let registry_guard = registry.write_lock_for_test().await;
+
+        let sweep = tokio::spawn({
+            let scheduler = scheduler.clone();
+            async move { scheduler.remove_timedout_workers(NOW).await }
+        });
+        // Let the sweep run: it takes the inner lock, snapshots the worker as
+        // locally stale, releases the lock, and parks on the registry read.
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+
+        // Gate 2: take the inner lock (currently free - the sweep released it)
+        // so that after its registry read the sweep parks again before it can
+        // evict. This models inner-lock contention on a busy scheduler.
+        let mut inner_guard = scheduler.inner.lock().await;
+
+        // Release gate 1: the sweep reads the registry (heartbeat still t=0,
+        // so "dead"), queues the worker for eviction, and parks on the inner
+        // lock we hold.
+        drop(registry_guard);
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+
+        // The keepalive lands NOW, while the sweep is parked awaiting the
+        // inner lock. These are exactly the two steps of
+        // `worker_keep_alive_received` -> `refresh_worker`: refresh the local
+        // lifetime under the inner lock, then update the registry heartbeat.
+        inner_guard
+            .refresh_lifetime(&worker_id, NOW, None, true)
+            .expect("refresh_lifetime failed");
+        registry
+            .update_worker_heartbeat(&worker_id, UNIX_EPOCH + Duration::from_secs(NOW))
+            .await;
+
+        // Release gate 2: the sweep re-acquires the inner lock and applies its
+        // stale decision without re-checking either liveness source.
+        drop(inner_guard);
+        sweep
+            .await
+            .expect("sweep panicked")
+            .expect("remove_timedout_workers failed");
+
+        // The worker heartbeated at t=NOW - both the local timestamp and the
+        // registry say it is alive - yet the stale sweep evicted it.
+        assert!(
+            scheduler.contains_worker_for_test(&worker_id).await,
+            "live worker (keepalive at t={NOW}, timeout {WORKER_TIMEOUT_S}s) \
+             was evicted by a stale timeout decision"
+        );
+    }
+}
