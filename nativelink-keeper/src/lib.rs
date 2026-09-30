@@ -24,6 +24,14 @@ pub struct Session<'srv> {
 }
 unsafe impl Send for Session<'_> {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchEvent {
+    Created,
+    Deleted,
+    Changed,
+    SessionLost,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum KeeperError {
     NoNode,
@@ -57,6 +65,30 @@ impl Server {
     pub fn start(dir: &Path, tick: Duration) -> Result<Self, KeeperError> {
         let c = CString::new(dir.to_str().expect("utf8 path")).unwrap();
         let p = unsafe { ffi::nlk_server_start(c.as_ptr(), tick.as_millis() as u32) };
+        if p.is_null() {
+            return Err(KeeperError::Other(last_error()));
+        }
+        Ok(Self(p))
+    }
+
+    /// Multi-node raft. `ensemble` lists every member as `(id, "host:port")`,
+    /// including this node (`my_id`), whose entry determines the local bind.
+    pub fn start_ensemble(
+        dir: &Path,
+        tick: Duration,
+        my_id: u32,
+        ensemble: &[(u32, &str)],
+    ) -> Result<Self, KeeperError> {
+        let c = CString::new(dir.to_str().expect("utf8 path")).unwrap();
+        let spec = ensemble
+            .iter()
+            .map(|(id, hp)| format!("{id}={hp}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let spec = CString::new(spec).unwrap();
+        let p = unsafe {
+            ffi::nlk_server_start_ensemble(c.as_ptr(), tick.as_millis() as u32, my_id, spec.as_ptr())
+        };
         if p.is_null() {
             return Err(KeeperError::Other(last_error()));
         }
@@ -121,6 +153,37 @@ impl Session<'_> {
         let out = unsafe { core::slice::from_raw_parts(data, len) }.to_vec();
         unsafe { ffi::nlk_free(data.cast()) };
         Ok((out, ver))
+    }
+
+    /// One-shot watch on `path`. The callback fires at most once (re-subscribe
+    /// from within it to re-arm). The callback allocation is intentionally
+    /// leaked; watches are expected to live for the process lifetime.
+    pub fn watch<F>(&self, path: &str, f: F) -> Result<(), KeeperError>
+    where
+        F: Fn(WatchEvent, &str) + Send + 'static,
+    {
+        unsafe extern "C" fn trampoline<F: Fn(WatchEvent, &str)>(
+            ctx: *mut core::ffi::c_void,
+            ev: ffi::nlk_event,
+            path: *const core::ffi::c_char,
+        ) {
+            use ffi::nlk_event as E;
+            let ev = match ev {
+                E::NLK_EV_CREATED => WatchEvent::Created,
+                E::NLK_EV_DELETED => WatchEvent::Deleted,
+                E::NLK_EV_CHANGED => WatchEvent::Changed,
+                _ => WatchEvent::SessionLost,
+            };
+            let path = unsafe { CStr::from_ptr(path) }.to_string_lossy();
+            unsafe { (*(ctx as *const F))(ev, &path) };
+        }
+        let c = CString::new(path).unwrap();
+        let ctx = Box::into_raw(Box::new(f)) as *mut core::ffi::c_void;
+        let w = unsafe { ffi::nlk_watch_subscribe(self.raw, c.as_ptr(), Some(trampoline::<F>), ctx) };
+        if w.is_null() {
+            return Err(KeeperError::Other(last_error()));
+        }
+        Ok(())
     }
 
     /// Simulate ungraceful client death; ephemerals must be reaped by

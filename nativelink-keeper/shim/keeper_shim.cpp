@@ -248,7 +248,63 @@ struct nlk_session
 
 /* ---- server lifecycle ------------------------------------------------ */
 
+namespace
+{
+
+struct EnsembleMember
+{
+    uint32_t id;
+    std::string host;
+    uint16_t port;
+};
+
+// Parse "id=host:port,id=host:port,...".
+bool parse_ensemble(const std::string & spec, std::vector<EnsembleMember> & out)
+{
+    std::istringstream ss(spec);
+    std::string entry;
+    while (std::getline(ss, entry, ','))
+    {
+        if (entry.empty())
+            continue;
+        auto eq = entry.find('=');
+        auto colon = entry.rfind(':');
+        if (eq == std::string::npos || colon == std::string::npos || colon < eq)
+        {
+            set_last_error("malformed ensemble entry: " + entry);
+            return false;
+        }
+        try
+        {
+            EnsembleMember m;
+            m.id = static_cast<uint32_t>(std::stoul(entry.substr(0, eq)));
+            m.host = entry.substr(eq + 1, colon - eq - 1);
+            m.port = static_cast<uint16_t>(std::stoul(entry.substr(colon + 1)));
+            out.push_back(std::move(m));
+        }
+        catch (const std::exception &)
+        {
+            set_last_error("malformed ensemble entry: " + entry);
+            return false;
+        }
+    }
+    if (out.empty())
+        set_last_error("empty ensemble");
+    return !out.empty();
+}
+
+} // namespace
+
 nlk_server * nlk_server_start(const char * storage_dir, uint32_t tick_ms)
+{
+    // Single-node special case: an ensemble of one — ourselves — on the
+    // deterministic derived port.
+    std::string spec = "1=localhost:" + std::to_string(raft_port_for(storage_dir));
+    return nlk_server_start_ensemble(storage_dir, tick_ms, 1, spec.c_str());
+}
+
+nlk_server * nlk_server_start_ensemble(const char * storage_dir, uint32_t tick_ms,
+                                       uint32_t my_id, const char * ensemble)
 {
     try
     {
@@ -260,16 +316,34 @@ nlk_server * nlk_server_start(const char * storage_dir, uint32_t tick_ms)
         if (tick_ms == 0)
             tick_ms = 500;
 
-        // In-memory config; schema mirrors programs/keeper/keeper_config.xml:30-63.
+        std::vector<EnsembleMember> members;
+        if (!parse_ensemble(ensemble, members))
+            return nullptr;
+        bool my_id_present = false;
+        for (const auto & m : members)
+            my_id_present |= (m.id == my_id);
+        if (!my_id_present)
+        {
+            // KeeperStateManager::parseServersConfiguration requires our own id
+            // in the member list ("5. Our ID present in hostnames list",
+            // vendor/clickhouse/src/Coordination/KeeperStateManager.cpp:158;
+            // the entry whose <id> == <server_id> supplies the local bind port).
+            set_last_error("my_id not present in ensemble");
+            return nullptr;
+        }
+
+        // In-memory config; schema mirrors programs/keeper/keeper_config.xml:30-63
+        // and is parsed by KeeperStateManager::parseServersConfiguration
+        // (vendor/clickhouse/src/Coordination/KeeperStateManager.cpp:162-198:
+        // keeper_server.raft_configuration.server -> <id>/<hostname>/<port>).
         // No <tcp_port>: we never start the TCP servers (that is Keeper.cpp's
-        // server loop, which we deliberately skip). The raft port is still bound
-        // by nuraft even for a single-node ensemble.
+        // server loop, which we deliberately skip).
         std::ostringstream xml;
         xml << "<clickhouse>"
                "<logger><level>warning</level><console>false</console></logger>"
                "<path>" << dir << "</path>"
                "<keeper_server>"
-               "<server_id>1</server_id>"
+               "<server_id>" << my_id << "</server_id>"
                "<storage_path>" << dir << "</storage_path>"
                "<log_storage_path>" << dir << "/logs</log_storage_path>"
                "<snapshot_storage_path>" << dir << "/snapshots</snapshot_storage_path>"
@@ -285,10 +359,15 @@ nlk_server * nlk_server_start(const char * storage_dir, uint32_t tick_ms)
                "<raft_logs_level>warning</raft_logs_level>"
                "</coordination_settings>"
                "<hostname_checks_enabled>false</hostname_checks_enabled>"
-               "<raft_configuration>"
-               "<server><id>1</id><hostname>localhost</hostname>"
-               "<port>" << raft_port_for(dir) << "</port></server>"
-               "</raft_configuration>"
+               "<raft_configuration>";
+        // Multiple sibling <server> elements surface to Poco config keys as
+        // "server", "server[1]", ... which is exactly what
+        // KeeperStateManager iterates via config.keys(".raft_configuration")
+        // (KeeperStateManager.cpp:167).
+        for (const auto & m : members)
+            xml << "<server><id>" << m.id << "</id><hostname>" << m.host
+                << "</hostname><port>" << m.port << "</port></server>";
+        xml << "</raft_configuration>"
                "</keeper_server>"
                "</clickhouse>";
 
