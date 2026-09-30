@@ -45,6 +45,14 @@ typedef enum nlk_event {
 /* Single-node raft on local storage. `storage_dir` must exist.
  * `tick_ms` is the coordination heartbeat (session expiry granularity). */
 nlk_server *nlk_server_start(const char *storage_dir, uint32_t tick_ms);
+
+/* Multi-node raft. `my_id` is this member's server id; `ensemble` is a
+ * comma-separated list "id=host:port,id=host:port,..." naming EVERY
+ * member including this one (this member's entry determines the local
+ * raft bind port). A quorum of members must be reachable before the
+ * server reports started. */
+nlk_server *nlk_server_start_ensemble(const char *storage_dir, uint32_t tick_ms,
+                                      uint32_t my_id, const char *ensemble);
 void nlk_server_shutdown(nlk_server *);
 
 /* ---- sessions -------------------------------------------------------- */
