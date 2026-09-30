@@ -196,3 +196,85 @@ async fn copes_with_dropped_items() -> Result<(), Error> {
 
     Ok(())
 }
+
+const VALID_HASH2: &str = "aa23456789abcdef000000000000000000010000000000000123456789abcdef";
+
+// Repro for the pause_remove_callbacks race: it is an Option-as-boolean with no
+// refcount. Two concurrent update() calls share one pause window; the first
+// finisher unconditionally take()s the flag, unpausing the second update while
+// its inner-store write is still in flight. If the inner store then fires a
+// remove callback for the in-flight key (eviction/oversized skip), the callback
+// runs immediately as a no-op (key not yet cached), and the second update then
+// inserts a stale "exists" entry for a blob the inner store does not hold.
+#[nativelink_test]
+async fn concurrent_update_unpause_race_stale_existence_test() -> Result<(), Error> {
+    let spec = ExistenceCacheSpec {
+        backend: StoreSpec::Noop(NoopSpec::default()),
+        eviction_policy: Option::default(),
+    };
+    // max_bytes small enough that digest_b's write is skipped (and remove
+    // callbacks fired) by the inner memory store.
+    let inner_store = Store::new(MemoryStore::new(&MemorySpec {
+        eviction_policy: Some(EvictionPolicy {
+            max_bytes: 150,
+            ..Default::default()
+        }),
+    }));
+    let store = ExistenceCacheStore::new_with_time(
+        &spec,
+        inner_store.clone(),
+        MockInstantWrapped::default(),
+    );
+
+    let digest_a = DigestInfo::try_new(VALID_HASH1, 10).unwrap();
+    let digest_b = DigestInfo::try_new(VALID_HASH2, 200).unwrap();
+
+    // Task B: starts update(), sets the pause flag, then parks inside the inner
+    // store's update awaiting stream data.
+    let (mut tx_b, rx_b) = nativelink_util::buf_channel::make_buf_channel_pair();
+    let store_b = store.clone();
+    let task_b = nativelink_util::spawn!("update_b", async move {
+        store_b
+            .update(
+                digest_b,
+                rx_b,
+                nativelink_util::store_trait::UploadSizeInfo::ExactSize(200),
+            )
+            .await
+    });
+    // Single-threaded runtime: let B run until it awaits the reader.
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+    }
+
+    // Task A: full update while B is in flight. A finds the pause flag Some
+    // (set by B), and at the end unconditionally take()s it -- stealing B's
+    // pause window.
+    store
+        .update_oneshot(digest_a, vec![0u8; 10].into())
+        .await
+        .err_tip(|| "update A failed")?;
+
+    // Now finish B. The inner memory store drains it, refuses to store it
+    // (200 >= max_bytes) and fires remove callbacks for digest_b -- but the
+    // pause flag is already None, so the removal runs immediately as a no-op.
+    // B then inserts digest_b into the existence cache: stale entry.
+    tx_b.send(bytes::Bytes::from(vec![0u8; 200]))
+        .await
+        .err_tip(|| "send b")?;
+    tx_b.send_eof().err_tip(|| "eof b")?;
+    task_b.await.expect("join b").err_tip(|| "update B failed")?;
+
+    assert_eq!(
+        inner_store.has(digest_b).await?,
+        None,
+        "precondition: inner store must not hold digest_b"
+    );
+    assert_eq!(
+        store.has(digest_b).await.err_tip(|| "has b")?,
+        None,
+        "existence cache claims digest_b exists but the inner store evicted it \
+         (pause window stolen by concurrent update)"
+    );
+    Ok(())
+}
