@@ -1,0 +1,16 @@
+[package]
+name = "nativelink-keeper"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+# The C++ shim + vendored keeper link. Off by default so the workspace
+# builds while the vendor tree / shim are still landing.
+embedded = []
+
+[build-dependencies]
+bindgen = "0.70"
+
+[dev-dependencies]
+tempfile = "3"
