@@ -3078,3 +3078,52 @@ async fn test_count_by_index_prefix_reads_a_resp3_reply() -> Result<(), Error> {
     assert_eq!(count, 7);
     Ok(())
 }
+
+// Reproduces the STRLEN/EXISTS atomicity race in has_with_results.
+//
+// has_with_results issues `pipe().strlen(key).exists(key)` WITHOUT `.atomic()`,
+// so Redis executes the two commands as independent server-side commands with
+// no MULTI/EXEC guard. A concurrent writer's RENAME (update()'s commit, another
+// connection) may land between them, producing the server-legal observation
+// (STRLEN=0, EXISTS=true) for a blob whose committed value is non-empty.
+// Line ~914 then fabricates `Some(0)`: "exists and is empty".
+//
+// The mock connection below plays the role of the Redis server performing
+// exactly that legal interleaving. The test asserts the store must not report
+// a fully-committed non-empty blob as present-with-size-0; on current code it
+// deterministically fails with `Some(0)`. Note the mock matches the literal
+// non-atomic pipeline bytes, so a `.atomic()` fix changes the wire format and
+// this canned interleaving can no longer be expressed against it.
+#[nativelink_test]
+async fn has_strlen_exists_pipeline_race_fabricates_empty_blob() -> Result<(), Error> {
+    let digest = DigestInfo::try_new(VALID_HASH1, 2)?; // real size is 2, non-empty.
+    let real_key = format!("{digest}");
+
+    let commands = vec![
+        // Server-side view of the non-atomic pipeline with a concurrent
+        // update() RENAME committing between the two commands:
+        //   STRLEN key -> 0 (key absent at this instant)
+        //   [other connection: RENAME temp_key -> key commits the 2-byte blob]
+        //   EXISTS key -> true
+        MockCmd::with_values(
+            redis::pipe()
+                .cmd("STRLEN")
+                .arg(&real_key)
+                .cmd("EXISTS")
+                .arg(&real_key),
+            Ok(vec![Value::Int(0), Value::Boolean(true)]),
+        ),
+    ];
+    let store = make_mock_store(commands).await;
+
+    let result = store.has(digest).await?;
+    // The blob is either not yet visible (None) or fully committed with its
+    // real size (Some(2)). `Some(0)` is a state that never existed in Redis.
+    assert_ne!(
+        result,
+        Some(0),
+        "has_with_results fabricated 'exists with length 0' for a non-empty \
+         blob: STRLEN/EXISTS pipeline is not atomic"
+    );
+    Ok(())
+}
