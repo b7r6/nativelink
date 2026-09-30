@@ -20,7 +20,41 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Compute whether this diff can affect the LRE example builds. These lanes
+  # build @local-remote-execution//examples, so they are keyed off the LRE
+  # toolchain inputs. Pushes to main always run the full matrix (backstop).
+  changes:
+    name: Compute affected lanes
+    runs-on: ubuntu-24.04
+    outputs:
+      lre: ${{ steps.filter.outputs.lre }}
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Filter LRE-affecting paths
+        uses: >- # v3.0.2
+          dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        with:
+          filters: |
+            lre:
+              - 'local-remote-execution/**'
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '*.bazelrc'
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'tools/**'
+              - '.github/workflows/lre.yaml'
+              - '.github/actions/**'
+
   local:
+    needs: [changes]
+    if: >-
+      github.ref == 'refs/heads/main'
+      || needs.changes.outputs.lre == 'true'
     strategy:
       fail-fast: false
       matrix:

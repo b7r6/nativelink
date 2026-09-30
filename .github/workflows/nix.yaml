@@ -157,8 +157,45 @@ jobs:
           nativelink_attic_token: ${{ secrets.NATIVELINK_ATTIC_TOKEN }}
           nix_name: .#${{ matrix.test-name }}-with-nativelink-test
 
+  # Compute which lanes this diff can affect. The rbe-* lanes validate
+  # "does this toolchain still build through NativeLink", so they are keyed
+  # off the toolchain/LRE configuration inputs they consume. Pushes to main
+  # always run the full matrix (backstop), so no change can merge without
+  # the complete matrix running against it.
+  changes:
+    name: Compute affected lanes
+    runs-on: ubuntu-24.04
+    outputs:
+      toolchain: ${{ steps.filter.outputs.toolchain }}
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Filter toolchain-affecting paths
+        uses: >- # v3.0.2
+          dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        with:
+          filters: |
+            toolchain:
+              - 'toolchain-examples/**'
+              - 'local-remote-execution/**'
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '*.bazelrc'
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'tools/**'
+              - '.github/workflows/nix.yaml'
+              - '.github/actions/**'
+
   # rbe-toolchain is slow because it has many subcommands, so split it out
   generate-rbe-commands:
+    needs: [changes]
+    if: >-
+      github.ref == 'refs/heads/main'
+      || needs.changes.outputs.toolchain == 'true'
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
