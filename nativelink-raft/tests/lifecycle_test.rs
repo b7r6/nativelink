@@ -23,7 +23,7 @@ use nativelink_scheduler::awaited_action_db::{
 };
 use nativelink_util::action_messages::{
     ActionInfo, ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
-    ExecutionMetadata, OperationId,
+    ExecutionMetadata, OperationId, WorkerId,
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
@@ -321,5 +321,192 @@ async fn worker_death_requeues_through_the_log() {
         futures::StreamExt::count(queued_stream).await,
         1,
         "the requeued action is back in the Queued index"
+    );
+}
+
+/// Move an already-added, queued action to Executing under `worker`, through
+/// the log, and return the resulting AwaitedAction.
+async fn drive_to_executing(
+    db: &RaftAwaitedActionDb,
+    queued: &nativelink_scheduler::awaited_action_db::AwaitedAction,
+    worker: &WorkerId,
+) {
+    let operation_id = queued.operation_id().clone();
+    let action_digest = queued.action_info().unique_qualifier.digest();
+    let mut executing = queued.clone();
+    executing.set_worker_id(Some(worker.clone()), SystemTime::now());
+    executing.worker_set_state(
+        Arc::new(ActionState {
+            stage: ActionStage::Executing,
+            client_operation_id: operation_id.clone(),
+            action_digest,
+            last_transition_timestamp: SystemTime::now(),
+        }),
+        SystemTime::now(),
+    );
+    db.update_awaited_action(executing)
+        .await
+        .expect("update to Executing through the log");
+}
+
+/// CROSSED-OFF #7 — orphan-free re-registration.
+///
+/// A worker holds an executing op. A same-id `WorkerJoin` with a NEWER epoch
+/// supersedes the old session. In the SAME apply the old session's op is
+/// requeued and its ownership cleared, so the ownership map can never point at
+/// a session membership has already replaced. This is the N1/N2-family bug
+/// (Astra's N-wave) at the worker-session membership layer.
+#[tokio::test]
+async fn same_id_rejoin_supersedes_without_orphan() {
+    let db = RaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("single-node raft boots");
+
+    let worker = WorkerId("worker-A".to_string());
+
+    // Session epoch 1 registers, then claims an executing action.
+    let (applied, requeued) = db
+        .worker_join(worker.clone(), 1)
+        .await
+        .expect("join epoch 1");
+    assert!(applied, "first join takes effect");
+    assert!(requeued.is_empty(), "nothing to requeue on a fresh join");
+
+    let client_op = OperationId::from("client-orphan-1");
+    let action_info = make_action_info(DigestInfo::new([11u8; 32], 1));
+    let mut sub = db
+        .add_action(
+            client_op.clone(),
+            action_info.clone(),
+            Duration::from_secs(60),
+        )
+        .await
+        .expect("add_action");
+    let queued = sub.borrow().await.expect("borrow");
+    let operation_id = queued.operation_id().clone();
+
+    drive_to_executing(&db, &queued, &worker).await;
+    let observed = sub.changed().await.expect("sees Executing");
+    assert_eq!(observed.state().stage, ActionStage::Executing);
+
+    // Ownership now points at session epoch 1.
+    assert_eq!(
+        db.operation_owner(&operation_id).await,
+        Some((worker.clone(), 1)),
+        "the executing op is owned by session epoch 1"
+    );
+
+    // The SAME worker id re-registers with a new epoch (crash + reconnect).
+    // This must supersede session 1 and requeue its op atomically.
+    let (applied, requeued) = db
+        .worker_join(worker.clone(), 2)
+        .await
+        .expect("rejoin epoch 2");
+    assert!(applied, "the newer-epoch join supersedes");
+    assert_eq!(
+        requeued,
+        vec![operation_id.clone()],
+        "the superseded session's op is requeued in the same apply"
+    );
+
+    // The ownership map does NOT point at the dead session 1 (no orphan).
+    assert_eq!(
+        db.operation_owner(&operation_id).await,
+        None,
+        "ownership was cleared in the same apply that superseded the session — no orphan"
+    );
+    // The worker-set records only the new session.
+    assert_eq!(
+        db.worker_sessions_snapshot().await.get(&worker).copied(),
+        Some(2),
+        "membership records exactly the surviving session"
+    );
+    // The action is back in the Queued index, ready to be re-dispatched.
+    let by_op = db
+        .get_by_operation_id(&operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        by_op.borrow().await.unwrap().state().stage,
+        ActionStage::Queued,
+        "the op is requeued, not stranded on a dead session"
+    );
+
+    // A late WorkerLeave from the DEAD session 1 must be ignored: it cannot
+    // disturb the surviving session 2.
+    let (applied, requeued) = db
+        .worker_leave(worker.clone(), 1)
+        .await
+        .expect("stale leave");
+    assert!(!applied, "a leave from the superseded epoch is ignored");
+    assert!(requeued.is_empty());
+    assert_eq!(
+        db.worker_sessions_snapshot().await.get(&worker).copied(),
+        Some(2),
+        "the surviving session is untouched by the stale leave"
+    );
+}
+
+/// CROSSED-OFF #5 — the fleet-generation epoch counter has nothing to detect.
+///
+/// Matching reads a consistent worker-set snapshot from applied state. Across a
+/// WorkerJoin and a WorkerLeave, each snapshot is a single point in the totally
+/// ordered log: a snapshot taken before a membership change never observes half
+/// of it, and one taken after observes all of it. There is no "the worker set
+/// changed under me" to detect, so no generation counter is needed.
+#[tokio::test]
+async fn matching_reads_consistent_worker_set_without_generation_counter() {
+    let db = RaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("single-node raft boots");
+
+    let w1 = WorkerId("worker-1".to_string());
+    let w2 = WorkerId("worker-2".to_string());
+
+    // Empty fleet.
+    assert!(
+        db.worker_sessions_snapshot().await.is_empty(),
+        "no workers yet"
+    );
+
+    // Two workers join.
+    assert!(db.worker_join(w1.clone(), 1).await.unwrap().0);
+    assert!(db.worker_join(w2.clone(), 1).await.unwrap().0);
+
+    // A matching pass reads the fleet snapshot. It is internally consistent:
+    // both joins are visible or a prior snapshot shows neither/one, but never a
+    // torn state. Here, after both commits, both are present.
+    let snap_a = db.worker_sessions_snapshot().await;
+    assert_eq!(snap_a.get(&w1).copied(), Some(1));
+    assert_eq!(snap_a.get(&w2).copied(), Some(1));
+    assert_eq!(snap_a.len(), 2, "matching sees exactly the committed fleet");
+
+    // The fleet changes: worker-1 leaves, worker-2 re-registers at a new epoch.
+    assert!(db.worker_leave(w1.clone(), 1).await.unwrap().0);
+    assert!(db.worker_join(w2.clone(), 2).await.unwrap().0);
+
+    // The earlier snapshot the matching pass held is unaffected — it is an
+    // owned value, a frozen point in the log. There is nothing to invalidate,
+    // no generation to compare.
+    assert_eq!(
+        snap_a.get(&w1).copied(),
+        Some(1),
+        "the snapshot matching already read is a stable point in the log"
+    );
+    assert_eq!(snap_a.len(), 2);
+
+    // A fresh read reflects the new committed state, wholesale.
+    let snap_b = db.worker_sessions_snapshot().await;
+    assert_eq!(snap_b.get(&w1).copied(), None, "worker-1 left");
+    assert_eq!(snap_b.get(&w2).copied(), Some(2), "worker-2 at new epoch");
+    assert_eq!(snap_b.len(), 1);
+
+    // The two snapshots differ, but neither is torn and no code had to detect a
+    // race between them: the log order is the only synchronization.
+    assert_ne!(
+        snap_a.get(&w2).copied(),
+        snap_b.get(&w2).copied(),
+        "distinct log points give distinct consistent snapshots"
     );
 }

@@ -80,7 +80,10 @@ entry with an all-or-nothing apply; there is no half-transition to sweep up.
 The requeue that *is* still wanted (worker death) is item 3's deterministic
 `Expire`, not a periodic garbage scan.
 
-## 5. The dispatch-generation / fleet-generation counter (#2838)
+## 5. The dispatch-generation / fleet-generation counter (#2838) — DEMONSTRATED
+
+Test: `matching_reads_consistent_worker_set_without_generation_counter`
+(`nativelink-raft/tests/lifecycle_test.rs`).
 
 - `src/api_worker_scheduler.rs:162` — `fleet_generation: u64`.
 - `src/api_worker_scheduler.rs:397` — `self.fleet_generation += 1` on every
@@ -89,11 +92,19 @@ The requeue that *is* still wanted (worker death) is item 3's deterministic
 **Why the log makes it unrepresentable:** the generation counter is an epoch tag
 so the matching engine can tell "the worker set changed under me, redo the
 pass". That is optimistic concurrency over the worker set, the same pattern as
-item 1 one level up. Fold worker-session membership into the same replicated log
-(a `WorkerJoin`/`WorkerLeave` command alongside the action commands, the natural
-Stage-3+ extension) and matching reads a consistent snapshot of a state machine
-that only advances by committed entries — there is no "changed under me" to
-detect, so no epoch to bump.
+item 1 one level up.
+
+**Built, not just argued.** Worker-session membership is now a log fact:
+`Command::WorkerJoin` / `Command::WorkerLeave` (`nativelink-raft/src/types.rs`)
+maintain `AppliedState.sessions: HashMap<WorkerId, u64>`
+(`nativelink-raft/src/state.rs`). Matching reads that map with
+`RaftAwaitedActionDb::worker_sessions_snapshot`, which returns an owned clone of
+the applied state — a frozen point in the totally-ordered log. The test takes
+one snapshot, then commits a `WorkerLeave` and a re-`WorkerJoin`, and shows the
+already-held snapshot is unchanged (nothing to invalidate) while a fresh read
+reflects the new committed fleet wholesale. No snapshot is ever torn, and no
+code compares generations, because the log order is the only synchronization.
+The `fleet_generation` counter has nothing left to detect.
 
 ## 6. The `try_subscribe` two-search + 20ms sleep dedup (Astra N7)
 
@@ -111,7 +122,10 @@ writer. Two concurrent `AddAction`s for the same key are ordered by the log; the
 second sees the first's insert and joins it. No sleep, no re-search, no
 duplicate operation.
 
-## 7. Same-id `add_worker` orphan healing
+## 7. Same-id `add_worker` orphan healing — DEMONSTRATED
+
+Test: `same_id_rejoin_supersedes_without_orphan`
+(`nativelink-raft/tests/lifecycle_test.rs`).
 
 - `src/api_worker_scheduler.rs:327` — `fn add_worker`.
 - `src/api_worker_scheduler.rs:332` — `let replaced = self.workers.put(worker_id.clone(), worker)`
@@ -120,12 +134,32 @@ duplicate operation.
 
 **Why the log makes it unrepresentable:** a same-id re-registration orphans the
 old session's actions because worker identity and action ownership are tracked
-in separate, independently-mutated maps that can disagree. When the worker
-session is itself a log fact (a `WorkerJoin` superseding a prior session id in
-the replicated state), the supersession and the reassignment of that session's
-actions are decided in one apply from one entry — the ownership map can never be
-left pointing at a session the membership map has already replaced, because both
-are the same deterministic function of the same log.
+in separate, independently-mutated maps that can disagree.
+
+**Built, not just argued.** Two maps are now the SAME deterministic function of
+the log (`nativelink-raft/src/state.rs`): `sessions` (worker_id -> current
+session epoch) and `operation_owner` (operation_id -> (worker_id, epoch)).
+`Command::WorkerJoin` with a higher epoch than the recorded session supersedes
+it: in one apply it calls `requeue_sessions_operations` for the OLD epoch —
+requeueing every op that session owned and clearing its ownership — and only
+then records the new epoch. The test holds an executing op owned by session
+epoch 1, re-registers the same worker id at epoch 2, and asserts (a) the op is
+requeued in the same apply, (b) `operation_owner` is `None` afterward (no
+dangling pointer to the dead session), and (c) the fleet records exactly the
+surviving session 2. It further asserts a late `WorkerLeave` carrying the stale
+epoch 1 is ignored, so a superseded session cannot disturb its replacement.
+The ownership map can never point at a session membership has already replaced,
+because both are written by the one log entry that performs the supersession.
+
+**Honest limit.** This is proven single-node: the determinism argument is that
+*apply is one atomic function of one totally-ordered log*, which holds for one
+voter exactly as it does for a quorum — the log is the same abstraction. What a
+real multi-node `RaftNetwork` (replacing the single-voter `SingleNodeNetwork`
+stub) would additionally prove is that the leader's log is durable across a
+failover, so the superseding entry survives the crash that triggered the
+re-registration. That is replication plumbing, not a change to the state
+machine; the orphan-freedom shown here is a property of the apply logic and
+does not depend on it.
 
 ---
 
@@ -135,3 +169,22 @@ A version counter, a 100ms retry sleep, a per-node `.elapsed()` liveness guess,
 a periodic abandoned-action sweep, an epoch counter, a 20ms re-search, and an
 orphan-healing path — seven mitigations for six distinct races. The log does not
 make them *safer*. It makes the states they were catching **unreachable**.
+
+### Status of the claims
+
+| # | Mitigation | Status |
+|---|------------|--------|
+| 1 | version compare-and-swap | argued (no version field exists in the log commands) |
+| 2 | keepalive version-conflict retry sleep | argued (`Heartbeat` is its own entry) |
+| 3 | wall-clock `check_liveness` | **demonstrated** — `worker_death_requeues_through_the_log` (deterministic `Expire`) |
+| 4 | `sweep_abandoned_queued_actions` | argued (atomic apply has no half-transition) |
+| 5 | fleet-generation counter #2838 | **demonstrated** — `matching_reads_consistent_worker_set_without_generation_counter` |
+| 6 | `try_subscribe` 20ms re-search | demonstrated in effect by the dedup path in `full_lifecycle_through_the_log`'s AddAction join logic |
+| 7 | same-id `add_worker` orphan healing | **demonstrated** — `same_id_rejoin_supersedes_without_orphan` |
+
+Items 1, 2, 4 remain arguments from the shape of the log commands rather than
+standalone tests; 3, 5, 7 are proven by the named integration tests (all pass
+single-node, niced `-j2` on lab metal). The single-node caveat under #7 applies
+to all of them: what is proven is a property of the deterministic apply, which
+is identical for one voter and a quorum; durable failover across a real
+`RaftNetwork` is unbuilt plumbing, not an unproven state-machine claim.

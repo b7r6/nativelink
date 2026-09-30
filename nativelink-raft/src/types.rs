@@ -67,6 +67,30 @@ pub enum Command {
         now_unix_nanos: u128,
         lease_timeout_nanos: u128,
     },
+    /// A worker session registers (or re-registers) under `worker_id`.
+    ///
+    /// `session_epoch` is the leader-assigned monotonic tag for this session.
+    /// A `WorkerJoin` with a higher epoch than the currently-recorded session
+    /// for the same `worker_id` *supersedes* it: in the SAME apply, every
+    /// in-flight operation owned by the old session is requeued and its
+    /// ownership cleared. Because supersession and reassignment are one
+    /// deterministic function of one log entry, the ownership map can never be
+    /// left pointing at a session the membership map has already replaced —
+    /// the same-id `add_worker` orphan (CROSSED-OFF #7) is unrepresentable.
+    WorkerJoin {
+        worker_id: WorkerId,
+        session_epoch: u64,
+        now_unix_nanos: u128,
+    },
+    /// A worker session leaves. Its in-flight operations are requeued in the
+    /// same apply. A `WorkerLeave` carrying a stale epoch (older than the
+    /// recorded session) is ignored, so a late leave from a superseded session
+    /// cannot disturb the session that replaced it.
+    WorkerLeave {
+        worker_id: WorkerId,
+        session_epoch: u64,
+        now_unix_nanos: u128,
+    },
 }
 
 /// What `apply` returns to the caller that proposed the command.
@@ -78,6 +102,13 @@ pub enum CommandResponse {
     },
     /// The set of operation ids that an `Expire` requeued.
     Expired { requeued: Vec<OperationId> },
+    /// The result of a worker membership change: the operations that were
+    /// requeued because their owning session was superseded or left, and
+    /// whether the command took effect (an ignored stale command is `false`).
+    WorkerMembership {
+        applied: bool,
+        requeued: Vec<OperationId>,
+    },
 }
 
 declare_raft_types!(

@@ -17,7 +17,7 @@
 use core::future::Future;
 use core::ops::Bound;
 use core::time::Duration;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -278,7 +278,7 @@ impl RaftAwaitedActionDb {
             .await?;
         match resp {
             CommandResponse::Expired { requeued } => Ok(requeued),
-            CommandResponse::Applied { .. } => Ok(Vec::new()),
+            _ => Ok(Vec::new()),
         }
     }
 
@@ -290,6 +290,66 @@ impl RaftAwaitedActionDb {
         })
         .await?;
         Ok(())
+    }
+
+    /// Register (or re-register) a worker session under `worker_id` at
+    /// `session_epoch`, through the log. Returns `(applied, requeued)`: whether
+    /// the join took effect, and the operations a supersession requeued.
+    pub async fn worker_join(
+        &self,
+        worker_id: WorkerId,
+        session_epoch: u64,
+    ) -> Result<(bool, Vec<OperationId>), Error> {
+        let resp = self
+            .propose(Command::WorkerJoin {
+                worker_id,
+                session_epoch,
+                now_unix_nanos: now_unix_nanos(),
+            })
+            .await?;
+        match resp {
+            CommandResponse::WorkerMembership { applied, requeued } => Ok((applied, requeued)),
+            _ => Ok((false, Vec::new())),
+        }
+    }
+
+    /// A worker session leaves, through the log. Returns `(applied, requeued)`.
+    pub async fn worker_leave(
+        &self,
+        worker_id: WorkerId,
+        session_epoch: u64,
+    ) -> Result<(bool, Vec<OperationId>), Error> {
+        let resp = self
+            .propose(Command::WorkerLeave {
+                worker_id,
+                session_epoch,
+                now_unix_nanos: now_unix_nanos(),
+            })
+            .await?;
+        match resp {
+            CommandResponse::WorkerMembership { applied, requeued } => Ok((applied, requeued)),
+            _ => Ok((false, Vec::new())),
+        }
+    }
+
+    /// A consistent snapshot of the worker-set as the applied log defines it:
+    /// worker_id -> current session epoch. Matching reads this; there is no
+    /// "changed under me" epoch to detect because the snapshot is a point in
+    /// the totally-ordered log (CROSSED-OFF #5).
+    pub async fn worker_sessions_snapshot(&self) -> HashMap<WorkerId, u64> {
+        self.sm.snapshot_state().await.sessions
+    }
+
+    /// The owning `(worker_id, session_epoch)` of an in-flight operation, from
+    /// the same applied snapshot as the worker-set. Never disagrees with
+    /// `worker_sessions_snapshot`: both are one function of the log.
+    pub async fn operation_owner(&self, operation_id: &OperationId) -> Option<(WorkerId, u64)> {
+        self.sm
+            .snapshot_state()
+            .await
+            .operation_owner
+            .get(operation_id)
+            .cloned()
     }
 }
 
