@@ -47,7 +47,7 @@ use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
 use nativelink_util::instant_wrapper::MockInstantWrapped;
 use nativelink_util::operation_state_manager::{
-    ActionStateResult, ClientStateManager, MatchingEngineStateManager, OperationFilter,
+    ActionStateResult, ClientStateManager, Escalation, MatchingEngineStateManager, OperationFilter,
     OperationStageFlags, UpdateOperationType, WorkerStateManager,
 };
 use nativelink_util::platform_properties::PlatformProperties;
@@ -98,12 +98,19 @@ fn make_system_time(add_time: u64) -> SystemTime {
 }
 
 fn action_info(started: SystemTime) -> ActionInfo {
+    action_info_with_properties(started, HashMap::default())
+}
+
+fn action_info_with_properties(
+    started: SystemTime,
+    platform_properties: HashMap<String, String>,
+) -> ActionInfo {
     let action_digest = DigestInfo::zero_digest();
     ActionInfo {
         command_digest: action_digest,
         input_root_digest: action_digest,
         timeout: Duration::ZERO,
-        platform_properties: HashMap::default(),
+        platform_properties,
         priority: 0,
         load_timestamp: SystemTime::UNIX_EPOCH,
         insert_timestamp: started,
@@ -599,7 +606,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
     );
 
     state_mgr
-        .assign_operation(&operation_id, Ok(&worker_id))
+        .assign_operation(&operation_id, Ok(&worker_id), None)
         .await?;
     assert!(
         state_mgr
@@ -617,6 +624,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
         .assign_operation(
             &operation_id,
             Err(make_err!(Code::DeadlineExceeded, "timed out")),
+            None,
         )
         .await?;
     assert!(
@@ -625,7 +633,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
             .await?
     );
     state_mgr
-        .assign_operation(&operation_id, Ok(&other_worker_id))
+        .assign_operation(&operation_id, Ok(&other_worker_id), None)
         .await?;
     assert!(
         !state_mgr
@@ -1268,7 +1276,7 @@ async fn fail_queued_operation_leaves_an_executing_action_alone() -> Result<(), 
     let (operation_id, client) = queued_operation_id(state_mgr.as_ref()).await?;
     let worker_id = WorkerId::from(String::from("worker"));
     state_mgr
-        .assign_operation(&operation_id, Ok(&worker_id))
+        .assign_operation(&operation_id, Ok(&worker_id), None)
         .await?;
 
     let failed = state_mgr
@@ -1363,7 +1371,7 @@ async fn queue_and_assign_with_client<T: AwaitedActionDb>(
     let (state, _) = listed.as_state().await?;
     let operation_id = state.client_operation_id.clone();
     state_mgr
-        .assign_operation(&operation_id, Ok(worker_id))
+        .assign_operation(&operation_id, Ok(worker_id), None)
         .await?;
     Ok((operation_id, subscriber))
 }
@@ -1548,6 +1556,148 @@ async fn executing_sweep_lost_result_counts_against_max_job_retries() -> Result<
             .iter()
             .any(|m| m.contains("never reached the scheduler")),
         "the failure names the lost result: {err:?}"
+    );
+    Ok(())
+}
+
+/// N3: matching and assignment must agree on the action's requirements.
+///
+/// Two schedulers (two matchers) share one action DB and memory escalation
+/// is enabled. Matcher A reads action X while it needs 4 GiB and picks a
+/// 4 GiB worker for it. Before A releases that placement, a peer runs X,
+/// hits a memory-limit kill, and requeues X escalated to 8 GiB. When A then
+/// releases its stale 4 GiB placement, the assignment must reject it: its
+/// only guard used to be double-assignment, so it accepted the queued record
+/// and flipped X to Executing while A dispatched the parked 4 GiB reservation
+/// to the worker — the DB said 8 GiB but `StartExecute` and the worker's
+/// reservation carried 4 GiB, silently bypassing the escalation. The accept
+/// now validates the placement-relevant requirements the worker was chosen
+/// for and rejects the stale proposal, leaving X queued at 8 GiB to be
+/// rematched. A fresh placement made against the current 8 GiB requirements
+/// is accepted, so stored, matched, and assigned requirements all agree.
+#[nativelink_test]
+async fn assignment_rejects_a_stale_placement_after_escalation() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let state_mgr = state_manager(Arc::new(WorkerRegistry::new()));
+
+    let four_gib = HashMap::from([("memory_kb".to_string(), "4000".to_string())]);
+    let eight_gib = HashMap::from([("memory_kb".to_string(), "8000".to_string())]);
+
+    let client = state_mgr
+        .add_action(
+            OperationId::default(),
+            Arc::new(action_info_with_properties(
+                make_system_time(0),
+                four_gib.clone(),
+            )),
+        )
+        .await?;
+
+    // Matcher A reads X and picks a 4 GiB worker. This is the snapshot it
+    // will release against later; nothing is committed yet.
+    let operation_id = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the queued operation")
+    .as_state()
+    .await?
+    .0
+    .client_operation_id
+    .clone();
+    let matcher_a_snapshot = four_gib.clone();
+    let worker_a = WorkerId::from(String::from("matcher-a-worker-4gib"));
+
+    // A peer runs X on its own worker and the action is killed for memory;
+    // the peer requeues X escalated to 8 GiB. X is Queued again, needing more.
+    let peer_worker = WorkerId::from(String::from("peer-worker"));
+    state_mgr
+        .assign_operation(&operation_id, Ok(&peer_worker), Some(&four_gib))
+        .await?;
+    state_mgr
+        .update_operation(
+            &operation_id,
+            &peer_worker,
+            UpdateOperationType::UpdateWithEscalation(Escalation {
+                property: "memory_kb".to_string(),
+                value: 8000,
+                reason: make_err!(Code::FailedPrecondition, "killed for memory"),
+                cpu: None,
+            }),
+        )
+        .await?;
+
+    // The store now records the escalated requirement.
+    let stored = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the requeued operation")
+    .as_action_info()
+    .await?
+    .0;
+    assert_eq!(
+        stored.platform_properties, eight_gib,
+        "the escalation raised the stored reservation to 8 GiB"
+    );
+
+    // Matcher A now releases its stale 4 GiB placement against its 4 GiB
+    // worker. Without the fix the assignment accepts this and flips X to
+    // Executing at 4 GiB, bypassing the escalation. It must be rejected.
+    let stale = state_mgr
+        .assign_operation(&operation_id, Ok(&worker_a), Some(&matcher_a_snapshot))
+        .await
+        .expect_err("a stale placement must be rejected, not silently accepted");
+    assert_eq!(
+        stale.code,
+        Code::Aborted,
+        "a rejected stale placement is a lost race, not a hard error: {stale}"
+    );
+    assert_eq!(
+        client.as_state().await?.0.stage,
+        ActionStage::Queued,
+        "the rejected placement leaves X queued for a rematch, not Executing"
+    );
+
+    // A fresh placement made against the current 8 GiB requirement is
+    // accepted: stored, matched, and assigned requirements all agree.
+    state_mgr
+        .assign_operation(&operation_id, Ok(&worker_a), Some(&eight_gib))
+        .await?;
+    assert_eq!(
+        client.as_state().await?.0.stage,
+        ActionStage::Executing,
+        "a placement matching the current 8 GiB requirement is accepted"
+    );
+    let assigned = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Executing,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the assigned operation")
+    .as_action_info()
+    .await?
+    .0;
+    assert_eq!(
+        assigned.platform_properties, eight_gib,
+        "the dispatched action carries the escalated 8 GiB reservation"
     );
     Ok(())
 }
