@@ -566,6 +566,94 @@ async fn test_large_downloads_are_chunked() -> Result<(), Error> {
     Ok(())
 }
 
+// C10 (read integrity): equal-length in-place replacement tears a chunked read.
+//
+// `get_part` reads a value larger than `read_chunk_size` with one `GETRANGE`
+// per chunk, each a separate round-trip. The value under a key is mutable:
+// `update` lands data on a temp key and `RENAME`s it onto the final key,
+// discarding whatever was there (CAS content-addressing makes this a non-issue
+// for CAS, but the AC and arbitrary-key uses of this same driver mutate values
+// legitimately). If a writer replaces the value between two chunk reads with a
+// *different value of the same total length*, the reader stitches bytes from
+// two different values and returns them as success.
+//
+// A length guard cannot catch this: STRLEN is identical before, during, and
+// after the replacement. This test pins the current (buggy) behavior so the
+// hole is captured in-tree and so any future fix has a fail->pass target.
+// When a fix lands that establishes stable value identity across chunks, this
+// test's final assertion flips from "returns torn bytes as Ok" to "returns an
+// error", and the comment/name should change with it.
+#[nativelink_test]
+async fn c10_equal_length_replacement_tears_chunked_read() -> Result<(), Error> {
+    const READ_CHUNK_SIZE: usize = 1024;
+    // Two values of identical total length. Value A is all 'A's, value B all
+    // 'B's. The reader asks for A (via the first chunk) and then, mid-read,
+    // the key is swapped to B, so the second chunk comes from B.
+    let total_len = READ_CHUNK_SIZE + 128;
+    let value_a = Bytes::from(vec![b'A'; total_len]);
+    let value_b = Bytes::from(vec![b'B'; total_len]);
+    assert_eq!(
+        value_a.len(),
+        value_b.len(),
+        "same length is the whole point"
+    );
+
+    let digest = DigestInfo::try_new(VALID_HASH1, 1)?;
+    let real_key = format!("{digest}");
+
+    let commands = vec![
+        // get_part goes straight to GETRANGE per chunk (no up-front STRLEN):
+        // the existence/length pipeline lives in has_with_results, a separate
+        // call. STRLEN would be identical for A and B anyway -- the swap is
+        // indistinguishable by length.
+        // First chunk: bytes [0, READ_CHUNK_SIZE) of value A.
+        MockCmd::new(
+            redis::cmd("GETRANGE")
+                .arg(real_key.clone())
+                .arg(0)
+                .arg(READ_CHUNK_SIZE.try_into().unwrap_or(i64::MAX) - 1),
+            Ok(Value::BulkString(value_a.slice(..READ_CHUNK_SIZE).into())),
+        ),
+        // *** The value is replaced by B here (equal length). ***
+        // Second chunk: bytes [READ_CHUNK_SIZE, total_len) now come from B.
+        MockCmd::new(
+            redis::cmd("GETRANGE")
+                .arg(real_key)
+                .arg(READ_CHUNK_SIZE.try_into().unwrap_or(i64::MAX))
+                .arg(total_len.try_into().unwrap_or(i64::MAX) - 1),
+            Ok(Value::BulkString(value_b.slice(READ_CHUNK_SIZE..).into())),
+        ),
+    ];
+
+    let store = make_mock_store(commands).await;
+
+    let get_result = store
+        .get_part_unchunked(digest, 0, Some(total_len as u64))
+        .await;
+
+    // The stitched result is neither A nor B: it is the head of A spliced onto
+    // the tail of B -- a torn blob served as success. This is the C10 hole.
+    let torn = get_result.expect("current code returns the torn blob as Ok");
+    let mut expected_torn = Vec::with_capacity(total_len);
+    expected_torn.extend_from_slice(&value_a[..READ_CHUNK_SIZE]);
+    expected_torn.extend_from_slice(&value_b[READ_CHUNK_SIZE..]);
+    assert_eq!(
+        torn,
+        Bytes::from(expected_torn),
+        "C10: read is torn across an equal-length replacement -- head from A, tail from B",
+    );
+    assert_ne!(
+        torn, value_a,
+        "torn blob is not the value the reader asked for"
+    );
+    assert_ne!(
+        torn, value_b,
+        "torn blob is not the replacement value either"
+    );
+
+    Ok(())
+}
+
 #[nativelink_test]
 async fn yield_between_sending_packets_in_update() -> Result<(), Error> {
     let data_p1 = Bytes::from(vec![b'A'; DEFAULT_READ_CHUNK_SIZE + 512]);
