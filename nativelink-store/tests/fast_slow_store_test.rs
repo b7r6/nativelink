@@ -446,7 +446,7 @@ async fn drop_on_eof_completes_store_futures() -> Result<(), Error> {
 }
 
 #[nativelink_test]
-async fn ignore_value_in_fast_store() -> Result<(), Error> {
+async fn fast_store_only_value_is_reported_by_has() -> Result<(), Error> {
     let fast_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Arc::new(FastSlowStore::new(
@@ -465,9 +465,12 @@ async fn ignore_value_in_fast_store() -> Result<(), Error> {
     fast_store
         .update_oneshot(digest, make_random_data(100).into())
         .await?;
-    assert!(
-        fast_slow_store.has(digest).await?.is_none(),
-        "Expected data to not exist in store"
+    // Fast-first: a blob resident only in the fast tier is reported present.
+    // (The historical slow-only probe is what wedged FindMissingBlobs.)
+    assert_eq!(
+        fast_slow_store.has(digest).await?,
+        Some(100),
+        "fast-only blob must be reported present under the fast-first contract",
     );
     Ok(())
 }
@@ -1158,14 +1161,13 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
     // has_with_results above), so the only way this can be Some is via
     // the in-flight map wait.
     let observer_store = fast_slow.clone();
-    let mut observer = tokio::spawn(async move { observer_store.has(digest).await });
+    let observer = tokio::spawn(async move { observer_store.has(digest).await });
 
-    // Prove that the observer is blocked waiting for the in-flight write.
-    // It should not resolve before the gate is released.
-    tokio::select! {
-        _ = &mut observer => panic!("Observer resolved before writer completed"),
-        () = tokio::time::sleep(Duration::from_millis(10)) => {}
-    }
+    // Under the fast-first contract the observer may resolve as soon as the
+    // fast tier receives the blob (the write-through populates fast before the
+    // gated slow write completes); it is no longer required to block on the
+    // slow store. Give the fast write a moment to land.
+    tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Release the writer and confirm the in-flight tracker is cleaned up.
     gate_tx
@@ -1185,12 +1187,13 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
         "Concurrent has() must wait for and see in-flight slow write",
     );
 
-    // After completion the fast store still has the blob, but has() should
-    // return None since we never fallback to checking the fast store.
+    // After completion the blob is resident in the fast tier, so fast-first
+    // has() reports it present (the historical slow-only probe returned None
+    // here and is exactly the wedge this contract removes).
     assert_eq!(
         fast_slow.has(digest).await?,
-        None,
-        "Post-write has() should not see the blob via fast-store fallback",
+        Some(data.len() as u64),
+        "Post-write has() must see the fast-resident blob under fast-first",
     );
 
     Ok(())
@@ -1443,14 +1446,13 @@ async fn dropping_update_future_cleans_up_in_flight_entry() -> Result<(), Error>
         .map_err(|e| make_err!(Code::Internal, "started signal lost: {e:?}"))?;
 
     let observer_store = fast_slow.clone();
-    let mut observer = tokio::spawn(async move { observer_store.has(digest).await });
+    let observer = tokio::spawn(async move { observer_store.has(digest).await });
 
-    // Prove that the observer is blocked waiting for the in-flight write.
-    // It should not resolve before the gate is released.
-    tokio::select! {
-        _ = &mut observer => panic!("Observer resolved before writer completed"),
-        () = tokio::time::sleep(Duration::from_millis(10)) => {}
-    }
+    // Under the fast-first contract the observer may resolve as soon as the
+    // fast tier receives the blob (the write-through populates fast before the
+    // gated slow write completes); it is no longer required to block on the
+    // slow store. Give the fast write a moment to land.
+    tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Cancel the writer. The guard's Drop should remove the entry.
     writer.abort();
@@ -1623,7 +1625,7 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
     ];
 
     let observer_store = fast_slow.clone();
-    let mut observer = tokio::spawn(async move {
+    let observer = tokio::spawn(async move {
         let mut results: [Option<u64>; 4] = [None; 4];
         observer_store
             .as_store_driver_pin()
@@ -1632,12 +1634,11 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
         Ok::<_, Error>(results)
     });
 
-    // Prove that the observer is blocked waiting for the in-flight write.
-    // It should not resolve before the gate is released.
-    tokio::select! {
-        _ = &mut observer => panic!("Observer resolved before writer completed"),
-        () = tokio::time::sleep(Duration::from_millis(10)) => {}
-    }
+    // Under the fast-first contract the observer may resolve as soon as the
+    // fast tier receives the blob (the write-through populates fast before the
+    // gated slow write completes); it is no longer required to block on the
+    // slow store. Give the fast write a moment to land.
+    tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Cleanup: release the gated writer.
     gate_tx
@@ -1654,8 +1655,9 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
     assert_eq!(results[0], Some(slow_only_size), "slow-only key");
     assert_eq!(results[1], Some(in_flight_size), "in-flight key");
     assert_eq!(
-        results[2], None,
-        "fast-only key should be None because we do not check fast store"
+        results[2],
+        Some(fast_only_size),
+        "fast-only key must be reported present under the fast-first contract",
     );
     assert_eq!(results[3], None, "missing key must stay None");
 
