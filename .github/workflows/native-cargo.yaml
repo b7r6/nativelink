@@ -1,17 +1,32 @@
 ---
 name: Cargo Native
 
+# Cargo Native is the only CARGO-ONLY lane in CI: ubuntu + windows both run
+# `cargo build/test` with no Bazel equivalent. Windows is an irreducible
+# native compile (~9m) with NO bazel/nix path, so it alone gates per-PR
+# commit-to-verification at ~15m.
+#
+# Per directive this lane is moved OFF the per-PR hot path: it runs on push
+# to main (post-merge), on a daily cadence, via workflow_dispatch, and on the
+# experiment branches. It no longer runs on pull_request.
+#
+# TRADEOFF (honest): a cargo-only / Windows-only break (build-system
+# divergence Bazel does not catch) now reaches main BEFORE detection and is
+# caught on the main-push run, not pre-merge — requiring a revert to green
+# main. The strictly-safer variant is a merge queue (`merge_group:`): it runs
+# this lane after approval but BEFORE the commit lands, keeping main green.
+# Merge-queue is the RECOMMENDED hardening; main-only is implemented per
+# directive.
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/win-x-**']
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - '.github/styles/**'
-      - 'web/**'
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  # NOTE: intentionally NO `pull_request:` trigger. See header above.
 
 permissions: read-all
 
@@ -53,6 +68,8 @@ jobs:
       - name: Rust cache
         uses: >- # v2.9.1
           Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          prefix-key: "exp-mainonly"
 
       - name: Build on ${{ runner.os }}
         run: cargo build --all --profile=smol
