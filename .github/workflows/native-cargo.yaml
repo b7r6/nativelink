@@ -3,7 +3,7 @@ name: Cargo Native
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/win-x-**']
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
@@ -36,6 +36,10 @@ jobs:
     name: ${{ matrix.os }} / ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    env:
+      RUSTFLAGS: >-
+        -Dwarnings
+        ${{ matrix.os == 'windows-2022' && '-Clinker=rust-lld' || '' }}
     steps:
       - name: Checkout
         uses: >- # v6.0.2
@@ -53,6 +57,8 @@ jobs:
       - name: Rust cache
         uses: >- # v2.9.1
           Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          prefix-key: "exp-lld"
 
       - name: Build on ${{ runner.os }}
         run: cargo build --all --profile=smol
