@@ -20,7 +20,42 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Compute whether the Bazel 8 source-compatibility lane can be affected by
+  # this diff. That lane runs with --lockfile_mode=off and cannot use the
+  # Bazel-9-keyed remote cache (it rebuilds from source, ~2x the Bazel 9
+  # lane), yet it only validates that the sources still build under the older
+  # Bazel. A pure code PR that does not touch the module graph, bazelrc, or
+  # toolchains cannot change that answer, so the lane is gated off for those.
+  # Pushes to main always run it (backstop) so nothing merges unvalidated.
+  changes:
+    name: Compute affected lanes
+    runs-on: ubuntu-24.04
+    outputs:
+      bazel8: ${{ steps.filter.outputs.bazel8 }}
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Filter Bazel-8-affecting paths
+        uses: >- # v3.0.2
+          dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        with:
+          filters: |
+            bazel8:
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '*.bazelrc'
+              - '**/BUILD.bazel'
+              - '**/BUILD'
+              - '**/*.bzl'
+              - 'tools/**'
+              - 'local-remote-execution/**'
+              - '.github/workflows/native-bazel.yaml'
+              - '.github/actions/**'
+
   unit-tests:
+    needs: [changes]
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +64,7 @@ jobs:
           - os: ubuntu-24.04
             bazel_version: 9.1.1
             check_name: ubuntu-24.04
+            gated: false
           # Deterministic Bazel compatibility lane. Randomizing Bazel versions
           # makes failures harder to reproduce. Bazel 8 cannot read the
           # Bazel 9 lockfile format, so this lane tests source compatibility
@@ -36,8 +72,15 @@ jobs:
           - os: ubuntu-24.04
             bazel_version: 8.7.0
             check_name: ubuntu-24.04 / Bazel 8.7.0
+            gated: true
     name: ${{ matrix.check_name }}
     runs-on: ${{ matrix.os }}
+    # Gated lanes run only on main pushes or when affected paths changed; the
+    # non-gated lane (Bazel 9 required check) always runs.
+    if: >-
+      matrix.gated != true
+      || github.ref == 'refs/heads/main'
+      || needs.changes.outputs.bazel8 == 'true'
     timeout-minutes: 30
     env:
       USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
