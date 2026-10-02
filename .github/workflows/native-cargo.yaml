@@ -10,12 +10,12 @@ name: Cargo Native
 # merge_group trigger requires a merge queue enabled on the branch.
 on:
   push:
-    branches: [main]
+    branches: [main, ci/overhaul-v2-prbase]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
   pull_request:
-    branches: [main]
+    branches: [main, ci/overhaul-v2-prbase]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
