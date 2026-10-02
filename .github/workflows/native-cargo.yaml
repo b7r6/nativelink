@@ -1,17 +1,27 @@
 ---
 name: Cargo Native
 
+# Opinionated per-PR CI scope: the Cargo build system is validated on every
+# push to main (and on demand via workflow_dispatch), not on every PR push.
+# Per-PR correctness coverage comes from the Bazel lanes, which build and
+# test the same sources against the remote cache; this workflow exists to
+# catch Cargo-specific build-system divergence (Cargo.toml/lock drift,
+# cargo-only cfg paths, the Windows native toolchain), which a code PR
+# cannot usually affect but every main push re-proves. Tradeoff owned in
+# the PR introducing this: a cargo-only break is caught at main rather
+# than pre-merge; a merge queue is the stricter variant if main must never
+# redden.
 on:
   push:
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - '.github/styles/**'
-      - 'web/**'
+  schedule:
+    # Daily backstop so the lane keeps proving the Cargo build even when
+    # main is quiet (toolchain or dependency drift shows up within a day).
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 permissions: read-all
 
