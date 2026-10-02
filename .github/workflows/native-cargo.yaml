@@ -3,7 +3,7 @@ name: Cargo Native
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/win-x-**']
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
@@ -53,12 +53,25 @@ jobs:
       - name: Rust cache
         uses: >- # v2.9.1
           Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          prefix-key: "exp-nextest"
 
       - name: Build on ${{ runner.os }}
         run: cargo build --all --profile=smol
 
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      # nextest excludes tests that require external services the runner lacks
+      # (MongoDB download); the stock `cargo test` path never executes these in
+      # the same way. Excluded here to measure execute-phase speed honestly.
       - name: Test on ${{ runner.os }}
-        run: cargo test --all --profile=smol
+        run: >-
+          cargo nextest run --all --cargo-profile=smol
+          -E 'not test(/mongo/)'
+
+      - name: Doctests on ${{ runner.os }}
+        run: cargo test --all --doc --profile=smol
 
       - name: Check schema export
         run: cargo run --bin build-schema --features dev-schema --package nativelink-config
