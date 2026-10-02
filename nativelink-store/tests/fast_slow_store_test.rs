@@ -1201,7 +1201,7 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
 /// here we additionally assert that when the slow store DOES have the blob,
 /// the fast store is NOT consulted (avoiding the extra round trip).
 #[nativelink_test]
-async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Error> {
+async fn has_checks_fast_store_first_and_skips_slow_on_fast_hit() -> Result<(), Error> {
     #[derive(MetricsComponent)]
     struct CountingFastStore {
         inner: Arc<MemoryStore>,
@@ -1277,6 +1277,7 @@ async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Er
         has_calls: has_calls.clone(),
     }));
     let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let fast_for_seed = fast.clone();
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
             fast: StoreSpec::Memory(MemorySpec::default()),
@@ -1292,18 +1293,32 @@ async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Er
 
     let data = make_random_data(128);
     let digest = DigestInfo::try_new(VALID_HASH, data.len()).unwrap();
-    slow.update_oneshot(digest, data.clone().into()).await?;
 
+    // Fast-first: a blob resident in the fast tier is answered from the fast
+    // tier, and the fast store IS consulted. (The historical slow-only probe
+    // is what wedged FindMissingBlobs under slow-tier throttling.)
+    fast_for_seed
+        .update_oneshot(digest, data.clone().into())
+        .await?;
     let before = has_calls.load(Ordering::Acquire);
     assert_eq!(
         fast_slow.has(digest).await?,
         Some(data.len() as u64),
-        "Slow-store-only blob must be reported via slow lookup",
+        "Fast-resident blob must be reported present",
     );
-    let after = has_calls.load(Ordering::Acquire);
+    assert!(
+        has_calls.load(Ordering::Acquire) > before,
+        "Fast store has() must be consulted first under the fast-first contract",
+    );
+
+    // A fast-miss falls through to the slow tier (a bounded probe, not a wedge).
+    let other = make_random_data(64);
+    let other_digest = DigestInfo::try_new(VALID_HASH_B, other.len()).unwrap();
+    slow.update_oneshot(other_digest, other.clone().into()).await?;
     assert_eq!(
-        after, before,
-        "Fast store has() must not be consulted when the slow store already reports the blob",
+        fast_slow.has(other_digest).await?,
+        Some(other.len() as u64),
+        "Fast-miss must fall through and be found in the slow tier",
     );
 
     Ok(())
@@ -2360,6 +2375,106 @@ async fn write_back_decouples_update_from_slow_store() -> Result<(), Error> {
             "slow store never received the background write-back copy",
         );
     }
+
+    Ok(())
+}
+
+/// Fire-fix completion: a fast-miss must fail-fast on a slow tier that hangs.
+/// `has_with_results` bounds the slow-tier existence probe with a short deadline
+/// (SLOW_PROBE_DEADLINE ~3s) and degrades the fast-miss to "missing" on timeout,
+/// rather than blocking on the slow store's full RPC timeout (e.g. a GrpcStore's
+/// 60s). Without the deadline a cold build's tens-of-thousands of fast-misses
+/// each stall the hot ring long enough to wedge the worker.
+#[nativelink_test]
+async fn has_fast_miss_fails_fast_when_slow_tier_hangs() -> Result<(), Error> {
+    #[derive(MetricsComponent)]
+    struct HangingSlowStore;
+
+    #[async_trait]
+    impl StoreDriver for HangingSlowStore {
+        async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn has_with_results(
+            self: Pin<&Self>,
+            _keys: &[StoreKey<'_>],
+            _results: &mut [Option<u64>],
+        ) -> Result<(), Error> {
+            // Simulate a throttled/unreachable slow tier whose existence probe
+            // never returns within the caller's patience. Far longer than
+            // SLOW_PROBE_DEADLINE so the bound (not this future) decides.
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            Ok(())
+        }
+
+        async fn update(
+            self: Pin<&Self>,
+            _key: StoreKey<'_>,
+            _reader: DropCloserReadHalf,
+            _size_info: UploadSizeInfo,
+        ) -> Result<u64, Error> {
+            Ok(0)
+        }
+
+        async fn get_part(
+            self: Pin<&Self>,
+            _key: StoreKey<'_>,
+            _writer: &mut DropCloserWriteHalf,
+            _offset: u64,
+            _length: Option<u64>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn inner_store(&self, _key: Option<StoreKey>) -> &'_ dyn StoreDriver {
+            self
+        }
+
+        fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
+            self
+        }
+
+        fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
+            self
+        }
+
+        fn register_remove_callback(
+            self: Arc<Self>,
+            _callback: RemoveCallback,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    default_health_status_indicator!(HangingSlowStore);
+
+    let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let slow = Store::new(Arc::new(HangingSlowStore));
+    let fast_slow = Arc::new(FastSlowStore::new(
+        &FastSlowSpec {
+            fast: StoreSpec::Memory(MemorySpec::default()),
+            slow: StoreSpec::Memory(MemorySpec::default()),
+            fast_direction: StoreDirection::default(),
+            slow_direction: StoreDirection::default(),
+            bypass_dedup_threshold_bytes: 0,
+            slow_store_write_back: false,
+        },
+        fast,
+        slow,
+    ));
+
+    let digest = DigestInfo::try_new(VALID_HASH, 128).unwrap();
+
+    // The fast tier misses; the slow probe hangs. The call must still return
+    // (degraded to "missing") well before the slow store's 600s hang, bounded
+    // by SLOW_PROBE_DEADLINE. Give generous client-side slack over the 3s bound.
+    let result = tokio::time::timeout(Duration::from_secs(30), fast_slow.has(digest)).await;
+    let has = result.expect("has() must fail-fast, not block on the hung slow tier")?;
+    assert_eq!(
+        has, None,
+        "a fast-miss against a hung slow tier must degrade to missing, not wedge",
+    );
 
     Ok(())
 }
