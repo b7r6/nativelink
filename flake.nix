@@ -500,6 +500,9 @@
             rbe-toolchain-with-nativelink-test = pkgs.callPackage toolchain-examples/rbe-toolchain-test.nix {
               inherit nativelink bazel-retry bazel;
             };
+            # Discovery-only sibling with no nativelink dependency, so CI can
+            # enumerate the rbe-toolchain lanes without rebuilding nativelink.
+            rbe-toolchain-test-list = pkgs.callPackage toolchain-examples/rbe-toolchain-test-list.nix {};
             buck2-with-nativelink-test = pkgs.callPackage integration_tests/buck2/buck2-with-nativelink-test.nix {
               inherit nativelink buck2;
             };
