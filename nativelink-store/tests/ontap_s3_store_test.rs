@@ -310,7 +310,7 @@ async fn simple_update_ac() -> Result<(), Error> {
             headers.get("x-amz-checksum-sha256"),
             Some("ZAbm15cMyBMkq2sUXRgXHNb3az8dLCm3tnyixpdxF+o")
         );
-        aws_sdk_s3::primitives::ByteStream::from_body_0_4(sent_request.into_body())
+        aws_sdk_s3::primitives::ByteStream::from_body_1_x(sent_request.into_body())
     };
 
     // Wait for all the data to be received by the s3 backend server.

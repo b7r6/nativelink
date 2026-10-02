@@ -261,7 +261,7 @@ fn grpc_spec_for_port(port: u16) -> GrpcSpec {
         headers: HashMap::new(),
         forward_headers: vec![],
         experimental_read_batching: None,
-        experimental_remote_cache_compression: false,
+        experimental_remote_cache_compression: Some(false),
     }
 }
 
@@ -304,8 +304,8 @@ async fn make_ring() -> Result<Ring, Error> {
     let (live_port, live_blobs) = spawn_live_peer();
     let dead_port = dead_peer_port();
 
-    let live_store = GrpcStore::new(&grpc_spec_for_port(live_port)).await?;
-    let dead_store = GrpcStore::new(&grpc_spec_for_port(dead_port)).await?;
+    let live_store = GrpcStore::new(&grpc_spec_for_port(live_port))?;
+    let dead_store = GrpcStore::new(&grpc_spec_for_port(dead_port))?;
 
     // The spec's `store` fields are only used for length/weights by
     // `ShardStore::new`; memory placeholders keep the config minimal.
