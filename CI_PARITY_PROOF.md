@@ -1,0 +1,1 @@
+CI parity proof run: this branch is identical to fork main; .github/workflows/native-bazel.yaml is byte-identical to TraceMachina/nativelink main (same blob SHA fd60d6eb). This file exists only to open a PR that triggers the unmodified upstream CI against the public NativeLink remote cache.
