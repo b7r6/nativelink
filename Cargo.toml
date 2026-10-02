@@ -21,7 +21,7 @@ lto = true
 [profile.smol]
 debug = false
 inherits = "dev"
-opt-level = "z"
+opt-level = 1
 strip = true
 
 [[bin]]
