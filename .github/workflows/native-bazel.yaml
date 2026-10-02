@@ -8,7 +8,7 @@ on:
       - '.github/styles/**'
       - 'web/**'
   pull_request:
-    branches: [main]
+    branches: [main, ci/x2-base]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
