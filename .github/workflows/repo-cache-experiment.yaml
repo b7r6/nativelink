@@ -9,6 +9,8 @@ name: Repo Cache Experiment
 
 on:
   workflow_dispatch:
+  push:
+    branches: [b7r6/ci-exp-repo-cache]
 
 permissions: read-all
 
