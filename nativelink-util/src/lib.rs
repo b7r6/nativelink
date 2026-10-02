@@ -43,3 +43,5 @@ pub mod wire_compression;
 
 // Re-export tracing mostly for use in macros.
 pub use tracing as __tracing;
+
+// cold-timing probe (after, code-only on overhaul base, retrigger): heavy fan-out via nativelink-util edit
