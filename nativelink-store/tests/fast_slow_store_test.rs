@@ -2388,7 +2388,7 @@ async fn write_back_decouples_update_from_slow_store() -> Result<(), Error> {
 #[nativelink_test]
 async fn has_fast_miss_fails_fast_when_slow_tier_hangs() -> Result<(), Error> {
     #[derive(MetricsComponent)]
-    struct HangingSlowStore;
+    struct HangingSlowStore {}
 
     #[async_trait]
     impl StoreDriver for HangingSlowStore {
@@ -2450,7 +2450,7 @@ async fn has_fast_miss_fails_fast_when_slow_tier_hangs() -> Result<(), Error> {
     default_health_status_indicator!(HangingSlowStore);
 
     let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
-    let slow = Store::new(Arc::new(HangingSlowStore));
+    let slow = Store::new(Arc::new(HangingSlowStore {}));
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
             fast: StoreSpec::Memory(MemorySpec::default()),
