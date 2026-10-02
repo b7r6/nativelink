@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 #[cfg(feature = "dev-schema")]
@@ -305,6 +305,144 @@ pub struct FetchConfig {
     /// This store name referenced here may be reused multiple times.
     #[serde(deserialize_with = "convert_string_with_shellexpand")]
     pub fetch_store: StoreRefName,
+
+    /// Optional OCI toolchain configuration. When set, `FetchDirectory`
+    /// requests with `oci://` URIs will pull the OCI image, project it into
+    /// an REAPI Directory tree, upload blobs to the CAS store, and return the
+    /// root Directory digest. See the Standard OCI Toolchain Specification §6.
+    #[serde(default)]
+    pub oci: Option<OciFetchConfig>,
+}
+
+/// Configuration for OCI toolchain image fetching via the Remote Asset API.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciFetchConfig {
+    /// The CAS store to upload projected file blobs and Directory protos into.
+    /// Typically the same store used by the execution service. If omitted,
+    /// uses `fetch_store`.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub cas_store: Option<StoreRefName>,
+
+    /// Whether to check for existing blobs before uploading (dedup via
+    /// `FindMissingBlobs`-equivalent `has_many()`). Default: true.
+    #[serde(default = "default_true")]
+    pub dedup_check: bool,
+
+    /// Digest function for the REAPI projection.
+    /// Must match what the execution service expects. Default: "BLAKE3".
+    #[serde(default = "default_oci_digest_function")]
+    pub digest_function: String,
+
+    /// Per-registry connection and credential settings, matched against the
+    /// registry host of a pulled image reference (the part before the first
+    /// `/` in `oci://<host>/<repo>@<digest>`). A registry with no matching
+    /// entry is contacted anonymously over HTTPS — the prior behavior. Use
+    /// this to point the fetch at a private/sovereign registry (e.g. an
+    /// in-fleet zot) and to supply its credentials and TLS trust.
+    #[serde(default)]
+    pub registries: Vec<OciRegistryConfig>,
+
+    /// Local `oci_registry` short-circuit for the reserved `oci://self/...`
+    /// URI form. When set, a `FetchDirectory` of `oci://self/<name>:<tag>`
+    /// (or `@sha256:<digest>`) skips the network client entirely: the
+    /// manifest resolves through these stores' tag/alias records and layer
+    /// bytes are read from the blob store — the projection becomes a graph
+    /// walk over blobs already resident. Point the three stores at the SAME
+    /// stores the colocated `oci_registry` service instance uses.
+    #[serde(default)]
+    pub self_registry: Option<OciSelfRegistryConfig>,
+}
+
+/// Store references for the `oci://self/...` local-projection short-circuit
+/// (see [`OciFetchConfig::self_registry`]). These must reference the same
+/// stores as the colocated `oci_registry` service instance.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciSelfRegistryConfig {
+    /// The `oci_registry` instance's blob store (its `cas_store`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub blob_store: StoreRefName,
+
+    /// The `oci_registry` instance's digest-alias index store.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub index_store: StoreRefName,
+
+    /// The `oci_registry` instance's tag ref store.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ref_store: StoreRefName,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+fn default_oci_digest_function() -> String {
+    "BLAKE3".to_string()
+}
+
+/// Connection and credential configuration for a single OCI registry.
+///
+/// Fully specifies how to reach one registry host: the URL scheme, the TLS
+/// trust to use, and the credentials to authenticate a pull. Credential fields
+/// are shell-expanded, so secrets are supplied from the environment (e.g.
+/// `"${REGISTRY_PASSWORD}"`) rather than committed to config.
+///
+/// Authentication is resolved per the OCI Distribution v2 `WWW-Authenticate`
+/// challenge: a `Bearer` challenge is satisfied by fetching a token from the
+/// registry's realm (using `username`/`password` as HTTP Basic against the
+/// realm if present); a `Basic` challenge is satisfied with the same
+/// credentials directly. A pre-issued `bearer_token` short-circuits the
+/// challenge and is sent verbatim.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciRegistryConfig {
+    /// Registry host this entry applies to, matched exactly against the image
+    /// reference's registry component (e.g. `"registry.s4.gl"`,
+    /// `"registry-1.docker.io"`, `"ghcr.io"`, `"localhost:5000"`). Required.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub host: String,
+
+    /// URL scheme used to contact this registry: `"https"` (default) or
+    /// `"http"`. Use `"http"` only for an internal plain-HTTP registry on a
+    /// trusted network.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub scheme: Option<String>,
+
+    /// PEM CA-certificate bundle to trust for this registry's TLS, given as an
+    /// inline PEM (starting with `-----BEGIN CERTIFICATE-----`) or a path to a
+    /// PEM file. For a registry served with a private CA. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub root_certificates: Option<String>,
+
+    /// Skip TLS certificate verification for this registry. DANGEROUS — only
+    /// for an internal registry with a self-signed certificate on a trusted
+    /// network. Prefer `root_certificates`. Default: false.
+    #[serde(default)]
+    pub insecure_skip_verify: bool,
+
+    /// Basic-auth username. Combined with `password`, used to satisfy the
+    /// registry's `Bearer` token realm or a `Basic` challenge. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub username: Option<String>,
+
+    /// Basic-auth password. Required when `username` is set. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub password: Option<String>,
+
+    /// A pre-issued Bearer token, sent verbatim as `Authorization: Bearer`.
+    /// Mutually exclusive with `username`/`password`. Optional.
+    #[serde(default)]
+    #[serde(deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub bearer_token: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -320,6 +458,668 @@ pub struct PushConfig {
     /// it is only possible to read from the Action Cache.
     #[serde(default)]
     pub read_only: bool,
+}
+
+/// Configuration for a Nix binary-cache (substituter) service. This serves
+/// the Nix HTTP binary-cache protocol (`nix-cache-info`, `*.narinfo` and
+/// `nar/*` endpoints) directly from `NativeLink` stores, so `nix` clients
+/// can list a `NativeLink` deployment in their `substituters`.
+///
+/// The service mounts an HTTP router at `path` (default `/nix/<instance>`)
+/// on the same listener as the gRPC services, so it coexists with a full
+/// remote-execution stack on one port. Its `cas_store` (NAR blobs, keyed
+/// by `DigestInfo(sha256(nar), nar_size)`) may reuse the same content-
+/// addressed store as the gRPC CAS; `path_info_store` and `alias_store`
+/// are string-keyed and must be separate stores (see their field docs).
+/// See `examples/basic_cas_with_nix.json5` for a combined deployment.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct NixCacheConfig {
+    /// The store name referenced in the `stores` map in the main config.
+    /// This store holds the uncompressed NAR blobs and is digest-keyed:
+    /// each NAR is stored under `DigestInfo(sha256(nar), nar_size)`, so any
+    /// content-addressed CAS store works here. It is strongly recommended
+    /// to wrap this store in `verify` with both `verify_size` and
+    /// `verify_hash` enabled so corrupt or truncated NAR uploads are
+    /// rejected at write time instead of being served to clients.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// This store holds one record per Nix store path and is string-keyed
+    /// (NOT digest-keyed): records live under the 32-character `nixbase32`
+    /// store-path hash — the `<hash>` in `/nix/store/<hash>-<name>`.
+    ///
+    /// It is recommended to wrap this store in `completeness_checking`
+    /// with its `cas_store` referencing the NAR store above, so a
+    /// `narinfo` whose NAR has been evicted returns 404 instead of
+    /// advertising a NAR that can no longer be served.
+    ///
+    /// Never wrap this store in `existence_cache`: it drops overwrites
+    /// (later uploads of the same store path would be silently ignored)
+    /// and it rewrites string keys. Never wrap it in `verify` or
+    /// `size_partitioning` either — both reject string keys.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub path_info_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// This is a small string-keyed store mapping client-chosen NAR URL
+    /// names (the `url` field a client wrote into an uploaded `narinfo`)
+    /// to the `(digest, size)` of the NAR blob in `cas_store`, so uploads
+    /// are served back under the exact URL the client chose.
+    ///
+    /// This store must NOT sit behind the `completeness_checking` wrapper
+    /// used for `path_info_store`: alias records are not `narinfo`
+    /// records and would fail its decoding.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub alias_store: StoreRefName,
+
+    /// URL prefix under which this instance is mounted on the listener.
+    /// If the path is "/nix/main" and your domain is "example.com", the
+    /// cache root is <http://example.com/nix/main> and clients probe
+    /// <http://example.com/nix/main/nix-cache-info>.
+    ///
+    /// Default: "/nix/<`instance_name`>"
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub path: Option<String>,
+
+    /// The Nix store directory this cache serves paths for, advertised to
+    /// clients via the `StoreDir` field of `nix-cache-info`. Clients
+    /// refuse to substitute from a cache whose store dir differs from
+    /// their own, so this must match the store dir of the Nix clients —
+    /// almost always "/nix/store".
+    ///
+    /// Default: "/nix/store"
+    #[serde(
+        default = "default_nix_store_dir",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub store_dir: String,
+
+    /// Priority advertised via the `Priority` field of `nix-cache-info`.
+    /// When a client has several substituters configured, lower values
+    /// sort earlier, so a lower number makes this cache preferred. The
+    /// official `cache.nixos.org` uses 40.
+    ///
+    /// Default: 40
+    #[serde(
+        default = "default_nix_priority",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub priority: u32,
+
+    /// Value of the `WantMassQuery` field of `nix-cache-info`. When true,
+    /// clients are told it is acceptable to batch-query this cache for
+    /// many store paths at once, for example when computing which parts
+    /// of a large closure can be substituted.
+    ///
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub want_mass_query: bool,
+
+    /// Paths to secret signing keys in the format produced by
+    /// `nix key generate-secret --key-name <name>` — a single line of
+    /// `<name>:<base64 ed25519 keypair>`. Every served `narinfo` gets one
+    /// `Sig` line per key, so listing multiple keys enables key rotation:
+    /// sign with both the old and the new key while clients migrate their
+    /// `trusted-public-keys`.
+    ///
+    /// Default: [] (`narinfo` responses are unsigned; clients then need
+    /// to trust the cache some other way, such as `require-sigs = false`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub signing_key_files: Vec<String>,
+
+    /// Staging directory for decompressing compressed NAR uploads
+    /// (`.nar.xz`, `.nar.zst`, `.nar.bz2` and gzip-sniffed `.nar`).
+    /// Compressed uploads are stream-decompressed into a temporary file
+    /// here before being written to `cas_store`, so the filesystem behind
+    /// it needs enough space for the largest uncompressed NAR in flight.
+    /// The directory is created if missing and pruned of stale files at
+    /// startup.
+    ///
+    /// Default: `<system temp>/nativelink-nix-spool/<instance_name>`
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub spool_path: Option<String>,
+
+    /// When true, uploads are rejected: any `PUT` request returns
+    /// `405 Method Not Allowed`. Set this on public-facing listeners so
+    /// only internal listeners can populate the cache. A valid write
+    /// token (see `write_token_files`) does NOT override this.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub read_only: bool,
+
+    /// Paths to read-token files. Each file holds exactly ONE token
+    /// (surrounding whitespace is trimmed); listing multiple files
+    /// enables rotation — any listed token is accepted. Files are read
+    /// at startup and unreadable files or empty tokens fail fast.
+    ///
+    /// When non-empty, EVERY request on this instance (including
+    /// `nix-cache-info`) requires a valid read or write token, presented
+    /// either as `Authorization: Bearer <token>` or as HTTP Basic auth
+    /// where the token is the PASSWORD and the username is ignored —
+    /// the latter is how stock nix authenticates via `netrc`. Requests
+    /// without a valid token get `401` with a `Basic` challenge; nix
+    /// treats a `401` on a `narinfo` fetch as a clean miss, so a private
+    /// cache stays hidden from unauthenticated clients.
+    ///
+    /// SECURITY: the token is a Bearer/HTTP-Basic credential and travels
+    /// in the clear over a plaintext HTTP listener. Only enable this on a
+    /// listener that terminates TLS, or behind a TLS-terminating reverse
+    /// proxy; otherwise the token is trivially sniffable on the wire.
+    ///
+    /// Default: [] (anonymous reads)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub read_token_files: Vec<String>,
+
+    /// Paths to write-token files, with the same one-token-per-file
+    /// semantics as `read_token_files`. When non-empty, every `PUT`
+    /// additionally requires a valid write token — a read token alone is
+    /// not enough. `read_only` still wins over a valid write token:
+    /// uploads then get `405`.
+    ///
+    /// SECURITY: like `read_token_files`, this token is transmitted as a
+    /// Bearer/HTTP-Basic credential and is sent in cleartext over a
+    /// plaintext HTTP listener. Only expose it over TLS (or behind a
+    /// TLS-terminating proxy).
+    ///
+    /// Default: [] (writes gated only by `read_only`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub write_token_files: Vec<String>,
+
+    /// Compression this cache serves NARs with: unset or `"none"` serves
+    /// uncompressed NARs; `"zstd"` transcodes each NAR once when its
+    /// `narinfo` is uploaded — the uncompressed NAR is streamed out of
+    /// `cas_store` through a zstd encoder and the compressed result is
+    /// stored back into `cas_store` under its own digest, so served
+    /// `narinfo` documents advertise a `.nar.zst` URL with real
+    /// `FileHash`/`FileSize` lines. If the compressed blob is later
+    /// evicted, serving falls back to the uncompressed NAR. Stored
+    /// signatures stay valid either way: the signed fingerprint covers
+    /// only the uncompressed NAR, never the served URL or compression.
+    ///
+    /// Default: unset (serve uncompressed NARs)
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub serve_compression: Option<String>,
+
+    /// The zstd compression level used when `serve_compression` is
+    /// `"zstd"`; ignored otherwise. Must be in zstd's valid range,
+    /// `1..=22`, when set — `nativelink --check` rejects an out-of-range
+    /// value rather than letting the encoder silently clamp it at serve
+    /// time.
+    ///
+    /// No serde default exists: when unset, the service applies zstd
+    /// level 3 at serve time.
+    #[serde(
+        default,
+        deserialize_with = "convert_optional_numeric_with_shellexpand"
+    )]
+    pub compression_level: Option<i32>,
+
+    /// Round-trip compression fidelity. When true (the default), a
+    /// compressed NAR upload (`.nar.xz`/`.nar.zst`/`.nar.bz2`, the codec
+    /// nix's `nix copy` picks — `xz` by default) has its ORIGINAL bytes
+    /// stored as a CAS blob and served verbatim under the client's URL,
+    /// and the served `narinfo` advertises the original
+    /// compression/`FileHash`/`FileSize`. A client that pushed a path can
+    /// then pull it straight back within the narinfo TTL (the URL it
+    /// cached still resolves), matching attic/harmonia/nix-serve. When
+    /// false, compressed uploads are decompressed to the canonical
+    /// uncompressed NAR and served as `Compression: none`, saving roughly
+    /// the compressed blob's storage (~0.3x of the NAR) at the cost of
+    /// that warm-pull round trip.
+    ///
+    /// Interaction with `serve_compression = "zstd"`: a preserved original
+    /// takes precedence over transcoding, so a compressed push is served
+    /// back in the CLIENT's original codec (no re-encode, saving CPU) and
+    /// only `Compression: none` pushes are transcoded to zstd. If a
+    /// preserved compressed blob is later evicted, serving degrades
+    /// gracefully to the uncompressed NAR (`Compression: none`); the
+    /// signed fingerprint covers only the uncompressed NAR, so stored
+    /// signatures stay valid across every rendering.
+    ///
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub preserve_upload_compression: bool,
+
+    /// Maximum size in bytes of a single uncompressed NAR the cache will
+    /// ingest. Compressed uploads (`.nar.xz`/`.nar.zst`/`.nar.bz2` and
+    /// gzip-sniffed `.nar`) are stream-decompressed into the spool
+    /// directory; without a cap a small crafted upload could decompress to
+    /// arbitrarily many bytes and fill the spool disk (a decompression
+    /// bomb). A declared size (the `Content-Length` of a direct upload, or
+    /// the size embedded in a canonical NAR name) over this limit is
+    /// rejected with `413` before the body is read, and a decompressed
+    /// stream that grows past it is aborted with `413` mid-flight (the
+    /// partial spool file is deleted).
+    ///
+    /// The default is deliberately generous so legitimate large closures
+    /// still push; size it to the spool filesystem's capacity.
+    ///
+    /// Default: 34359738368 (32 GiB)
+    #[serde(
+        default = "default_max_nar_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_nar_size_bytes: u64,
+
+    /// Maximum number of NAR GET response bodies streamed concurrently from
+    /// this instance. Each in-flight stream holds a producer task plus a
+    /// small buffer, so without a ceiling many slow readers grow aggregate
+    /// memory without bound. Requests over the limit get a retryable `503`
+    /// rather than committing a `200` and buffering.
+    ///
+    /// The default is high enough that normal parallel substitution is
+    /// never throttled.
+    ///
+    /// Default: 256
+    #[serde(
+        default = "default_max_concurrent_nar_streams",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_nar_streams: usize,
+
+    /// Maximum number of zstd NAR transcodes running concurrently when
+    /// `serve_compression` is `"zstd"`. A transcode streams a whole NAR
+    /// through a zstd encoder and spools the output, so unbounded fan-out
+    /// of narinfo PUTs would balloon CPU and temp disk. Concurrent PUTs for
+    /// the SAME NAR are additionally coalesced into a single transcode.
+    ///
+    /// Default: 8
+    #[serde(
+        default = "default_max_concurrent_transcodes",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_transcodes: usize,
+
+    /// Idle timeout, in seconds, on a NAR upload body: if no new bytes
+    /// arrive within this window the upload is aborted with `408` and its
+    /// spool file and file descriptor are released, so a stalled or
+    /// slowloris-style client cannot pin resources indefinitely. The timer
+    /// resets on every received chunk, so a legitimately slow but steady
+    /// upload over a slow link is never killed.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_nar_upload_idle_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub nar_upload_idle_timeout_s: u64,
+
+    /// Upstream Nix binary caches to read through on a local miss. When
+    /// non-empty, a `narinfo` GET that misses the local `path_info_store`
+    /// is retried against each listed cache in order; the first cache that
+    /// has the path (and whose `narinfo` verifies against one of its
+    /// `trusted_public_keys`) is fetched — `narinfo` AND NAR — verified,
+    /// and ingested into this instance's stores, so the path is served
+    /// locally from then on ("durable on first fetch"). The re-served
+    /// `narinfo` is signed with this instance's own `signing_key_files`
+    /// in addition to the preserved upstream signatures.
+    ///
+    /// The NAR is fetched eagerly during the `narinfo` GET so the record
+    /// satisfies a `completeness_checking` `path_info_store` immediately;
+    /// see the store-composition notes in `examples/nix_cache.json5`.
+    /// Read-through populates the stores regardless of `read_only` (which
+    /// only gates client PUTs).
+    ///
+    /// Default: [] (read-through disabled; a local miss is a plain 404)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_caches: Vec<NixUpstreamCacheConfig>,
+
+    /// How long, in seconds, to remember that a path was NOT found in any
+    /// upstream, so a repeated request (Nix issues many `narinfo` probes
+    /// while computing a closure) does not re-query every upstream each
+    /// time. Only misses are cached; a successful fetch is durable in the
+    /// stores. Set to 0 to disable negative caching.
+    ///
+    /// Ignored when `upstream_caches` is empty.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_upstream_negative_ttl_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upstream_negative_ttl_s: u64,
+
+    /// Timeout, in seconds, for a single upstream `narinfo` probe. Kept
+    /// short because the probe is a small metadata request; the (possibly
+    /// large) NAR download that follows a hit is not bound by this timeout
+    /// but by `max_nar_size_bytes` during ingest.
+    ///
+    /// Ignored when `upstream_caches` is empty.
+    ///
+    /// Default: 30
+    #[serde(
+        default = "default_upstream_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upstream_timeout_s: u64,
+}
+
+/// One upstream Nix binary cache for the read-through feature (see
+/// [`NixCacheConfig::upstream_caches`]).
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct NixUpstreamCacheConfig {
+    /// Base URL of the upstream binary cache, without a trailing slash,
+    /// e.g. `"https://cache.nixos.org"` or
+    /// `"https://nix-community.cachix.org"`. The `narinfo` is fetched from
+    /// `<url>/<hash>.narinfo` and the NAR from `<url>/<narinfo URL>`.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub url: String,
+
+    /// Nix public keys (`<name>:<base64>`, the same form listed in a
+    /// client's `trusted-public-keys`, e.g.
+    /// `cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=`)
+    /// that a fetched `narinfo` must be signed by before this cache will
+    /// store and serve it. At least one listed key must verify the
+    /// `narinfo` fingerprint; an unsigned or unverifiable `narinfo` is
+    /// refused and the path is treated as an upstream miss, so
+    /// read-through can never be a cache-poisoning vector. Must be
+    /// non-empty.
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub trusted_public_keys: Vec<String>,
+}
+
+fn default_nix_store_dir() -> String {
+    "/nix/store".to_string()
+}
+
+/// Configuration for an OCI Distribution registry service — the OCI
+/// Distribution Specification (pull AND push) served directly from
+/// `NativeLink` stores, the same facade move `nix_cache` makes for the Nix
+/// binary-cache protocol. `skopeo`/`crane`/`docker` push to and pull from
+/// the CAS itself; blobs are stored ONCE under the deployment's canonical
+/// digest function with a sha256 alias index answering OCI wire names.
+///
+/// The service mounts an HTTP router at `path` (default `/v2` — the spec's
+/// fixed root) on the same listener as the gRPC services. Because the spec
+/// fixes the root at `/v2/`, run ONE instance per listener; a second
+/// instance needs its own listener (host-based routing is an open question
+/// in `design/oci-registry-over-cas.md`).
+///
+/// See `examples/oci_registry.json5` for a working deployment.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct OciRegistryServiceConfig {
+    /// The store name referenced in the `stores` map in the main config.
+    /// Digest-keyed: layer blobs, config blobs, and manifest bodies each
+    /// live under `DigestInfo(canonical_hash(bytes), size)` where the
+    /// canonical hash is `digest_function`. It is strongly recommended to
+    /// wrap this store in `verify` with both `verify_size` and
+    /// `verify_hash` enabled.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// String-keyed digest-alias records `oci-digest:sha256:<hex>` →
+    /// `(canonical_hex, size)` — immutable, content-derived facts.
+    ///
+    /// Recommended: wrap in `completeness_checking` with its `cas_store`
+    /// referencing the blob store above, so an alias whose blob was
+    /// evicted 404s instead of advertising a blob that cannot be served.
+    /// Never wrap in `verify` or `size_partitioning` (string keys).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub index_store: StoreRefName,
+
+    /// The store name referenced in the `stores` map in the main config.
+    /// String-keyed MUTABLE tag records (`oci-tag:<name>:<tag>`) and
+    /// per-repo tag indexes (`oci-tags:<name>`).
+    ///
+    /// Never wrap this store in `existence_cache`: it drops overwrites,
+    /// and a tag that cannot be overwritten is not a tag. Never wrap in
+    /// `verify` or `size_partitioning` either (string keys). Wrapping in
+    /// `completeness_checking` against the blob store is recommended so a
+    /// tag whose manifest was evicted returns 404 (`MANIFEST_UNKNOWN`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ref_store: StoreRefName,
+
+    /// URL prefix under which this instance is mounted on the listener.
+    /// The OCI Distribution Specification fixes the API root at `/v2/`,
+    /// so with the default mount a client's registry reference is just
+    /// `<host>:<port>/<repository>`. Change this only for internal
+    /// deployments whose clients tolerate a path prefix (skopeo does; the
+    /// conformance suite does not).
+    ///
+    /// Default: "/v2"
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub path: Option<String>,
+
+    /// Canonical digest function blobs are STORED under: "BLAKE3" or
+    /// "SHA256". The OCI wire always speaks sha256 names; at ingest the
+    /// upload stream feeds both hashers and an alias record maps the wire
+    /// name to the canonical identity. With "SHA256" the two coincide and
+    /// the alias record degenerates to an identity map (still written, so
+    /// reads are uniform). Must match the digest function the deployment's
+    /// REAPI consumers use (buck2 detects the function by hex length, so a
+    /// deployment cannot mix them per-blob).
+    ///
+    /// Default: "BLAKE3"
+    #[serde(
+        default = "default_oci_digest_function",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub digest_function: String,
+
+    /// Staging directory for in-flight blob uploads. Upload sessions spool
+    /// to files here (prefix-scoped startup pruning, idle-timeout aborts),
+    /// so the filesystem behind it needs room for the largest blob in
+    /// flight times `max_open_upload_sessions`.
+    ///
+    /// Default: `<system temp>/nativelink-oci-spool/<instance_name>`
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub spool_path: Option<String>,
+
+    /// Maximum size in bytes of a single blob this registry will ingest.
+    /// A declared `Content-Length` over the limit is rejected before the
+    /// body is read, and a stream that grows past it is aborted mid-flight
+    /// (the spool file is deleted).
+    ///
+    /// Default: 34359738368 (32 GiB)
+    #[serde(
+        default = "default_max_nar_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_blob_size_bytes: u64,
+
+    /// Maximum size in bytes of a manifest body (`PUT`/`GET` on
+    /// `/v2/<name>/manifests/<ref>`). Manifests are small JSON documents;
+    /// the ecosystem norm caps them around 4 MiB.
+    ///
+    /// Default: 4194304 (4 MiB)
+    #[serde(
+        default = "default_max_manifest_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_manifest_size_bytes: u64,
+
+    /// Idle timeout, in seconds, on an upload session: if no new bytes
+    /// arrive within this window the in-flight request is aborted, and a
+    /// session idle past it is pruned (spool file deleted) — clients
+    /// retry per the spec's resumable-upload semantics.
+    ///
+    /// Default: 60
+    #[serde(
+        default = "default_nar_upload_idle_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub upload_idle_timeout_s: u64,
+
+    /// Maximum number of blob GET response bodies streamed concurrently
+    /// from this instance; requests over the limit get a retryable `503`.
+    ///
+    /// Default: 256
+    #[serde(
+        default = "default_max_concurrent_nar_streams",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_blob_streams: usize,
+
+    /// Maximum number of upload sessions open at once; session-opening
+    /// requests over the limit get a retryable `503`.
+    ///
+    /// Default: 64
+    #[serde(
+        default = "default_max_open_upload_sessions",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_open_upload_sessions: usize,
+
+    /// When true, all mutating requests (`POST`/`PATCH`/`PUT`/`DELETE`)
+    /// return `405 Method Not Allowed`. Set this on public-facing
+    /// listeners. A valid write token does NOT override this.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub read_only: bool,
+
+    /// Enables the Content Management endpoints (`DELETE` on manifests,
+    /// tags, and blobs). Registry DELETE removes NAMES (alias and tag
+    /// records); content lifetime belongs to CAS eviction — the lens has
+    /// no GC, so `skopeo delete` never reclaims backing bytes
+    /// synchronously.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub enable_delete: bool,
+
+    /// Paths to read-token files, `nix_cache` semantics verbatim: one
+    /// token per file, any listed token accepted, `Bearer <token>` or
+    /// HTTP Basic where the token is the PASSWORD (how docker/skopeo
+    /// send configured credentials). When non-empty, EVERY request on the
+    /// instance requires a valid read or write token; failures get `401`
+    /// with a `Basic` challenge.
+    ///
+    /// SECURITY: tokens travel in cleartext over a plaintext listener;
+    /// only enable on a TLS-terminated path.
+    ///
+    /// Default: [] (anonymous reads)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub read_token_files: Vec<String>,
+
+    /// Paths to write-token files, same semantics as `read_token_files`.
+    /// When any token auth is configured, every mutating request requires
+    /// a valid WRITE token — a read token alone is never sufficient, and
+    /// an instance with read tokens but no write tokens fails writes
+    /// closed. `read_only` wins over a valid write token.
+    ///
+    /// Default: [] (writes gated only by `read_only`)
+    #[serde(default, deserialize_with = "convert_vec_string_with_shellexpand")]
+    pub write_token_files: Vec<String>,
+}
+
+const fn default_max_manifest_size_bytes() -> u64 {
+    4 * 1024 * 1024 // 4 MiB
+}
+
+const fn default_max_open_upload_sessions() -> usize {
+    64
+}
+
+/// Configuration for the CAS witness (caching HTTP forward proxy)
+/// (see [`ServicesConfig::cas_witness`]).
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct CasWitnessConfig {
+    /// Store name for fetched bodies. Digest-keyed: every body is stored
+    /// under `DigestInfo(sha256(body), size)`, so any content-addressed CAS
+    /// works and may be shared with the gRPC CAS and the `nix_cache` NAR
+    /// store. Wrapping it in `verify` is recommended.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub cas_store: StoreRefName,
+
+    /// Store name for the URL index. A small string-keyed map from a fetched
+    /// URL to the `(digest, size, content-type)` of its body in `cas_store`,
+    /// so a repeat fetch of the same URL is served from the CAS. Must be a
+    /// separate, string-keyed store (do not wrap in `verify`,
+    /// `size_partitioning`, or `completeness_checking`).
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub alias_store: StoreRefName,
+
+    /// Path to the proxy's CA certificate. Clients must trust this to accept
+    /// the intercepted TLS connections (nix: `NIX_SSL_CERT_FILE`). Generated
+    /// along with `ca_key_file` if either file is missing.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ca_cert_file: String,
+
+    /// Path to the proxy's CA private key. This key can impersonate any host
+    /// to a client that trusts the CA, so keep it private (it is written
+    /// `0600` when generated). Generated with `ca_cert_file` if missing.
+    #[serde(deserialize_with = "convert_string_with_shellexpand")]
+    pub ca_key_file: String,
+
+    /// Path to the witness signing key (ed25519, raw 32-byte seed in
+    /// base64). When set, the proxy emits a DSSE/in-toto attestation for
+    /// every cached fetch, stored in the CAS and referenced by two
+    /// response headers: `X-Straylight-Witness` (BLAKE3 key of the
+    /// attestation in the CAS) and `X-Straylight-Witness-Receipt` (a
+    /// compact signed binding that identifies the attestation as
+    /// belonging to this transaction). Generated if the file does not
+    /// exist. When unset, witnessing is disabled and the proxy behaves
+    /// as a plain caching proxy.
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub witness_key_file: Option<String>,
+
+    /// Maximum size in bytes of a single response body the proxy will cache.
+    /// A larger response is streamed through to the client but not stored.
+    ///
+    /// Default: 2147483648 (2 GiB)
+    #[serde(
+        default = "default_max_fetch_size_bytes",
+        deserialize_with = "convert_data_size_with_shellexpand"
+    )]
+    pub max_fetch_size_bytes: u64,
+
+    /// Timeout in seconds for fetching a single URL from the origin on a
+    /// cache miss.
+    ///
+    /// Default: 300
+    #[serde(
+        default = "default_fetch_timeout_s",
+        deserialize_with = "convert_duration_with_shellexpand"
+    )]
+    pub fetch_timeout_s: u64,
+}
+
+const fn default_max_fetch_size_bytes() -> u64 {
+    2 * 1024 * 1024 * 1024 // 2 GiB
+}
+
+const fn default_fetch_timeout_s() -> u64 {
+    300
+}
+
+const fn default_nix_priority() -> u32 {
+    40
+}
+
+const fn default_max_nar_size_bytes() -> u64 {
+    32 * 1024 * 1024 * 1024 // 32 GiB
+}
+
+const fn default_max_concurrent_nar_streams() -> usize {
+    256
+}
+
+const fn default_max_concurrent_transcodes() -> usize {
+    8
+}
+
+const fn default_nar_upload_idle_timeout_s() -> u64 {
+    60
+}
+
+const fn default_upstream_negative_ttl_s() -> u64 {
+    60
+}
+
+const fn default_upstream_timeout_s() -> u64 {
+    30
 }
 
 // From https://github.com/serde-rs/serde/issues/818#issuecomment-287438544
@@ -462,6 +1262,24 @@ pub struct HealthConfig {
     pub readiness_path: String,
 }
 
+#[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct PrometheusConfig {
+    /// Path to register the Prometheus scrape endpoint. If path is "/metrics",
+    /// and your domain is "example.com", you can reach the endpoint with:
+    /// <http://example.com/metrics>.
+    ///
+    /// The endpoint renders the full `MetricsComponent` tree (store and
+    /// scheduler metrics) as Prometheus text-exposition v0.0.4, prefixed with
+    /// `nativelink_`. Collection is per-scrape, so there is no runtime cost
+    /// when nothing is scraping.
+    ///
+    /// Default: "/metrics"
+    #[serde(default)]
+    pub path: String,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
 pub struct BepConfig {
@@ -568,6 +1386,37 @@ pub struct ServicesConfig {
     )]
     pub push: Option<Vec<WithInstanceName<PushConfig>>>,
 
+    /// The Nix binary-cache (substituter) services. Each entry mounts a
+    /// Nix HTTP binary-cache endpoint on this listener that serves
+    /// `nix-cache-info`, `narinfo` records and NAR blobs from the
+    /// referenced stores.
+    #[serde(
+        default,
+        deserialize_with = "super::backcompat::opt_vec_with_instance_name"
+    )]
+    pub nix_cache: Option<Vec<WithInstanceName<NixCacheConfig>>>,
+
+    /// The OCI Distribution registry services. Each entry mounts the OCI
+    /// Distribution API (pull and push) on this listener, served directly
+    /// from the referenced stores — blobs stored once under the canonical
+    /// digest function, sha256 wire names answered via the alias index.
+    /// The spec fixes the API root at `/v2/`, so configure at most one
+    /// instance per listener with the default mount.
+    #[serde(
+        default,
+        deserialize_with = "super::backcompat::opt_vec_with_instance_name"
+    )]
+    pub oci_registry: Option<Vec<WithInstanceName<OciRegistryServiceConfig>>>,
+
+    /// CAS witness (caching HTTP forward proxy, TLS-intercepting) that stores
+    /// fetched bodies in a `NativeLink` CAS. A build client points `HTTPS_PROXY`/
+    /// `HTTP_PROXY` at this listener and trusts its generated CA (nix reads
+    /// it via `NIX_SSL_CERT_FILE`); the first fetch of a URL is streamed
+    /// from the origin into the CAS and every later fetch is served from it.
+    /// This listener speaks the HTTP proxy protocol (`CONNECT`), so it must
+    /// not share a port with other services.
+    pub cas_witness: Option<CasWitnessConfig>,
+
     /// This is the service used for workers to connect and communicate
     /// through.
     /// NOTE: This service should be served on a different, non-public port.
@@ -588,6 +1437,12 @@ pub struct ServicesConfig {
 
     /// This is the service for health status check.
     pub health: Option<HealthConfig>,
+
+    /// Exposes a Prometheus `/metrics` scrape endpoint that renders the full
+    /// `MetricsComponent` tree (stores and schedulers). Disabled unless
+    /// configured. Prefixed `experimental_` because the emitted metric names
+    /// are not yet a stability contract.
+    pub experimental_prometheus: Option<PrometheusConfig>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -980,10 +1835,6 @@ pub struct ResourceEnforcementConfig {
 
 fn default_memory_property_name() -> String {
     "memory_kb".to_string()
-}
-
-const fn default_true() -> bool {
-    true
 }
 
 fn default_disk_property_name() -> String {
@@ -1702,6 +2553,21 @@ pub struct GlobalConfig {
     /// Default: 1024*1024 (1MiB)
     #[serde(default, deserialize_with = "convert_data_size_with_shellexpand")]
     pub default_digest_size_health_check: usize,
+
+    /// When true, reject any request where the digest function is not explicitly
+    /// set (i.e. arrives as 0/UNKNOWN) rather than silently defaulting to
+    /// `default_digest_hash_function`. This prevents a class of bugs where a
+    /// BLAKE3 client omits the field, the server defaults to SHA256, and output
+    /// Directory trees are hashed with the wrong algorithm — corrupting results.
+    ///
+    /// When false (the default for backwards compatibility), unset digest
+    /// functions fall through to `default_digest_hash_function` as before.
+    ///
+    /// Recommended: true for new deployments.
+    ///
+    /// Default: false
+    #[serde(default)]
+    pub require_explicit_digest_function: bool,
 }
 
 pub type StoreConfig = NamedConfig<StoreSpec>;
@@ -1829,6 +2695,10 @@ impl CasConfig {
                 worker_api,
                 experimental_bep,
                 admin,
+                nix_cache,
+                oci_registry,
+                cas_witness,
+                experimental_prometheus,
                 health: _,
             } = services;
             if cas.is_some()
@@ -1841,6 +2711,10 @@ impl CasConfig {
                 || worker_api.is_some()
                 || experimental_bep.is_some()
                 || admin.is_some()
+                || nix_cache.is_some()
+                || oci_registry.is_some()
+                || cas_witness.is_some()
+                || experimental_prometheus.is_some()
             {
                 return Err(make_input_err!(
                     "single_use worker processes may expose only health services"
@@ -1943,10 +2817,1568 @@ impl CasConfig {
         }
         Ok(())
     }
+
+    /// Offline structural validation of every store/scheduler name reference
+    /// in this config. This is a pure, read-only check intended for
+    /// `nativelink --check`: it constructs no stores, binds no sockets, opens
+    /// no connections, and creates no directories.
+    ///
+    /// Every store name referenced by a worker or by a server service, and
+    /// every scheduler name referenced by a service, must resolve to a store
+    /// declared in `stores` / a scheduler declared in `schedulers`. Store
+    /// references made *inside* a declared store's spec (the `ref_store`
+    /// wrappers such as `fast_slow`, `dedup`, `completeness_checking`, ...)
+    /// are also resolved, but only for the transitive closure of stores that
+    /// are actually wired to a worker or service. Store definitions that are
+    /// never referenced by any consumer (for example a pure store-catalog
+    /// sample config) are intentionally not walked, so their illustrative
+    /// placeholder references are never flagged.
+    ///
+    /// All problems are collected and reported together, each with a path
+    /// such as `servers[0].services.nix_cache[main].path_info_store references
+    /// undefined store 'NIX_PI'`, rather than failing on the first one.
+    ///
+    /// Duplicate store names and duplicate scheduler names are also reported,
+    /// because [`crate::stores`] / the store manager resolve names last-wins
+    /// and would otherwise silently drop the earlier definition.
+    ///
+    /// In addition to reference resolution, a small set of `nix_cache`
+    /// field-value invariants that would otherwise only surface at service
+    /// boot (empty upstream `trusted_public_keys`, out-of-range zstd
+    /// `compression_level`, zero `max_concurrent_*`) are checked here; see
+    /// [`validate_nix_cache_fields`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(Code::InvalidArgument)` if any referenced store/scheduler
+    /// name is undeclared, if a store/scheduler name is declared more than
+    /// once, or if a `nix_cache` instance violates one of the field-value
+    /// invariants above.
+    pub fn validate_references(&self) -> Result<(), Error> {
+        let mut problems: Vec<String> = Vec::new();
+
+        // Declared registries. Collision on insert is a duplicate name.
+        let mut store_names: HashSet<&str> = HashSet::new();
+        for store in &self.stores {
+            if !store_names.insert(store.name.as_str()) {
+                problems.push(format!("duplicate store name '{}'", store.name));
+            }
+        }
+        let mut scheduler_names: HashSet<&str> = HashSet::new();
+        for scheduler in self.schedulers.iter().flatten() {
+            if !scheduler_names.insert(scheduler.name.as_str()) {
+                problems.push(format!("duplicate scheduler name '{}'", scheduler.name));
+            }
+        }
+
+        // Only validate a reference category when its registry is non-empty.
+        // A config that declares zero stores (or zero schedulers) is a
+        // fragment or legacy-format sample whose backing definitions live
+        // elsewhere; every reference would then trivially be "unresolved" and
+        // flagging them would be a false positive on an otherwise-valid
+        // sample. Real deployments always declare their stores, so genuine
+        // typos are still caught.
+        let mut checker = ReferenceChecker {
+            check_stores: !store_names.is_empty(),
+            check_schedulers: !scheduler_names.is_empty(),
+            store_names,
+            scheduler_names,
+            problems,
+            used_stores: Vec::new(),
+        };
+
+        for (worker_idx, worker) in self.workers.iter().flatten().enumerate() {
+            let WorkerConfig::Local(local) = worker;
+            checker.store(
+                &format!("workers[{worker_idx}].local.cas_fast_slow_store"),
+                &local.cas_fast_slow_store,
+            );
+            if let Some(ac_store) = &local.upload_action_result.ac_store {
+                checker.store(
+                    &format!("workers[{worker_idx}].local.upload_action_result.ac_store"),
+                    ac_store,
+                );
+            }
+            if let Some(historical) = &local.upload_action_result.historical_results_store {
+                checker.store(
+                    &format!(
+                        "workers[{worker_idx}].local.upload_action_result.historical_results_store"
+                    ),
+                    historical,
+                );
+            }
+        }
+
+        if let Some(origin_events) = &self.experimental_origin_events {
+            checker.store(
+                "experimental_origin_events.publisher.store",
+                &origin_events.publisher.store,
+            );
+        }
+
+        for (server_idx, server) in self.servers.iter().enumerate() {
+            let Some(services) = &server.services else {
+                continue;
+            };
+            let prefix = format!("servers[{server_idx}].services");
+            for entry in services.cas.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(&format!("{prefix}.cas[{name}].cas_store"), &entry.cas_store);
+            }
+            for entry in services.ac.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(&format!("{prefix}.ac[{name}].ac_store"), &entry.ac_store);
+            }
+            for entry in services.execution.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.execution[{name}].cas_store"),
+                    &entry.cas_store,
+                );
+                checker.scheduler(
+                    &format!("{prefix}.execution[{name}].scheduler"),
+                    &entry.scheduler,
+                );
+            }
+            for entry in services.capabilities.iter().flatten() {
+                if let Some(remote_execution) = &entry.remote_execution {
+                    let name = &entry.instance_name;
+                    checker.scheduler(
+                        &format!("{prefix}.capabilities[{name}].remote_execution.scheduler"),
+                        &remote_execution.scheduler,
+                    );
+                }
+            }
+            for entry in services.bytestream.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.bytestream[{name}].cas_store"),
+                    &entry.cas_store,
+                );
+            }
+            for entry in services.fetch.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.fetch[{name}].fetch_store"),
+                    &entry.fetch_store,
+                );
+                // `oci.cas_store` is optional; when absent it defaults to
+                // `fetch_store` (already checked above), so only validate it
+                // when explicitly present.
+                if let Some(oci) = &entry.oci
+                    && let Some(cas_store) = &oci.cas_store
+                {
+                    checker.store(&format!("{prefix}.fetch[{name}].oci.cas_store"), cas_store);
+                }
+                if let Some(oci) = &entry.oci
+                    && let Some(self_registry) = &oci.self_registry
+                {
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.blob_store"),
+                        &self_registry.blob_store,
+                    );
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.index_store"),
+                        &self_registry.index_store,
+                    );
+                    checker.store(
+                        &format!("{prefix}.fetch[{name}].oci.self_registry.ref_store"),
+                        &self_registry.ref_store,
+                    );
+                }
+            }
+            for entry in services.push.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.push[{name}].push_store"),
+                    &entry.push_store,
+                );
+            }
+            for entry in services.nix_cache.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.nix_cache[{name}].cas_store"),
+                    &entry.cas_store,
+                );
+                checker.store(
+                    &format!("{prefix}.nix_cache[{name}].path_info_store"),
+                    &entry.path_info_store,
+                );
+                checker.store(
+                    &format!("{prefix}.nix_cache[{name}].alias_store"),
+                    &entry.alias_store,
+                );
+                // Field-value validation for a nix_cache instance. These are
+                // NOT reference checks, but they belong on the same offline
+                // `nativelink --check` path so an operator learns about a
+                // config that would fail (or be silently coerced) at service
+                // boot without binding a socket.
+                validate_nix_cache_fields(
+                    &format!("{prefix}.nix_cache[{name}]"),
+                    &entry.config,
+                    &mut checker.problems,
+                );
+            }
+            for entry in services.oci_registry.iter().flatten() {
+                let name = &entry.instance_name;
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].cas_store"),
+                    &entry.cas_store,
+                );
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].index_store"),
+                    &entry.index_store,
+                );
+                checker.store(
+                    &format!("{prefix}.oci_registry[{name}].ref_store"),
+                    &entry.ref_store,
+                );
+                validate_oci_registry_fields(
+                    &format!("{prefix}.oci_registry[{name}]"),
+                    &entry.config,
+                    &mut checker.problems,
+                );
+            }
+            if let Some(worker_api) = &services.worker_api {
+                checker.scheduler(
+                    &format!("{prefix}.worker_api.scheduler"),
+                    &worker_api.scheduler,
+                );
+            }
+            if let Some(bep) = &services.experimental_bep {
+                checker.store(&format!("{prefix}.experimental_bep.store"), &bep.store);
+            }
+            if let Some(cas_witness) = &services.cas_witness {
+                checker.store(
+                    &format!("{prefix}.cas_witness.cas_store"),
+                    &cas_witness.cas_store,
+                );
+                checker.store(
+                    &format!("{prefix}.cas_witness.alias_store"),
+                    &cas_witness.alias_store,
+                );
+            }
+        }
+
+        // Resolve `ref_store` references reachable from the wired-up stores.
+        if checker.check_stores {
+            let store_specs: HashMap<&str, &StoreSpec> = self
+                .stores
+                .iter()
+                .map(|store| (store.name.as_str(), &store.spec))
+                .collect();
+            checker.walk_used_stores(&store_specs);
+        }
+
+        if checker.problems.is_empty() {
+            Ok(())
+        } else {
+            Err(make_err!(
+                Code::InvalidArgument,
+                "configuration reference validation failed:\n  - {}",
+                checker.problems.join("\n  - ")
+            ))
+        }
+    }
+}
+
+/// Recursively collects every `ref_store` name that appears anywhere inside a
+/// single [`StoreSpec`] tree (the wrapper stores nest other `StoreSpec`s). The
+/// match is exhaustive on purpose so a newly added wrapping store forces this
+/// to be revisited.
+fn collect_ref_store_names<'a>(spec: &'a StoreSpec, out: &mut Vec<&'a StoreRefName>) {
+    match spec {
+        StoreSpec::RefStore(ref_spec) => out.push(&ref_spec.name),
+        StoreSpec::CacheMetrics(inner) => collect_ref_store_names(&inner.backend, out),
+        StoreSpec::Verify(inner) => collect_ref_store_names(&inner.backend, out),
+        StoreSpec::CompletenessChecking(inner) => {
+            collect_ref_store_names(&inner.backend, out);
+            collect_ref_store_names(&inner.cas_store, out);
+        }
+        StoreSpec::Compression(inner) => collect_ref_store_names(&inner.backend, out),
+        StoreSpec::Dedup(inner) => {
+            collect_ref_store_names(&inner.index_store, out);
+            collect_ref_store_names(&inner.content_store, out);
+        }
+        StoreSpec::ExistenceCache(inner) => collect_ref_store_names(&inner.backend, out),
+        StoreSpec::FastSlow(inner) => {
+            collect_ref_store_names(&inner.fast, out);
+            collect_ref_store_names(&inner.slow, out);
+        }
+        StoreSpec::Shard(inner) => {
+            for shard in &inner.stores {
+                collect_ref_store_names(&shard.store, out);
+            }
+        }
+        StoreSpec::SizePartitioning(inner) => {
+            collect_ref_store_names(&inner.lower_store, out);
+            collect_ref_store_names(&inner.upper_store, out);
+        }
+        // Leaf stores and stores whose backends are concrete (non-`StoreSpec`)
+        // specs carry no nested `ref_store` names.
+        StoreSpec::Memory(_)
+        | StoreSpec::ExperimentalCloudObjectStore(_)
+        | StoreSpec::OntapS3ExistenceCache(_)
+        | StoreSpec::Filesystem(_)
+        | StoreSpec::Grpc(_)
+        | StoreSpec::RedisStore(_)
+        | StoreSpec::Noop(_)
+        | StoreSpec::ExperimentalMongo(_) => {}
+    }
+}
+
+/// Minimum zstd compression level accepted by the encoder.
+const ZSTD_MIN_COMPRESSION_LEVEL: i32 = 1;
+/// Maximum zstd compression level accepted by the encoder.
+const ZSTD_MAX_COMPRESSION_LEVEL: i32 = 22;
+
+/// Validates the scalar field values of a single [`NixCacheConfig`] instance,
+/// pushing a human-readable message onto `problems` for each violation.
+///
+/// These checks mirror invariants the service enforces (or silently coerces)
+/// at boot, surfaced here so `nativelink --check` catches them offline:
+///
+/// * `trusted_public_keys` on every configured upstream must be non-empty —
+///   an upstream with no trusted key can never verify a fetched `narinfo`, so
+///   read-through would always treat the path as a miss (the field is
+///   `#[serde(default)]`, so an empty vec parses cleanly but is useless).
+/// * `compression_level`, when set together with `serve_compression = "zstd"`,
+///   must lie in zstd's real `1..=22` range; an out-of-range value is silently
+///   clamped by the encoder at serve time, quietly discarding the operator's
+///   chosen tradeoff.
+/// * `max_concurrent_nar_streams` / `max_concurrent_transcodes` must be `>= 1`;
+///   the service coerces `0` to `1` via `.max(1)`, so `0` does not mean
+///   "unlimited" as an operator might assume.
+///
+/// `path` is the config location prefix (e.g.
+/// `servers[0].services.nix_cache[main]`) used to build precise messages.
+fn validate_nix_cache_fields(path: &str, config: &NixCacheConfig, problems: &mut Vec<String>) {
+    for (upstream_idx, upstream) in config.upstream_caches.iter().enumerate() {
+        if upstream.trusted_public_keys.is_empty() {
+            problems.push(format!(
+                "{path}.upstream_caches[{upstream_idx}] (url '{}') has an empty \
+                 trusted_public_keys; at least one key is required or every \
+                 fetched narinfo is rejected as unverifiable",
+                upstream.url
+            ));
+        }
+    }
+
+    // `compression_level` only takes effect for zstd; validate its range only
+    // when zstd serving is actually selected so a stale level left on a
+    // `serve_compression: "none"` cache is not spuriously flagged.
+    if config.serve_compression.as_deref() == Some("zstd")
+        && let Some(level) = config.compression_level
+        && !(ZSTD_MIN_COMPRESSION_LEVEL..=ZSTD_MAX_COMPRESSION_LEVEL).contains(&level)
+    {
+        problems.push(format!(
+            "{path}.compression_level {level} is outside zstd's valid range \
+             {ZSTD_MIN_COMPRESSION_LEVEL}..={ZSTD_MAX_COMPRESSION_LEVEL}"
+        ));
+    }
+
+    if config.max_concurrent_nar_streams == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_nar_streams must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_concurrent_transcodes == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_transcodes must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+}
+
+/// Validates the scalar field values of a single [`OciRegistryServiceConfig`]
+/// instance, pushing a human-readable message onto `problems` for each
+/// violation — the [`validate_nix_cache_fields`] discipline applied to the
+/// OCI registry facade, so `nativelink --check` catches offline:
+///
+/// * `digest_function` must be `"BLAKE3"` or `"SHA256"` (the service
+///   rejects anything else at boot);
+/// * concurrency ceilings must be `>= 1` (the service coerces `0` to `1`
+///   via `.max(1)`, so `0` does not mean "unlimited");
+/// * `max_manifest_size_bytes` must not exceed `max_blob_size_bytes` —
+///   manifests are blobs too, and an inverted pair means the operator's
+///   manifest cap silently never binds.
+fn validate_oci_registry_fields(
+    path: &str,
+    config: &OciRegistryServiceConfig,
+    problems: &mut Vec<String>,
+) {
+    let digest_function = config.digest_function.to_uppercase();
+    if digest_function != "BLAKE3" && digest_function != "SHA256" {
+        problems.push(format!(
+            "{path}.digest_function must be \"BLAKE3\" or \"SHA256\", got '{}'",
+            config.digest_function
+        ));
+    }
+    if config.max_concurrent_blob_streams == 0 {
+        problems.push(format!(
+            "{path}.max_concurrent_blob_streams must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_open_upload_sessions == 0 {
+        problems.push(format!(
+            "{path}.max_open_upload_sessions must be >= 1 (0 is coerced to 1 \
+             at boot, so it does not mean unlimited)"
+        ));
+    }
+    if config.max_manifest_size_bytes == 0 {
+        problems.push(format!(
+            "{path}.max_manifest_size_bytes must be >= 1 (a zero cap rejects \
+             every manifest)"
+        ));
+    }
+    if config.max_manifest_size_bytes > config.max_blob_size_bytes {
+        problems.push(format!(
+            "{path}.max_manifest_size_bytes ({}) exceeds max_blob_size_bytes \
+             ({}); manifests are blobs and the smaller cap always binds",
+            config.max_manifest_size_bytes, config.max_blob_size_bytes
+        ));
+    }
+}
+
+/// Accumulates unresolved-reference problems while walking a [`CasConfig`].
+struct ReferenceChecker<'a> {
+    store_names: HashSet<&'a str>,
+    scheduler_names: HashSet<&'a str>,
+    check_stores: bool,
+    check_schedulers: bool,
+    problems: Vec<String>,
+    /// Declared store names reached from a worker/service, used to seed the
+    /// `ref_store` reachability walk.
+    used_stores: Vec<&'a str>,
+}
+
+impl<'a> ReferenceChecker<'a> {
+    /// Records that `name` (found at `path`) must resolve to a declared store.
+    fn store(&mut self, path: &str, name: &'a str) {
+        if !self.check_stores {
+            return;
+        }
+        if self.store_names.contains(name) {
+            self.used_stores.push(name);
+        } else {
+            self.problems
+                .push(format!("{path} references undefined store '{name}'"));
+        }
+    }
+
+    /// Records that `name` (found at `path`) must resolve to a declared
+    /// scheduler.
+    fn scheduler(&mut self, path: &str, name: &str) {
+        if !self.check_schedulers {
+            return;
+        }
+        if !self.scheduler_names.contains(name) {
+            self.problems
+                .push(format!("{path} references undefined scheduler '{name}'"));
+        }
+    }
+
+    /// Walks the transitive closure of stores reachable from
+    /// [`Self::used_stores`], resolving each nested `ref_store` against the
+    /// declared store set. A visited set bounds the walk against `ref_store`
+    /// cycles.
+    fn walk_used_stores(&mut self, store_specs: &HashMap<&'a str, &'a StoreSpec>) {
+        let mut visited: HashSet<&'a str> = HashSet::new();
+        while let Some(name) = self.used_stores.pop() {
+            if !visited.insert(name) {
+                continue;
+            }
+            let Some(&spec) = store_specs.get(name) else {
+                continue;
+            };
+            let mut refs: Vec<&'a StoreRefName> = Vec::new();
+            collect_ref_store_names(spec, &mut refs);
+            for ref_name in refs {
+                if self.store_names.contains(ref_name.as_str()) {
+                    self.used_stores.push(ref_name.as_str());
+                } else {
+                    self.problems.push(format!(
+                        "store '{name}' references undefined store '{ref_name}'"
+                    ));
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use tracing_test::traced_test;
+
+    use super::*;
+
+    // ----------------------------------------------------------------------
+    // Golden vectors, generated with the local `nix` CLI (nix (Nix) 2.34.7).
+    // Each vector documents a wire/key format that the `NixCacheConfig` doc
+    // comments promise, with the exact command used to produce it.
+    // ----------------------------------------------------------------------
+
+    /// Deterministic store path (reproducible on any machine), generated
+    /// with:
+    /// ```sh
+    /// nix eval --raw --expr \
+    ///   '"${builtins.toFile "example.txt" "nativelink nix-cache golden vector\n"}"'
+    /// ```
+    const GOLDEN_STORE_PATH: &str = "/nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt";
+
+    /// `sha256(nar)` of the NAR serialization of `GOLDEN_STORE_PATH` (the
+    /// hash half of the `DigestInfo` key in `cas_store`), generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt | sha256sum
+    /// ```
+    const GOLDEN_NAR_SHA256_HEX: &str =
+        "877a42f22e7f9e476abe1c8db48828dc26b1916d92cedfc15e77324978d7488e";
+
+    /// Same NAR hash in `nixbase32`, as it appears in a `narinfo`
+    /// `NarHash: sha256:<...>` line, generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt > example.nar
+    /// nix hash file --type sha256 --base32 example.nar
+    /// ```
+    const GOLDEN_NAR_SHA256_NIXBASE32: &str =
+        "13j8sxw4jckpbv0xzkljdn8v29nw524b938wprm4g7kz5vr44yl7";
+
+    /// `nar_size` in bytes of the same NAR (the size half of the
+    /// `DigestInfo` key in `cas_store`), generated with:
+    /// ```sh
+    /// nix nar pack /nix/store/5b7qqpfva0sj45yail8a5x0052vv3pjm-example.txt | wc -c
+    /// ```
+    const GOLDEN_NAR_SIZE: u64 = 152;
+
+    /// Contents of a file suitable for `signing_key_files`. Key generation
+    /// is random, so this output was generated once and frozen here, with:
+    /// ```sh
+    /// nix key generate-secret --key-name nix-cache.example.org-1
+    /// ```
+    const GOLDEN_SIGNING_SECRET_KEY: &str = "nix-cache.example.org-1:+Qh4p1yd65B2kXerqAgjiK3ioUqruN8poSHRBjH4EvRnz/8zr0GPu1kjKaIeOTbHznDkpLxTsUL1LONeOtGSHQ==";
+
+    /// Matching public key for clients' `trusted-public-keys`, generated
+    /// from the frozen secret key above with:
+    /// ```sh
+    /// nix key convert-secret-to-public < nix-cache.example.org-1.key
+    /// ```
+    const GOLDEN_SIGNING_PUBLIC_KEY: &str =
+        "nix-cache.example.org-1:Z8//M69Bj7tZIymiHjk2x85w5KS8U7FC9SzjXjrRkh0=";
+
+    /// The `nixbase32` alphabet: base32 without `e`, `o`, `u` and `t`.
+    const NIXBASE32_ALPHABET: &str = "0123456789abcdfghijklmnpqrsvwxyz";
+
+    fn parse_services(json5: &str) -> ServicesConfig {
+        serde_json5::from_str(json5).expect("valid ServicesConfig json5")
+    }
+
+    #[test]
+    fn nix_cache_minimal_config_applies_defaults() {
+        let services = parse_services(
+            r#"{
+                nix_cache: [{
+                    instance_name: "main",
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                }],
+            }"#,
+        );
+        let nix_cache = services.nix_cache.expect("nix_cache service is configured");
+        assert_eq!(nix_cache.len(), 1);
+        let instance = &nix_cache[0];
+        assert_eq!(instance.instance_name, "main");
+        assert_eq!(instance.cas_store, "NIX_NAR_STORE");
+        assert_eq!(instance.path_info_store, "NIX_PATH_INFO_STORE");
+        assert_eq!(instance.alias_store, "NIX_ALIAS_STORE");
+        assert_eq!(instance.path, None);
+        assert_eq!(instance.store_dir, "/nix/store");
+        assert_eq!(instance.priority, 40);
+        assert!(instance.want_mass_query);
+        assert!(instance.signing_key_files.is_empty());
+        assert_eq!(instance.spool_path, None);
+        assert!(!instance.read_only);
+        assert!(instance.read_token_files.is_empty());
+        assert!(instance.write_token_files.is_empty());
+        assert_eq!(instance.serve_compression, None);
+        assert_eq!(instance.compression_level, None);
+        // Hardening limits default generously so real workloads are
+        // unaffected.
+        assert_eq!(instance.max_nar_size_bytes, 32 * 1024 * 1024 * 1024);
+        assert_eq!(instance.max_concurrent_nar_streams, 256);
+        assert_eq!(instance.max_concurrent_transcodes, 8);
+        assert_eq!(instance.nar_upload_idle_timeout_s, 60);
+    }
+
+    #[test]
+    fn nix_cache_full_config_round_trips() {
+        let services = parse_services(
+            r#"{
+                nix_cache: [{
+                    instance_name: "public",
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                    path: "/nix/public",
+                    store_dir: "/nix/store",
+                    priority: 30,
+                    want_mass_query: false,
+                    signing_key_files: ["/etc/nix/keys/nix-cache.example.org-1.key"],
+                    read_only: true,
+                    read_token_files: ["/etc/nativelink/nix-read.token"],
+                    write_token_files: ["/etc/nativelink/nix-write.token"],
+                    serve_compression: "zstd",
+                    compression_level: 19,
+                    max_nar_size_bytes: "8GB",
+                    max_concurrent_nar_streams: 512,
+                    max_concurrent_transcodes: 4,
+                    nar_upload_idle_timeout_s: 120,
+                }],
+            }"#,
+        );
+        let serialized =
+            serde_json::to_string(&services).expect("ServicesConfig serializes to JSON");
+        let reparsed: ServicesConfig =
+            serde_json5::from_str(&serialized).expect("serialized ServicesConfig reparses");
+        let instance = &reparsed.nix_cache.expect("nix_cache survives round trip")[0];
+        assert_eq!(instance.instance_name, "public");
+        assert_eq!(instance.cas_store, "NIX_NAR_STORE");
+        assert_eq!(instance.path_info_store, "NIX_PATH_INFO_STORE");
+        assert_eq!(instance.alias_store, "NIX_ALIAS_STORE");
+        assert_eq!(instance.path.as_deref(), Some("/nix/public"));
+        assert_eq!(instance.store_dir, "/nix/store");
+        assert_eq!(instance.priority, 30);
+        assert!(!instance.want_mass_query);
+        assert_eq!(
+            instance.signing_key_files,
+            vec!["/etc/nix/keys/nix-cache.example.org-1.key".to_string()]
+        );
+        assert!(instance.read_only);
+        assert_eq!(
+            instance.read_token_files,
+            vec!["/etc/nativelink/nix-read.token".to_string()]
+        );
+        assert_eq!(
+            instance.write_token_files,
+            vec!["/etc/nativelink/nix-write.token".to_string()]
+        );
+        assert_eq!(instance.serve_compression.as_deref(), Some("zstd"));
+        assert_eq!(instance.compression_level, Some(19));
+        // The data-size deserializer accepts "8GB"; the rest are plain
+        // numerics that survive the JSON round trip.
+        assert_eq!(instance.max_nar_size_bytes, 8_000_000_000);
+        assert_eq!(instance.max_concurrent_nar_streams, 512);
+        assert_eq!(instance.max_concurrent_transcodes, 4);
+        assert_eq!(instance.nar_upload_idle_timeout_s, 120);
+    }
+
+    #[test]
+    fn nix_cache_rejects_unknown_fields() {
+        // Direct deserialization honors `deny_unknown_fields`.
+        let result: Result<NixCacheConfig, _> = serde_json5::from_str(
+            r#"{
+                cas_store: "NIX_NAR_STORE",
+                path_info_store: "NIX_PATH_INFO_STORE",
+                alias_store: "NIX_ALIAS_STORE",
+                narinfo_compression: "xz",
+            }"#,
+        );
+        assert!(result.is_err(), "unknown fields must be rejected");
+
+        // Through `ServicesConfig` the entries pass through
+        // `WithInstanceName`'s `#[serde(flatten)]`, which swallows
+        // `deny_unknown_fields` (a serde limitation). Pin `nix_cache` to
+        // whatever the existing `cas` service does there, so the two never
+        // drift apart if serde changes behavior.
+        let nix_cache_via_services: Result<ServicesConfig, _> = serde_json5::from_str(
+            r#"{
+                nix_cache: [{
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                    alias_store: "NIX_ALIAS_STORE",
+                    narinfo_compression: "xz",
+                }],
+            }"#,
+        );
+        let cas_via_services: Result<ServicesConfig, _> =
+            serde_json5::from_str(r#"{ cas: [{ cas_store: "X", narinfo_compression: "xz" }] }"#);
+        assert_eq!(
+            nix_cache_via_services.is_err(),
+            cas_via_services.is_err(),
+            "nix_cache unknown-field handling must match the cas service"
+        );
+    }
+
+    #[test]
+    fn nix_cache_missing_store_ref_is_rejected() {
+        let result: Result<ServicesConfig, _> = serde_json5::from_str(
+            r#"{
+                nix_cache: [{
+                    cas_store: "NIX_NAR_STORE",
+                    path_info_store: "NIX_PATH_INFO_STORE",
+                }],
+            }"#,
+        );
+        assert!(result.is_err(), "alias_store is required");
+    }
+
+    #[test]
+    fn nix_cache_accepts_legacy_map_format() {
+        // The `nix_cache` field uses the same backcompat deserializer as
+        // `cas`/`ac`/`fetch`, so the deprecated map-of-instance-name format
+        // must keep parsing.
+        let services = parse_services(
+            r#"{
+                nix_cache: {
+                    "main": {
+                        cas_store: "NIX_NAR_STORE",
+                        path_info_store: "NIX_PATH_INFO_STORE",
+                        alias_store: "NIX_ALIAS_STORE",
+                    },
+                },
+            }"#,
+        );
+        let nix_cache = services.nix_cache.expect("nix_cache service is configured");
+        assert_eq!(nix_cache.len(), 1);
+        assert_eq!(nix_cache[0].instance_name, "main");
+        assert_eq!(nix_cache[0].cas_store, "NIX_NAR_STORE");
+    }
+
+    #[test]
+    fn golden_store_path_matches_default_store_dir() {
+        // `store_dir` defaults to the same value `nix eval --raw --expr
+        // 'builtins.storeDir'` reports on a stock installation.
+        let store_dir = default_nix_store_dir();
+        assert_eq!(store_dir, "/nix/store");
+        let base_name = GOLDEN_STORE_PATH
+            .strip_prefix("/nix/store/")
+            .expect("golden store path lives under the default store dir");
+        // `path_info_store` keys are the 32-character nixbase32 hash before
+        // the first `-` of the store path base name.
+        let (hash, name) = base_name
+            .split_once('-')
+            .expect("store path base name is <hash>-<name>");
+        assert_eq!(hash.len(), 32);
+        assert!(hash.chars().all(|c| NIXBASE32_ALPHABET.contains(c)));
+        assert_eq!(name, "example.txt");
+    }
+
+    #[test]
+    fn golden_nar_digest_key_shape() {
+        // `cas_store` keys are `DigestInfo(sha256(nar), nar_size)`: a
+        // 64-hex-character sha256 plus the byte size of the NAR.
+        assert_eq!(GOLDEN_NAR_SHA256_HEX.len(), 64);
+        assert!(
+            GOLDEN_NAR_SHA256_HEX
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
+        // The `narinfo` rendering of the same 32-byte hash is 52 nixbase32
+        // characters (ceil(256 / 5)).
+        assert_eq!(GOLDEN_NAR_SHA256_NIXBASE32.len(), 52);
+        assert!(
+            GOLDEN_NAR_SHA256_NIXBASE32
+                .chars()
+                .all(|c| NIXBASE32_ALPHABET.contains(c))
+        );
+        // As the pair appears in the narinfo served for this NAR.
+        assert_eq!(
+            format!("NarHash: sha256:{GOLDEN_NAR_SHA256_NIXBASE32}"),
+            "NarHash: sha256:13j8sxw4jckpbv0xzkljdn8v29nw524b938wprm4g7kz5vr44yl7"
+        );
+        assert_eq!(format!("NarSize: {GOLDEN_NAR_SIZE}"), "NarSize: 152");
+    }
+
+    #[test]
+    fn golden_signing_key_file_format() {
+        // Files listed in `signing_key_files` hold `<name>:<base64 keypair>`
+        // where the keypair is the 64-byte ed25519 secret||public
+        // concatenation (88 base64 characters). The derived public key is
+        // 32 bytes (44 base64 characters) under the same name.
+        let (secret_name, secret_b64) = GOLDEN_SIGNING_SECRET_KEY
+            .split_once(':')
+            .expect("secret key is <name>:<base64>");
+        let (public_name, public_b64) = GOLDEN_SIGNING_PUBLIC_KEY
+            .split_once(':')
+            .expect("public key is <name>:<base64>");
+        assert_eq!(secret_name, "nix-cache.example.org-1");
+        assert_eq!(secret_name, public_name);
+        assert_eq!(secret_b64.len(), 88);
+        assert!(secret_b64.ends_with("=="));
+        assert_eq!(public_b64.len(), 44);
+        assert!(public_b64.ends_with('='));
+        // The public key is embedded in the tail of the secret keypair:
+        // base64 of bytes[32..64] re-encodes to the public key's base64.
+        // (Byte-level check lands with the service implementation; here we
+        // pin the textual formats the config doc comments promise.)
+        assert_ne!(secret_b64, public_b64);
+    }
+
+    // ----------------------------------------------------------------------
+    // `validate_references` (offline `nativelink --check`) tests.
+    // ----------------------------------------------------------------------
+
+    fn parse_cas_config(json5: &str) -> CasConfig {
+        serde_json5::from_str(json5).expect("valid CasConfig json5")
+    }
+
+    /// A fully-resolved config that exercises worker, service and nested
+    /// `ref_store` reference sites. `WRAPPED` wraps a `ref_store` to `CAS`,
+    /// so the reachability walk must resolve it.
+    const VALID_CONFIG: &str = r#"{
+        stores: [
+            { name: "CAS", memory: {} },
+            { name: "AC", memory: {} },
+            { name: "ALIAS", memory: {} },
+            { name: "WRAPPED", fast_slow: {
+                fast: { ref_store: { name: "CAS" } },
+                slow: { noop: {} },
+            } },
+        ],
+        schedulers: [{ name: "SCHED", simple: {} }],
+        workers: [{
+            local: {
+                worker_api_endpoint: { uri: "grpc://127.0.0.1:50061" },
+                cas_fast_slow_store: "WRAPPED",
+                upload_action_result: { ac_store: "AC" },
+                work_directory: "/tmp/work",
+                platform_properties: {},
+            },
+        }],
+        servers: [{
+            listener: { http: { socket_address: "0.0.0.0:50051" } },
+            services: {
+                cas: [{ instance_name: "main", cas_store: "CAS" }],
+                ac: [{ instance_name: "main", ac_store: "AC" }],
+                execution: [{ instance_name: "main", cas_store: "CAS", scheduler: "SCHED" }],
+                capabilities: [{ instance_name: "main", remote_execution: { scheduler: "SCHED" } }],
+                bytestream: [{ instance_name: "main", cas_store: "CAS" }],
+                worker_api: { scheduler: "SCHED" },
+                cas_witness: {
+                    cas_store: "CAS",
+                    alias_store: "ALIAS",
+                    ca_cert_file: "/tmp/ca.crt",
+                    ca_key_file: "/tmp/ca.key",
+                },
+            },
+        }],
+    }"#;
+
+    #[test]
+    fn validate_references_accepts_resolved_config() {
+        parse_cas_config(VALID_CONFIG)
+            .validate_references()
+            .expect("every reference resolves");
+    }
+
+    #[test]
+    fn validate_references_flags_undefined_service_store() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: { cas: [{ instance_name: "main", cas_store: "CAS_TYPO" }] },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("CAS_TYPO"),
+            "error must name the bad store ref: {message}"
+        );
+        assert!(
+            message.contains("servers[0].services.cas[main].cas_store"),
+            "error must name the reference site: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_undefined_cas_witness_store() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        cas_witness: {
+                            cas_store: "CAS_TYPO",
+                            alias_store: "CAS",
+                            ca_cert_file: "/tmp/ca.crt",
+                            ca_key_file: "/tmp/ca.key",
+                        },
+                    },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("CAS_TYPO"),
+            "error must name the bad store ref: {message}"
+        );
+        assert!(
+            message.contains("servers[0].services.cas_witness.cas_store"),
+            "error must name the reference site: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_undefined_scheduler() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                schedulers: [{ name: "SCHED", simple: {} }],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        execution: [{
+                            instance_name: "main",
+                            cas_store: "CAS",
+                            scheduler: "SCHED_TYPO",
+                        }],
+                    },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("SCHED_TYPO"),
+            "error must name the bad scheduler ref: {message}"
+        );
+        assert!(
+            message.contains("scheduler"),
+            "error must name the reference site: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_undefined_worker_store() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                workers: [{
+                    local: {
+                        worker_api_endpoint: { uri: "grpc://127.0.0.1:50061" },
+                        cas_fast_slow_store: "WORKER_TYPO",
+                        work_directory: "/tmp/work",
+                        platform_properties: {},
+                    },
+                }],
+                servers: [],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("WORKER_TYPO")
+                && message.contains("workers[0].local.cas_fast_slow_store"),
+            "error must name the bad worker store ref and site: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_nested_ref_store_typo() {
+        // `WRAPPED` is wired to a service, so its nested `ref_store` typo must
+        // be resolved and flagged via the reachability walk.
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [
+                    { name: "CAS", memory: {} },
+                    { name: "WRAPPED", fast_slow: {
+                        fast: { ref_store: { name: "CAS_TYPO" } },
+                        slow: { noop: {} },
+                    } },
+                ],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: { cas: [{ instance_name: "main", cas_store: "WRAPPED" }] },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("CAS_TYPO") && message.contains("store 'WRAPPED'"),
+            "error must name the nested bad ref and its owning store: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_duplicate_store_name() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [
+                    { name: "CAS", memory: {} },
+                    { name: "CAS", memory: {} },
+                ],
+                servers: [],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("duplicate store name 'CAS'"),
+            "error must report the duplicate store: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_flags_duplicate_scheduler_name() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                schedulers: [
+                    { name: "SCHED", simple: {} },
+                    { name: "SCHED", simple: {} },
+                ],
+                servers: [],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("duplicate scheduler name 'SCHED'"),
+            "error must report the duplicate scheduler: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_collects_all_problems() {
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [{ name: "CAS", memory: {} }],
+                schedulers: [{ name: "SCHED", simple: {} }],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        cas: [{ instance_name: "main", cas_store: "BAD_CAS" }],
+                        ac: [{ instance_name: "main", ac_store: "BAD_AC" }],
+                    },
+                }],
+            }"#,
+        );
+        let err = cfg.validate_references().unwrap_err();
+        let message = err.messages.join("\n");
+        // Reporting is not fail-fast: both bad references appear together.
+        assert!(
+            message.contains("BAD_CAS") && message.contains("BAD_AC"),
+            "error must collect every unresolved reference: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_skips_empty_store_registry() {
+        // A fragment/legacy sample with no declared stores must not be
+        // flagged: every reference would trivially be unresolved, which would
+        // be a false positive on an otherwise-valid sample.
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        cas: [{ instance_name: "", cas_store: "CAS_MAIN_STORE" }],
+                        execution: [{
+                            instance_name: "",
+                            cas_store: "WORKER_STORE",
+                            scheduler: "MAIN_SCHEDULER",
+                        }],
+                    },
+                }],
+            }"#,
+        );
+        cfg.validate_references()
+            .expect("empty registries defer to boot, not a false positive");
+    }
+
+    #[test]
+    fn validate_references_ignores_unreferenced_store_internal_refs() {
+        // A pure store-catalog config (no servers, no workers) may carry
+        // illustrative placeholder `ref_store` names; because nothing wires
+        // those stores to a consumer, their internal refs are not walked and
+        // must not be flagged.
+        let cfg = parse_cas_config(
+            r#"{
+                stores: [
+                    { name: "REAL", memory: {} },
+                    { name: "SHOWCASE", ref_store: { name: "PLACEHOLDER_NOT_DECLARED" } },
+                ],
+                servers: [],
+            }"#,
+        );
+        cfg.validate_references()
+            .expect("unreferenced catalog stores are not walked");
+    }
+
+    // ----------------------------------------------------------------------
+    // `nix_cache` field-value validation (also part of `validate_references`).
+    // ----------------------------------------------------------------------
+
+    /// A reference-valid `CasConfig` with exactly one `nix_cache` instance and
+    /// no upstreams, used as a mutation base for the field-value tests. Every
+    /// store it names is declared, so `validate_references` on the pristine
+    /// value succeeds and any later failure is attributable to the mutation.
+    fn cas_config_with_one_nix_cache() -> CasConfig {
+        parse_cas_config(
+            r#"{
+                stores: [
+                    { name: "NAR", memory: {} },
+                    { name: "PI", memory: {} },
+                    { name: "ALIAS", memory: {} },
+                ],
+                servers: [{
+                    listener: { http: { socket_address: "0.0.0.0:50051" } },
+                    services: {
+                        nix_cache: [{
+                            instance_name: "main",
+                            cas_store: "NAR",
+                            path_info_store: "PI",
+                            alias_store: "ALIAS",
+                        }],
+                    },
+                }],
+            }"#,
+        )
+    }
+
+    /// Mutable handle to the single `nix_cache` instance's config in a
+    /// [`cas_config_with_one_nix_cache`]-shaped value.
+    fn nix_cache_mut(cfg: &mut CasConfig) -> &mut NixCacheConfig {
+        &mut cfg.servers[0]
+            .services
+            .as_mut()
+            .expect("services present")
+            .nix_cache
+            .as_mut()
+            .expect("nix_cache present")[0]
+            .config
+    }
+
+    fn sample_upstream(keys: Vec<String>) -> NixUpstreamCacheConfig {
+        NixUpstreamCacheConfig {
+            url: "https://cache.example.org".to_string(),
+            trusted_public_keys: keys,
+        }
+    }
+
+    #[test]
+    fn validate_references_rejects_empty_upstream_trusted_keys() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).upstream_caches = vec![sample_upstream(Vec::new())];
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("trusted_public_keys")
+                && message.contains("cache.example.org")
+                && message.contains("nix_cache[main]"),
+            "error must name the empty-keys upstream and its instance: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_accepts_non_empty_upstream_trusted_keys() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).upstream_caches =
+            vec![sample_upstream(vec![GOLDEN_SIGNING_PUBLIC_KEY.to_string()])];
+        cfg.validate_references()
+            .expect("a non-empty trusted_public_keys upstream is accepted");
+    }
+
+    #[test]
+    fn validate_references_rejects_out_of_range_zstd_compression_level() {
+        // 0, 23, and a negative are all outside zstd's 1..=22 range.
+        for bad in [0_i32, 23, -1, i32::MIN, i32::MAX] {
+            let mut cfg = cas_config_with_one_nix_cache();
+            {
+                let nc = nix_cache_mut(&mut cfg);
+                nc.serve_compression = Some("zstd".to_string());
+                nc.compression_level = Some(bad);
+            }
+            let err = match cfg.validate_references() {
+                Ok(()) => panic!("level {bad} must be rejected"),
+                Err(err) => err,
+            };
+            assert_eq!(err.code, Code::InvalidArgument);
+            let message = err.messages.join("\n");
+            assert!(
+                message.contains("compression_level") && message.contains("1..=22"),
+                "error must explain the zstd range for level {bad}: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_references_accepts_in_range_zstd_compression_level() {
+        // Both boundaries (1 and 22) and an interior value are accepted.
+        for good in [1_i32, 3, 19, 22] {
+            let mut cfg = cas_config_with_one_nix_cache();
+            {
+                let nc = nix_cache_mut(&mut cfg);
+                nc.serve_compression = Some("zstd".to_string());
+                nc.compression_level = Some(good);
+            }
+            cfg.validate_references()
+                .unwrap_or_else(|e| panic!("level {good} must be accepted: {e}"));
+        }
+    }
+
+    #[test]
+    fn validate_references_ignores_compression_level_without_zstd() {
+        // An out-of-range level is not flagged when zstd serving is not
+        // selected, because the field is inert then.
+        let mut cfg = cas_config_with_one_nix_cache();
+        {
+            let nc = nix_cache_mut(&mut cfg);
+            nc.serve_compression = None;
+            nc.compression_level = Some(99);
+        }
+        cfg.validate_references()
+            .expect("compression_level is inert without serve_compression = zstd");
+
+        let mut cfg = cas_config_with_one_nix_cache();
+        {
+            let nc = nix_cache_mut(&mut cfg);
+            nc.serve_compression = Some("none".to_string());
+            nc.compression_level = Some(-5);
+        }
+        cfg.validate_references()
+            .expect("compression_level is inert when serve_compression = none");
+    }
+
+    #[test]
+    fn validate_references_rejects_zero_max_concurrent_nar_streams() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).max_concurrent_nar_streams = 0;
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("max_concurrent_nar_streams") && message.contains(">= 1"),
+            "error must explain the >= 1 requirement: {message}"
+        );
+    }
+
+    #[test]
+    fn validate_references_rejects_zero_max_concurrent_transcodes() {
+        let mut cfg = cas_config_with_one_nix_cache();
+        nix_cache_mut(&mut cfg).max_concurrent_transcodes = 0;
+        let err = cfg.validate_references().unwrap_err();
+        assert_eq!(err.code, Code::InvalidArgument);
+        let message = err.messages.join("\n");
+        assert!(
+            message.contains("max_concurrent_transcodes") && message.contains(">= 1"),
+            "error must explain the >= 1 requirement: {message}"
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // Adversarial property tests. Failure persistence is disabled so no
+    // `proptest-regressions/` artifacts land in the tree.
+    // ----------------------------------------------------------------------
+
+    mod proptests {
+        use proptest::prelude::*;
+        use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence};
+
+        use super::*;
+
+        fn no_persist() -> ProptestConfig {
+            ProptestConfig {
+                failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
+                ..ProptestConfig::default()
+            }
+        }
+
+        /// Base valid `nix_cache` config text, parameterised only by the store
+        /// names so the "undefined store" property can inject a random ref.
+        fn nix_cache_config_text(cas_store: &str) -> String {
+            format!(
+                r#"{{
+                    stores: [
+                        {{ name: "NAR", memory: {{}} }},
+                        {{ name: "PI", memory: {{}} }},
+                        {{ name: "ALIAS", memory: {{}} }},
+                    ],
+                    servers: [{{
+                        listener: {{ http: {{ socket_address: "0.0.0.0:50051" }} }},
+                        services: {{
+                            nix_cache: [{{
+                                instance_name: "main",
+                                cas_store: "{cas_store}",
+                                path_info_store: "PI",
+                                alias_store: "ALIAS",
+                            }}],
+                        }},
+                    }}],
+                }}"#
+            )
+        }
+
+        fn base_nix_cache_cas_config() -> CasConfig {
+            serde_json5::from_str(&nix_cache_config_text("NAR"))
+                .expect("base nix_cache config parses")
+        }
+
+        fn nix_cache_field_mut(cfg: &mut CasConfig) -> &mut NixCacheConfig {
+            &mut cfg.servers[0]
+                .services
+                .as_mut()
+                .expect("services")
+                .nix_cache
+                .as_mut()
+                .expect("nix_cache")[0]
+                .config
+        }
+
+        proptest! {
+            #![proptest_config(no_persist())]
+
+            /// The deserializer must never panic on arbitrary input: it either
+            /// parses or returns an error, for both a full `ServicesConfig` and
+            /// a bare `NixCacheConfig`. (In-tree complement to the libfuzzer
+            /// `cas_config` target.)
+            #[test]
+            fn deserializer_never_panics_on_arbitrary_text(input in ".*") {
+                // Reaching here without a panic is the property; the parse
+                // outcome itself is discarded.
+                let _services = serde_json5::from_str::<ServicesConfig>(&input);
+                let _nix_cache = serde_json5::from_str::<NixCacheConfig>(&input);
+            }
+
+            /// Structured-but-adversarial JSON (balanced object with random
+            /// keys/values) also never panics the deserializer.
+            #[test]
+            fn deserializer_never_panics_on_structured_json(
+                keys in prop::collection::vec("[a-z_]{1,8}", 0..6),
+                vals in prop::collection::vec(-1_000_000_i64..1_000_000, 0..6),
+            ) {
+                let body = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, k)| {
+                        let v = vals.get(i).copied().unwrap_or(0);
+                        format!("\"{k}\": {v}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let obj = format!("{{{body}}}");
+                let _services = serde_json5::from_str::<ServicesConfig>(&obj);
+                let _nix_cache = serde_json5::from_str::<NixCacheConfig>(&obj);
+            }
+
+            /// (a) A `nix_cache` upstream with empty `trusted_public_keys` is
+            /// ALWAYS rejected, regardless of URL.
+            #[test]
+            fn empty_upstream_trusted_keys_always_rejected(
+                url in "[a-z][a-z0-9.-]{0,40}",
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                nix_cache_field_mut(&mut cfg).upstream_caches = vec![NixUpstreamCacheConfig {
+                    url: format!("https://{url}"),
+                    trusted_public_keys: Vec::new(),
+                }];
+                let err = cfg.validate_references().unwrap_err();
+                prop_assert_eq!(err.code, Code::InvalidArgument);
+                prop_assert!(err.messages.join("\n").contains("trusted_public_keys"));
+            }
+
+            /// (b) With `serve_compression = "zstd"`, a `compression_level`
+            /// outside 1..=22 is ALWAYS rejected and one inside is ALWAYS
+            /// accepted (holding all other fields valid).
+            #[test]
+            fn zstd_compression_level_range_enforced(level in any::<i32>()) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.serve_compression = Some("zstd".to_string());
+                    nc.compression_level = Some(level);
+                }
+                let result = cfg.validate_references();
+                if (1..=22).contains(&level) {
+                    prop_assert!(
+                        result.is_ok(),
+                        "in-range level {} must be accepted: {:?}", level, result.err()
+                    );
+                } else {
+                    let err = result.unwrap_err();
+                    prop_assert_eq!(err.code, Code::InvalidArgument);
+                    prop_assert!(err.messages.join("\n").contains("compression_level"));
+                }
+            }
+
+            /// (c) A zero `max_concurrent_*` is ALWAYS rejected; any non-zero
+            /// value passes that particular check.
+            #[test]
+            fn zero_max_concurrent_always_rejected(
+                streams in 0_usize..2048,
+                transcodes in 0_usize..2048,
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.max_concurrent_nar_streams = streams;
+                    nc.max_concurrent_transcodes = transcodes;
+                }
+                let result = cfg.validate_references();
+                if streams == 0 || transcodes == 0 {
+                    prop_assert!(result.is_err(), "a zero max_concurrent_* must be rejected");
+                } else {
+                    prop_assert!(
+                        result.is_ok(),
+                        "non-zero max_concurrent_* must pass: {:?}", result.err()
+                    );
+                }
+            }
+
+            /// (d) An otherwise-valid, fully-resolved config with valid
+            /// nix_cache fields is ALWAYS accepted across the whole valid space
+            /// of the fields under test.
+            #[test]
+            fn fully_valid_nix_cache_config_always_accepted(
+                level in 1_i32..=22,
+                streams in 1_usize..4096,
+                transcodes in 1_usize..4096,
+                keys in prop::collection::vec("[A-Za-z0-9.:+/=-]{1,60}", 1..4),
+            ) {
+                let mut cfg = base_nix_cache_cas_config();
+                {
+                    let nc = nix_cache_field_mut(&mut cfg);
+                    nc.serve_compression = Some("zstd".to_string());
+                    nc.compression_level = Some(level);
+                    nc.max_concurrent_nar_streams = streams;
+                    nc.max_concurrent_transcodes = transcodes;
+                    nc.upstream_caches = vec![NixUpstreamCacheConfig {
+                        url: "https://cache.example.org".to_string(),
+                        trusted_public_keys: keys,
+                    }];
+                }
+                cfg.validate_references()
+                    .expect("a fully-valid nix_cache config must be accepted");
+            }
+
+            /// (e) An undefined store reference is ALWAYS rejected — property
+            /// over random ref names that are not among the declared stores.
+            #[test]
+            fn undefined_store_ref_always_rejected(
+                bad_ref in "[A-Za-z0-9_]{1,32}",
+            ) {
+                // Exclude the (few) names that are actually declared so the
+                // ref really is dangling.
+                prop_assume!(!["NAR", "PI", "ALIAS"].contains(&bad_ref.as_str()));
+                let cfg: CasConfig =
+                    serde_json5::from_str(&nix_cache_config_text(&bad_ref))
+                        .expect("config text parses");
+                let err = cfg.validate_references().unwrap_err();
+                prop_assert_eq!(err.code, Code::InvalidArgument);
+                let message = err.messages.join("\n");
+                prop_assert!(
+                    message.contains(&bad_ref) && message.contains("undefined store"),
+                    "must flag the dangling ref '{}': {}", bad_ref, message
+                );
+            }
+
+            /// A generated `NixCacheConfig` survives a JSON serialize →
+            /// deserialize round trip unchanged (guards against serde attribute
+            /// drift on the fields exercised here).
+            #[test]
+            fn nix_cache_config_json_round_trips(
+                priority in any::<u32>(),
+                want_mass_query in any::<bool>(),
+                read_only in any::<bool>(),
+                preserve_upload_compression in any::<bool>(),
+                level in 1_i32..=22,
+                streams in 1_usize..4096,
+                transcodes in 1_usize..4096,
+                max_nar in 1_u64..1_000_000_000_000,
+                idle in 0_u64..100_000,
+                neg_ttl in 0_u64..100_000,
+                up_ttl in 0_u64..100_000,
+                keys in prop::collection::vec("[A-Za-z0-9.:+/=-]{1,40}", 0..3),
+            ) {
+                // Start from a parsed baseline (all fields present), then set
+                // the varied fields directly on the struct.
+                let mut original: NixCacheConfig = serde_json5::from_str(
+                    r#"{
+                        cas_store: "NAR",
+                        path_info_store: "PI",
+                        alias_store: "ALIAS",
+                    }"#,
+                ).expect("baseline NixCacheConfig parses");
+                original.priority = priority;
+                original.want_mass_query = want_mass_query;
+                original.read_only = read_only;
+                original.preserve_upload_compression = preserve_upload_compression;
+                original.serve_compression = Some("zstd".to_string());
+                original.compression_level = Some(level);
+                original.max_concurrent_nar_streams = streams;
+                original.max_concurrent_transcodes = transcodes;
+                original.max_nar_size_bytes = max_nar;
+                original.nar_upload_idle_timeout_s = idle;
+                original.upstream_negative_ttl_s = neg_ttl;
+                original.upstream_timeout_s = up_ttl;
+                original.upstream_caches = keys
+                    .into_iter()
+                    .map(|k| NixUpstreamCacheConfig {
+                        url: "https://cache.example.org".to_string(),
+                        trusted_public_keys: vec![k],
+                    })
+                    .collect();
+
+                let json = serde_json::to_string(&original)
+                    .expect("NixCacheConfig serializes to json");
+                let reparsed: NixCacheConfig = serde_json5::from_str(&json)
+                    .expect("serialized NixCacheConfig re-parses");
+
+                prop_assert_eq!(original.cas_store, reparsed.cas_store);
+                prop_assert_eq!(original.path_info_store, reparsed.path_info_store);
+                prop_assert_eq!(original.alias_store, reparsed.alias_store);
+                prop_assert_eq!(original.priority, reparsed.priority);
+                prop_assert_eq!(original.want_mass_query, reparsed.want_mass_query);
+                prop_assert_eq!(original.read_only, reparsed.read_only);
+                prop_assert_eq!(
+                    original.preserve_upload_compression,
+                    reparsed.preserve_upload_compression
+                );
+                prop_assert_eq!(original.serve_compression, reparsed.serve_compression);
+                prop_assert_eq!(original.compression_level, reparsed.compression_level);
+                prop_assert_eq!(
+                    original.max_concurrent_nar_streams,
+                    reparsed.max_concurrent_nar_streams
+                );
+                prop_assert_eq!(
+                    original.max_concurrent_transcodes,
+                    reparsed.max_concurrent_transcodes
+                );
+                prop_assert_eq!(original.max_nar_size_bytes, reparsed.max_nar_size_bytes);
+                prop_assert_eq!(
+                    original.nar_upload_idle_timeout_s,
+                    reparsed.nar_upload_idle_timeout_s
+                );
+                prop_assert_eq!(
+                    original.upstream_negative_ttl_s,
+                    reparsed.upstream_negative_ttl_s
+                );
+                prop_assert_eq!(original.upstream_timeout_s, reparsed.upstream_timeout_s);
+                prop_assert_eq!(
+                    original.upstream_caches.len(),
+                    reparsed.upstream_caches.len()
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod capabilities_tests {
     use tracing_test::traced_test;
 
     use super::*;

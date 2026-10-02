@@ -142,7 +142,7 @@ async fn aborted_caller_future_does_not_leak_permits() -> Result<(), Error> {
             // task abort; bare `let _ = ...` would drop it immediately
             // and defeat the test.
             let _conn = cm.connection(format!("aborted-{i}")).await;
-            futures::future::pending::<()>().await
+            futures::future::pending::<()>().await;
         }));
     }
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -158,6 +158,38 @@ async fn aborted_caller_future_does_not_leak_permits() -> Result<(), Error> {
         .expect("post-abort acquire 2 blocked >5s — permit leak")?;
     drop(c1);
     drop(c2);
+    Ok(())
+}
+
+/// The production "shard-ring wedge": an endpoint that is dead (nothing
+/// listening — killed or never started) must yield a fast `Unavailable`
+/// error from `connection()` instead of queuing the request forever while
+/// the worker retries the connect in the background. Before the fix this
+/// test failed: `cm.connection()` never resolved and the outer timeout
+/// elapsed.
+#[nativelink_test]
+async fn dead_endpoint_fails_fast_instead_of_queuing_forever() -> Result<(), Error> {
+    // Bind a port and immediately drop the listener so nothing is
+    // listening there — connects get ECONNREFUSED, the "peer killed or
+    // never started" case observed in production.
+    let dead_port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let endpoint = Endpoint::from_shared(format!("http://127.0.0.1:{dead_port}"))
+        .unwrap()
+        .connect_timeout(Duration::from_secs(1));
+
+    let cm = ConnectionManager::new(vec![endpoint], 1, 2, Retry::default(), no_jitter());
+
+    let result = timeout(Duration::from_secs(10), cm.connection("dead-peer".into()))
+        .await
+        .expect("connection() to a dead endpoint hung past 10s instead of erroring");
+    assert_eq!(
+        result.err().map(|err| err.code),
+        Some(nativelink_error::Code::Unavailable),
+        "expected fast Unavailable from a dead endpoint",
+    );
     Ok(())
 }
 

@@ -1,0 +1,68 @@
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_doc",
+    "rust_doc_test",
+    "rust_library",
+    "rust_test",
+)
+
+rust_library(
+    name = "nativelink-oci",
+    srcs = [
+        "src/lib.rs",
+        "src/oci_client.rs",
+        "src/projection.rs",
+        "src/registry.rs",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//nativelink-error",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:bytes",
+        "@crates//:flate2",
+        "@crates//:hex",
+        "@crates//:prost",
+        "@crates//:reqwest",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+        "@crates//:tar",
+        "@crates//:tracing",
+    ],
+)
+
+rust_test(
+    name = "unit_test",
+    timeout = "short",
+    crate = ":nativelink-oci",
+    deps = [
+        "//nativelink-error",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:bytes",
+        "@crates//:flate2",
+        "@crates//:hex",
+        "@crates//:prost",
+        "@crates//:reqwest",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+        "@crates//:tar",
+        "@crates//:tracing",
+    ],
+)
+
+rust_doc(
+    name = "docs",
+    crate = ":nativelink-oci",
+    visibility = ["//visibility:public"],
+)
+
+rust_doc_test(
+    name = "doc_test",
+    timeout = "short",
+    crate = ":nativelink-oci",
+)

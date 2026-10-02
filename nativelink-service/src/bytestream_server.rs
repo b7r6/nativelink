@@ -46,7 +46,8 @@ use nativelink_util::buf_channel::{
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::{
-    DigestHasherFunc, default_digest_hasher_func, make_ctx_for_hash_func,
+    DigestHasherFunc, default_digest_hasher_func, digest_hasher_from_resource_name_segment,
+    make_ctx_for_hash_func,
 };
 use nativelink_util::proto_stream_utils::WriteRequestStreamWrapper;
 use nativelink_util::resource_info::ResourceInfo;
@@ -1427,10 +1428,8 @@ impl ByteStream for ByteStreamServer {
             return Ok(Response::new(stream));
         }
 
-        let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(default_digest_hasher_func()),
-            DigestHasherFunc::try_from,
-        )?;
+        let digest_function =
+            digest_hasher_from_resource_name_segment(resource_info.digest_function.as_deref())?;
 
         // Determine if the client requested wire-compressed data via compressed-blobs URI.
         let wire_compressor = crate::wire_compression::resolve_wire_compressor(
@@ -1544,26 +1543,27 @@ impl ByteStream for ByteStreamServer {
             return resp;
         }
 
+        // Our strictness knob first (require_explicit_digest_function → hard
+        // error on an omitted segment); upstream's one-time mismatch telemetry
+        // grafted on top — a client digest function differing from the server
+        // default splits cache keys across clients.
+        let digest_function = digest_hasher_from_resource_name_segment(
+            stream.resource_info.digest_function.as_deref(),
+        )?;
         let default_digest_function = default_digest_hasher_func();
-        let digest_function = match stream.resource_info.digest_function.as_deref() {
-            Some(value) => {
-                let digest_function = DigestHasherFunc::try_from(value)?;
-                if digest_function != default_digest_function
-                    && self
-                        .reported_digest_function_mismatches
-                        .lock()
-                        .insert((digest_function, default_digest_function))
-                {
-                    warn!(
-                        client_digest_function = %digest_function,
-                        server_default_digest_function = %default_digest_function,
-                        "ByteStream client declared a digest function that differs from the server default; the client-declared function will be used for this upload, but clients using different digest functions generate different cache keys and will not share cache hits; configure global.default_digest_hash_function and all clients to use the same digest function"
-                    );
-                }
-                digest_function
-            }
-            None => default_digest_function,
-        };
+        if stream.resource_info.digest_function.is_some()
+            && digest_function != default_digest_function
+            && self
+                .reported_digest_function_mismatches
+                .lock()
+                .insert((digest_function, default_digest_function))
+        {
+            warn!(
+                client_digest_function = %digest_function,
+                server_default_digest_function = %default_digest_function,
+                "ByteStream client declared a digest function that differs from the server default; the client-declared function will be used for this upload, but clients using different digest functions generate different cache keys and will not share cache hits; configure global.default_digest_hash_function and all clients to use the same digest function"
+            );
+        }
 
         // Determine if the client is sending wire-compressed data via compressed-blobs URI.
         let wire_compressor = crate::wire_compression::resolve_wire_compressor(

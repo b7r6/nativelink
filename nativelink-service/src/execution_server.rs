@@ -362,6 +362,23 @@ impl ExecutionServer {
             .get(&instance_name)
             .err_tip(|| format!("'instance_name' not configured for '{instance_name}'"))?;
 
+        // The digest function MUST be explicitly declared by the client for
+        // execution requests. A value of 0 (UNKNOWN) means the client did not
+        // set the field, and we cannot safely default it — the worker will use
+        // this function to hash output Directory trees, and a mismatch corrupts
+        // results for clients expecting a different algorithm (e.g. BLAKE3
+        // clients getting SHA256 directory digests). See:
+        // https://github.com/straylight-prelude/straylight-nativelink/blob/main/book/src/part9/standard-oci-toolchain.md §4.4, §14.16
+        if request.digest_function == 0 {
+            return Err(make_input_err!(
+                "ExecuteRequest.digest_function must be explicitly set (received \
+                 UNKNOWN/0). The server cannot safely default the digest function \
+                 for execution because it determines how output Directory trees \
+                 are hashed. Clients MUST set this field to the digest function \
+                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=9)."
+            ));
+        }
+
         let digest = DigestInfo::try_from(
             request
                 .action_digest
@@ -529,6 +546,15 @@ impl Execution for ExecutionServer {
         let request = grpc_request.into_inner();
 
         let digest_function = request.digest_function;
+        if digest_function == 0 {
+            return Err(Status::invalid_argument(
+                "ExecuteRequest.digest_function must be explicitly set (received \
+                 UNKNOWN/0). The server cannot safely default the digest function \
+                 for execution because it determines how output Directory trees \
+                 are hashed. Clients MUST set this field to the digest function \
+                 used to compute the action_digest (e.g. SHA256=1, BLAKE3=9).",
+            ));
+        }
         let result = self
             .inner_execute(request)
             .instrument(error_span!("execution_server_execute"))

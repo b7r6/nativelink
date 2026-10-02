@@ -54,6 +54,7 @@ async fn test_fetch_blob() -> Result<(), Status> {
             instance_name: instance_name.clone(),
             config: FetchConfig {
                 fetch_store: String::from("test_fetch_store"),
+                oci: None,
             },
         }],
         &store_manager,

@@ -743,9 +743,15 @@ impl LenEntry for FileEntryImpl {
     async fn unref(&self) {
         let mut encoded_file_path = self.encoded_file_path.write().await;
         if encoded_file_path.path_type == PathType::Temp {
-            // We are already a temp file that is now marked for deletion on drop.
-            // This is very rare, but most likely the rename into the content path failed.
-            warn!(
+            // Already a temp file that is now marked for deletion on drop.
+            // The dominant trigger is a benign concurrent-emplace race: a
+            // later same-key `emplace_file` inserted a replacement, which
+            // evicted (and `unref`'d) this entry before its own background
+            // emplace finished the temp->content rename, so `path_type` is
+            // still `Temp`. Like the sibling ENOENT branch below, this
+            // dominates log volume under heavy write+evict concurrency and is
+            // not actionable, so keep it at `debug`.
+            debug!(
                 key = ?encoded_file_path.key,
                 "File is already a temp file",
             );
@@ -1208,6 +1214,14 @@ where
 
             let mut temp_buffer: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
             let mut existing_buffer: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
+            // Iterate every byte offset in the half-open range
+            // `[0, file_length)`. The exclusive upper bound of `file_length`
+            // (not `file_length - 1`) is load-bearing in two ways: it keeps
+            // the range empty when `file_length == 0` (two zero-length files
+            // are duplicates, so the body is correctly skipped) which avoids
+            // the `0u64 - 1` underflow panic that fires under the dev/test
+            // profile's overflow-checks, and it also compares the final byte
+            // of every file rather than silently dropping it.
             for offset in (0..file_length).step_by(CHUNK_SIZE) {
                 let buffer_size = if offset + (CHUNK_SIZE as u64) <= file_length {
                     CHUNK_SIZE
@@ -2233,6 +2247,9 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
         offset: u64,
         length: Option<u64>,
     ) -> Result<(), Error> {
+        // Bounded retries for the transient map/disk race handled in the read
+        // path below (declared here so it precedes any statement in the block).
+        const MAX_MISS_RETRIES: usize = 3;
         if is_zero_digest(key.borrow()) {
             self.has(key.borrow())
                 .await
@@ -2243,33 +2260,53 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
             return Ok(());
         }
         let owned_key = key.into_owned();
-        let entry = self.evicting_map.get(&owned_key).await.ok_or_else(|| {
-            make_err!(
-                Code::NotFound,
-                "{} not found in filesystem store here",
-                owned_key.as_str()
-            )
-        })?;
         let read_limit = length.unwrap_or(u64::MAX);
-        let mut temp_file = match entry.read_file_part(offset, read_limit).await {
-            Ok(file) => file,
-            Err(err) => {
-                // If the file is not found, we need to remove it from the eviction map.
-                if err.code == Code::NotFound {
-                    // Map said the file was present but `open()` hit ENOENT.
-                    // Self-heals: we remove the stale entry below and a
-                    // fast/slow caller re-populates from the slow store, so
-                    // this is a recoverable warn, not a fatal error.
+        // A `get()` hit followed by an `open()` ENOENT is ambiguous. Under
+        // concurrent same-key writes an evicted generation's `unref()` renames
+        // the shared content path away while a fresh generation is still being
+        // emplaced, so the entry the map just handed us can momentarily have no
+        // file on disk even though a present replacement is landing. Retry a
+        // bounded number of times, re-fetching the (newer) entry each pass, so
+        // a transient race self-heals instead of surfacing a spurious miss.
+        // Only once the miss persists past the retries do we treat it as a
+        // genuine map/disk divergence.
+        let mut miss_attempts: usize = 0;
+        // Keep the resolved `entry` bound for the whole stream below. Dropping
+        // the last `Arc<FileEntry>` is what triggers deletion of an evicted
+        // (renamed-to-temp) file, and an in-flight reader must be able to
+        // finish streaming from its already-open fd first — so the entry must
+        // outlive the read loop exactly as it did before the retry was added.
+        let (entry, mut temp_file) = loop {
+            let entry = self.evicting_map.get(&owned_key).await.ok_or_else(|| {
+                make_err!(
+                    Code::NotFound,
+                    "{} not found in filesystem store here",
+                    owned_key.as_str()
+                )
+            })?;
+            match entry.read_file_part(offset, read_limit).await {
+                Ok(file) => break (entry, file),
+                Err(err) if err.code == Code::NotFound && miss_attempts < MAX_MISS_RETRIES => {
+                    // Transient map/disk race: yield so a racing writer's
+                    // emplace can commit, then re-fetch and re-open.
+                    miss_attempts += 1;
+                    tokio::task::yield_now().await;
+                }
+                Err(err) if err.code == Code::NotFound => {
+                    // Retries exhausted: the map says the file is present but
+                    // `open()` keeps hitting ENOENT, so this is a genuine
+                    // map/disk divergence. Remove the stale entry — a
+                    // fast/slow caller then re-populates from the slow store —
+                    // and surface the miss. Recoverable, hence a warn.
                     warn!(
                         ?err,
                         key = ?owned_key,
                         "Filesystem store map/disk divergence: removing entry; reader will fall through to slow store",
                     );
-                    self.evicting_map
-                        .remove_if(&owned_key, |map_entry| Arc::ptr_eq(map_entry, &entry))
-                        .await;
+                    self.evicting_map.remove(&owned_key).await;
+                    return Err(err);
                 }
-                return Err(err);
+                Err(err) => return Err(err),
             }
         };
 
@@ -2294,6 +2331,10 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
             .send_eof()
             .err_tip(|| "Filed to send EOF in filesystem store get_part")?;
 
+        // Hold the file entry until the body is fully streamed (see the
+        // binding above): releasing it earlier could let an evicted file be
+        // deleted out from under this in-flight read.
+        drop(entry);
         Ok(())
     }
 

@@ -1,6 +1,13 @@
 // Oracle Cloud Infrastructure (OCI) Object Storage backend via the Amazon S3
 // Compatibility API.
 //
+// NAMESAKE WARNING: here "OCI" means *Oracle Cloud Infrastructure*, a cloud
+// *store backend* that holds CAS/AC data. It is NOT the Open Container
+// Initiative image format. If you came here to pull an OCI/Docker image into
+// the CAS (the `fetch` service with an `oci` sub-block, oci:// or docker://
+// URIs), that is a different feature entirely — see
+// examples/oci_toolchain_fetch.json5.
+//
 // The endpoint is derived from `namespace` + `region` as
 // https://{namespace}.compat.objectstorage.{region}.oci.customer-oci.com and is
 // always addressed path-style (bucket as the first path segment).

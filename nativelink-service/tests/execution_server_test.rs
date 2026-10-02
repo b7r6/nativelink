@@ -130,6 +130,50 @@ async fn instance_name_fail() -> Result<(), Box<dyn core::error::Error>> {
     Ok(())
 }
 
+/// Regression test: `ExecuteRequest` with `digest_function=0` (UNKNOWN) MUST be
+/// rejected with `INVALID_ARGUMENT` rather than silently defaulting to SHA256.
+/// A silent default causes BLAKE3 clients to receive SHA256-hashed Directory
+/// digests in `ActionResults`, corrupting output trees.
+/// See: Standard OCI Toolchain Specification §4.4, §14.16
+#[nativelink_test]
+async fn execute_rejects_unset_digest_function() -> Result<(), Box<dyn core::error::Error>> {
+    let store_manager = make_store_manager().await?;
+    let (execution_server, _) = make_execution_server(&store_manager)?;
+
+    let raw_response = execution_server
+        .execute(Request::new(ExecuteRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            digest_function: 0, // UNKNOWN — must be rejected
+            skip_cache_lookup: false,
+            action_digest: None,
+            execution_policy: None,
+            results_cache_policy: None,
+        }))
+        .await;
+
+    match raw_response {
+        Err(status) => {
+            assert_eq!(
+                status.code(),
+                TonicCode::InvalidArgument,
+                "Expected INVALID_ARGUMENT for unset digest_function, got {:?}",
+                status.code()
+            );
+            assert!(
+                status
+                    .message()
+                    .contains("digest_function must be explicitly set"),
+                "Error message should explain the requirement, got: {}",
+                status.message()
+            );
+        }
+        Ok(_) => {
+            panic!("Expected error for unset digest_function, but got Ok");
+        }
+    }
+    Ok(())
+}
+
 #[nativelink_test]
 async fn operations_list_operations_unimplemented() -> Result<(), Box<dyn core::error::Error>> {
     let store_manager = make_store_manager().await?;
