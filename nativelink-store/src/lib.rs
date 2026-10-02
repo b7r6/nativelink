@@ -43,3 +43,5 @@ pub mod shard_store;
 pub mod size_partitioning_store;
 pub mod store_manager;
 pub mod verify_store;
+
+// cone-curve benchmark marker: tier T3 mid (store, 5 crates) (semantic no-op, invalidates this crate's action)
