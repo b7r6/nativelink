@@ -984,3 +984,6 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
         .err_tip(|| "main() function failed")?;
     Ok(())
 }
+
+// CI probe: code-only change; the Bazel 8.7.0 compatibility lane should be
+// skipped by the affected-lanes gate while the Bazel 9 lane still runs.
