@@ -530,7 +530,7 @@ impl StoreDriver for FastSlowStore {
             // probes, and without a short deadline every fast-miss stalls the
             // hot ring long enough to wedge the worker. On timeout we treat the
             // blob as missing; the write-back path still carries durability.
-            const SLOW_PROBE_DEADLINE: core::time::Duration = core::time::Duration::from_secs(3);
+            const SLOW_PROBE_DEADLINE: Duration = Duration::from_secs(3);
             let probe = self
                 .slow_store
                 .has_with_results(&slow_keys, &mut slow_results);
