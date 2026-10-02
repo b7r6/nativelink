@@ -96,6 +96,7 @@ async fn oci_bridge_projects_to_producer_hint() -> Result<(), Error> {
                         password: None,
                         bearer_token: None,
                     }],
+                    self_registry: None,
                 }),
             },
         }],

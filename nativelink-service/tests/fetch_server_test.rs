@@ -128,6 +128,7 @@ async fn test_fetch_blob_corrupt_store_entry_returns_error() -> Result<(), Statu
             instance_name: instance_name.clone(),
             config: FetchConfig {
                 fetch_store: String::from("test_fetch_store"),
+                oci: None,
             },
         }],
         &store_manager,
