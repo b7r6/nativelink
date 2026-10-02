@@ -257,7 +257,7 @@ async fn simple_update_ac() -> Result<(), Error> {
                 "https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{VALID_HASH1}-{AC_ENTRY_SIZE}?x-id=PutObject"
             )
         );
-        ByteStream::from_body_0_4(sent_request.into_body())
+        ByteStream::from_body_1_x(sent_request.into_body())
     };
 
     let send_data_copy = send_data.clone();

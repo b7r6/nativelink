@@ -115,6 +115,7 @@ async fn filesystem_fast_tier_recovers_missing_files_on_upload_and_read() -> Res
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
+            slow_store_write_back: false,
         },
         fast.clone(),
         slow.clone(),
@@ -2178,6 +2179,7 @@ async fn slow_store_not_found_under_the_read_names_the_digest() -> Result<(), Er
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
+            slow_store_write_back: false,
         },
         Store::new(MemoryStore::new(&MemorySpec::default())),
         Store::new(Arc::new(PartialThenGoneStore {
