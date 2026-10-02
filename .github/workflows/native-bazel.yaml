@@ -71,9 +71,12 @@ jobs:
         with:
           bazelisk-cache: true
           repository-cache: true
-          # Only enable when we don't have remote cache, otherwise it just gets very slow
-          # and enormous
-          disk-cache: ${{ steps.setup-nativelink-cloud.outputs.enabled == 'false'}}
+          # Enable the disk cache when we don't have a usable remote cache.
+          # The Bazel 8 lane runs --lockfile_mode=off and gets ~2.6% hits on
+          # the Bazel-9-keyed remote cache, so it is effectively cache-cold;
+          # give it a persistent disk cache (keyed per bazel_version by the
+          # action) so repeat runs reuse its own compile outputs.
+          disk-cache: ${{ steps.setup-nativelink-cloud.outputs.enabled == 'false' || matrix.bazel_version == '8.7.0' }}
 
       - name: Show Bazel version
         run: bazel --version
