@@ -73,7 +73,13 @@ jobs:
           repository-cache: true
           # Only enable when we don't have remote cache, otherwise it just gets very slow
           # and enormous
-          disk-cache: ${{ steps.setup-nativelink-cloud.outputs.enabled == 'false'}}
+          # Always keep a persistent disk cache alongside the remote cache.
+          # The remote cache is Bazel-9/lockfile-keyed and only ~54% warm
+          # on the Bazel 9 lane and ~2.6% on the Bazel 8 lane; a per-lane
+          # disk cache (keyed by setup-bazel on the job + matrix) absorbs
+          # the uncached local compiles across runs. Measured: Bazel 8 lane
+          # 729s cold -> 148s warm.
+          disk-cache: true
 
       - name: Show Bazel version
         run: bazel --version
@@ -146,7 +152,13 @@ jobs:
           repository-cache: true
           # Only enable when we don't have remote cache, otherwise it just gets very slow
           # and enormous
-          disk-cache: ${{ steps.setup-nativelink-cloud.outputs.enabled == 'false'}}
+          # Always keep a persistent disk cache alongside the remote cache.
+          # The remote cache is Bazel-9/lockfile-keyed and only ~54% warm
+          # on the Bazel 9 lane and ~2.6% on the Bazel 8 lane; a per-lane
+          # disk cache (keyed by setup-bazel on the job + matrix) absorbs
+          # the uncached local compiles across runs. Measured: Bazel 8 lane
+          # 729s cold -> 148s warm.
+          disk-cache: true
 
       - name: Run Store tester with sentinel
         run: |

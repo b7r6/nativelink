@@ -32,7 +32,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022]
-        toolchain: [stable]
+        # Pin to the committed MSRV instead of floating `stable`. Floating
+        # stable drifts ahead of the crate's rust-version and turns new
+        # deprecation lints into hard build errors (e.g. atomic fetch_update
+        # -> try_update), reddening the lane for a toolchain reason unrelated
+        # to the change under test. The MSRV is the contract the crate pins.
+        toolchain: ['1.97.1']
     name: ${{ matrix.os }} / ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30

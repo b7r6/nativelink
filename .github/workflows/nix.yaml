@@ -53,12 +53,27 @@ jobs:
           # non-Linux runners, so macOS lanes fall back to cache.
           exec: ${{ runner.os == 'Linux' && 'on' || 'off' }}
 
+      # Persist a Bazel disk cache across runs. The nix-wrapped lane runs the
+      # same `bazel test //...` as Bazel Native but gets no setup-bazel disk
+      # cache; without it the ~46% uncached local compiles cost ~700s every
+      # run. The disk cache absorbs them across runs (same lever that took the
+      # Bazel 8 native lane 729s -> 148s warm).
+      - name: Bazel disk cache
+        uses: >- # v4.2.0
+          actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: ~/.cache/bazel-disk
+          key: nix-bazel-dev-disk-${{ matrix.os }}-${{ hashFiles('MODULE.bazel.lock', 'Cargo.lock') }}
+          restore-keys: |
+            nix-bazel-dev-disk-${{ matrix.os }}-
+
       - name: Invoke Bazel build in Nix shell
         run: |
           nix develop --impure --command \
             bazel-retry test //... \
               --verbose_failures \
               --lockfile_mode=error \
+              --disk_cache=~/.cache/bazel-disk \
 
       - name: Teardown Worker
         uses: ./.github/actions/end-nix
@@ -211,7 +226,10 @@ jobs:
 
       - name: Get commands list
         run: |
-          COMMANDS=$(nix run .#rbe-toolchain-with-nativelink-test list)
+          # Discovery uses the list-only target, which carries no nativelink
+          # dependency, so enumerating the lanes no longer rebuilds nativelink
+          # (that build now happens once per rbe-toolchain shard, not twice).
+          COMMANDS=$(nix run .#rbe-toolchain-test-list)
           echo "matrix={\"command\":${COMMANDS}}" >> $GITHUB_OUTPUT
         id: set-matrix
 
