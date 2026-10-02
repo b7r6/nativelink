@@ -69,11 +69,13 @@ jobs:
 
       - name: Invoke Bazel build in Nix shell
         run: |
+          # Bazel does not expand ~ in --disk_cache; pass an absolute path via
+          # $HOME so it matches the actions/cache path above and actually hits.
           nix develop --impure --command \
             bazel-retry test //... \
               --verbose_failures \
               --lockfile_mode=error \
-              --disk_cache=~/.cache/bazel-disk \
+              --disk_cache="$HOME/.cache/bazel-disk" \
 
       - name: Teardown Worker
         uses: ./.github/actions/end-nix
