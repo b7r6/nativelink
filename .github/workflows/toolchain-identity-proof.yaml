@@ -1,0 +1,94 @@
+---
+# Measurement/proof workflow only; never merge. Proves that pinning
+# --config=nl-toolchain makes the Nix/Bazel Dev lane's action keys MATCH a
+# non-nix (bare runner) build for identical source, which is the precondition
+# for remote-cache hits against a warm writer.
+#
+# Three analyses of the SAME source, all via `bazel aquery` (analysis only, no
+# compile, no cache needed):
+#   A. nix develop, DEFAULT toolchain   -> the current 0-hit identity
+#   B. nix develop, --config=nl-toolchain (the FIX)
+#   C. bare runner,  --config=nl-toolchain (the WARMER identity)
+# Proof: the toolchain/compiler paths in B must equal C and differ from A.
+name: Toolchain Identity Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [b7r6/ci-nix-toolchain-identity]
+
+permissions: read-all
+
+jobs:
+  aquery-nix:
+    name: aquery inside nix develop (A default, B nl-toolchain)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Prepare Worker
+        uses: ./.github/actions/prepare-nix
+        with:
+          nativelink_attic_token: ${{ secrets.NATIVELINK_ATTIC_TOKEN }}
+      - name: A - aquery with nix-default toolchain
+        run: |
+          nix develop --impure --command \
+            bazel aquery 'mnemonic("CppCompile|Rustc", //nativelink-util:nativelink-util)' \
+              --output=text --include_commandline 2>/dev/null \
+            | grep -E 'Mnemonic:|Command Line|/nix/store|clang|cc_wrapper|rustc|-isysroot|external/' \
+            | head -40 | tee A-nix-default.txt
+      - name: B - aquery with --config=nl-toolchain (the fix)
+        run: |
+          nix develop --impure --command \
+            bazel aquery 'mnemonic("CppCompile|Rustc", //nativelink-util:nativelink-util)' \
+              --config=nl-toolchain \
+              --output=text --include_commandline 2>/dev/null \
+            | grep -E 'Mnemonic:|Command Line|/nix/store|clang|cc_wrapper|rustc|-isysroot|external/' \
+            | head -40 | tee B-nix-nltoolchain.txt
+      - name: Fingerprint A vs B
+        run: |
+          echo "== A (nix default) toolchain path signature =="
+          grep -oE '/nix/store/[a-z0-9]+-[^ ]*(clang|gcc|rustc|cc-wrapper)[^ ]*' A-nix-default.txt | sort -u | head
+          echo "== B (nl-toolchain) toolchain path signature =="
+          grep -oE '(external/[^ ]*llvm[^ ]*|external/[^ ]*rust[^ ]*)' B-nix-nltoolchain.txt | sort -u | head
+          echo "== does B still reference /nix/store toolchains? (expect NONE) =="
+          grep -c '/nix/store/.*\(clang\|gcc\|rustc\|cc-wrapper\)' B-nix-nltoolchain.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aquery-nix
+          path: "*.txt"
+
+  aquery-bare:
+    name: aquery on bare runner (C nl-toolchain = warmer identity)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Setup Bazel
+        uses: >- # v0.19.0
+          bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: false
+      - name: C - aquery with --config=nl-toolchain on bare runner
+        env:
+          USE_BAZEL_VERSION: 9.1.1
+        run: |
+          bazel aquery 'mnemonic("CppCompile|Rustc", //nativelink-util:nativelink-util)' \
+            --config=nl-toolchain \
+            --output=text --include_commandline 2>/dev/null \
+          | grep -E 'Mnemonic:|Command Line|/nix/store|clang|cc_wrapper|rustc|-isysroot|external/' \
+          | head -40 | tee C-bare-nltoolchain.txt
+          echo "== C toolchain path signature =="
+          grep -oE '(external/[^ ]*llvm[^ ]*|external/[^ ]*rust[^ ]*)' C-bare-nltoolchain.txt | sort -u | head
+          echo "== does C reference /nix/store? (expect NONE) =="
+          grep -c '/nix/store' C-bare-nltoolchain.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aquery-bare
+          path: "*.txt"
