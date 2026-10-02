@@ -24,3 +24,5 @@ pub mod reaper;
 pub mod running_actions_manager;
 pub mod worker_api_client_wrapper;
 pub mod worker_utils;
+
+// cone-curve benchmark marker: tier T2 small (worker, 2 crates) (semantic no-op, invalidates this crate's action)
