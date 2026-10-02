@@ -1,6 +1,13 @@
 ---
 name: Cargo Native
 
+# Two-tier cadence. On pull_request only the Ubuntu cargo target runs, for
+# fast contributor feedback. The expensive Windows native-compile target --
+# the only CI lane with no Bazel/Nix path -- is deferred to the merge queue
+# (post-approval, pre-merge) so it still gates every commit that lands on
+# main, plus push-to-main and a daily cron as backstops. A Windows-cargo-only
+# break is therefore caught at merge time rather than on the PR push; the
+# merge_group trigger requires a merge queue enabled on the branch.
 on:
   push:
     branches: [main]
@@ -12,6 +19,11 @@ on:
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+  merge_group:
+  schedule:
+    # Daily backstop so toolchain/dependency drift surfaces within a day.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 permissions: read-all
 
@@ -31,7 +43,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        # pull_request: Ubuntu only (fast feedback). Other events add the
+        # expensive Windows native-compile target.
+        os: >-
+          ${{ github.event_name == 'pull_request'
+              && fromJSON('["ubuntu-24.04"]')
+              || fromJSON('["ubuntu-24.04", "windows-2022"]') }}
         # Pin to the committed MSRV instead of floating `stable`. Floating
         # stable drifts ahead of the crate's rust-version and turns new
         # deprecation lints into hard build errors (e.g. atomic fetch_update
