@@ -20,7 +20,7 @@ Install `Nix` with `flakes` enabled, for instance install it via
 Create a new directory, `cd` into it and replace `TEMPLATE_NAME` with the name
 of the template to initialize your project with
 ```bash
-nix flake init -t github:TraceMachina/nativelink#TEMPLATE_NAME
+nix flake init -t git+ssh://git@git.s4.gl/straylight/straylight-nativelink.git#TEMPLATE_NAME
 git init
 git add .
 ```

@@ -6,11 +6,11 @@ module(
 
 # Keep the commit in sync with the NativeLink input from `flake.nix`.
 bazel_dep(name = "local-remote-execution", version = "0")
-archive_override(
+git_override(
     module_name = "local-remote-execution",
-    integrity = "sha256-/hcZonUZHrbu8ihWLIQM1PoQqrRatzim7ec8phccwTY=",
-    strip_prefix = "nativelink-f9ff630e09a3c22d6a3abea68d1bacc775eac6bb/local-remote-execution",
-    urls = ["https://github.com/TraceMachina/nativelink/archive/f9ff630e09a3c22d6a3abea68d1bacc775eac6bb.zip"],
+    commit = "a8822ee3083d59d54f9f0f091ee8c3df5e44d324",
+    remote = "ssh://git@git.s4.gl/straylight/straylight-nativelink.git",
+    strip_prefix = "local-remote-execution",
 )
 
 bazel_dep(name = "rules_cc", version = "0.2.8")

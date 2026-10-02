@@ -27,6 +27,11 @@ nativelink.bazelrc
 user.bazelrc
 *.log
 buck-out/
+book/out/
 nativelink_config.schema.json
 .gstack/
+# Ignore local Cargo state (credentials, registry cache) but keep the committed
+# build config that caps parallelism.
+/.cargo/*
+!/.cargo/config.toml
 .worktrees/

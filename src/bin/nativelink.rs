@@ -50,14 +50,19 @@ use nativelink_service::cas_server::CasServer;
 use nativelink_service::execution_server::ExecutionServer;
 use nativelink_service::fetch_server::FetchServer;
 use nativelink_service::health_server::{HealthServer, health_paths};
+use nativelink_service::nix_cache_server::NixCacheServer;
+use nativelink_service::oci_registry_server::OciRegistryServer;
 use nativelink_service::push_server::PushServer;
 use nativelink_service::wire_compression::RemoteCacheCompressionInstances;
 use nativelink_service::worker_api_server::WorkerApiServer;
 use nativelink_store::default_store_factory::store_factory;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::common::fs::set_open_file_limit;
-use nativelink_util::digest_hasher::{DigestHasherFunc, set_default_digest_hasher_func};
+use nativelink_util::digest_hasher::{
+    DigestHasherFunc, set_default_digest_hasher_func, set_require_explicit_digest_function,
+};
 use nativelink_util::health_utils::HealthRegistryBuilder;
+use nativelink_util::metrics_collector::RootMetricsComponent;
 use nativelink_util::origin_event_publisher::OriginEventPublisher;
 #[cfg(target_family = "unix")]
 use nativelink_util::shutdown_guard::Priority;
@@ -83,7 +88,7 @@ use tokio_rustls::rustls::server::WebPkiClientVerifier;
 use tokio_rustls::rustls::{RootCertStore, ServerConfig as TlsServerConfig};
 use tonic::codec::CompressionEncoding;
 use tonic::service::Routes;
-use tracing::{error, error_span, info, trace_span, warn};
+use tracing::{debug, error, error_span, info, trace_span, warn};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -93,6 +98,9 @@ const DEFAULT_ADMIN_API_PATH: &str = "/admin";
 
 // Note: This must be kept in sync with the documentation in `HealthConfig::path`.
 
+// Note: This must be kept in sync with the documentation in `PrometheusConfig::path`.
+const DEFAULT_PROMETHEUS_METRICS_PATH: &str = "/metrics";
+
 // Note: This must be kept in sync with the documentation in
 // `OriginEventsConfig::max_event_queue_size`.
 const DEFAULT_MAX_QUEUE_EVENTS: usize = 0x0001_0000;
@@ -100,6 +108,54 @@ const DEFAULT_MAX_QUEUE_EVENTS: usize = 0x0001_0000;
 /// Broadcast Channel Capacity
 /// Note: The actual capacity may be greater than the provided capacity.
 const BROADCAST_CAPACITY: usize = 1;
+
+/// HTTP/1 header-read timeout. hyper ships a 30s default for this
+/// slowloris defense, but it is silently disabled unless a timer is
+/// installed on the connection builder — which configuring only HTTP/2
+/// options otherwise skips. Restore hyper's own default explicitly.
+const HTTP1_HEADER_READ_TIMEOUT_SECS: u64 = 30;
+
+/// Classifies a served-connection error as client-caused — a disconnect,
+/// idle/read timeout, or a malformed/oversized request — versus a genuine
+/// server-side fault. Client-caused wire and parse errors are
+/// attacker-cheap to trigger, so they are logged at `debug!` rather than
+/// `error!` to avoid unbounded ERROR-log amplification. The hyper error is
+/// often wrapped, so the whole source chain is inspected.
+fn is_client_connection_error(err: &(dyn std::error::Error + 'static)) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(source) = current {
+        if let Some(hyper_err) = source.downcast_ref::<hyper::Error>() {
+            if hyper_err.is_parse()
+                || hyper_err.is_parse_too_large()
+                || hyper_err.is_parse_status()
+                || hyper_err.is_incomplete_message()
+                || hyper_err.is_canceled()
+                || hyper_err.is_body_write_aborted()
+                || hyper_err.is_timeout()
+            {
+                return true;
+            }
+            // Do NOT return here: an I/O-kind hyper error (the common
+            // mid-stream `ConnectionReset`/`BrokenPipe` client abort) matches
+            // none of the predicates above but carries the real cause as its
+            // `io::Error` source, classified by the branch below on the next
+            // hop of the chain.
+        } else if let Some(io_err) = source.downcast_ref::<std::io::Error>()
+            && matches!(
+                io_err.kind(),
+                ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::BrokenPipe
+                    | ErrorKind::UnexpectedEof
+                    | ErrorKind::TimedOut
+            )
+        {
+            return true;
+        }
+        current = source.source();
+    }
+    false
+}
 
 fn install_default_rustls_crypto_provider() {
     drop(tokio_rustls::rustls::crypto::ring::default_provider().install_default());
@@ -128,6 +184,10 @@ struct Args {
     /// Config file to use.
     #[clap(value_parser)]
     config_file: String,
+
+    /// Validate the configuration and exit without starting any services.
+    #[arg(long)]
+    check: bool,
 }
 
 trait RoutesExt {
@@ -305,6 +365,20 @@ async fn inner_main(
         }
     }
 
+    // Roots for the Prometheus `/metrics` endpoint: the store manager (all
+    // stores) and every worker scheduler. Both implement `RootMetricsComponent`.
+    // Action schedulers are exposed as `Arc<dyn KnownPlatformPropertyProvider>`
+    // (not a metrics root), so their metrics surface through the corresponding
+    // worker scheduler when one exists.
+    let metrics_roots: Vec<(String, Arc<dyn RootMetricsComponent>)> = {
+        let mut roots: Vec<(String, Arc<dyn RootMetricsComponent>)> =
+            vec![("stores".to_string(), store_manager.clone())];
+        for (name, scheduler) in &worker_schedulers {
+            roots.push((format!("schedulers_{name}"), scheduler.clone()));
+        }
+        roots
+    };
+
     let server_cfgs: Vec<ServerConfig> = cfg.servers.into_iter().collect();
 
     // The capabilities service advertises chunking support for CAS instances
@@ -325,6 +399,41 @@ async fn inner_main(
 
         // Currently we only support http as our socket type.
         let ListenerConfig::Http(http_config) = server_cfg.listener;
+
+        // The CAS witness owns its entire listener: it speaks the
+        // HTTP `CONNECT` proxy protocol, not the shared gRPC/axum service
+        // stack, so it is handled here and the rest of the server setup is
+        // skipped for this listener.
+        if let Some(witness_cfg) = services.cas_witness {
+            let cas_witness =
+                nativelink_service::cas_witness::CasWitness::new(&witness_cfg, &store_manager)
+                    .err_tip(|| "Could not create CAS witness service")?;
+            let socket_addr = http_config
+                .socket_address
+                .parse::<SocketAddr>()
+                .map_err(|e| {
+                    Error::from_std_err(Code::InvalidArgument, &e)
+                        .append(format!("Invalid address '{}'", http_config.socket_address))
+                })?;
+            let tcp_listener = if http_config.freebind {
+                bind_freebind(socket_addr)
+            } else {
+                TcpListener::bind(&socket_addr).await
+            }
+            .map_err(|e| {
+                Error::from_std_err(Code::Internal, &e)
+                    .append(format!("Failed to bind CAS witness to '{socket_addr}'"))
+            })?;
+            info!(
+                %socket_addr,
+                ca_cert_file = %witness_cfg.ca_cert_file,
+                "Ready, CAS witness listening (trust its CA via NIX_SSL_CERT_FILE)",
+            );
+            drop(background_spawn!("cas_witness_listener", async move {
+                cas_witness.serve(tcp_listener).await;
+            }));
+            continue;
+        }
 
         let execution_server = services
             .execution
@@ -546,6 +655,86 @@ async fn inner_main(
             );
         }
 
+        if let Some(nix_cache_cfgs) = &services.nix_cache {
+            // A plaintext (non-TLS) listener sends Bearer/Basic tokens in the
+            // clear. We do not hard-fail — TLS is often terminated by a proxy
+            // in front — but warn so token auth on a bare HTTP listener is a
+            // deliberate, visible choice rather than a silent leak.
+            if http_config.tls.is_none() {
+                for cfg in nix_cache_cfgs {
+                    if !cfg.read_token_files.is_empty() || !cfg.write_token_files.is_empty() {
+                        warn!(
+                            "nix_cache instance '{}' has auth tokens on a plaintext HTTP \
+                             listener; Bearer/Basic credentials will travel in cleartext — \
+                             terminate TLS on this listener or in front of it",
+                            cfg.instance_name
+                        );
+                    }
+                }
+            }
+            let nix_cache_server = NixCacheServer::new(nix_cache_cfgs, &store_manager)
+                .err_tip(|| "Could not create NixCache service")?;
+            for (prefix, router) in nix_cache_server.routers() {
+                svc = svc.nest_service(&prefix, router);
+            }
+        }
+
+        if let Some(oci_registry_cfgs) = &services.oci_registry {
+            // Same cleartext-token warning as nix_cache: tokens on a bare
+            // HTTP listener travel in the clear.
+            if http_config.tls.is_none() {
+                for cfg in oci_registry_cfgs {
+                    if !cfg.read_token_files.is_empty() || !cfg.write_token_files.is_empty() {
+                        warn!(
+                            "oci_registry instance '{}' has auth tokens on a plaintext HTTP \
+                             listener; Bearer/Basic credentials will travel in cleartext — \
+                             terminate TLS on this listener or in front of it",
+                            cfg.instance_name
+                        );
+                    }
+                }
+            }
+            let oci_registry_server = OciRegistryServer::new(oci_registry_cfgs, &store_manager)
+                .err_tip(|| "Could not create OciRegistry service")?;
+            for (prefix, router) in oci_registry_server.routers() {
+                svc = svc.nest_service(&prefix, router);
+            }
+        }
+
+        if let Some(prometheus_cfg) = &services.experimental_prometheus {
+            let path = if prometheus_cfg.path.is_empty() {
+                DEFAULT_PROMETHEUS_METRICS_PATH
+            } else {
+                &prometheus_cfg.path
+            };
+            let metrics_roots = metrics_roots.clone();
+            svc = svc.route(
+                path,
+                axum::routing::get(move || {
+                    let metrics_roots = metrics_roots.clone();
+                    async move {
+                        // Collection walks shared component state and installs a
+                        // scoped tracing subscriber; run it on a blocking thread
+                        // so we never park the async runtime on it.
+                        let body = tokio::task::spawn_blocking(move || {
+                            let metrics =
+                                nativelink_util::metrics_collector::collect(&metrics_roots);
+                            nativelink_util::metrics_collector::render_prometheus(&metrics)
+                        })
+                        .await
+                        .unwrap_or_else(|e| format!("# metrics collection failed: {e}\n"));
+                        (
+                            [(
+                                axum::http::header::CONTENT_TYPE,
+                                "text/plain; version=0.0.4",
+                            )],
+                            body,
+                        )
+                    }
+                }),
+            );
+        }
+
         // This is the default service that executes if no other endpoint matches.
         svc = svc.fallback(|uri: Uri| async move {
             warn!("No route for {uri}");
@@ -702,6 +891,13 @@ async fn inner_main(
         if let Some(value) = http_config.experimental_http2_max_header_list_size {
             http.http2().max_header_list_size(value);
         }
+        // Restore hyper's HTTP/1 header-read timeout (its own 30s default),
+        // which stays disabled unless a timer is installed — configuring
+        // only the HTTP/2 knobs above otherwise drops this slowloris
+        // defense on the HTTP/1 side of the auto (h1/h2) listener.
+        http.http1()
+            .timer(TokioTimer::new())
+            .header_read_timeout(Duration::from_secs(HTTP1_HEADER_READ_TIMEOUT_SECS));
         info!("Ready, listening on {socket_addr}",);
         root_futures.push(Box::pin(async move {
             loop {
@@ -745,11 +941,24 @@ async fn inner_main(
                                         };
 
                                         if let Err(err) = serve_connection.await {
-                                            error!(
-                                                target: "nativelink::services",
-                                                ?err,
-                                                "Failed running service"
-                                            );
+                                            // Client-caused disconnects, parse
+                                            // errors, and idle timeouts are
+                                            // attacker-cheap; log them at debug
+                                            // to avoid ERROR-log amplification,
+                                            // and keep error! for real faults.
+                                            if is_client_connection_error(err.as_ref()) {
+                                                debug!(
+                                                    target: "nativelink::services",
+                                                    ?err,
+                                                    "Client connection closed"
+                                                );
+                                            } else {
+                                                error!(
+                                                    target: "nativelink::services",
+                                                    ?err,
+                                                    "Failed running service"
+                                                );
+                                            }
                                         }
                                     }),
                                     target: "nativelink::services",
@@ -881,13 +1090,50 @@ async fn inner_main(
     Ok(())
 }
 
-fn get_config() -> Result<CasConfig, Error> {
+fn get_config() -> Result<(Args, CasConfig), Error> {
     let args = Args::parse();
-    CasConfig::try_from_json5_file(&args.config_file)
+    let cfg = CasConfig::try_from_json5_file(&args.config_file)
+        .err_tip(|| format!("While loading config file {}", args.config_file))?;
+    Ok((args, cfg))
 }
 
 fn main() -> Result<(), Box<dyn core::error::Error>> {
     install_default_rustls_crypto_provider();
+
+    // Parse args and load the config *before* building any runtime so that
+    // `--check` can run a fully offline validation and exit without starting
+    // a serving runtime, binding a socket, connecting to a backend, or
+    // creating any store directories.
+    let (args, mut cfg) = get_config()?;
+
+    if args.check {
+        return match cfg.validate_references() {
+            Ok(()) => {
+                let num_schedulers = cfg.schedulers.as_ref().map_or(0, Vec::len);
+                #[allow(
+                    clippy::print_stdout,
+                    reason = "`--check` reports its success summary on stdout for CI"
+                )]
+                {
+                    println!(
+                        "OK: {} — {} stores, {} schedulers, {} servers, all references resolve",
+                        args.config_file,
+                        cfg.stores.len(),
+                        num_schedulers,
+                        cfg.servers.len(),
+                    );
+                }
+                Ok(())
+            }
+            Err(err) => {
+                eprintln!("FAIL: {} — configuration is invalid", args.config_file);
+                for message in &err.messages {
+                    eprintln!("{message}");
+                }
+                std::process::exit(1);
+            }
+        };
+    }
 
     // Set QoS to USER_INITIATED on the main thread *before* the tokio
     // runtime is built so the spawned worker threads inherit P-core
@@ -910,8 +1156,6 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
     #[expect(clippy::disallowed_methods, reason = "tracing init on main runtime")]
     runtime.block_on(async { tokio::spawn(async { init_tracing().await }).await? })?;
 
-    let mut cfg = get_config()?;
-
     let global_cfg = if let Some(global_cfg) = &mut cfg.global {
         if global_cfg.max_open_files == 0 {
             global_cfg.max_open_files = fs::DEFAULT_OPEN_FILE_LIMIT;
@@ -926,6 +1170,7 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
             max_open_files: fs::DEFAULT_OPEN_FILE_LIMIT,
             default_digest_hash_function: None,
             default_digest_size_health_check: DEFAULT_DIGEST_SIZE_HEALTH_CHECK_CFG,
+            require_explicit_digest_function: false,
         }
     };
     set_open_file_limit(global_cfg.max_open_files);
@@ -934,6 +1179,7 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
             .default_digest_hash_function
             .unwrap_or(ConfigDigestHashFunction::Sha256),
     ))?;
+    set_require_explicit_digest_function(global_cfg.require_explicit_digest_function)?;
     set_default_digest_size_health_check(global_cfg.default_digest_size_health_check)?;
 
     // Initiates the shutdown process by broadcasting the shutdown signal via the `oneshot::Sender` to all listeners.

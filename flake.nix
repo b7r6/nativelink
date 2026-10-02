@@ -2,8 +2,14 @@
   description = "nativelink";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
+    nixpkgs.url = "github:sensenet-ai/nixpkgs";
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+      # Global pin: flake-parts pulls its own nixpkgs-lib (nix-community/
+      # nixpkgs.lib) by default; force it onto our single sensenet-ai/nixpkgs
+      # so no other nixpkgs revision enters the closure.
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -45,6 +51,15 @@
         ./flake-module.nix
       ];
       flake = {
+        # The NixOS module: a full CAS/scheduler/worker + nix-cache + fetch-proxy
+        # service around this flake's binaries. The consumer supplies the fleet
+        # topology (`hyper-modern-nixos.nativelink.fleetDir`, a typed Dhall tree)
+        # and its own telemetry/state-registry wiring; everything else is here.
+        nixosModules.nativelink = _moduleArgs: {
+          imports = [./nixos/module.nix];
+          _module.args.nativelinkFlake = inputs.self;
+        };
+
         flakeModules = {
           default = ./flake-module.nix;
           darwin = ./tools/darwin/flake-module.nix;
@@ -55,7 +70,9 @@
           lre = import ./local-remote-execution/overlays/default.nix {inherit nix2container;};
           tools = import ./tools/public/default.nix {inherit nix2container;};
         };
-        # TODO(jaroeichler): Keep template inputs on upstream.
+        # Fork note: template inputs point at this fork's origin
+        # (git.s4.gl/straylight/straylight-nativelink), pinned in
+        # templates/bazel/{flake.nix,MODULE.bazel}. Keep those two in sync.
         templates = {
           bazel = {
             path = ./templates/bazel;
@@ -87,13 +104,17 @@
           then q.pkgsMusl.stdenv
           else q.stdenv;
         craneLibFor = p:
-          ((crane.mkLib p).overrideToolchain pkgs.lre.stableRustFor).overrideScope (_: _: {
-            stdenvSelector = stdenvSelectorFor;
-          });
+          ((crane.mkLib p).overrideToolchain pkgs.lre.stableRustFor).overrideScope (
+            _: _: {
+              stdenvSelector = stdenvSelectorFor;
+            }
+          );
         nightlyCraneLibFor = p:
-          ((crane.mkLib p).overrideToolchain pkgs.lre.nightlyRustFor).overrideScope (_: _: {
-            stdenvSelector = stdenvSelectorFor;
-          });
+          ((crane.mkLib p).overrideToolchain pkgs.lre.nightlyRustFor).overrideScope (
+            _: _: {
+              stdenvSelector = stdenvSelectorFor;
+            }
+          );
 
         src = pkgs.lib.cleanSourceWith {
           src = (craneLibFor pkgs).path ./.;
@@ -120,7 +141,8 @@
                   "aarch64-linux" = "aarch64-unknown-linux-musl";
                   "x86_64-darwin" = "x86_64-apple-darwin";
                   "aarch64-darwin" = "aarch64-apple-darwin";
-                }.${
+                }
+                  .${
                   nixSystem
                 } or (throw "Unsupported Nix host platform: ${nixSystem}")
             )
@@ -132,19 +154,26 @@
             then "${pkgs.mold}/bin/ld.mold"
             else "${pkgs.llvmPackages_22.lld}/bin/ld.lld";
 
-          linkerEnvVar = "CARGO_TARGET_${pkgs.lib.toUpper (pkgs.lib.replaceStrings ["-"] ["_"] targetArch)}_LINKER";
+          linkerEnvVar = "CARGO_TARGET_${
+            pkgs.lib.toUpper (pkgs.lib.replaceStrings ["-"] ["_"] targetArch)
+          }_LINKER";
         in
           {
             inherit src;
             strictDeps = true;
             buildInputs =
-              [p.cacert]
+              [
+                p.cacert
+              ]
               ++ pkgs.lib.optionals p.stdenv.targetPlatform.isDarwin [
                 p.apple-sdk_14
                 p.libiconv
               ];
             nativeBuildInputs =
-              [p.bashNonInteractive] # needed for some command tests
+              [
+                p.bashNonInteractive # needed for some command tests
+                pkgs.cmake # libz-ng-sys (via zlib-ng) builds its C lib with cmake
+              ]
               ++ (
                 if isLinuxBuild
                 then [pkgs.mold]
@@ -156,10 +185,11 @@
               ];
             CARGO_BUILD_TARGET = targetArch;
           }
-          // (pkgs.lib.optionalAttrs (isLinuxTarget && !isCrossCompile) {
-            # customClang is only defined for the host compiler, so doesn't work for cross-compiling
-            TARGET_CC = "${pkgs.lre.clang}/bin/customClang"; # So mimalloc gets the right compiler not defaulting to gcc
-          })
+          // (pkgs.lib.optionalAttrs
+            (isLinuxTarget && !isCrossCompile && !p.stdenv.targetPlatform.isMusl) {
+              # customClang is only defined for the host compiler, so doesn't work for cross-compiling
+              TARGET_CC = "${pkgs.lre.clang}/bin/customClang"; # So mimalloc gets the right compiler not defaulting to gcc
+            })
           // (pkgs.lib.optionalAttrs isLinuxTarget {
             CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
             # FIXME(palfrey): Attempted workaround from https://github.com/llvm/llvm-project/issues/32849#issuecomment-2353071071 but doesn't work
@@ -226,14 +256,16 @@
         };
 
         nativelinkFor = p:
-          (craneLibFor p).buildPackage ((commonArgsFor p)
+          (craneLibFor p).buildPackage (
+            (commonArgsFor p)
             // {
               cargoArtifacts = cargoArtifactsFor p;
               # If you're testing Nativelink locally, doing a dev profile will
               # massively speedup build times. Just don't commit/push anything build with dev!
               # CARGO_PROFILE = "dev";
             }
-            // pkgs.lib.optionalAttrs p.stdenv.targetPlatform.isDarwin (darwinSystemDylibArgs p));
+            // pkgs.lib.optionalAttrs p.stdenv.targetPlatform.isDarwin (darwinSystemDylibArgs p)
+          );
 
         nativeTargetPkgs =
           if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
@@ -244,19 +276,33 @@
 
         nativelink = nativelinkFor nativeTargetPkgs;
 
+        # The Nix cache client + watch-store daemon: nl-nix and nl-watch-store,
+        # from the `nativelink-nix-client` workspace crate. Built NATIVE (glibc),
+        # NOT musl-static like the server: it is a host-side systemd daemon, and
+        # rusqlite's bundled sqlite references LFS symbols (lstat64, open64, …)
+        # that musl-static does not provide. `-p` builds just the two client
+        # binaries; crane vendors the lone git dep from the lock.
+        nativelink-nix-client = (craneLibFor pkgs).buildPackage {
+          inherit src;
+          pname = "nativelink-nix-client";
+          version = "1.5.2";
+          strictDeps = true;
+          doCheck = false;
+          cargoExtraArgs = "--locked -p nativelink-nix-client";
+        };
+
         # These two can be built by all build platforms. This is not true for
         # darwin targets which are only buildable via native compilation.
         nativelink-aarch64-linux = nativelinkFor pkgs.pkgsCross.aarch64-multiplatform-musl;
         nativelink-x86_64-linux = nativelinkFor pkgs.pkgsCross.musl64;
 
-        nativelink-is-executable-test = pkgs.callPackage ./tools/nativelink-is-executable-test.nix {inherit nativelink;};
+        nativelink-is-executable-test = pkgs.callPackage ./tools/nativelink-is-executable-test.nix {
+          inherit nativelink;
+        };
 
         generate-toolchains = pkgs.callPackage ./tools/generate-toolchains.nix {};
 
-        build-chromium-tests =
-          pkgs.writeShellScriptBin
-          "build-chromium-tests"
-          ./deploy/chromium-example/build_chromium_tests.sh;
+        build-chromium-tests = pkgs.writeShellScriptBin "build-chromium-tests" ./deploy/chromium-example/build_chromium_tests.sh;
 
         docs = pkgs.callPackage ./tools/docs.nix {rust = pkgs.lre.stable-rust;};
 
@@ -304,12 +350,21 @@
 
         nativelinkWorkerInitFor = archImage: archPackages: arch:
           pkgs.callPackage ./tools/nativelink-worker-init.nix {
-            inherit buildImage self arch archPackages;
+            inherit
+              buildImage
+              self
+              arch
+              archPackages
+              ;
             nativelink-image = archImage;
           };
 
-        nativelink-init-for-x64 = nativelinkWorkerInitFor nativelink-image-for-x64 pkgs.pkgsCross.musl64 "amd64";
-        nativelink-init-for-aarch64 = nativelinkWorkerInitFor nativelink-image-for-aarch64 pkgs.pkgsCross.aarch64-multiplatform-musl "arm64";
+        nativelink-init-for-x64 =
+          nativelinkWorkerInitFor nativelink-image-for-x64 pkgs.pkgsCross.musl64
+          "amd64";
+        nativelink-init-for-aarch64 =
+          nativelinkWorkerInitFor nativelink-image-for-aarch64 pkgs.pkgsCross.aarch64-multiplatform-musl
+          "arm64";
 
         nativelink-worker-init =
           if pkgs.stdenv.isx86_64
@@ -400,7 +455,8 @@
             "--ignore-filename-regex '.*(genproto|vendor-cargo-deps|crates).*'"
           ];
         in
-          (nightlyCraneLibFor p).mkCargoDerivation (coverageArgs
+          (nightlyCraneLibFor p).mkCargoDerivation (
+            coverageArgs
             // {
               # We build our own custom command so we can run with report for both html and text output
               # Mostly derived from the upstream cargoLlvmCov though
@@ -435,7 +491,8 @@
                 ln -s ${p.mongodb}/bin/mongod ''${MONGOD}
                 ''${MONGOD} --version
               '';
-            });
+            }
+          );
 
         nativelinkCoverageForHost = nativelinkCoverageFor pkgs;
       in rec {
@@ -450,6 +507,10 @@
             self.overlays.tools
             (import rust-overlay)
             (import ./tools/rust-overlay-cut-libsecret.nix)
+            # Fix compiler-rt aarch64 cpu_model for musl (sys/auxv.h); lets the
+            # server build for aarch64-unknown-linux-musl. Propagates into
+            # pkgsCross.aarch64-multiplatform-musl used by nativelink-aarch64-linux.
+            (import ./tools/compiler-rt-musl-overlay.nix)
           ];
         };
         apps = {
@@ -457,11 +518,46 @@
             type = "app";
             program = "${nativelink}/bin/nativelink";
           };
+          book = {
+            type = "app";
+            program = "${pkgs.writeShellScript "book-serve" ''
+              cd "$(${pkgs.git}/bin/git rev-parse --show-toplevel)/book"
+              echo "NativeLink: The Missing Guide — http://localhost:3000"
+              exec ${pkgs.mdbook}/bin/mdbook serve --open --port 3000  --hostname 0.0.0.0
+            ''}";
+          };
+          # The Nix cache client, standalone: `nix run .#nl-nix -- <push|pull|
+          # info|flake> …`. `flake` builds a whole flake and pushes its closures
+          # natively — no shell wrapper.
+          nl-nix = {
+            type = "app";
+            program = "${nativelink-nix-client}/bin/nl-nix";
+          };
+          # `nix run .#push-flake [-- FLAKE]` — fleet-flavored convenience over
+          # `nl-nix flake`: default to the local cache and sign with the fleet
+          # key when present. All enumerate/build/push logic now lives in nl-nix.
+          push-flake = {
+            type = "app";
+            program = pkgs.lib.getExe (pkgs.writeShellApplication {
+              name = "push-flake";
+              runtimeInputs = [pkgs.nix nativelink-nix-client];
+              text = ''
+                set -euo pipefail
+                cache="''${NL_NIX_CACHE:-http://127.0.0.1:50071/nix/main}"
+                signing=()
+                if [ -r /run/agenix/nativelink-nix-cache-key ]; then
+                  signing=(--signing-key /run/agenix/nativelink-nix-cache-key)
+                fi
+                exec nl-nix --to "$cache" "''${signing[@]}" flake "$@"
+              '';
+            });
+          };
         };
         packages =
           rec {
             inherit
               nativelink
+              nativelink-nix-client
               nativelinkCoverageForHost
               nativelink-aarch64-linux
               nativelink-image
@@ -474,8 +570,30 @@
               nativelink-x86_64-linux
               ;
 
+            # NativeLink: The Missing Guide — rendered as a static site
+            book = pkgs.stdenvNoCC.mkDerivation {
+              name = "nativelink-the-missing-guide";
+              src = ./book;
+              nativeBuildInputs = [pkgs.mdbook];
+              buildPhase = ''
+                runHook preBuild
+                mdbook build --dest-dir ./out
+                runHook postBuild
+              '';
+              installPhase = ''
+                runHook preInstall
+                cp -r ./out $out
+                runHook postInstall
+              '';
+            };
             # Used by the CI
-            inherit (pkgs.nativelink-tools) local-image-test publish-ghcr create-multi-arch-image regctl-ghcr-login;
+            inherit
+              (pkgs.nativelink-tools)
+              local-image-test
+              publish-ghcr
+              create-multi-arch-image
+              regctl-ghcr-login
+              ;
 
             default = nativelink;
 
@@ -490,27 +608,51 @@
             nativelink-worker-buck2-toolchain = buck2-toolchain;
             image = nativelink-image;
 
-            inherit (pkgs) buildstream buck2 mongodb wait4x bazelisk;
-            buildstream-with-nativelink-test = pkgs.callPackage integration_tests/buildstream/buildstream-with-nativelink-test.nix {
-              inherit nativelink buildstream;
-            };
-            mongo-with-nativelink-test = pkgs.callPackage integration_tests/mongo/mongo-with-nativelink-test.nix {
-              inherit nativelink mongodb wait4x bazelisk;
-            };
+            inherit
+              (pkgs)
+              buildstream
+              buck2
+              mongodb
+              wait4x
+              bazelisk
+              ;
+            buildstream-with-nativelink-test =
+              pkgs.callPackage integration_tests/buildstream/buildstream-with-nativelink-test.nix
+              {
+                inherit nativelink buildstream;
+              };
+            mongo-with-nativelink-test =
+              pkgs.callPackage integration_tests/mongo/mongo-with-nativelink-test.nix
+              {
+                inherit
+                  nativelink
+                  mongodb
+                  wait4x
+                  bazelisk
+                  ;
+              };
             rbe-toolchain-with-nativelink-test = pkgs.callPackage toolchain-examples/rbe-toolchain-test.nix {
               inherit nativelink bazel-retry bazel;
             };
-            buck2-with-nativelink-test = pkgs.callPackage integration_tests/buck2/buck2-with-nativelink-test.nix {
-              inherit nativelink buck2;
-            };
+            buck2-with-nativelink-test =
+              pkgs.callPackage integration_tests/buck2/buck2-with-nativelink-test.nix
+              {
+                inherit nativelink buck2;
+              };
             update-module-hashes = pkgs.callPackage tools/updaters/rewrite-module.nix {
-              python-with-requests = pkgs.python3.withPackages (ps:
-                with ps; [
-                  ps.requests
-                ]);
+              python-with-requests = pkgs.python3.withPackages (
+                ps:
+                  with ps; [
+                    ps.requests
+                  ]
+              );
             };
-            generate-bazel-rc = pkgs.callPackage tools/generate-bazel-rc/build.nix {craneLib = craneLibFor pkgs;};
-            generate-stores-config = pkgs.callPackage nativelink-config/generate-stores-config/build.nix {craneLib = craneLibFor pkgs;};
+            generate-bazel-rc = pkgs.callPackage tools/generate-bazel-rc/build.nix {
+              craneLib = craneLibFor pkgs;
+            };
+            generate-stores-config = pkgs.callPackage nativelink-config/generate-stores-config/build.nix {
+              craneLib = craneLibFor pkgs;
+            };
           }
           // (
             # It's not possible to crosscompile to darwin, not even between
@@ -526,10 +668,82 @@
             }
             else {}
           );
+        checks =
+          {
+            # Focused Rust test gate for the Nix substituter: the
+            # nativelink-nix protocol crate plus the nix_cache_server HTTP
+            # facade and its integration suite.
+            nix-crate-tests = let
+              # Linking the test binaries against the musl C deps
+              # (zlib-ng/zstd) pulls in fortified __*_chk symbols musl
+              # doesn't provide. The plain binary drops those code paths
+              # via --gc-sections, but the test binaries retain them, so
+              # the C deps themselves must be built without fortification —
+              # hence a dedicated buildDepsOnly rather than reusing the
+              # package's cached artifacts.
+              testArgs =
+                (commonArgsFor pkgs)
+                // {
+                  hardeningDisable = ["fortify"];
+                };
+            in
+              (craneLibFor pkgs).cargoTest (
+                testArgs
+                // {
+                  cargoArtifacts = (craneLibFor pkgs).buildDepsOnly testArgs;
+                  cargoExtraArgs = "--locked -p nativelink-nix -p nativelink-oci-registry -p nativelink-service";
+                }
+              );
+            # Validate every example config with `nativelink --check`.
+            # Purely offline (no sockets, no I/O), so it works in a sandbox.
+            check-example-configs =
+              pkgs.runCommand "check-example-configs" {
+                nativeBuildInputs = [nativelink];
+              } ''
+                for f in ${./nativelink-config/examples}/*.json5; do
+                  nativelink --check "$f" || exit 1
+                done
+                touch $out
+              '';
+          }
+          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            # End-to-end round trip: a real `nix` client against a running
+            # nativelink nix_cache service in a NixOS VM. Needs KVM, so it is
+            # Linux-only.
+            nix-substituter-e2e = pkgs.callPackage ./tools/checks/nix-substituter-vm-test.nix {
+              inherit nativelink;
+            };
+            # Independent-client round trips (skopeo + crane, byte-identical)
+            # against a live oci_registry instance in the build sandbox on
+            # loopback (design 3, oracle 2 of the OCI-registry-over-CAS
+            # design). No KVM needed, but the server binary is Linux-shaped.
+            oci-client-roundtrip = pkgs.callPackage ./tools/checks/oci-client-roundtrip.nix {
+              inherit nativelink;
+            };
+            # The OFFICIAL opencontainers/distribution-spec conformance
+            # suite (pinned v1.1.1) against a live oci_registry instance —
+            # all four workflow categories; the suite's JUnit report is the
+            # artifact (design 3, oracle 1).
+            oci-conformance = pkgs.callPackage ./tools/checks/oci-conformance.nix {
+              inherit nativelink;
+            };
+            # The projection differential: FetchDirectory via the network
+            # client and via the oci://self local short-circuit must agree
+            # on the REAPI root digest for the same pushed image (design 3,
+            # oracle 3).
+            oci-projection-differential = pkgs.callPackage ./tools/checks/oci-projection-differential.nix {
+              inherit nativelink;
+            };
+          };
         pre-commit.settings = {
           hooks = import ./tools/pre-commit-hooks.nix {
             inherit pkgs;
             inherit (packages) generate-bazel-rc generate-stores-config;
+            # Upstream nixpkgs renovate now carries the macOS libtool fix
+            # (cctools for better-sqlite3) that the former vendored copy in
+            # tools/renovate.nix existed to provide, and uses fetcherVersion 3
+            # (v2 was removed in nixpkgs 26.11). Use it directly.
+            renovate-patched = pkgs.renovate;
             nightly-rust = pkgs.rust-bin.nightly.${pkgs.lre.nightly-rust.meta.version};
           };
         };
@@ -569,6 +783,13 @@
           "${bash}/bin"
           "${coreutils}/bin"
           "${gnused}/bin"
+
+          # libz-ng-sys (via zlib-ng) builds its C lib with cmake (which in
+          # turn drives make); the Cargo build gets these from
+          # `nativeBuildInputs`, but Bazel's `--incompatible_strict_action_env`
+          # build-script actions only see this PATH.
+          "${cmake}/bin"
+          "${gnumake}/bin"
         ];
         devShells.default = pkgs.mkShell {
           packages =
@@ -608,6 +829,9 @@
               pkgs.go
               pkgs.kustomize
               pkgs.kubectx
+
+              # Documentation
+              pkgs.mdbook
 
               # Web
               pkgs.bun

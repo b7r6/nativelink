@@ -1,0 +1,17 @@
+# Cap parallel codegen so builds can't oversubscribe a shared machine.
+#
+# Each `cargo` defaults to one `rustc` per core (32 here), and separate cargo
+# invocations do NOT share a jobserver — so several at once (a CI matrix, or
+# tool/agent-driven builds running concurrently) can pile up dozens of `rustc`
+# and spike memory even on a large box. 16 (half the cores) stays fast with
+# headroom. For a max-speed solo build, override with `CARGO_BUILD_JOBS=32`
+# or `cargo build --jobs 32`.
+[build]
+jobs = 16
+
+# Cap the test runner too. `cargo test` defaults libtest to one thread per core
+# (32 here), so a full suite whose tests each build a temp tree or open the
+# 388 MB store DB can multiply peak memory. 8 keeps it bounded without being
+# slow. Override per-run with `cargo test -- --test-threads=N`.
+[env]
+RUST_TEST_THREADS = "8"

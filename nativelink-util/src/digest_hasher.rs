@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use blake3::Hasher as Blake3Hasher;
@@ -27,11 +28,13 @@ use opentelemetry::context::Context;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+use tracing::warn;
 
 use crate::common::DigestInfo;
 use crate::{fs, spawn_blocking};
 
 static DEFAULT_DIGEST_HASHER_FUNC: OnceLock<DigestHasherFunc> = OnceLock::new();
+static REQUIRE_EXPLICIT_DIGEST_FUNCTION: OnceLock<bool> = OnceLock::new();
 
 /// Utility function to make a context with a specific hasher function set.
 pub fn make_ctx_for_hash_func<H>(hasher: H) -> Result<Context, Error>
@@ -66,6 +69,70 @@ pub fn set_default_digest_hasher_func(hasher: DigestHasherFunc) -> Result<(), Er
     DEFAULT_DIGEST_HASHER_FUNC
         .set(hasher)
         .map_err(|_| make_err!(Code::Internal, "default_digest_hasher_func already set"))
+}
+
+/// When set to true, `TryFrom<i32>` for `DigestHasherFunc` will reject
+/// value 0 (UNKNOWN) with an error rather than silently defaulting to the
+/// server's configured digest function. This prevents BLAKE3/SHA256
+/// cross-hashing bugs where a client omits the field and the server
+/// defaults to a mismatched algorithm.
+pub fn set_require_explicit_digest_function(required: bool) -> Result<(), Error> {
+    REQUIRE_EXPLICIT_DIGEST_FUNCTION.set(required).map_err(|_| {
+        make_err!(
+            Code::Internal,
+            "require_explicit_digest_function already set"
+        )
+    })
+}
+
+/// Returns whether the server requires clients to explicitly set the
+/// digest function (rejects UNKNOWN/0).
+pub fn require_explicit_digest_function() -> bool {
+    *REQUIRE_EXPLICIT_DIGEST_FUNCTION.get_or_init(|| false)
+}
+
+/// Resolve the digest function from an optional `ByteStream` resource-name
+/// segment, honoring strict mode.
+///
+/// REAPI carries the digest function for `ByteStream` as a path segment
+/// (`.../blobs/{digest_function}/{hash}/{size}`), not as a proto int field, so
+/// an omitted segment is the `ByteStream` analogue of `digest_function == 0` on
+/// the structured RPCs. Resolving it through this function (rather than
+/// defaulting directly) ensures `require_explicit_digest_function` covers
+/// `ByteStream` too: an omitted segment is rejected in strict mode and defaulted
+/// (with the same one-time warning as the i32 path) otherwise. A present
+/// segment is parsed normally and an unknown value is rejected regardless of
+/// mode.
+pub fn digest_hasher_from_resource_name_segment(
+    segment: Option<&str>,
+) -> Result<DigestHasherFunc, Error> {
+    if let Some(name) = segment {
+        return DigestHasherFunc::try_from(name);
+    }
+    if require_explicit_digest_function() {
+        return Err(make_input_err!(
+            "digest_function is required but the ByteStream resource name \
+             omitted it (e.g. '.../blobs/{{hash}}/{{size}}' with no \
+             '{{digest_function}}' segment). Clients MUST address blobs \
+             under '.../blobs/{{digest_function}}/{{hash}}/{{size}}'. Set \
+             global.require_explicit_digest_function to false to restore \
+             the legacy defaulting behavior."
+        ));
+    }
+    if !WARNED_UNSET_DIGEST_FUNCTION.swap(true, Ordering::Relaxed) {
+        let default_fn = default_digest_hasher_func();
+        warn!(
+            default_digest_function = %default_fn,
+            "Received ByteStream request with no digest_function segment in \
+             the resource name; defaulting to {default_fn}. This can cause \
+             silent corruption if the client is using a different digest \
+             function (e.g. BLAKE3 client with SHA256 server default). Set \
+             global.require_explicit_digest_function = true to reject such \
+             requests, or ensure all clients address blobs under \
+             '.../blobs/{{digest_function}}/{{hash}}/{{size}}'.",
+        );
+    }
+    Ok(default_digest_hasher_func())
 }
 
 /// Supported digest hash functions.
@@ -145,12 +212,37 @@ impl core::fmt::Display for DigestHasherFunc {
     }
 }
 
+/// Tracks whether we've already warned about unset `digest_function`
+/// so we don't spam logs on every single request.
+static WARNED_UNSET_DIGEST_FUNCTION: AtomicBool = AtomicBool::new(false);
+
 impl TryFrom<i32> for DigestHasherFunc {
     type Error = Error;
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
-        // Zero means not-set.
+        // Zero means not-set (protobuf default for unset enum fields).
         if value == 0 {
+            if require_explicit_digest_function() {
+                return Err(make_input_err!(
+                    "digest_function is required but was not set (received UNKNOWN/0). \
+                     Clients MUST explicitly declare the digest function. \
+                     Set global.require_explicit_digest_function to false to restore \
+                     the legacy defaulting behavior."
+                ));
+            }
+            // Legacy mode: default, but warn so operators can detect the issue.
+            if !WARNED_UNSET_DIGEST_FUNCTION.swap(true, Ordering::Relaxed) {
+                let default_fn = default_digest_hasher_func();
+                warn!(
+                    default_digest_function = %default_fn,
+                    "Received request with digest_function unset (UNKNOWN/0); \
+                     defaulting to {default_fn}. This can cause silent corruption \
+                     if the client is using a different digest function (e.g. BLAKE3 \
+                     client with SHA256 server default). Set \
+                     global.require_explicit_digest_function = true to reject such \
+                     requests, or ensure all clients explicitly set digest_function.",
+                );
+            }
             return Ok(default_digest_hasher_func());
         }
         match ProtoDigestFunction::try_from(value) {

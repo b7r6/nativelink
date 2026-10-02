@@ -1003,6 +1003,26 @@ pub struct FastSlowSpec {
     /// Default: disabled (0)
     #[serde(default, deserialize_with = "convert_data_size_with_shellexpand")]
     pub bypass_dedup_threshold_bytes: u64,
+
+    /// When enabled, an update returns to the client as soon as the `fast`
+    /// store holds the data; the `slow` store is then populated by a background
+    /// task that reads the blob back out of the fast store. This decouples
+    /// client write latency — and liveness — from the slow tier, so a slow or
+    /// briefly stalled slow store (e.g. a remote object store) can no longer
+    /// backpressure or freeze the client upload. Existence checks (`has`)
+    /// remain correct while the copy is in flight via in-flight slow-write
+    /// tracking.
+    ///
+    /// Trade-off: there is a window after the update completes during which the
+    /// blob exists only in the fast store and is not yet durable in the slow
+    /// store; if the process or node is lost in that window the blob must be
+    /// re-uploaded. This suits a rebuildable cache whose fast tier is
+    /// authoritative for reads (e.g. a sharded CAS whose reads route to the
+    /// writing node). Only takes effect when both tiers are written on update
+    /// (`fast_direction` and `slow_direction` are `Both` or `Update`).
+    /// Default: false (writes are synchronous write-through to both tiers).
+    #[serde(default)]
+    pub slow_store_write_back: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
@@ -1520,12 +1540,18 @@ pub struct GrpcSpec {
     #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
     pub connections_per_endpoint: usize,
 
-    /// Maximum time (seconds) allowed for a single RPC request (e.g. a
-    /// `ByteStream.Write` call) before it is cancelled.
+    /// Maximum time (seconds) allowed for a single RPC request before it
+    /// is cancelled with `DeadlineExceeded` (retryable). This applies to
+    /// every RPC this store makes: unary calls (e.g. `FindMissingBlobs`,
+    /// `BatchReadBlobs`), `ByteStream.Write` calls, and the establishment
+    /// of read streams through their first response chunk. The body of an
+    /// established read stream is not bounded by this deadline.
     ///
     /// A value of 0 (the default) disables the per-RPC timeout. Dead
     /// connections are still detected by the HTTP/2 and TCP keepalive
-    /// mechanisms configured on each endpoint.
+    /// mechanisms configured on each endpoint, and endpoints that cannot
+    /// be connected to at all fail fast with `Unavailable` rather than
+    /// queuing requests indefinitely.
     ///
     /// For large uploads (multi-GB), either leave this at 0 or set it
     /// large enough to accommodate the full transfer time.

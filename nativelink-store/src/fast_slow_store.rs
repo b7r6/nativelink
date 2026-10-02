@@ -31,13 +31,13 @@ use nativelink_metric::MetricsComponent;
 use nativelink_util::buf_channel::{
     DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
 };
-use nativelink_util::fs;
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
 use nativelink_util::metrics::{record_store_tier_io, record_store_tier_read};
 use nativelink_util::store_trait::{
     RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, StoreOptimizations, UploadSizeInfo,
     slow_update_store_with_file,
 };
+use nativelink_util::{background_spawn, fs};
 use parking_lot::Mutex;
 use tokio::sync::OnceCell;
 use tracing::{debug, info, trace, warn};
@@ -64,6 +64,10 @@ pub struct FastSlowStore {
     slow_direction: StoreDirection,
     /// See [`FastSlowSpec::bypass_dedup_threshold_bytes`].
     bypass_dedup_threshold_bytes: u64,
+    /// See [`FastSlowSpec::slow_store_write_back`]. When true, updates return
+    /// once the fast store has the data and the slow store is populated from a
+    /// background task, decoupling the client write from the slow tier.
+    slow_store_write_back: bool,
     weak_self: Weak<Self>,
     #[metric]
     metrics: FastSlowStoreMetrics,
@@ -166,6 +170,7 @@ impl FastSlowStore {
             slow_direction: spec.slow_direction,
             // 0 (default) disables the bypass entirely (always dedup).
             bypass_dedup_threshold_bytes: spec.bypass_dedup_threshold_bytes,
+            slow_store_write_back: spec.slow_store_write_back,
             weak_self: weak_self.clone(),
             metrics: FastSlowStoreMetrics::default(),
             populating_digests: Mutex::new(HashMap::new()),
@@ -504,8 +509,42 @@ impl StoreDriver for FastSlowStore {
             return self.fast_store.has_with_results(key, results).await;
         }
 
-        // Check with the slow store first.
-        self.slow_store.has_with_results(key, results).await?;
+        // Check the fast (local NVMe) tier first: a blob resident there is
+        // present and is answered without a slow-tier round-trip. Only
+        // fast-misses are probed against the slow tier, and a slow-tier
+        // failure (or a probe that exceeds SLOW_PROBE_DEADLINE) degrades
+        // gracefully (treated as missing) instead of wedging FindMissingBlobs
+        // into a re-upload storm when the slow tier is throttled.
+        self.fast_store.has_with_results(key, results).await?;
+        let slow_idx: Vec<usize> = results
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| r.is_none().then_some(i))
+            .collect();
+        if !slow_idx.is_empty() {
+            let slow_keys: Vec<StoreKey<'_>> = slow_idx.iter().map(|&i| key[i].borrow()).collect();
+            let mut slow_results = vec![None; slow_idx.len()];
+            // Bound the slow-tier existence probe. A fast-miss must fail-fast
+            // rather than block on the slow store's full RPC timeout (e.g. a
+            // GrpcStore's 60s): a cold build issues tens of thousands of these
+            // probes, and without a short deadline every fast-miss stalls the
+            // hot ring long enough to wedge the worker. On timeout we treat the
+            // blob as missing; the write-back path still carries durability.
+            const SLOW_PROBE_DEADLINE: core::time::Duration = core::time::Duration::from_secs(3);
+            let probe = self
+                .slow_store
+                .has_with_results(&slow_keys, &mut slow_results);
+            match tokio::time::timeout(SLOW_PROBE_DEADLINE, probe).await {
+                Ok(Ok(())) => {
+                    for (j, &i) in slow_idx.iter().enumerate() {
+                        results[i] = slow_results[j];
+                    }
+                }
+                // Slow-tier error or deadline exceeded: degrade to "missing"
+                // for the fast-miss digests rather than propagating a wedge.
+                Ok(Err(_)) | Err(_) => {}
+            }
+        }
 
         // Check for any in-flight requests to the slow store next.
         let mut in_flight_futs = FuturesUnordered::new();
@@ -527,12 +566,14 @@ impl StoreDriver for FastSlowStore {
             results[i] = size;
         }
 
-        // NOTE: We intentionally *NEVER* check the fast store, this is to
-        // ensure that we re-upload data to the slow store if it only exists
-        // in the fast store.  This does not affect workers as they do not
-        // check existence through `has` and instead go direct to loading the
-        // data which bypasses the check and will load from the fast store if
-        // it does not exist in the slow store.
+        // NOTE: this store historically probed ONLY the slow tier (to force
+        // re-upload of fast-only blobs). That turned FindMissingBlobs into a
+        // per-digest slow-tier existence probe, which wedges the hot ring
+        // under slow-tier throttling (find_missing -> has -> slow probe x
+        // tens-of-thousands -> 60s timeout -> re-upload storm). We now answer
+        // fast-present from the fast tier and probe the slow tier only for
+        // fast-misses (with a short deadline); durability to the slow tier is
+        // the write-back path's job.
 
         Ok(())
     }
@@ -575,6 +616,44 @@ impl StoreDriver for FastSlowStore {
                 slow_in_flight_guard.complete(Some(*size));
             }
             return result;
+        }
+
+        // Write-back (opt-in): populate the fast store synchronously from the
+        // client, then copy fast->slow in a background task. This returns to the
+        // client at fast-store speed and prevents a slow or stalled slow store
+        // from backpressuring/freezing the upload. See
+        // [`FastSlowSpec::slow_store_write_back`].
+        if self.slow_store_write_back {
+            let size = self
+                .fast_store
+                .update(key.borrow(), reader, size_info)
+                .await
+                .err_tip(|| "In FastSlowStore::update fast store (write-back)")?;
+            match self.weak_self.upgrade() {
+                Some(store) => {
+                    let key_owned = key.borrow().into_owned();
+                    background_spawn!("fast_slow_store_write_back", async move {
+                        let (tx, rx) = make_buf_channel_pair();
+                        let get_fut = store.fast_store.get(key_owned.borrow(), tx);
+                        let update_fut = store.slow_store.update(key_owned.borrow(), rx, size_info);
+                        match try_join!(get_fut, update_fut) {
+                            Ok(((), slow_size)) => slow_in_flight_guard.complete(Some(slow_size)),
+                            Err(e) => {
+                                warn!(
+                                    ?e,
+                                    key = %key_owned.as_str(),
+                                    "fast_slow_store write-back to slow store failed; \
+                                     blob remains in fast store only",
+                                );
+                                drop(slow_in_flight_guard);
+                            }
+                        }
+                    });
+                }
+                // Store is shutting down; can't spawn a tracked copy.
+                None => drop(slow_in_flight_guard),
+            }
+            return Ok(size);
         }
 
         let (mut fast_tx, fast_rx) = make_buf_channel_pair();
@@ -714,6 +793,55 @@ impl StoreDriver for FastSlowStore {
             .fast_store
             .optimized_for(StoreOptimizations::FileUpdates)
         {
+            // Write-back (opt-in): move the file into the fast store now, then
+            // copy fast->slow in a background task so we do not block on the
+            // slow tier. See [`FastSlowSpec::slow_store_write_back`].
+            if self.slow_store_write_back
+                && !self
+                    .slow_store
+                    .inner_store(Some(key.borrow()))
+                    .optimized_for(StoreOptimizations::NoopUpdates)
+                && self.slow_direction != StoreDirection::ReadOnly
+                && self.slow_direction != StoreDirection::Get
+                && self.fast_direction != StoreDirection::ReadOnly
+                && self.fast_direction != StoreDirection::Get
+            {
+                let slow_in_flight_guard = self.register_in_flight_slow_write(key.borrow());
+                let (size, maybe_file) = self
+                    .fast_store
+                    .update_with_whole_file(key.borrow(), path, file, upload_size)
+                    .await
+                    .err_tip(
+                        || "In FastSlowStore::update_with_whole_file fast store (write-back)",
+                    )?;
+                match self.weak_self.upgrade() {
+                    Some(store) => {
+                        let key_owned = key.borrow().into_owned();
+                        background_spawn!("fast_slow_store_write_back_file", async move {
+                            let (tx, rx) = make_buf_channel_pair();
+                            let get_fut = store.fast_store.get(key_owned.borrow(), tx);
+                            let update_fut =
+                                store.slow_store.update(key_owned.borrow(), rx, upload_size);
+                            match try_join!(get_fut, update_fut) {
+                                Ok(((), slow_size)) => {
+                                    slow_in_flight_guard.complete(Some(slow_size));
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        ?e,
+                                        key = %key_owned.as_str(),
+                                        "fast_slow_store write-back (file) to slow store failed; \
+                                         blob remains in fast store only",
+                                    );
+                                    drop(slow_in_flight_guard);
+                                }
+                            }
+                        });
+                    }
+                    None => drop(slow_in_flight_guard),
+                }
+                return Ok((size, maybe_file));
+            }
             if !self
                 .slow_store
                 .inner_store(Some(key.borrow()))

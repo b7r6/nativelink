@@ -1,0 +1,18 @@
+#:schema ../tools/cargo-with-detailed-deps.json
+lints.workspace = true
+
+[package]
+description = "OCI Distribution protocol primitives for NativeLink — wire names, digest-alias and tag records"
+edition = "2024"
+name = "nativelink-oci-registry"
+version = "1.5.2"
+
+[dependencies]
+nativelink-error = { path = "../nativelink-error" }
+nativelink-proto = { path = "../nativelink-proto" }
+
+prost = { version = "0.14.4", default-features = false }
+prost-types = { version = "0.14.4", default-features = false }
+serde_json = { version = "1.0.140", default-features = false, features = [
+  "std",
+] }

@@ -8,7 +8,7 @@
       follows = "nativelink/git-hooks";
     };
     nativelink = {
-      url = "github:TraceMachina/nativelink/f9ff630e09a3c22d6a3abea68d1bacc775eac6bb";
+      url = "git+ssh://git@git.s4.gl/straylight/straylight-nativelink.git?ref=main&rev=a8822ee3083d59d54f9f0f091ee8c3df5e44d324";
     };
     nixpkgs = {
       follows = "nativelink/nixpkgs";
