@@ -1,12 +1,21 @@
 ---
 name: Cargo Native
 
+# MERGE-QUEUE variant (recommended hardening over main-only): Cargo Native
+# runs in the merge queue (after approval, BEFORE the commit lands on main)
+# plus main-push and a daily cadence. On pull_request only the Ubuntu cargo
+# target runs for fast feedback; the expensive Windows target is deferred to
+# the merge queue. This keeps main green (catches cargo-only breaks pre-merge)
+# while removing Windows from the per-PR hot path.
 on:
+  merge_group:
   push:
-    branches: [main]
+    branches: [main, 'ci/win-x-**']
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+  schedule:
+    - cron: '0 6 * * *'
   pull_request:
     branches: [main]
     paths-ignore:
@@ -31,7 +40,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        # pull_request: Ubuntu only (fast feedback). merge_group/push/schedule:
+        # full matrix including the expensive Windows target.
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04", "windows-2022"]') }}
         toolchain: [stable]
     name: ${{ matrix.os }} / ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
@@ -53,6 +64,8 @@ jobs:
       - name: Rust cache
         uses: >- # v2.9.1
           Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          prefix-key: "exp-mq"
 
       - name: Build on ${{ runner.os }}
         run: cargo build --all --profile=smol
