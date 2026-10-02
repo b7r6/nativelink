@@ -2247,9 +2247,6 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
         offset: u64,
         length: Option<u64>,
     ) -> Result<(), Error> {
-        // Bounded retries for the transient map/disk race handled in the read
-        // path below (declared here so it precedes any statement in the block).
-        const MAX_MISS_RETRIES: usize = 3;
         if is_zero_digest(key.borrow()) {
             self.has(key.borrow())
                 .await
@@ -2260,53 +2257,33 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
             return Ok(());
         }
         let owned_key = key.into_owned();
+        let entry = self.evicting_map.get(&owned_key).await.ok_or_else(|| {
+            make_err!(
+                Code::NotFound,
+                "{} not found in filesystem store here",
+                owned_key.as_str()
+            )
+        })?;
         let read_limit = length.unwrap_or(u64::MAX);
-        // A `get()` hit followed by an `open()` ENOENT is ambiguous. Under
-        // concurrent same-key writes an evicted generation's `unref()` renames
-        // the shared content path away while a fresh generation is still being
-        // emplaced, so the entry the map just handed us can momentarily have no
-        // file on disk even though a present replacement is landing. Retry a
-        // bounded number of times, re-fetching the (newer) entry each pass, so
-        // a transient race self-heals instead of surfacing a spurious miss.
-        // Only once the miss persists past the retries do we treat it as a
-        // genuine map/disk divergence.
-        let mut miss_attempts: usize = 0;
-        // Keep the resolved `entry` bound for the whole stream below. Dropping
-        // the last `Arc<FileEntry>` is what triggers deletion of an evicted
-        // (renamed-to-temp) file, and an in-flight reader must be able to
-        // finish streaming from its already-open fd first — so the entry must
-        // outlive the read loop exactly as it did before the retry was added.
-        let (entry, mut temp_file) = loop {
-            let entry = self.evicting_map.get(&owned_key).await.ok_or_else(|| {
-                make_err!(
-                    Code::NotFound,
-                    "{} not found in filesystem store here",
-                    owned_key.as_str()
-                )
-            })?;
-            match entry.read_file_part(offset, read_limit).await {
-                Ok(file) => break (entry, file),
-                Err(err) if err.code == Code::NotFound && miss_attempts < MAX_MISS_RETRIES => {
-                    // Transient map/disk race: yield so a racing writer's
-                    // emplace can commit, then re-fetch and re-open.
-                    miss_attempts += 1;
-                    tokio::task::yield_now().await;
-                }
-                Err(err) if err.code == Code::NotFound => {
-                    // Retries exhausted: the map says the file is present but
-                    // `open()` keeps hitting ENOENT, so this is a genuine
-                    // map/disk divergence. Remove the stale entry — a
-                    // fast/slow caller then re-populates from the slow store —
-                    // and surface the miss. Recoverable, hence a warn.
+        let mut temp_file = match entry.read_file_part(offset, read_limit).await {
+            Ok(file) => file,
+            Err(err) => {
+                // If the file is not found, we need to remove it from the eviction map.
+                if err.code == Code::NotFound {
+                    // Map said the file was present but `open()` hit ENOENT.
+                    // Self-heals: we remove the stale entry below and a
+                    // fast/slow caller re-populates from the slow store, so
+                    // this is a recoverable warn, not a fatal error.
                     warn!(
                         ?err,
                         key = ?owned_key,
                         "Filesystem store map/disk divergence: removing entry; reader will fall through to slow store",
                     );
-                    self.evicting_map.remove(&owned_key).await;
-                    return Err(err);
+                    self.evicting_map
+                        .remove_if(&owned_key, |map_entry| Arc::ptr_eq(map_entry, &entry))
+                        .await;
                 }
-                Err(err) => return Err(err),
+                return Err(err);
             }
         };
 
@@ -2331,9 +2308,9 @@ impl<Fe: FileEntry> StoreDriver for FilesystemStore<Fe> {
             .send_eof()
             .err_tip(|| "Filed to send EOF in filesystem store get_part")?;
 
-        // Hold the file entry until the body is fully streamed (see the
-        // binding above): releasing it earlier could let an evicted file be
-        // deleted out from under this in-flight read.
+        // Hold the file entry until the body is fully streamed: releasing the
+        // last Arc earlier could let an evicted file be deleted out from under
+        // this in-flight read.
         drop(entry);
         Ok(())
     }
