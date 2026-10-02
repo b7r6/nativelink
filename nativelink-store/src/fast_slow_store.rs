@@ -453,8 +453,32 @@ impl StoreDriver for FastSlowStore {
             return self.fast_store.has_with_results(key, results).await;
         }
 
-        // Check with the slow store first.
-        self.slow_store.has_with_results(key, results).await?;
+        // Check the fast (local NVMe) tier first: a blob resident there is
+        // present and is answered without a slow-tier round-trip. Only
+        // fast-misses are probed against the slow tier, and a slow-tier
+        // failure degrades gracefully (treated as missing) instead of wedging
+        // FindMissingBlobs into a re-upload storm when R2 is throttled.
+        self.fast_store.has_with_results(key, results).await?;
+        let slow_idx: Vec<usize> = results
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| r.is_none().then_some(i))
+            .collect();
+        if !slow_idx.is_empty() {
+            let slow_keys: Vec<StoreKey<'_>> =
+                slow_idx.iter().map(|&i| key[i].borrow()).collect();
+            let mut slow_results = vec![None; slow_idx.len()];
+            if self
+                .slow_store
+                .has_with_results(&slow_keys, &mut slow_results)
+                .await
+                .is_ok()
+            {
+                for (j, &i) in slow_idx.iter().enumerate() {
+                    results[i] = slow_results[j];
+                }
+            }
+        }
 
         // Check for any in-flight requests to the slow store next.
         let mut in_flight_futs = FuturesUnordered::new();
@@ -476,12 +500,13 @@ impl StoreDriver for FastSlowStore {
             results[i] = size;
         }
 
-        // NOTE: We intentionally *NEVER* check the fast store, this is to
-        // ensure that we re-upload data to the slow store if it only exists
-        // in the fast store.  This does not affect workers as they do not
-        // check existence through `has` and instead go direct to loading the
-        // data which bypasses the check and will load from the fast store if
-        // it does not exist in the slow store.
+        // NOTE: this store historically probed ONLY the slow tier above (to
+        // force re-upload of fast-only blobs). That made FindMissingBlobs a
+        // per-digest R2 existence probe, which wedges the hot ring under R2
+        // throttling (the buck2 cache_uploader death-spiral: find_missing ->
+        // has -> R2 probe x tens-of-thousands -> 60s timeout -> re-upload all).
+        // We now answer fast-present from the fast tier and probe slow only for
+        // fast-misses; durability to the slow tier is the write-back path's job.
 
         Ok(())
     }
