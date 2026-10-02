@@ -992,7 +992,7 @@ impl SchedulerStore for ExperimentalMongoStore {
             let result = match self
                 .scheduler_collection
                 .find_one_and_update(filter, update_doc)
-                .upsert(true)
+                .upsert(current_version == 0)
                 .return_document(ReturnDocument::After)
                 .await
             {

@@ -839,7 +839,10 @@ async fn test_scheduler_store_operations() -> Result<(), Error> {
         data.version = version1; // Using old version
         let result = helper.store.update_data(data.clone(), None).await;
 
-        assert!(result.is_err(), "Update with old version should fail");
+        assert!(
+            matches!(result, Ok(None)),
+            "Stale-version update must return retryable Ok(None), got {result:?}"
+        );
         eprintln!("Correctly rejected update with stale version");
     }
 
@@ -1066,6 +1069,53 @@ async fn update_rejects_truncated_stream_instead_of_committing_it() -> Result<()
     assert!(
         store.has(digest).await?.is_none(),
         "a torn upload must not leave the digest present",
+    );
+
+    Ok(())
+}
+
+#[nativelink_test]
+async fn update_data_stale_version_returns_retryable_none_not_err() -> Result<(), Error> {
+    // N12 regression: ExperimentalMongoStore::update_data used upsert(true), so a
+    // version-CAS miss (a concurrent writer already bumped the version) hit the
+    // unique _id and surfaced as a DuplicateKeyError (Err) instead of the
+    // retryable Ok(None) the scheduler contract (and the Redis backend) require.
+    let helper = TestMongoHelper::new(None).await?;
+
+    let mut data = TestSchedulerData {
+        key: "test:n12_version_cas".to_string(),
+        content: "v1".to_string(),
+        version: 0,
+    };
+
+    // Seed at version 0 -> creates version 1 (genuine first create still upserts).
+    let v1 = helper
+        .store
+        .update_data(data.clone(), None)
+        .await
+        .err_tip(|| "create should succeed")?
+        .ok_or_else(|| make_err!(Code::Internal, "expected a version on create"))?;
+
+    // One writer wins with the correct version -> version 2.
+    data.content = "v2".to_string();
+    data.version = v1;
+    let v2 = helper
+        .store
+        .update_data(data.clone(), None)
+        .await
+        .err_tip(|| "correct-version update should succeed")?
+        .ok_or_else(|| make_err!(Code::Internal, "expected a version on update"))?;
+    assert!(v2 > v1, "version should increment ({v1} -> {v2})");
+
+    // The losing concurrent writer carries the now-stale version. It MUST get a
+    // retryable Ok(None), not Err. Before the fix this returned Err(Internal)
+    // (duplicate _id), destroying the retry signal.
+    data.content = "stale".to_string();
+    data.version = v1;
+    let stale = helper.store.update_data(data.clone(), None).await;
+    assert!(
+        matches!(stale, Ok(None)),
+        "stale-version update must return retryable Ok(None), got {stale:?}"
     );
 
     Ok(())
