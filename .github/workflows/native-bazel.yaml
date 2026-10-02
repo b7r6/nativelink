@@ -53,7 +53,7 @@ jobs:
         id: setup-nativelink-cloud
         uses: ./.github/actions/setup-nativelink-cloud
         with:
-          ci-mode: ${{ vars.NATIVELINK_CI_MODE }}
+          ci-mode: off
           claim-base: ${{ secrets.NATIVELINK_STAGING_CLAIM_BASE }}
           bes-results-url: ${{ secrets.NATIVELINK_STAGING_BES_RESULTS_URL }}
           api-key: >-
@@ -126,7 +126,7 @@ jobs:
         id: setup-nativelink-cloud
         uses: ./.github/actions/setup-nativelink-cloud
         with:
-          ci-mode: ${{ vars.NATIVELINK_CI_MODE }}
+          ci-mode: off
           claim-base: ${{ secrets.NATIVELINK_STAGING_CLAIM_BASE }}
           bes-results-url: ${{ secrets.NATIVELINK_STAGING_BES_RESULTS_URL }}
           api-key: >-
