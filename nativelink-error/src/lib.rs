@@ -621,3 +621,5 @@ pub enum CodeDef {
     // NOTE: Additional codes must be added to stores.rs in ErrorCodes and also
     // in both match statements in retry.rs.
 }
+
+// cone-curve benchmark marker: tier T4 big (error, 9 crates) (semantic no-op, invalidates this crate's action)
