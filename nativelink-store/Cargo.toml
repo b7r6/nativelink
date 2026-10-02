@@ -3,6 +3,7 @@ lints.workspace = true
 
 [package]
 edition = "2024"
+autotests = false
 name = "nativelink-store"
 version = "1.7.3"
 
@@ -186,3 +187,19 @@ zip = { version = "8.0.0", default-features = false, features = [
 [package.metadata.cargo-machete]
 # Used by nativelink_test macro
 ignored = ["cc", "tracing-test"]
+
+[[test]]
+name = "all_store_tests"
+path = "tests/all_store_tests.rs"
+
+[[test]]
+name = "filesystem_store_test"
+path = "tests/filesystem_store_test.rs"
+
+[[test]]
+name = "mongo_store_test"
+path = "tests/mongo_store_test.rs"
+
+[[test]]
+name = "tls_client_no_roots_test"
+path = "tests/tls_client_no_roots_test.rs"
