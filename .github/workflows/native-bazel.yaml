@@ -8,7 +8,7 @@ on:
       - '.github/styles/**'
       - 'web/**'
   pull_request:
-    branches: [main]
+    branches: [main, ci/overhaul-verify-base]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
