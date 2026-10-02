@@ -1,0 +1,66 @@
+---
+# Measurement experiment only; never merge. Isolates the ~5 GB Bazel
+# repository cache: is restoring+extracting the archive actually faster
+# than fetching external deps fresh? Disk cache is pinned off in both
+# jobs so the repository cache is the only variable. `bazel fetch`
+# exercises exactly what the repository cache covers (external archive
+# downloads/extraction) without compiling.
+name: Repo Cache Experiment
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  with-repo-cache:
+    name: fetch with repository cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Free disk space
+        uses: ./.github/actions/free-disk
+
+      - name: Setup Bazel
+        uses: >- # v0.19.0
+          bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: false
+
+      - name: Fetch external dependencies
+        run: |
+          time bazel fetch //... \
+            --lockfile_mode=error \
+            --extra_toolchains=@rust_toolchains//:all
+
+  without-repo-cache:
+    name: fetch without repository cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Free disk space
+        uses: ./.github/actions/free-disk
+
+      - name: Setup Bazel
+        uses: >- # v0.19.0
+          bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86
+        with:
+          bazelisk-cache: true
+          repository-cache: false
+          disk-cache: false
+
+      - name: Fetch external dependencies
+        run: |
+          time bazel fetch //... \
+            --lockfile_mode=error \
+            --extra_toolchains=@rust_toolchains//:all
