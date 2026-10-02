@@ -3,7 +3,7 @@ name: Bazel Native
 
 on:
   push:
-    branches: [main]
+    branches: [main, ci/x2-pushprobe]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
