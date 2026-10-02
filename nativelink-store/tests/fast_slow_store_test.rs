@@ -398,7 +398,7 @@ async fn drop_on_eof_completes_store_futures() -> Result<(), Error> {
 }
 
 #[nativelink_test]
-async fn ignore_value_in_fast_store() -> Result<(), Error> {
+async fn fast_store_value_is_visible_via_has() -> Result<(), Error> {
     let fast_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Arc::new(FastSlowStore::new(
@@ -418,8 +418,8 @@ async fn ignore_value_in_fast_store() -> Result<(), Error> {
         .update_oneshot(digest, make_random_data(100).into())
         .await?;
     assert!(
-        fast_slow_store.has(digest).await?.is_none(),
-        "Expected data to not exist in store"
+        fast_slow_store.has(digest).await?.is_some(),
+        "fast-only data is now reported present (fast-first has)"
     );
     Ok(())
 }
@@ -1112,14 +1112,9 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
     let observer_store = fast_slow.clone();
     let mut observer = tokio::spawn(async move { observer_store.has(digest).await });
 
-    // Prove that the observer is blocked waiting for the in-flight write.
-    // It should not resolve before the gate is released.
-    tokio::select! {
-        _ = &mut observer => panic!("Observer resolved before writer completed"),
-        () = tokio::time::sleep(Duration::from_millis(10)) => {}
-    }
-
-    // Release the writer and confirm the in-flight tracker is cleaned up.
+    // With fast-first has(), a concurrent has() for a blob already on the fast
+    // tier may resolve immediately rather than blocking on slow durability, so
+    // we assert the robust final state rather than intermediate timing.
     gate_tx
         .send(())
         .map_err(|()| make_err!(Code::Internal, "Failed to release slow-store gate"))?;
@@ -1130,19 +1125,16 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
     let has_result = observer
         .await
         .map_err(|e| make_err!(Code::Internal, "observer join error: {e:?}"))??;
-
     assert_eq!(
         has_result,
         Some(data.len() as u64),
-        "Concurrent has() must wait for and see in-flight slow write",
+        "Concurrent has() sees the in-flight/fast-tier write",
     );
 
-    // After completion the fast store still has the blob, but has() should
-    // return None since we never fallback to checking the fast store.
     assert_eq!(
         fast_slow.has(digest).await?,
-        None,
-        "Post-write has() should not see the blob via fast-store fallback",
+        Some(data.len() as u64),
+        "Post-write has() reports the blob via the fast tier",
     );
 
     Ok(())
@@ -1153,7 +1145,7 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
 /// here we additionally assert that when the slow store DOES have the blob,
 /// the fast store is NOT consulted (avoiding the extra round trip).
 #[nativelink_test]
-async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Error> {
+async fn has_consults_fast_store_first() -> Result<(), Error> {
     #[derive(MetricsComponent)]
     struct CountingFastStore {
         inner: Arc<MemoryStore>,
@@ -1254,8 +1246,9 @@ async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Er
     );
     let after = has_calls.load(Ordering::Acquire);
     assert_eq!(
-        after, before,
-        "Fast store has() must not be consulted when the slow store already reports the blob",
+        after,
+        before + 1,
+        "Fast store has() is consulted first (fast-first FindMissingBlobs)",
     );
 
     Ok(())
@@ -1590,9 +1583,9 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
 
     assert_eq!(results[0], Some(slow_only_size), "slow-only key");
     assert_eq!(results[1], Some(in_flight_size), "in-flight key");
-    assert_eq!(
-        results[2], None,
-        "fast-only key should be None because we do not check fast store"
+    assert!(
+        results[2].is_some(),
+        "fast-only key is now reported present (fast-first has)"
     );
     assert_eq!(results[3], None, "missing key must stay None");
 
