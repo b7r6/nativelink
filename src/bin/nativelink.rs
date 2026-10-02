@@ -984,3 +984,5 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
         .err_tip(|| "main() function failed")?;
     Ok(())
 }
+
+// cone-curve benchmark marker: tier T1 tiny (bin leaf, 1 crate) (semantic no-op, invalidates this crate's action)
