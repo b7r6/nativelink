@@ -304,6 +304,9 @@ impl NixPathInfo {
         if !self.deriver.is_empty() {
             validate_reference(&self.deriver)
                 .err_tip(|| format!("invalid deriver in NixPathInfo for '{}'", self.store_path))?;
+            // Nix store paths are case-sensitive; `.drv` is the literal,
+            // canonical suffix - a case-insensitive match would be wrong.
+            #[allow(clippy::case_sensitive_file_extension_comparisons)]
             if !self.deriver.ends_with(".drv") {
                 return Err(make_input_err!(
                     "deriver '{}' in NixPathInfo for '{}' is not a .drv basename",
