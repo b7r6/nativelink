@@ -20,6 +20,43 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Compute whether this diff can affect Bazel-version compatibility. The
+  # Bazel 8 lane exists to answer "does this tree still build under Bazel 8",
+  # which is a property of the build graph (BUILD/bzl files, module deps,
+  # bazelrc, toolchains) rather than of Rust source: both lanes compile the
+  # same sources with the same toolchains, so a code-only diff cannot differ
+  # between them in a way the Bazel 9 lane does not already test. Pushes to
+  # main always run the lane (post-merge compatibility backstop), so no
+  # change can land on main without the full Bazel 8 run against it.
+  changes:
+    name: Compute affected lanes
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Filter build-graph paths
+        uses: >- # v3.0.2
+          dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        with:
+          filters: |
+            buildgraph:
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '**/BUILD.bazel'
+              - '**/*.bzl'
+              - '*.bazelrc'
+              - 'Cargo.lock'
+              - 'tools/**'
+              - 'flake.nix'
+              - 'flake.lock'
+              - '.github/workflows/native-bazel.yaml'
+              - '.github/actions/**'
+    outputs:
+      buildgraph: ${{ steps.filter.outputs.buildgraph }}
+
   unit-tests:
     strategy:
       fail-fast: false
@@ -29,13 +66,6 @@ jobs:
           - os: ubuntu-24.04
             bazel_version: 9.1.1
             check_name: ubuntu-24.04
-          # Deterministic Bazel compatibility lane. Randomizing Bazel versions
-          # makes failures harder to reproduce. Bazel 8 cannot read the
-          # Bazel 9 lockfile format, so this lane tests source compatibility
-          # without enforcing the committed MODULE.bazel.lock.
-          - os: ubuntu-24.04
-            bazel_version: 8.7.0
-            check_name: ubuntu-24.04 / Bazel 8.7.0
     name: ${{ matrix.check_name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -105,6 +135,67 @@ jobs:
             echo "Unknown runner OS: $RUNNER_OS"
             exit 1
           fi
+
+  # Deterministic Bazel compatibility lane, split out of unit-tests so it can
+  # be keyed to the diffs that can actually change its answer (see `changes`
+  # above). Randomizing Bazel versions makes failures harder to reproduce.
+  # Bazel 8 cannot read the Bazel 9 lockfile format, so this lane tests
+  # source compatibility without enforcing the committed MODULE.bazel.lock.
+  # It cannot hit the (Bazel 9-keyed) remote cache, so it is the coldest lane
+  # in the workflow; on code-only PRs it is skipped and the main-push run is
+  # the compatibility backstop.
+  bazel8-compat:
+    needs: [changes]
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.buildgraph == 'true'
+    name: ubuntu-24.04 / Bazel 8.7.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      USE_BAZEL_VERSION: 8.7.0
+    steps:
+      - name: Checkout
+        uses: >- # v6.0.2
+          actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Free disk space
+        uses: ./.github/actions/free-disk
+
+      - name: Setup NativeLink Cloud
+        id: setup-nativelink-cloud
+        uses: ./.github/actions/setup-nativelink-cloud
+        with:
+          ci-mode: ${{ vars.NATIVELINK_CI_MODE }}
+          claim-base: ${{ secrets.NATIVELINK_STAGING_CLAIM_BASE }}
+          bes-results-url: ${{ secrets.NATIVELINK_STAGING_BES_RESULTS_URL }}
+          api-key: >-
+            ${{ github.event_name == 'push'
+                && secrets.NATIVELINK_STAGING_API_KEY_RW
+                || secrets.NATIVELINK_STAGING_API_KEY_RO }}
+          mode: ${{ github.event_name == 'push' && 'write' || 'read' }}
+          exec: 'on'
+
+      - name: Setup Bazel
+        uses: >- # v0.19.0
+          bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          # Only enable when we don't have remote cache, otherwise it just gets very slow
+          # and enormous
+          disk-cache: ${{ steps.setup-nativelink-cloud.outputs.enabled == 'false'}}
+
+      - name: Show Bazel version
+        run: bazel --version
+
+      - name: Run Bazel tests
+        run: |
+          # Bazel 8 cannot parse the Bazel 9 MODULE.bazel.lock format.
+          bazel test //... \
+            --lockfile_mode=off \
+            --extra_toolchains=@rust_toolchains//:all \
+            --verbose_failures
 
   redis-store-tester:
     name: Redis store tester
