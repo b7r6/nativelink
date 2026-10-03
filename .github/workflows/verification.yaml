@@ -1,0 +1,134 @@
+---
+# Aggregate verification gate.
+#
+# No build or test check is required to merge into main: the main ruleset
+# requires only pre-commit-checks, CodeQL and vale (checked 2026-10-21), so
+# merges are green-by-convention for every build and test lane. Making
+# individual workflows required instead has a well-known trap: a workflow
+# skipped by `paths-ignore` (or any lane-selection workflow that never starts)
+# reports NOTHING, and a required check that never reports leaves the PR
+# pending forever.
+#
+# This workflow is the answer: it has NO path filters, so it always runs and
+# always reports, and it is the single check branch protection should
+# require. Selection stays where it belongs — inside the individual
+# workflows, as job-level skips — and this gate fails the PR if any check on
+# the head commit failed, and if any lane expected for this diff never
+# reported at all (a skipped-by-selection job still reports, as 'skipped',
+# which the gate accepts; a workflow that silently never started does not).
+name: Verification
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  checks: read
+  contents: read
+  pull-requests: read
+  statuses: read
+
+jobs:
+  gate:
+    name: All verifications pass
+    runs-on: ubuntu-24.04
+    # Longest observed lane on this repo is well under 40 minutes; the gate
+    # must outlive the slowest lane it waits for.
+    timeout-minutes: 50
+    steps:
+      - name: Wait for every other check and fail on any red or missing lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SELF_NAME: All verifications pass
+          # Lanes that must report on every PR, no matter what the diff
+          # touches: their workflows have no path filter. Keep in sync with
+          # the job names in pre-commit.yaml; a renamed lane shows up here as
+          # a loud 'missing lane' failure, not a silent pass.
+          CORE_LANES: |
+            pre-commit-checks
+          # Lanes that must report on every PR that touches anything outside
+          # CODE_LANES_IGNORE. Bazel Dev (nix.yaml) is the per-PR build and
+          # test signal now that Bazel Native and Cargo Native run only on
+          # merge and nightly. CODE_LANES_IGNORE mirrors nix.yaml's
+          # pull_request paths-ignore (as an extended regex over file paths);
+          # keep the two in sync.
+          CODE_LANES: |
+            Bazel Dev / ubuntu-24.04
+          CODE_LANES_IGNORE: '^(\.github/styles/|web/)'
+        run: |
+          set -euo pipefail
+
+          deadline=$((SECONDS + 45 * 60))
+          # A job behind `needs:` (the rbe matrix behind its generator) gets
+          # its check run only once its dependency completes, so one poll can
+          # see everything complete in the gap. Require two quiet polls.
+          quiet=0
+          while :; do
+            # All check runs (GitHub Actions jobs, CodeQL, etc.) on the PR
+            # head commit, newest attempt per name.
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv' \
+              | sort -u > /tmp/checks.tsv
+
+            # Drop ourselves; we are by definition in_progress.
+            awk -F'\t' -v self="$SELF_NAME" '$1 != self' /tmp/checks.tsv \
+              > /tmp/others.tsv
+
+            pending=$(awk -F'\t' '$2 != "completed"' /tmp/others.tsv | wc -l)
+            if [[ "$pending" -eq 0 ]]; then
+              quiet=$((quiet + 1))
+              if [[ "$quiet" -ge 2 ]]; then
+                break
+              fi
+            else
+              quiet=0
+            fi
+            if (( SECONDS > deadline )); then
+              echo "::error::Timed out with ${pending} checks still running:"
+              awk -F'\t' '$2 != "completed" { print "  " $1 " (" $2 ")" }' /tmp/others.tsv
+              exit 1
+            fi
+            echo "Waiting on ${pending} checks..."
+            sleep 30
+          done
+
+          status=0
+
+          # Any completed check that did not succeed (or get skipped by
+          # deliberate in-workflow selection, or be neutral) fails the gate.
+          if awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral"' \
+              /tmp/others.tsv | grep -q .; then
+            echo "::error::Red checks on ${HEAD_SHA}:"
+            awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral" \
+              { print "  " $1 ": " $3 }' /tmp/others.tsv
+            status=1
+          fi
+
+          # The code lanes are expected unless every changed file is one
+          # their workflow path-filters away.
+          expected="$CORE_LANES"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[].filename' > /tmp/files.txt
+          if grep -qvE "$CODE_LANES_IGNORE" /tmp/files.txt; then
+            expected="${expected}"$'\n'"${CODE_LANES}"
+          else
+            echo "Only path-filtered files changed; code lanes are not expected."
+          fi
+
+          # Expected lanes must have reported — a lane that never starts
+          # (workflow file broken, runner outage) is a failure, not a pass.
+          while IFS= read -r lane; do
+            [[ -z "$lane" ]] && continue
+            if ! cut -f1 /tmp/others.tsv | grep -qxF "$lane"; then
+              echo "::error::Expected lane never reported on ${HEAD_SHA}: ${lane}"
+              status=1
+            fi
+          done <<< "$expected"
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "All $(wc -l < /tmp/others.tsv) checks green (or deliberately skipped)."
+          fi
+          exit "$status"
