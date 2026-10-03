@@ -10,6 +10,7 @@ on:
       - '**/*.md'
       - '**/*.mdx'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
@@ -32,6 +33,7 @@ env:
 
 jobs:
   cargo-native:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:

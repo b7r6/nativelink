@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
@@ -19,6 +20,7 @@ concurrency:
 
 jobs:
   get-images-matrix:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     outputs:
        matrix: ${{ steps.setmatrix.outputs.matrix }}

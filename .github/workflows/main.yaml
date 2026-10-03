@@ -10,6 +10,7 @@ on:
       - '**/*.md'
       - '**/*.mdx'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ main ]
     paths-ignore:
       - '.github/styles/**'
@@ -91,6 +92,7 @@ jobs:
   #       ' 2>&1 | ( ! grep '         PASSED in ' ) # If we get PASSED without (cache) it means there's a cache issue.
 
   integration-tests:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
