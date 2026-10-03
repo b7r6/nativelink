@@ -891,8 +891,13 @@ in {
         };
         serviceConfig = {
           ExecStart = "${nativelinkPkg}/bin/nativelink ${configFile}";
-          Restart = "on-failure";
+          # Self-heal ANY exit — a clean-exit crash (e.g. the R2 clock-skew
+          # abort) must not leave a fleet node dark until a human notices.
+          Restart = "always";
           RestartSec = 5;
+          # The CAS fast tier holds one fd per hot blob plus the gRPC fan-out;
+          # pin a durable ceiling instead of relying on a runtime prlimit.
+          LimitNOFILE = 524288;
           StateDirectory = "nativelink";
           # R2 creds for shellexpand in the config (${R2_ACCESS_KEY_ID} etc.).
           EnvironmentFile = lib.mkIf (cfg.r2.enable && cfg.r2.environmentFile != null) cfg.r2.environmentFile;
