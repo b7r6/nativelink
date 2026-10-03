@@ -25,7 +25,7 @@ use nativelink_worker::capacity::find_limit;
 use nativelink_worker::capacity::{
     ObservedCapacity, advertised, free_memory_kb_from, memory_headroom_percent, parse_cpu_max,
     parse_meminfo_available_kb, parse_meminfo_total_kb, parse_memory_current_kb, parse_memory_max,
-    parse_self_cgroup, resolve_cgroup_dir, without_cgroup,
+    parse_memory_stat_inactive_file_kb, parse_self_cgroup, resolve_cgroup_dir, without_cgroup,
 };
 use pretty_assertions::assert_eq;
 
@@ -203,12 +203,69 @@ fn free_memory_is_limit_less_current_or_the_host_available() {
         Some(12_345_678)
     );
     assert_eq!(
-        free_memory_kb_from(Some(52 * 1024 * 1024), Some(40 * 1024 * 1024), Some(1)),
+        free_memory_kb_from(
+            Some(52 * 1024 * 1024),
+            Some(40 * 1024 * 1024),
+            None,
+            Some(1)
+        ),
         Some(12 * 1024 * 1024)
     );
-    assert_eq!(free_memory_kb_from(Some(100), Some(200), Some(1)), Some(0));
-    assert_eq!(free_memory_kb_from(None, Some(200), Some(777)), Some(777));
-    assert_eq!(free_memory_kb_from(None, None, None), None);
+    assert_eq!(
+        free_memory_kb_from(Some(100), Some(200), None, Some(1)),
+        Some(0)
+    );
+    assert_eq!(
+        free_memory_kb_from(None, Some(200), None, Some(777)),
+        Some(777)
+    );
+    assert_eq!(free_memory_kb_from(None, None, None, None), None);
+}
+
+/// The incident shape: `memory.current` a hair under the limit while anon
+/// is a few hundred MiB, the rest `file` cache the kernel reclaims under
+/// pressure. Counting that cache as used reported ~2 GiB of headroom on a
+/// worker with ~19 GiB to give and vetoed it into a stall; the limited
+/// branch must count reclaimable cache as free, as the `MemAvailable`
+/// branch already does.
+#[test]
+fn free_memory_counts_reclaimable_file_cache_as_free() {
+    // 24 GiB limit; 22.06 GiB current of which 17.39 GiB is inactive_file
+    // (numbers from the incident worker's own cgroup files).
+    let limit_kb = 24 * 1024 * 1024;
+    let current_kb = 23_131_587;
+    let inactive_file_kb = 18_235_392;
+    let free = free_memory_kb_from(
+        Some(limit_kb),
+        Some(current_kb),
+        Some(inactive_file_kb),
+        None,
+    )
+    .unwrap();
+    // Real headroom: limit less what reclaim cannot free, ~19.4 GiB.
+    assert_eq!(free, limit_kb - (current_kb - inactive_file_kb));
+    // The bug reported limit - current, ~2 GiB: false pressure.
+    assert!(
+        free > 19 * 1024 * 1024,
+        "free {free} KiB counted cache as used"
+    );
+    // An unreadable memory.stat falls back to the old conservative number.
+    assert_eq!(
+        free_memory_kb_from(Some(limit_kb), Some(current_kb), None, None),
+        Some(limit_kb - current_kb)
+    );
+    // inactive_file can momentarily exceed current between two reads.
+    assert_eq!(
+        free_memory_kb_from(Some(100), Some(50), Some(80), None),
+        Some(100)
+    );
+    assert_eq!(
+        parse_memory_stat_inactive_file_kb(
+            "anon 193675264\nfile 22122001186\ninactive_anon 100\nactive_file 3443068108\ninactive_file 18673041408\n"
+        ),
+        Some(18_235_392)
+    );
+    assert_eq!(parse_memory_stat_inactive_file_kb("anon 1\nfile 2\n"), None);
 }
 
 #[test]
