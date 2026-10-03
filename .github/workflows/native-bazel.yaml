@@ -88,9 +88,16 @@ jobs:
                 --extra_toolchains=@rust_toolchains//:all \
                 --verbose_failures
             else
+              # --config=nl-toolchain (which includes the same toolchains
+              # line the Bazel 8 branch passes) keys this lane's actions on
+              # the hermetic LLVM + downloaded-Rust identity. On main pushes
+              # this job holds the write key, so it is the cache WARMER:
+              # building with the hermetic identity
+              # populates the exact digests the Bazel Dev (nix) lane and PR
+              # lanes now request. One digest space for writer and readers.
               bazel test //... \
                 --lockfile_mode=error \
-                --extra_toolchains=@rust_toolchains//:all \
+                --config=nl-toolchain \
                 --verbose_failures
             fi
           elif [ "$RUNNER_OS" == "Windows" ]; then
