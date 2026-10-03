@@ -207,13 +207,14 @@ impl ByteStream for FakeShardServer {
     }
 }
 
-/// Spawns a live in-process shard peer and returns its port and blob map.
-fn spawn_live_peer() -> (u16, Arc<Mutex<HashMap<String, Bytes>>>) {
+/// Spawns a live in-process shard peer on `port` (0 for ephemeral) and
+/// returns its bound port and blob map.
+fn spawn_live_peer_on(port: u16) -> (u16, Arc<Mutex<HashMap<String, Bytes>>>) {
     let server = FakeShardServer {
         blobs: Arc::new(Mutex::new(HashMap::new())),
     };
     let blobs = server.blobs.clone();
-    let listener = TcpIncoming::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let listener = TcpIncoming::bind(format!("127.0.0.1:{port}").parse().unwrap()).unwrap();
     let port = listener.local_addr().unwrap().port();
     let cas_service = ContentAddressableStorageServer::new(server.clone());
     let bytestream_service = ByteStreamServer::new(server);
@@ -296,12 +297,13 @@ struct Ring {
     shard_store: Arc<ShardStore>,
     live_shard: usize,
     live_blobs: Arc<Mutex<HashMap<String, Bytes>>>,
+    dead_port: u16,
 }
 
 /// Builds a two-shard equal-weight ring: shard 0 is a live in-process
 /// peer, shard 1 is dead (nothing listening).
 async fn make_ring() -> Result<Ring, Error> {
-    let (live_port, live_blobs) = spawn_live_peer();
+    let (live_port, live_blobs) = spawn_live_peer_on(0);
     let dead_port = dead_peer_port();
 
     let live_store = GrpcStore::new(&grpc_spec_for_port(live_port))?;
@@ -324,6 +326,7 @@ async fn make_ring() -> Result<Ring, Error> {
         shard_store,
         live_shard: 0,
         live_blobs,
+        dead_port,
     })
 }
 
@@ -350,25 +353,129 @@ async fn read_routed_to_dead_shard_errors_instead_of_hanging() -> Result<(), Err
 
 // The production symptom: a multi-key existence check (FindMissingBlobs)
 // fans out to every shard, so ONE dead peer wedged EVERY CAS RPC through
-// the frontend. It must settle with an error instead.
+// the frontend. With read failover the dead shard's bucket is retried on
+// the live shard, so the whole call succeeds instead of erroring.
 #[nativelink_test]
-async fn has_with_dead_shard_errors_instead_of_hanging() -> Result<(), Error> {
+async fn has_with_dead_shard_fails_over_instead_of_erroring() -> Result<(), Error> {
     let ring = make_ring().await?;
-    let (live_digest, _) = digest_for_shard(ring.live_shard);
-    let (dead_digest, _) = digest_for_shard(1 - ring.live_shard);
+    let (live_digest, live_content) = digest_for_shard(ring.live_shard);
+    let (dead_digest, dead_content) = digest_for_shard(1 - ring.live_shard);
+    // Both blobs are present on the live shard (as a replica would be).
+    {
+        let mut blobs = ring.live_blobs.lock().await;
+        blobs.insert(live_digest.packed_hash().to_string(), live_content.clone());
+        blobs.insert(dead_digest.packed_hash().to_string(), dead_content.clone());
+    }
 
-    let result = timeout(
+    let results = timeout(
         GENEROUS_TIMEOUT,
         ring.shard_store
             .has_many(&[live_digest.into(), dead_digest.into()]),
     )
     .await
-    .expect("multi-key has() with a dead shard hung past the generous timeout");
-    let err = result.expect_err("has() touching a dead shard cannot succeed");
-    assert!(
-        matches!(err.code, Code::Unavailable | Code::DeadlineExceeded),
-        "expected Unavailable/DeadlineExceeded from the dead shard, got: {err:?}",
+    .expect("multi-key has() with a dead shard hung past the generous timeout")?;
+    assert_eq!(
+        results,
+        vec![
+            Some(live_content.len() as u64),
+            Some(dead_content.len() as u64)
+        ],
+        "both keys must resolve: the dead shard's bucket via failover",
     );
+    Ok(())
+}
+
+// A single-key has() routed to the dead shard must fail over to the live
+// shard that holds the blob instead of surfacing Unavailable.
+#[nativelink_test]
+async fn has_routed_to_dead_shard_fails_over_to_live_replica() -> Result<(), Error> {
+    let ring = make_ring().await?;
+    let (dead_digest, dead_content) = digest_for_shard(1 - ring.live_shard);
+    ring.live_blobs
+        .lock()
+        .await
+        .insert(dead_digest.packed_hash().to_string(), dead_content.clone());
+
+    let result = timeout(GENEROUS_TIMEOUT, ring.shard_store.has(dead_digest))
+        .await
+        .expect("single-key has() routed to the dead shard hung")?;
+    assert_eq!(
+        result,
+        Some(dead_content.len() as u64),
+        "has() must find the blob on the live shard via failover",
+    );
+    Ok(())
+}
+
+// A read routed to the dead shard must fail over to the live shard that
+// holds a replica of the blob and return its content.
+#[nativelink_test]
+async fn get_part_routed_to_dead_shard_fails_over_to_live_replica() -> Result<(), Error> {
+    let ring = make_ring().await?;
+    let (dead_digest, dead_content) = digest_for_shard(1 - ring.live_shard);
+    ring.live_blobs
+        .lock()
+        .await
+        .insert(dead_digest.packed_hash().to_string(), dead_content.clone());
+
+    let data = timeout(
+        GENEROUS_TIMEOUT,
+        ring.shard_store.get_part_unchunked(dead_digest, 0, None),
+    )
+    .await
+    .expect("read routed to the dead shard hung")?;
+    assert_eq!(
+        data, dead_content,
+        "failover read must return the live shard's replica",
+    );
+    Ok(())
+}
+
+// Health recovery: after enough consecutive failures the dead shard is
+// marked suspect and skipped; once the peer comes back and the cooldown
+// elapses it is probed again and serves its own keys directly.
+#[nativelink_test]
+async fn dead_shard_recovers_after_cooldown() -> Result<(), Error> {
+    let ring = make_ring().await?;
+    let (dead_digest, dead_content) = digest_for_shard(1 - ring.live_shard);
+
+    // Trip the suspect threshold: each read fails over to the live shard
+    // (which lacks the blob), so the call errors, but each attempt counts
+    // a connectivity failure against the dead shard.
+    for _ in 0..3 {
+        let result = timeout(
+            GENEROUS_TIMEOUT,
+            ring.shard_store.get_part_unchunked(dead_digest, 0, None),
+        )
+        .await
+        .expect("read with dead shard hung");
+        assert!(result.is_err(), "blob exists nowhere yet; read must fail");
+    }
+
+    // Revive the dead peer on its original port, now holding the blob.
+    let (_, revived_blobs) = spawn_live_peer_on(ring.dead_port);
+    revived_blobs
+        .lock()
+        .await
+        .insert(dead_digest.packed_hash().to_string(), dead_content.clone());
+
+    // Wait out the suspect cooldown so the shard is probed again.
+    tokio::time::sleep(Duration::from_secs(6)).await;
+
+    let data = timeout(
+        GENEROUS_TIMEOUT,
+        ring.shard_store.get_part_unchunked(dead_digest, 0, None),
+    )
+    .await
+    .expect("read after recovery hung")?;
+    assert_eq!(data, dead_content, "revived shard must serve its own key");
+
+    // The success must have reset the failure counter: an immediate
+    // follow-up (well inside any cooldown) is also served directly.
+    let result = timeout(GENEROUS_TIMEOUT, ring.shard_store.has(dead_digest))
+        .await
+        .expect("has() after recovery hung")?;
+    assert_eq!(result, Some(dead_content.len() as u64));
     Ok(())
 }
 

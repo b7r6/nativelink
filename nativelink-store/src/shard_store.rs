@@ -15,6 +15,8 @@
 use core::hash::Hasher;
 use core::ops::BitXor;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::time::Duration;
 use std::hash::DefaultHasher;
 use std::sync::Arc;
 
@@ -22,13 +24,39 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use nativelink_config::stores::ShardSpec;
-use nativelink_error::{Error, ResultExt, error_if};
+use nativelink_error::{Code, Error, ResultExt, error_if};
 use nativelink_metric::MetricsComponent;
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
 use nativelink_util::store_trait::{
     RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
 };
+use tokio::time::Instant;
+
+/// Number of consecutive connectivity failures after which a shard is
+/// considered suspect and skipped as the first read target.
+const SUSPECT_FAILURE_THRESHOLD: u32 = 3;
+
+/// How long a suspect shard is skipped on the read path before it is
+/// probed again.
+const SUSPECT_COOLDOWN: Duration = Duration::from_secs(5);
+
+/// Errors that indicate the shard itself is unreachable (as opposed to a
+/// definitive answer like `NotFound`), making read failover safe.
+const fn is_connectivity_error(err: &Error) -> bool {
+    matches!(err.code, Code::Unavailable | Code::DeadlineExceeded)
+}
+
+/// Read-path health state for one shard. Writes never consult this: a
+/// blob's home shard is fixed by the ring, so writes always target it.
+#[derive(Debug, Default)]
+struct ShardHealth {
+    /// Consecutive connectivity failures observed on this shard.
+    consecutive_failures: AtomicU32,
+    /// Nanoseconds (since `ShardStore` creation) of the most recent
+    /// connectivity failure. Zero means "never failed".
+    last_failure_nanos: AtomicU64,
+}
 
 #[derive(Debug, MetricsComponent)]
 struct StoreAndWeight {
@@ -36,6 +64,7 @@ struct StoreAndWeight {
     weight: u32,
     #[metric(help = "The underlying store")]
     store: Store,
+    health: ShardHealth,
 }
 
 #[derive(Debug, MetricsComponent)]
@@ -47,6 +76,8 @@ pub struct ShardStore {
         help = "The weights and stores that are used to determine which store to use"
     )]
     weights_and_stores: Vec<StoreAndWeight>,
+    /// Anchor for `ShardHealth::last_failure_nanos` timestamps.
+    created_at: Instant,
 }
 
 impl ShardStore {
@@ -85,8 +116,107 @@ impl ShardStore {
             weights_and_stores: weights
                 .into_iter()
                 .zip(stores)
-                .map(|(weight, store)| StoreAndWeight { weight, store })
+                .map(|(weight, store)| StoreAndWeight {
+                    weight,
+                    store,
+                    health: ShardHealth::default(),
+                })
                 .collect(),
+            created_at: Instant::now(),
+        }))
+    }
+
+    fn now_nanos(&self) -> u64 {
+        u64::try_from(self.created_at.elapsed().as_nanos()).unwrap_or(u64::MAX)
+    }
+
+    /// A shard is suspect once it has accumulated enough consecutive
+    /// connectivity failures and its cooldown has not yet elapsed. After
+    /// the cooldown it is probed again (treated as healthy).
+    fn is_suspect(&self, store_idx: usize) -> bool {
+        let health = &self.weights_and_stores[store_idx].health;
+        if health.consecutive_failures.load(Ordering::Relaxed) < SUSPECT_FAILURE_THRESHOLD {
+            return false;
+        }
+        let last_failure_nanos = health.last_failure_nanos.load(Ordering::Relaxed);
+        let cooldown_nanos = u64::try_from(SUSPECT_COOLDOWN.as_nanos()).unwrap_or(u64::MAX);
+        self.now_nanos().saturating_sub(last_failure_nanos) < cooldown_nanos
+    }
+
+    fn note_success(&self, store_idx: usize) {
+        self.weights_and_stores[store_idx]
+            .health
+            .consecutive_failures
+            .store(0, Ordering::Relaxed);
+    }
+
+    fn note_connectivity_failure(&self, store_idx: usize) {
+        let health = &self.weights_and_stores[store_idx].health;
+        health.consecutive_failures.fetch_add(1, Ordering::Relaxed);
+        health
+            .last_failure_nanos
+            .store(self.now_nanos(), Ordering::Relaxed);
+    }
+
+    /// Runs `has_with_results` against the ring starting at `primary_idx`,
+    /// failing over in ring order on connectivity errors (each shard is
+    /// tried at most once). Suspect shards are skipped unless every shard
+    /// is suspect, in which case the primary is probed directly.
+    async fn has_on_ring(
+        &self,
+        primary_idx: usize,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        let num_stores = self.weights_and_stores.len();
+        let mut last_err = None;
+        let mut attempted_any = false;
+        for attempt in 0..num_stores {
+            let store_idx = (primary_idx + attempt) % num_stores;
+            if self.is_suspect(store_idx) {
+                continue;
+            }
+            attempted_any = true;
+            let store = &self.weights_and_stores[store_idx].store;
+            match store.has_with_results(keys, results).await {
+                Ok(()) => {
+                    self.note_success(store_idx);
+                    return Ok(());
+                }
+                Err(err) if is_connectivity_error(&err) => {
+                    self.note_connectivity_failure(store_idx);
+                    results.fill(None);
+                    last_err = Some(err);
+                }
+                Err(err) => {
+                    return Err(err)
+                        .err_tip(|| "In ShardStore::has_with_results() for store {store_idx}");
+                }
+            }
+        }
+        if !attempted_any {
+            // Every shard is suspect: probe the primary rather than fail
+            // without touching the network.
+            let store = &self.weights_and_stores[primary_idx].store;
+            match store.has_with_results(keys, results).await {
+                Ok(()) => {
+                    self.note_success(primary_idx);
+                    return Ok(());
+                }
+                Err(err) => {
+                    if is_connectivity_error(&err) {
+                        self.note_connectivity_failure(primary_idx);
+                    }
+                    return Err(err)
+                        .err_tip(|| "In ShardStore::has_with_results() for store {store_idx}");
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| {
+            Error::new(
+                Code::Unavailable,
+                "All shards unavailable in ShardStore::has_with_results()".to_string(),
+            )
         }))
     }
 
@@ -167,11 +297,7 @@ impl StoreDriver for ShardStore {
         if keys.len() == 1 {
             // Hot path: It is very common to lookup only one key.
             let store_idx = self.get_store_index(&keys[0]);
-            let store = &self.weights_and_stores[store_idx].store;
-            return store
-                .has_with_results(keys, results)
-                .await
-                .err_tip(|| "In ShardStore::has_with_results() for store {store_idx}}");
+            return self.has_on_ring(store_idx, keys, results).await;
         }
         let mut keys_for_store: Vec<(KeyIdxVec, KeyVec)> = self
             .weights_and_stores
@@ -192,12 +318,9 @@ impl StoreDriver for ShardStore {
             .into_iter()
             .enumerate()
             .map(|(store_idx, (key_idxs, keys))| async move {
-                let store = &self.weights_and_stores[store_idx].store;
                 let mut inner_results = vec![None; keys.len()];
-                store
-                    .has_with_results(&keys, &mut inner_results)
-                    .await
-                    .err_tip(|| "In ShardStore::has_with_results() for store {store_idx}")?;
+                self.has_on_ring(store_idx, &keys, &mut inner_results)
+                    .await?;
                 Result::<_, Error>::Ok((key_idxs, inner_results))
             })
             .collect();
@@ -231,11 +354,68 @@ impl StoreDriver for ShardStore {
         offset: u64,
         length: Option<u64>,
     ) -> Result<(), Error> {
-        let store = self.get_store(&key);
-        store
-            .get_part(key, writer, offset, length)
-            .await
-            .err_tip(|| "In ShardStore::get_part()")
+        let primary_idx = self.get_store_index(&key);
+        let num_stores = self.weights_and_stores.len();
+        let bytes_written_start = writer.get_bytes_written();
+        let mut last_connectivity_err = None;
+        let mut last_other_err = None;
+        let mut attempted_any = false;
+        for attempt in 0..num_stores {
+            let store_idx = (primary_idx + attempt) % num_stores;
+            if self.is_suspect(store_idx) {
+                continue;
+            }
+            attempted_any = true;
+            let store = &self.weights_and_stores[store_idx].store;
+            match store
+                .get_part(key.borrow(), &mut *writer, offset, length)
+                .await
+            {
+                Ok(()) => {
+                    self.note_success(store_idx);
+                    return Ok(());
+                }
+                Err(err) if is_connectivity_error(&err) => {
+                    self.note_connectivity_failure(store_idx);
+                    // Failover is only safe if nothing reached the client.
+                    if writer.get_bytes_written() != bytes_written_start {
+                        return Err(err).err_tip(|| "In ShardStore::get_part()");
+                    }
+                    last_connectivity_err = Some(err);
+                }
+                Err(err) if err.code == Code::NotFound && store_idx != primary_idx => {
+                    // A failover shard legitimately may not have the blob;
+                    // keep looking, but never let it mask a connectivity
+                    // error from the shard that owns the key.
+                    self.note_success(store_idx);
+                    last_other_err = Some(err);
+                }
+                Err(err) => return Err(err).err_tip(|| "In ShardStore::get_part()"),
+            }
+        }
+        if !attempted_any {
+            // Every shard is suspect: probe the primary rather than fail
+            // without touching the network.
+            let store = &self.weights_and_stores[primary_idx].store;
+            let result = store.get_part(key, writer, offset, length).await;
+            match &result {
+                Ok(()) => self.note_success(primary_idx),
+                Err(err) if is_connectivity_error(err) => {
+                    self.note_connectivity_failure(primary_idx);
+                }
+                Err(_) => {}
+            }
+            return result.err_tip(|| "In ShardStore::get_part()");
+        }
+        Err(last_connectivity_err
+            .or(last_other_err)
+            .unwrap_or_else(|| {
+                Error::new(
+                    Code::Unavailable,
+                    "All shards unavailable in ShardStore::get_part()".to_string(),
+                )
+            }))
+        .err_tip(|| "In ShardStore::get_part()")
     }
 
     fn inner_store(&self, key: Option<StoreKey>) -> &'_ dyn StoreDriver {
