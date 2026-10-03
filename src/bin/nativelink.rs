@@ -984,3 +984,4 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
         .err_tip(|| "main() function failed")?;
     Ok(())
 }
+// CI affected-lane demo: code-only edit (no build-graph change).
