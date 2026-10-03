@@ -1,0 +1,104 @@
+---
+# Aggregate verification gate.
+#
+# Today no build or test check is required to merge into main (checked
+# 2026-10-03: no check on an open PR reports isRequired=true); merges are
+# green-by-convention. Making individual workflows required instead has a
+# well-known trap: a workflow skipped by `paths-ignore` (or any lane-selection
+# workflow that never starts) reports NOTHING, and a required check that never
+# reports leaves the PR pending forever.
+#
+# This workflow is the answer: it has NO path filters, so it always runs and
+# always reports, and it is the single check branch protection should
+# require. Selection stays where it belongs — inside the individual
+# workflows, as job-level skips — and this gate fails the PR if any check on
+# the head commit failed, and if any of the always-expected core lanes never
+# reported at all (a skipped-by-selection job still reports, as 'skipped',
+# which the gate accepts; a workflow that silently never started does not).
+name: Verification
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  checks: read
+  contents: read
+  statuses: read
+
+jobs:
+  gate:
+    name: All verifications pass
+    runs-on: ubuntu-24.04
+    # Longest observed lane on this repo is well under 40 minutes; the gate
+    # must outlive the slowest lane it waits for.
+    timeout-minutes: 50
+    steps:
+      - name: Wait for every other check and fail on any red or missing lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SELF_NAME: All verifications pass
+          # Lanes that must exist on every PR, no matter what the diff
+          # touches. Keep in sync with the job names in native-bazel.yaml,
+          # native-cargo.yaml and pre-commit.yaml; a renamed core lane shows
+          # up here as a loud 'missing lane' failure, not a silent pass.
+          CORE_LANES: |
+            ubuntu-24.04
+            pre-commit-checks
+        run: |
+          set -euo pipefail
+
+          deadline=$((SECONDS + 45 * 60))
+          while :; do
+            # All check runs (GitHub Actions jobs, CodeQL, etc.) on the PR
+            # head commit, newest attempt per name.
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv' \
+              | sort -u > /tmp/checks.tsv
+
+            # Drop ourselves; we are by definition in_progress.
+            awk -F'\t' -v self="$SELF_NAME" '$1 != self' /tmp/checks.tsv \
+              > /tmp/others.tsv
+
+            pending=$(awk -F'\t' '$2 != "completed"' /tmp/others.tsv | wc -l)
+            if [[ "$pending" -eq 0 ]]; then
+              break
+            fi
+            if (( SECONDS > deadline )); then
+              echo "::error::Timed out with ${pending} checks still running:"
+              awk -F'\t' '$2 != "completed" { print "  " $1 " (" $2 ")" }' /tmp/others.tsv
+              exit 1
+            fi
+            echo "Waiting on ${pending} checks..."
+            sleep 30
+          done
+
+          status=0
+
+          # Any completed check that did not succeed (or get skipped by
+          # deliberate in-workflow selection, or be neutral) fails the gate.
+          if awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral"' \
+              /tmp/others.tsv | grep -q .; then
+            echo "::error::Red checks on ${HEAD_SHA}:"
+            awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != "neutral" \
+              { print "  " $1 ": " $3 }' /tmp/others.tsv
+            status=1
+          fi
+
+          # Core lanes must have reported — a lane that never starts (workflow
+          # path-filtered away, workflow file broken, runner outage) is a
+          # failure, not a pass.
+          while IFS= read -r lane; do
+            [[ -z "$lane" ]] && continue
+            if ! cut -f1 /tmp/others.tsv | grep -qxF "$lane"; then
+              echo "::error::Core lane never reported on ${HEAD_SHA}: ${lane}"
+              status=1
+            fi
+          done <<< "$CORE_LANES"
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "All $(wc -l < /tmp/others.tsv) checks green (or deliberately skipped)."
+          fi
+          exit "$status"
