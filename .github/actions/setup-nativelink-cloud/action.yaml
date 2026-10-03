@@ -79,6 +79,13 @@ outputs:
   enabled:
     description: "'true' when remote cache or execution is enabled, else 'false'."
     value: ${{ steps.configure.outputs.enabled }}
+  exec:
+    description: >-
+      'true' only when remote execution was actually honored. Workflows that
+      require RBE should assert on this instead of trusting their own
+      'exec: on' input, which downgrades to cache-only when ci-mode is not
+      'rbe' or credentials are missing.
+    value: ${{ steps.configure.outputs.exec }}
 
 runs:
   using: composite
@@ -139,8 +146,12 @@ runs:
         fi
 
         if [[ -z "$cred_kind" ]]; then
+          if [[ "$NL_EXEC" == "on" ]]; then
+            echo "::warning title=remote execution not honored::exec: on was requested but NativeLink Cloud is disabled (ci-mode='${NL_CI_MODE:-<empty>}', no credentials); this lane builds locally."
+          fi
           write_ci_metadata
           echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "exec=false" >> "$GITHUB_OUTPUT"
           echo "NativeLink Cloud disabled (no credentials or ci-mode off); building locally."
           exit 0
         fi
@@ -157,8 +168,15 @@ runs:
           # read-only path never executes remotely.
           if [[ "$NL_CI_MODE" == "rbe" && "$cred_kind" == "private" ]]; then
             exec_enabled=true
+          else
+            # Never let "exec: on" be a silent no-op (see the inert exec:on
+            # incident): the job keeps running on the cache-only path, but
+            # the downgrade is surfaced as a workflow warning and in the
+            # 'exec' output so lanes that require RBE can assert on it.
+            echo "::warning title=remote execution not honored::exec: on was requested but is inert (ci-mode='${NL_CI_MODE:-<empty>}', credentials='${cred_kind:-none}'); this lane runs cache-only."
           fi
         fi
+        echo "exec=${exec_enabled}" >> "$GITHUB_OUTPUT"
 
         if [[ "$cred_kind" == "public" ]]; then
           {
