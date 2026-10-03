@@ -124,6 +124,14 @@ jobs:
           nativelink-bazelrc=user.bazelrc
         load: true # This brings the build into `docker images` from buildx.
         tags: trace_machina/nativelink:latest
+        # Reuse image layers (base pulls, apt installs, toolchain setup)
+        # across runs via the GitHub Actions cache; without this every run
+        # rebuilds every layer from scratch. The Bazel compile inside the
+        # build already reads the remote cache, so this only shortens the
+        # non-Bazel layers. mode=min keeps only final-stage layers,
+        # bounding cache size.
+        cache-from: type=gha
+        cache-to: type=gha,mode=min
 
     - name: Run tests
       env:
