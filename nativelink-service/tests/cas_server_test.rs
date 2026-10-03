@@ -78,6 +78,7 @@ fn make_cas_server(store_manager: &StoreManager) -> Result<CasServer, Error> {
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
                 experimental_chunking: None,
+                batch_read_per_blob_timeout_s: None,
             },
         }],
         store_manager,
@@ -92,6 +93,7 @@ fn make_cas_server_with_zstd(store_manager: &StoreManager) -> Result<CasServer, 
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
                 experimental_chunking: None,
+                batch_read_per_blob_timeout_s: None,
             },
         }],
         store_manager,
@@ -700,6 +702,8 @@ async fn batch_update_blobs_two_items_existence_with_third_missing()
 #[derive(Debug, MetricsComponent)]
 struct StallStore {
     delay: Duration,
+    /// Data returned by `get_part` once `delay` has elapsed.
+    data: Bytes,
 }
 
 #[async_trait]
@@ -732,12 +736,15 @@ impl StoreDriver for StallStore {
     async fn get_part(
         self: Pin<&Self>,
         _key: StoreKey<'_>,
-        _writer: &mut DropCloserWriteHalf,
+        writer: &mut DropCloserWriteHalf,
         _offset: u64,
         _length: Option<u64>,
     ) -> Result<(), Error> {
         tokio::time::sleep(self.delay).await;
-        Ok(())
+        if !self.data.is_empty() {
+            writer.send(self.data.clone()).await?;
+        }
+        writer.send_eof()
     }
 
     fn inner_store(&self, _digest: Option<StoreKey>) -> &'_ dyn StoreDriver {
@@ -760,14 +767,23 @@ impl StoreDriver for StallStore {
 default_health_status_indicator!(StallStore);
 
 fn make_cas_server_with_stall_store(delay: Duration) -> Result<CasServer, Error> {
+    make_cas_server_with_stall_store_and_timeout(delay, Bytes::new(), None)
+}
+
+fn make_cas_server_with_stall_store_and_timeout(
+    delay: Duration,
+    data: Bytes,
+    batch_read_per_blob_timeout_s: Option<u32>,
+) -> Result<CasServer, Error> {
     let store_manager = Arc::new(StoreManager::new());
-    store_manager.add_store("main_cas", Store::new(Arc::new(StallStore { delay })))?;
+    store_manager.add_store("main_cas", Store::new(Arc::new(StallStore { delay, data })))?;
     CasServer::new(
         &[WithInstanceName {
             instance_name: INSTANCE_NAME.to_string(),
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
                 experimental_chunking: None,
+                batch_read_per_blob_timeout_s,
             },
         }],
         &store_manager,
@@ -855,6 +871,47 @@ async fn batch_read_blobs_per_blob_timeout_returns_deadline_exceeded()
         "unexpected message: {}",
         status.message,
     );
+    Ok(())
+}
+
+#[nativelink_test(start_paused = true)]
+async fn batch_read_blobs_respects_configured_per_blob_timeout()
+-> Result<(), Box<dyn core::error::Error>> {
+    const VALUE: &str = "1";
+
+    // The store stalls for 2 minutes — well beyond the 30 s default that
+    // would fail the read — but the instance is configured with a 3 minute
+    // per-blob timeout, so the read must succeed.
+    let cas_server = make_cas_server_with_stall_store_and_timeout(
+        Duration::from_mins(2),
+        Bytes::from_static(VALUE.as_bytes()),
+        Some(180),
+    )?;
+
+    let digest = Digest {
+        hash: HASH1.to_string(),
+        size_bytes: VALUE.len().try_into().unwrap_or(i64::MAX),
+    };
+    let raw_response = cas_server
+        .batch_read_blobs(Request::new(BatchReadBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            digests: vec![digest.clone()],
+            acceptable_compressors: vec![compressor::Value::Identity.into()],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .await;
+
+    let response = raw_response.unwrap().into_inner();
+    assert_eq!(response.responses.len(), 1);
+    let entry = &response.responses[0];
+    assert_eq!(entry.digest.as_ref(), Some(&digest));
+    let status = entry.status.as_ref().expect("status set");
+    assert_eq!(
+        status.code,
+        Code::Ok as i32,
+        "expected Ok with a raised per-blob timeout, got status: {status:?}",
+    );
+    assert_eq!(entry.data, VALUE.as_bytes());
     Ok(())
 }
 
@@ -1061,6 +1118,7 @@ fn make_chunking_cas_server_with_avg(
             instance_name: INSTANCE_NAME.to_string(),
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
+                batch_read_per_blob_timeout_s: None,
                 experimental_chunking: Some(nativelink_config::cas_server::CasChunkingConfig {
                     index_store: Some("chunk_index".to_string()),
                     avg_chunk_size_bytes,
@@ -1516,6 +1574,7 @@ async fn chunking_rejects_index_store_same_as_cas_store() -> Result<(), Box<dyn 
             instance_name: INSTANCE_NAME.to_string(),
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
+                batch_read_per_blob_timeout_s: None,
                 experimental_chunking: Some(nativelink_config::cas_server::CasChunkingConfig {
                     index_store: Some("main_cas".to_string()),
                     avg_chunk_size_bytes: 0,
@@ -1575,6 +1634,7 @@ async fn chunking_on_grpc_store_forbids_index_store() -> Result<(), Box<dyn core
             instance_name: INSTANCE_NAME.to_string(),
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "grpc_cas".to_string(),
+                batch_read_per_blob_timeout_s: None,
                 experimental_chunking: Some(nativelink_config::cas_server::CasChunkingConfig {
                     index_store,
                     avg_chunk_size_bytes: 0,
@@ -1619,6 +1679,7 @@ async fn max_chunk_count_limits_split_and_splice() -> Result<(), Box<dyn core::e
             instance_name: INSTANCE_NAME.to_string(),
             config: nativelink_config::cas_server::CasStoreConfig {
                 cas_store: "main_cas".to_string(),
+                batch_read_per_blob_timeout_s: None,
                 experimental_chunking: Some(nativelink_config::cas_server::CasChunkingConfig {
                     index_store: Some("chunk_index".to_string()),
                     avg_chunk_size_bytes: AVG_CHUNK_SIZE,

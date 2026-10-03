@@ -148,6 +148,17 @@ pub struct CasStoreConfig {
     /// and behavior is identical to when this option did not exist.
     #[serde(default)]
     pub experimental_chunking: Option<CasChunkingConfig>,
+
+    /// Per-blob timeout in seconds applied inside `BatchReadBlobs`. Each
+    /// blob read in a batch races this deadline so a single stalled read
+    /// cannot pin the whole batch until the client's overall deadline.
+    /// Cold reads through a slow backing tier (e.g. an object store that
+    /// backfills a local cache on read) can legitimately take longer than
+    /// the default for large blobs; raise this value for such deployments.
+    ///
+    /// Default: 30 seconds.
+    #[serde(default)]
+    pub batch_read_per_blob_timeout_s: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
