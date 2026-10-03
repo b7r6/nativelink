@@ -88,6 +88,7 @@ async fn start_real_cas_server(
             config: CasStoreConfig {
                 cas_store: "main_cas".to_string(),
                 experimental_chunking: None,
+                batch_read_per_blob_timeout_s: None,
             },
         }],
         &store_manager,
