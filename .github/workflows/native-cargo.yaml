@@ -32,7 +32,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022]
-        toolchain: [stable]
+        # Pin to the committed MSRV (Cargo.toml `rust-version`) instead of
+        # floating `stable`. Two reasons:
+        # 1. Contract: no lane currently builds at the MSRV, so an MSRV break
+        #    ships silently and is only discovered by downstream consumers.
+        #    This lane now tests the pin the crate commits to.
+        # 2. Stability: with RUSTFLAGS=-Dwarnings, every new stable release
+        #    can redden these lanes with brand-new lints that have nothing to
+        #    do with the change under test. A pinned toolchain only changes
+        #    when the repo changes it.
+        # Bump this together with `rust-version` in Cargo.toml.
+        toolchain: ['1.97.1']
     name: ${{ matrix.os }} / ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
