@@ -831,6 +831,7 @@ impl OciRegistryInstance {
 
     /// Opens a fresh upload session (spool file + dual hashers), enforcing
     /// the open-session ceiling; `Err(response)` carries the HTTP rejection.
+    #[allow(clippy::result_large_err)] // Err is a full HTTP response by design
     async fn open_session(&self) -> Result<(String, UploadSession), Response> {
         self.prune_idle_sessions();
         {
@@ -933,6 +934,7 @@ impl OciRegistryInstance {
     /// digest, writes the alias record, and removes the spool file.
     ///
     /// Returns the `(sha256_hex, canonical_digest)` pair on success.
+    #[allow(clippy::result_large_err)] // Err is a full HTTP response by design
     async fn finalize_upload(
         &self,
         mut session: UploadSession,
@@ -1310,6 +1312,7 @@ async fn handle_upload_session(
 
 /// Resolves a manifest reference (tag or digest) to `(sha256_hex,
 /// canonical, media_type)`, or an error response.
+#[allow(clippy::result_large_err)] // Err is a full HTTP response by design
 async fn resolve_manifest(
     instance: &OciRegistryInstance,
     name: &str,

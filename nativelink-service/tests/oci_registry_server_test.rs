@@ -62,9 +62,10 @@ fn blake3_hex(data: &[u8]) -> String {
 }
 
 fn hex_of(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
     let mut out = String::with_capacity(bytes.len() * 2);
     for b in bytes {
-        out.push_str(&format!("{b:02x}"));
+        let _ = write!(out, "{b:02x}");
     }
     out
 }
@@ -705,7 +706,7 @@ async fn token_auth_gates_reads_and_writes() -> Result<(), Error> {
     );
 
     // Write token writes (Basic form, as docker/skopeo send it).
-    let basic = base64_of(&format!("anyuser:writer-secret"));
+    let basic = base64_of("anyuser:writer-secret");
     let put = Request::builder()
         .method(Method::POST)
         .uri(format!("/v2/gated/repo/blobs/uploads/?digest={digest}"))

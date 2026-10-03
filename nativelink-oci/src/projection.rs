@@ -56,6 +56,7 @@ pub enum ProjectionDigestFunction {
 
 impl ProjectionDigestFunction {
     /// Hash raw bytes and return `(hex_digest, size)`.
+    #[allow(clippy::cast_possible_wrap)] // blob sizes are < i64::MAX
     pub fn hash_bytes(&self, data: &[u8]) -> (String, i64) {
         let hex = match self {
             Self::Blake3 => {
@@ -376,6 +377,7 @@ fn ensure_dir(root: &mut FsNode, path: &Path) -> Result<(), Error> {
 }
 
 /// Normalize a tar entry path: strip leading `./` and any leading `/`.
+#[allow(clippy::unnecessary_wraps, clippy::match_same_arms)] // Result kept for call-site uniformity; arms kept distinct for the traversal comment
 fn normalize_path(path: &Path) -> Result<Vec<std::ffi::OsString>, Error> {
     let components: Vec<std::ffi::OsString> = path
         .components()
@@ -429,6 +431,7 @@ fn lookup_file_content(root: &FsNode, path: &Path) -> Option<(Bytes, bool)> {
 ///
 /// Returns the Directory proto and its digest. Populates the blob maps for
 /// all files and child directories encountered.
+#[allow(clippy::trivially_copy_pass_by_ref, clippy::manual_let_else)]
 fn build_directory(
     node: &FsNode,
     digest_fn: &ProjectionDigestFunction,
@@ -527,6 +530,7 @@ pub fn decompress_gzip(compressed: &[u8]) -> Result<Vec<u8>, Error> {
 /// Per §6.4, since layers are disjoint additive subtrees, we can project each
 /// layer independently and merge their root Directories by combining their
 /// children lists.
+#[allow(clippy::cast_possible_wrap)] // encoded proto sizes are < i64::MAX
 pub fn merge_projections(projections: Vec<ProjectionResult>) -> Result<ProjectionResult, Error> {
     if projections.is_empty() {
         return Err(make_input_err!("No projections to merge"));

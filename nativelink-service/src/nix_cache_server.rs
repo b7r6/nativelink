@@ -1626,16 +1626,16 @@ async fn get_narinfo_inner(instance: &NixCacheInstance, file: &str) -> Result<Re
     // fingerprint covers path/NarHash/NarSize/References, which the URL and
     // Compression switch below never touch, so this stays valid for every
     // rendered variant. A fingerprint failure is non-fatal — serve as stored.
-    if !instance.signing_keys.is_empty() {
-        if let Ok(fingerprint) = path_info.fingerprint() {
-            let new_sigs: Vec<String> = instance
-                .signing_keys
-                .iter()
-                .map(|key| key.sign(&fingerprint))
-                .filter(|our_sig| !path_info.signatures.contains(our_sig))
-                .collect();
-            path_info.signatures.extend(new_sigs);
-        }
+    if !instance.signing_keys.is_empty()
+        && let Ok(fingerprint) = path_info.fingerprint()
+    {
+        let new_sigs: Vec<String> = instance
+            .signing_keys
+            .iter()
+            .map(|key| key.sign(&fingerprint))
+            .filter(|our_sig| !path_info.signatures.contains(our_sig))
+            .collect();
+        path_info.signatures.extend(new_sigs);
     }
     // Choose the served URL/Compression/FileHash/FileSize by precedence,
     // each guarded by "the referenced blob still exists in CAS" (else fall

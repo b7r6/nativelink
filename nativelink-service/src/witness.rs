@@ -243,6 +243,7 @@ pub struct Notary {
 /// See <https://github.com/in-toto/attestation/blob/main/spec/v1.0/statement.md>.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statement {
+    #[allow(clippy::pub_underscore_fields)] // serde field name is `_type` on the wire
     pub _type: String,
     pub subject: Vec<StatementSubject>,
     pub predicate_type: String,
@@ -295,6 +296,7 @@ fn dsse_pae(payload_type: &str, payload: &[u8]) -> Vec<u8> {
 
 /// Creates a DSSE envelope wrapping an in-toto Statement, signed with the
 /// witness key.
+#[allow(clippy::needless_pass_by_value)] // statement is consumed into the envelope by serialization
 pub fn create_attestation(statement: Statement, key: &WitnessKey) -> Result<DsseEnvelope, Error> {
     let payload = serde_json::to_vec(&statement)
         .map_err(|e| make_err!(Code::Internal, "serializing in-toto statement: {e}"))?;
@@ -394,7 +396,7 @@ impl Receipt {
         ts: &str,
         key: &WitnessKey,
     ) -> Result<String, Error> {
-        let receipt = Receipt {
+        let receipt = Self {
             attestation: attestation_blake3_hex.to_string(),
             subject: body_sha256_hex.to_string(),
             url: url.to_string(),
@@ -445,14 +447,13 @@ pub fn now_rfc3339() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let days = secs / 86_400;
     let remainder = secs % 86_400;
     let hour = remainder / 3600;
     let min = (remainder % 3600) / 60;
     let sec = remainder % 60;
-    let (year, month, day) = days_to_ymd(days as i64);
+    let (year, month, day) = days_to_ymd(days.cast_signed());
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
 }
 
