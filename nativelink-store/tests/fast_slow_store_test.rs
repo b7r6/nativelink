@@ -2383,8 +2383,8 @@ async fn write_back_decouples_update_from_slow_store() -> Result<(), Error> {
 
 /// Fire-fix completion: a fast-miss must fail-fast on a slow tier that hangs.
 /// `has_with_results` bounds the slow-tier existence probe with a short deadline
-/// (SLOW_PROBE_DEADLINE ~3s) and degrades the fast-miss to "missing" on timeout,
-/// rather than blocking on the slow store's full RPC timeout (e.g. a GrpcStore's
+/// (`SLOW_PROBE_DEADLINE` ~3s) and degrades the fast-miss to "missing" on timeout,
+/// rather than blocking on the slow store's full RPC timeout (e.g. a `GrpcStore`'s
 /// 60s). Without the deadline a cold build's tens-of-thousands of fast-misses
 /// each stall the hot ring long enough to wedge the worker.
 #[nativelink_test]

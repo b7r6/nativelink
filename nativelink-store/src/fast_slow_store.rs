@@ -551,6 +551,14 @@ impl StoreDriver for FastSlowStore {
         key: &[StoreKey<'_>],
         results: &mut [Option<u64>],
     ) -> Result<(), Error> {
+        // Bound the slow-tier existence probe. A fast-miss must fail-fast
+        // rather than block on the slow store's full RPC timeout (e.g. a
+        // GrpcStore's 60s): a cold build issues tens of thousands of these
+        // probes, and without a short deadline every fast-miss stalls the
+        // hot ring long enough to wedge the worker. On timeout we treat the
+        // blob as missing; the write-back path still carries durability.
+        const SLOW_PROBE_DEADLINE: Duration = Duration::from_secs(3);
+
         // If our slow store is a noop store, it'll always return a 404,
         // so only check the fast store in such case.
         let slow_store = self.slow_store.inner_store::<StoreKey<'_>>(None);
@@ -579,19 +587,18 @@ impl StoreDriver for FastSlowStore {
             // probes, and without a short deadline every fast-miss stalls the
             // hot ring long enough to wedge the worker. On timeout we treat the
             // blob as missing; the write-back path still carries durability.
-            const SLOW_PROBE_DEADLINE: Duration = Duration::from_secs(3);
             let probe = self
                 .slow_store
                 .has_with_results(&slow_keys, &mut slow_results);
-            match tokio::time::timeout(SLOW_PROBE_DEADLINE, probe).await {
-                Ok(Ok(())) => {
-                    for (j, &i) in slow_idx.iter().enumerate() {
-                        results[i] = slow_results[j];
-                    }
+            // Slow-tier error or deadline exceeded: degrade to "missing"
+            // for the fast-miss digests rather than propagating a wedge.
+            if matches!(
+                tokio::time::timeout(SLOW_PROBE_DEADLINE, probe).await,
+                Ok(Ok(()))
+            ) {
+                for (j, &i) in slow_idx.iter().enumerate() {
+                    results[i] = slow_results[j];
                 }
-                // Slow-tier error or deadline exceeded: degrade to "missing"
-                // for the fast-miss digests rather than propagating a wedge.
-                Ok(Err(_)) | Err(_) => {}
             }
         }
 

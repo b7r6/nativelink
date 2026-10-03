@@ -15,6 +15,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use nativelink_macro::nativelink_test;
 use nativelink_config::stores::FilesystemSpec;
 use nativelink_error::Error;
 use nativelink_store::filesystem_store::{FileEntryImpl, FilesystemStore};
@@ -24,7 +25,7 @@ use tracing::info;
 
 /// Test configuration that creates multiple workers with isolated CAS stores
 /// This should reproduce the "Object not found" error
-#[tokio::test]
+#[nativelink_test]
 async fn test_multi_worker_isolated_cas_fails() -> Result<(), Error> {
     // Create temporary directories for each worker's CAS
     let temp_dir = std::env::temp_dir().join(format!("test-worker-cas-{}", uuid::Uuid::new_v4()));
@@ -78,8 +79,7 @@ async fn test_multi_worker_isolated_cas_fails() -> Result<(), Error> {
     if let Err(e) = result {
         assert!(
             e.to_string().contains("not found") || e.to_string().contains("No such"),
-            "Expected 'not found' error, got: {}",
-            e
+            "Expected 'not found' error, got: {e}"
         );
     }
 
@@ -93,7 +93,7 @@ async fn test_multi_worker_isolated_cas_fails() -> Result<(), Error> {
 
 /// Test configuration with shared CAS store
 /// This should work correctly with multiple workers
-#[tokio::test]
+#[nativelink_test]
 async fn test_multi_worker_shared_cas_works() -> Result<(), Error> {
     // Create a single shared CAS store
     let temp_dir = std::env::temp_dir().join(format!("test-shared-cas-{}", uuid::Uuid::new_v4()));
@@ -145,9 +145,13 @@ async fn test_multi_worker_shared_cas_works() -> Result<(), Error> {
 }
 
 /// Stress test with many workers and concurrent actions
-#[tokio::test]
-#[ignore] // This is a longer-running test
+#[nativelink_test]
+#[ignore = "longer-running stress test"]
 async fn stress_test_multi_worker_cas() -> Result<(), Error> {
+    const NUM_WORKERS: usize = 10;
+    const NUM_FILES: usize = 100;
+    const FILE_SIZE: usize = 1024 * 1024; // 1MB files
+
     let temp_dir = std::env::temp_dir().join(format!("test-stress-cas-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_dir).unwrap();
     let shared_cas = Arc::new(
@@ -160,19 +164,15 @@ async fn stress_test_multi_worker_cas() -> Result<(), Error> {
         .await?,
     );
 
-    const NUM_WORKERS: usize = 10;
-    const NUM_FILES: usize = 100;
-    const FILE_SIZE: usize = 1024 * 1024; // 1MB files
-
     // Upload many files concurrently
     let mut upload_handles = vec![];
     for i in 0..NUM_FILES {
         let cas = shared_cas.clone();
         let handle = tokio::spawn(async move {
-            let data = vec![i as u8; FILE_SIZE];
+            let data = vec![u8::try_from(i % 256).unwrap(); FILE_SIZE];
             // Use a simple digest for testing (not a real hash)
             let digest = DigestInfo::try_new(
-                &format!("{:064}", i), // Create a 64-char hex string
+                &format!("{i:064}"), // Create a 64-char hex string
                 FILE_SIZE,
             )?;
             cas.update_oneshot(digest, data.into()).await?;
@@ -198,8 +198,7 @@ async fn stress_test_multi_worker_cas() -> Result<(), Error> {
                 assert_eq!(
                     data.len(),
                     FILE_SIZE,
-                    "Worker {} got wrong data size",
-                    worker_id
+                    "Worker {worker_id} got wrong data size"
                 );
             }
             Ok::<_, Error>(())

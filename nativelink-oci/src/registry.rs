@@ -112,6 +112,7 @@ impl ImageReference {
 
 /// Split "registry.example.com/org/repo" into ("registry.example.com", "org/repo").
 /// If no registry is apparent, defaults to "registry-1.docker.io" (Docker Hub).
+#[allow(clippy::unnecessary_wraps)] // Result kept for call-site uniformity
 fn split_registry_repo(s: &str) -> Result<(String, String), Error> {
     if let Some(slash_pos) = s.find('/') {
         let first_part = &s[..slash_pos];
