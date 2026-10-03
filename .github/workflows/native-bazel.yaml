@@ -93,15 +93,11 @@ jobs:
                 --extra_toolchains=@rust_toolchains//:all \
                 --verbose_failures
             fi
-          elif [ "$RUNNER_OS" == "Windows" ]; then
-            bazel \
-              --lockfile_mode=error \
-              --output_user_root=${{ steps.bazel-cache.outputs.mountpoint }} \
-              test \
-              --config=windows \
-              //... \
-              --verbose_failures
           else
+            # No Windows runner exists in this matrix. The previous Windows
+            # branch here was unreachable dead config and referenced a
+            # nonexistent step id (steps.bazel-cache), so it would have
+            # expanded to an empty --output_user_root= had it ever run.
             echo "Unknown runner OS: $RUNNER_OS"
             exit 1
           fi
