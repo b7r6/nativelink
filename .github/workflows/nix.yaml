@@ -174,7 +174,11 @@ jobs:
 
       - name: Get commands list
         run: |
-          COMMANDS=$(nix run .#rbe-toolchain-with-nativelink-test list)
+          # Discovery uses the list-only target, which carries no nativelink
+          # dependency, so enumerating the lanes no longer builds nativelink
+          # (that build now happens once per rbe-toolchain shard, not first in
+          # a serial discovery step the whole matrix waits on).
+          COMMANDS=$(nix run .#rbe-toolchain-test-list)
           echo "matrix={\"command\":${COMMANDS}}" >> $GITHUB_OUTPUT
         id: set-matrix
 
