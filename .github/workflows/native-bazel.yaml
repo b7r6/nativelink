@@ -8,7 +8,8 @@ on:
       - '.github/styles/**'
       - 'web/**'
   pull_request:
-    branches: [main]
+    # demo-only widening so the skip-path staging PR triggers this workflow
+    branches: [main, ci/bazel8-demo-base]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
