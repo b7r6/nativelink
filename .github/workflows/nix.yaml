@@ -87,6 +87,16 @@ jobs:
       - name: Rust cache
         uses: >- # v2.9.1
           Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          # This lane compiles with the rustc from the nix devshell, but
+          # rust-cache fingerprints the HOST rustc (the preinstalled runner
+          # toolchain) when computing its key. Host and devshell compilers
+          # drift independently, so a "hit" can restore a target/ tree built
+          # by a different rustc — every cargo fingerprint is then stale and
+          # the whole dependency graph recompiles despite the restored cache.
+          # Keying on flake.lock ties the cache to the toolchain that
+          # actually builds, so restored artifacts stay reusable.
+          prefix-key: nix-cargo-${{ hashFiles('flake.lock') }}
 
       - name: Invoke Cargo build in Nix shell
         run: >
