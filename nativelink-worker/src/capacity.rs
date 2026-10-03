@@ -293,16 +293,38 @@ pub fn parse_meminfo_available_kb(meminfo: &str) -> Option<u64> {
     })
 }
 
-/// Memory the worker could still give an action: the cgroup limit less its
-/// current usage when there is a limit, the host's `MemAvailable` when
-/// there is not, nothing when neither can be read.
+/// `inactive_file` from cgroup v2 `memory.stat`, in KiB: page cache the
+/// kernel reclaims first under pressure, charged to `memory.current` but
+/// held by nothing.
+pub fn parse_memory_stat_inactive_file_kb(memory_stat: &str) -> Option<u64> {
+    memory_stat.lines().find_map(|line| {
+        let rest = line.strip_prefix("inactive_file ")?;
+        rest.trim().parse::<u64>().ok().map(|bytes| bytes / 1024)
+    })
+}
+
+/// Memory the worker could still give an action: the cgroup limit less the
+/// usage that would survive reclaim when there is a limit, the host's
+/// `MemAvailable` when there is not, nothing when neither can be read.
+/// `memory.current` charges file cache the kernel drops on demand, so an
+/// I/O-heavy action can fill the counter to the limit while nearly all of
+/// it is reclaimable; the unlimited branch already counts that cache as
+/// free, because `MemAvailable` does, so the limited branch subtracts
+/// `inactive_file` to say the same thing.
 pub const fn free_memory_kb_from(
     limit_kb: Option<u64>,
     current_kb: Option<u64>,
+    reclaimable_kb: Option<u64>,
     available_kb: Option<u64>,
 ) -> Option<u64> {
     match (limit_kb, current_kb) {
-        (Some(limit), Some(current)) => Some(limit.saturating_sub(current)),
+        (Some(limit), Some(current)) => {
+            let reclaimable = match reclaimable_kb {
+                Some(kb) => kb,
+                None => 0,
+            };
+            Some(limit.saturating_sub(current.saturating_sub(reclaimable)))
+        }
         _ => available_kb,
     }
 }
@@ -327,10 +349,15 @@ pub fn free_memory_kb() -> Option<u64> {
             .ok()
             .and_then(|current| parse_memory_current_kb(&current))
     });
+    let reclaimable_kb = limited.as_ref().and_then(|(dir, _)| {
+        std::fs::read_to_string(dir.join("memory.stat"))
+            .ok()
+            .and_then(|stat| parse_memory_stat_inactive_file_kb(&stat))
+    });
     let available_kb = std::fs::read_to_string("/proc/meminfo")
         .ok()
         .and_then(|meminfo| parse_meminfo_available_kb(&meminfo));
-    free_memory_kb_from(limit_kb, current_kb, available_kb)
+    free_memory_kb_from(limit_kb, current_kb, reclaimable_kb, available_kb)
 }
 
 #[cfg(not(target_os = "linux"))]
