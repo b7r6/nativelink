@@ -43,6 +43,12 @@ jobs:
         with:
           bazelisk-cache: true
           repository-cache: true
+          # Every other Bazel lane carries a disk cache; this one rebuilt the
+          # asan graph from scratch each run. The sanitizer flags land in the
+          # action keys, so this cache cannot cross-contaminate the plain
+          # lanes — it only lets an asan run reuse its own prior work.
+          disk-cache: >-
+            ${{ github.workflow }}-${{ matrix.os }}-${{ matrix.sanitizer }}
 
       - name: Setup NativeLink Cloud
         uses: ./.github/actions/setup-nativelink-cloud
