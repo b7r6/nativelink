@@ -1069,6 +1069,12 @@ async fn update_rejects_truncated_stream_instead_of_committing_it() -> Result<()
     assert!(
         store.has(digest).await?.is_none(),
         "a torn upload must not leave the digest present",
+    );
+
+    Ok(())
+}
+
+#[nativelink_test]
 async fn update_data_stale_version_returns_retryable_none_not_err() -> Result<(), Error> {
     // N12 regression: ExperimentalMongoStore::update_data used upsert(true), so a
     // version-CAS miss (a concurrent writer already bumped the version) hit the
