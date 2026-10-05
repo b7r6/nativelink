@@ -364,6 +364,11 @@ async fn assert_entries_readable(store: &FilesystemStore) -> Result<(), Error> {
 const HASH1: &str = "0123456789abcdef000000000000000000010000000000000123456789abcdef";
 const HASH2: &str = "0123456789abcdef000000000000000000020000000000000123456789abcdef";
 const VALUE1: &str = "0123456789";
+// Longer than buf_channel's 32-chunk buffer (1-byte chunks in these tests) so
+// an in-flight get() genuinely stalls and keeps its file entry referenced.
+const LONG_VALUE1: &str = "012345678901234567890123456789012345678901234567890123456789";
+const LONG_VALUE2: &str = "987654321098765432109876543210987654321098765432109876543210";
+
 const VALUE2: &str = "9876543210";
 const STRING_NAME: &str = "String_Filename";
 
@@ -525,7 +530,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
         }
     }
 
-    let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
+    let digest1 = DigestInfo::try_new(HASH1, LONG_VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -545,7 +550,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
     );
 
     // Insert data into store.
-    store.update_oneshot(digest1, VALUE1.into()).await?;
+    store.update_oneshot(digest1, LONG_VALUE1.into()).await?;
 
     let (writer, mut reader) = make_buf_channel_pair();
     let store_clone = store.clone();
@@ -563,13 +568,13 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
             .err_tip(|| "Error reading first byte")?;
         assert_eq!(
             first_byte[0],
-            VALUE1.as_bytes()[0],
+            LONG_VALUE1.as_bytes()[0],
             "Expected first byte to match"
         );
     }
 
     // Replace content.
-    store.update_oneshot(digest1, VALUE2.into()).await?;
+    store.update_oneshot(digest1, LONG_VALUE2.into()).await?;
 
     // Ensure we let any background tasks finish.
     tokio::task::yield_now().await;
@@ -588,7 +593,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
             let data = read_file_contents(path.as_os_str()).await?;
             assert_eq!(
                 &data[..],
-                VALUE1.as_bytes(),
+                LONG_VALUE1.as_bytes(),
                 "Expected file content to match"
             );
         }
@@ -605,7 +610,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
 
     assert_eq!(
         &remaining_file_data,
-        &VALUE1.as_bytes()[1..],
+        &LONG_VALUE1.as_bytes()[1..],
         "Expected file content to match"
     );
 
@@ -633,8 +638,8 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
         }
     }
 
-    let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
-    let digest2 = DigestInfo::try_new(HASH2, VALUE2.len())?;
+    let digest1 = DigestInfo::try_new(HASH1, LONG_VALUE1.len())?;
+    let digest2 = DigestInfo::try_new(HASH2, LONG_VALUE2.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -654,7 +659,10 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
     );
 
     // Insert data into store.
-    store.update_oneshot(digest1, VALUE1.into()).await.unwrap();
+    store
+        .update_oneshot(digest1, LONG_VALUE1.into())
+        .await
+        .unwrap();
 
     let mut reader = {
         let (writer, reader) = make_buf_channel_pair();
@@ -670,7 +678,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
     assert!(reader.peek().await.is_ok(), "Could not peek into reader");
 
     // Insert new content. This will evict the old item.
-    store.update_oneshot(digest2, VALUE2.into()).await?;
+    store.update_oneshot(digest2, LONG_VALUE2.into()).await?;
 
     // Ensure we let any background tasks finish.
     tokio::task::yield_now().await;
@@ -689,7 +697,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
             let data = read_file_contents(path.as_os_str()).await?;
             assert_eq!(
                 &data[..],
-                VALUE1.as_bytes(),
+                LONG_VALUE1.as_bytes(),
                 "Expected file content to match"
             );
         }
@@ -704,7 +712,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
         .await
         .err_tip(|| "Error reading remaining bytes")?;
 
-    assert_eq!(&reader_data, VALUE1, "Expected file content to match");
+    assert_eq!(&reader_data, LONG_VALUE1, "Expected file content to match");
 
     loop {
         if DELETES_FINISHED.load(Ordering::Relaxed) == 1 {

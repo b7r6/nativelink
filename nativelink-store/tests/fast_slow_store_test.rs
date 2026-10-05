@@ -478,7 +478,7 @@ async fn has_checks_fast_store_when_noop() -> Result<(), Error> {
     let fast_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let slow_store = Store::new(NoopStore::new());
     let fast_slow_store_config = FastSlowSpec {
-            slow_store_write_back: Default::default(),
+        slow_store_write_back: Default::default(),
         fast: StoreSpec::Memory(MemorySpec::default()),
         slow: StoreSpec::Noop(NoopSpec::default()),
         fast_direction: StoreDirection::default(),
