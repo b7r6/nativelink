@@ -67,15 +67,22 @@ impl WorkerRegistry {
         }
     }
 
-    /// Updates the heartbeat timestamp for a worker.
+    /// Advances a worker's heartbeat to `now`. Monotone: a late or out-of-order
+    /// keepalive never regresses `last_seen`. The liveness signal is the MAX of
+    /// receipt times — a monotone fact — and must not move backward and
+    /// manufacture a false `Stale` (pairs with the TL1 fix in
+    /// `ApiWorkerScheduler::refresh_worker`, which now stamps this on receipt,
+    /// possibly ahead of `refresh_lifetime`'s own out-of-order rejection).
     pub async fn update_worker_heartbeat(&self, worker_id: &WorkerId, now: SystemTime) {
         let mut workers = self.workers.write().await;
-        // TL1: monotone -- never regress last_seen. A delayed or out-of-order
-        // keepalive must not move liveness backward and manufacture a false Stale.
-        let slot = workers.entry(worker_id.clone()).or_insert(now);
-        if now > *slot {
-            *slot = now;
-        }
+        workers
+            .entry(worker_id.clone())
+            .and_modify(|prev| {
+                if now > *prev {
+                    *prev = now;
+                }
+            })
+            .or_insert(now);
         trace!(?worker_id, now = %humantime::format_rfc3339(now), "FLOW: Worker heartbeat updated in registry");
     }
 
@@ -131,6 +138,15 @@ impl WorkerRegistry {
         self.check_liveness(worker_id, timeout, now).await == WorkerLiveness::Alive
     }
 
+    /// Test-only: hold the internal write lock so that concurrent liveness
+    /// reads park at a deterministic await point.
+    #[cfg(test)]
+    pub(crate) async fn write_lock_for_test(
+        &self,
+    ) -> async_lock::RwLockWriteGuard<'_, HashMap<WorkerId, SystemTime>> {
+        self.workers.write().await
+    }
+
     pub async fn get_worker_last_seen(&self, worker_id: &WorkerId) -> Option<SystemTime> {
         let workers = self.workers.read().await;
         workers.get(worker_id).copied()
@@ -144,24 +160,6 @@ mod tests {
     use nativelink_macro::nativelink_test;
 
     use super::*;
-
-    /// TL1 regression: a delayed or out-of-order keepalive must never regress
-    /// `last_seen`. A plain `insert` moves liveness backward and manufactures a
-    /// false `Stale` (fails-without by construction); monotone keeps the newer time.
-    #[nativelink_test]
-    async fn heartbeat_is_monotone_never_regresses() {
-        let registry = WorkerRegistry::new();
-        let worker_id = WorkerId::from(String::from("tl1"));
-        let t_late = SystemTime::UNIX_EPOCH + Duration::from_secs(1000);
-        let t_early = SystemTime::UNIX_EPOCH + Duration::from_secs(970);
-        registry.update_worker_heartbeat(&worker_id, t_late).await;
-        registry.update_worker_heartbeat(&worker_id, t_early).await;
-        assert_eq!(
-            registry.get_worker_last_seen(&worker_id).await,
-            Some(t_late),
-            "heartbeat regressed: non-monotone update manufactured a false Stale"
-        );
-    }
 
     #[nativelink_test]
     async fn test_worker_heartbeat() {
@@ -255,6 +253,42 @@ mod tests {
             !registry
                 .is_worker_alive(&worker_id, Duration::from_secs(5), now)
                 .await
+        );
+    }
+
+    // TL1 regression (monotone half): an out-of-order / late keepalive must not
+    // regress `last_seen` and manufacture a false `Stale`. Fails WITHOUT the
+    // monotone fix (plain `insert` overwrites with the older timestamp, so the
+    // liveness check past the old deadline reads Stale).
+    #[nativelink_test]
+    async fn heartbeat_is_monotone_never_regresses() {
+        let registry = WorkerRegistry::new();
+        let w = WorkerId::from(String::from("w"));
+        let timeout = Duration::from_secs(5);
+        let t0 = SystemTime::now();
+        let t_late = t0.checked_add(Duration::from_secs(10)).unwrap();
+
+        registry.register_worker(&w, t0).await;
+        registry.update_worker_heartbeat(&w, t_late).await; // advance
+        registry.update_worker_heartbeat(&w, t0).await; // out-of-order (older) — must NOT regress
+
+        assert_eq!(
+            registry.get_worker_last_seen(&w).await,
+            Some(t_late),
+            "an older keepalive regressed last_seen — manufactures false Stale (TL1)"
+        );
+        // A check 1s past the OLD deadline (t0 + timeout) must still be Alive,
+        // because the real last_seen is t_late.
+        let past_old_deadline = t0
+            .checked_add(timeout)
+            .unwrap()
+            .checked_add(Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(
+            registry
+                .check_liveness(&w, timeout, past_old_deadline)
+                .await,
+            WorkerLiveness::Alive
         );
     }
 }

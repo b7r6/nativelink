@@ -322,11 +322,12 @@ default_health_status_indicator!(AlwaysErrStore);
 
 /// Regression: a real backend read/decode failure on the action-result record
 /// must propagate with its underlying, non-`NotFound` code — it must NOT be
-/// collapsed into `Code::NotFound`. Otherwise the nix cache layer (which maps
-/// `NotFound` -> 404 and everything else -> 5xx) would serve a backend fault as
-/// a clean miss and trip nix's substituter-disable. The genuine eviction-miss
-/// path (referent absent) is covered by `verify_has_function_call_checks_cas`
-/// and stays `NotFound`.
+/// collapsed into `Code::NotFound`. A `NotFound` miss tells the client the
+/// result does not exist and to re-execute; a backend fault (unavailable
+/// Redis, decode failure) is transient and retryable, and serving it as a
+/// clean miss silently discards a valid cached result. The genuine
+/// eviction-miss path (referent absent) is covered by
+/// `verify_has_function_call_checks_cas` and stays `NotFound`.
 #[nativelink_test]
 async fn backend_error_on_record_propagates_as_non_not_found() -> Result<(), Error> {
     let make_store = || {

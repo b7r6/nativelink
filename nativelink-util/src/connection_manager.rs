@@ -101,6 +101,14 @@ struct ConnectionManagerWorker {
     /// `Unavailable` instead of queuing forever while the background
     /// reconnect loop runs (the "dead peer wedges every RPC" hang).
     endpoint_connect_failed: Vec<bool>,
+    /// Number of currently established channels, whether sitting in
+    /// `available_channels` or checked out to in-flight `Connection`s.
+    /// `available_channels` alone cannot distinguish "everything is down"
+    /// from "everything is busy": borrowed channels are not in that queue,
+    /// so a busy-but-healthy pool plus one transient connect failure must
+    /// not be declared dead. Incremented on connect success, decremented
+    /// when a channel is torn down on transport error.
+    live_channels: usize,
     /// The channel used to communicate between a Connection and the worker.
     connection_tx: mpsc::UnboundedSender<ConnectionRequest>,
     /// Gates the maximum number of in-flight `Connection` objects.
@@ -168,6 +176,7 @@ impl ConnectionManager {
         let worker = ConnectionManagerWorker {
             endpoints,
             endpoint_connect_failed,
+            live_channels: 0,
             available_connections: Arc::new(Semaphore::new(max_concurrent_requests)),
             bounded_connections,
             connection_tx,
@@ -266,6 +275,7 @@ impl ConnectionManagerWorker {
                 {
                     *failed = false;
                 }
+                self.live_channels += 1;
                 self.available_channels.push_back(established_channel);
                 self.maybe_available_connection();
             }
@@ -289,11 +299,11 @@ impl ConnectionManagerWorker {
         }
     }
 
-    /// True when no channel is available and the last connect attempt to
-    /// every endpoint failed: nothing can service a request until a
-    /// background reconnect succeeds.
+    /// True when no channel is live (available or checked out) and the
+    /// last connect attempt to every endpoint failed: nothing can service
+    /// a request until a background reconnect succeeds.
     fn all_endpoints_down(&self) -> bool {
-        self.available_channels.is_empty()
+        self.live_channels == 0
             && !self.endpoint_connect_failed.is_empty()
             && self.endpoint_connect_failed.iter().all(|failed| *failed)
     }
@@ -474,6 +484,17 @@ impl ConnectionManagerWorker {
                     original_length != self.available_channels.len()
                 };
                 if should_reconnect {
+                    // The channel this identifier referred to is gone;
+                    // saturate in case of duplicate error reports for the
+                    // same pending channel.
+                    self.live_channels = self.live_channels.saturating_sub(1);
+                    // If this was the last live channel and every endpoint's
+                    // last connect cycle had already failed, the pool just
+                    // became unreachable — flush queued waiters now instead
+                    // of leaving them parked until the reconnect scheduled
+                    // below fails a full connect cycle later (new requests
+                    // already fail fast in `handle_worker` in this state).
+                    self.fail_requests_if_all_endpoints_down();
                     self.connect_endpoint(identifier.endpoint_index, None);
                 }
             }

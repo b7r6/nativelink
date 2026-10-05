@@ -407,11 +407,16 @@ impl From<tonic::Status> for Error {
 }
 
 /// Whether a `tonic::Status` originates from a transport-layer failure (a
-/// reset/broken connection), which tonic surfaces as `Code::Unknown`. Precise
-/// when the concrete transport error is reachable in the source chain; falls
-/// back to tonic's "transport error" message otherwise.
+/// reset/broken connection), which tonic surfaces as `Code::Unknown`.
+///
+/// tonic's own `Status::from_error` already maps the failures it recognizes
+/// (for example a connect refusal) to `Unavailable`; the `Unknown` shape
+/// arises for transport errors it does not, and for statuses that crossed a
+/// process boundary. Detection is downcast-first: precise when the concrete
+/// transport error is still reachable in the source chain; falls back to the
+/// message otherwise.
 fn is_transport_status(status: &tonic::Status) -> bool {
-    let mut source = core::error::Error::source(status);
+    let mut source = std::error::Error::source(status);
     while let Some(err) = source {
         if err.is::<tonic::transport::Error>() {
             return true;
@@ -420,12 +425,14 @@ fn is_transport_status(status: &tonic::Status) -> bool {
     }
     // Fallback for a `Status` reconstructed from the wire, where the concrete
     // transport error is no longer in the source chain and only the message
-    // survives. tonic renders these as exactly "transport error" or
-    // "transport error: <detail>", so anchor the match — an unanchored
-    // `contains` would reclassify any app-level `Unknown` whose message merely
-    // mentions "transport error" as retryable `Unavailable`.
+    // survives. `tonic::transport::Error` renders as exactly "transport
+    // error" (no detail suffix), and this crate's own `From<Error> for
+    // Status` re-encodes a proxied one as "transport error : <appended
+    // context>". Anchor to those two shapes — an unanchored `contains` would
+    // reclassify any app-level `Unknown` whose message merely mentions
+    // "transport error" as retryable `Unavailable`.
     let msg = status.message();
-    msg == "transport error" || msg.starts_with("transport error:")
+    msg == "transport error" || msg.starts_with("transport error : ")
 }
 
 impl From<Error> for tonic::Status {

@@ -51,6 +51,7 @@ use nativelink_proto::google::bytestream::{
     WriteResponse,
 };
 use nativelink_store::grpc_store::GrpcStore;
+use nativelink_store::memory_store::MemoryStore;
 use nativelink_store::shard_store::ShardStore;
 use nativelink_util::background_spawn;
 use nativelink_util::common::DigestInfo;
@@ -261,7 +262,7 @@ fn grpc_spec_for_port(port: u16) -> GrpcSpec {
         headers: HashMap::new(),
         forward_headers: vec![],
         experimental_read_batching: None,
-        experimental_remote_cache_compression: Some(false),
+        experimental_remote_cache_compression: None,
     }
 }
 
@@ -325,6 +326,50 @@ async fn make_ring() -> Result<Ring, Error> {
         live_shard: 0,
         live_blobs,
     })
+}
+
+// Guard for `shard_index_for`: it re-implements `ShardStore`'s xor-fold
+// routing, which would silently diverge if upstream ever changes the ring
+// hash — the dead-peer tests above would then route probes to the wrong
+// shard and test nothing. This builds a REAL `ShardStore` over two
+// instrumented `MemoryStore` backends, writes each probe digest through
+// it, and asserts the blob landed on the shard `shard_index_for`
+// predicted. If the ring hash changes upstream, this fails loudly.
+#[nativelink_test]
+async fn shard_index_for_matches_real_shard_store_routing() -> Result<(), Error> {
+    let backends: Vec<Arc<MemoryStore>> = (0..2)
+        .map(|_| MemoryStore::new(&MemorySpec::default()))
+        .collect();
+    let shard_store = ShardStore::new(
+        &ShardSpec {
+            stores: (0..2)
+                .map(|_| ShardConfig {
+                    store: StoreSpec::Memory(MemorySpec::default()),
+                    weight: Some(1),
+                })
+                .collect(),
+        },
+        backends
+            .iter()
+            .map(|backend| Store::new(backend.clone()))
+            .collect(),
+    )?;
+
+    for shard in 0..2usize {
+        let (digest, content) = digest_for_shard(shard);
+        shard_store.update_oneshot(digest, content).await?;
+        for (backend_index, backend) in backends.iter().enumerate() {
+            let present = backend.has(digest).await?.is_some();
+            assert_eq!(
+                present,
+                backend_index == shard,
+                "probe digest {digest} predicted for shard {shard} but presence on \
+                 backend {backend_index} was {present}: `shard_index_for` no longer \
+                 matches ShardStore's ring hash",
+            );
+        }
+    }
+    Ok(())
 }
 
 // A read routed to the dead shard must settle with an error (which the

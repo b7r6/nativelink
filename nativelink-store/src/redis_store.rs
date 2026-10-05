@@ -52,8 +52,8 @@ use redis::cluster::ClusterClient;
 use redis::cluster_async::ClusterConnection;
 use redis::sentinel::{SentinelClient, SentinelNodeConnectionInfo, SentinelServerType};
 use redis::{
-    AsyncCommands, AsyncIter, Client, IntoConnectionInfo, PushInfo, ScanOptions, Script, Value,
-    pipe,
+    AsyncCommands, AsyncIter, Client, IntoConnectionInfo, PushInfo, RedisError, ScanOptions,
+    Script, Value, pipe,
 };
 use serde::Deserialize;
 use serde::de::IntoDeserializer;
@@ -94,7 +94,7 @@ const MAX_REDIS_RETRY_ATTEMPTS: u32 = 5;
 /// dropped/refused connection, an IO error, or a write that hit a freshly
 /// demoted replica. Anything else (e.g. a real protocol/logic error) is
 /// returned as-is.
-fn is_retryable_redis_error(err: &redis::RedisError) -> bool {
+fn is_retryable_redis_error(err: &RedisError) -> bool {
     err.is_connection_dropped()
         || err.is_connection_refusal()
         || err.is_io_error()
@@ -1677,6 +1677,10 @@ const CURSOR_IDLE_MS: u64 = 30_000;
 const DATA_FIELD_NAME: &str = "data";
 /// The name of the field in the Redis hash that stores the version.
 const VERSION_FIELD_NAME: &str = "version";
+/// The `RediSearch` built-in property holding the document's own key. Loaded in
+/// searches so a row whose record cannot be decoded can still be identified
+/// and removed rather than sitting in the index forever.
+const DOC_KEY_FIELD_NAME: &str = "__key";
 /// The time to live of indexes in seconds. After this time redis may delete the index.
 const INDEX_TTL_S: u64 = 60 * 60 * 24; // 24 hours.
 
@@ -1733,6 +1737,48 @@ end
 return {{ 1, new_version }}
 "
 );
+
+/// Lua script that deletes a record only if its version still matches the
+/// version a search listed it at. Used to garbage-collect a record whose
+/// `data` cannot be decoded: records are written atomically (delete and
+/// re-insert in `LUA_VERSION_SET_SCRIPT`), so an undecodable record is never
+/// a write in progress, and no writer can ever update it either, because
+/// every update needs the current version from a decoded copy. The version
+/// guard makes the removal safe even if that reasoning is ever violated: a
+/// record rewritten after the listing is left alone.
+pub const LUA_DELETE_LOST_RECORD_SCRIPT: &str = formatcp!(
+    r"
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return -1
+end
+if redis.call('HGET', KEYS[1], '{VERSION_FIELD_NAME}') == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"
+);
+
+/// Deletes the lost record at `key`, but only if the liveness guard at
+/// `guard_key` does not exist (returns -1 if it does) and the record still
+/// holds `version` (returns 0 if it does not). Returns 1 on deletion.
+async fn delete_lost_record<C>(
+    mut connection: C,
+    key: &str,
+    guard_key: &str,
+    version: i64,
+) -> Result<i64, RedisError>
+where
+    C: ConnectionLike + Send,
+{
+    redis::cmd("EVAL")
+        .arg(LUA_DELETE_LOST_RECORD_SCRIPT)
+        .arg(2)
+        .arg(key)
+        .arg(guard_key)
+        .arg(version.to_string())
+        .query_async(&mut connection)
+        .await
+}
 
 /// How long a freshly created index is given to finish its background
 /// scan before a read goes ahead regardless, and how often it is asked.
@@ -2340,7 +2386,11 @@ where
                     format!("@{}:{{ {} }}", K::INDEX_NAME, index_value)
                 },
                 FtAggregateOptions {
-                    load: vec![DATA_FIELD_NAME.into(), VERSION_FIELD_NAME.into()],
+                    load: vec![
+                        DATA_FIELD_NAME.into(),
+                        VERSION_FIELD_NAME.into(),
+                        format!("@{DOC_KEY_FIELD_NAME}"),
+                    ],
                     cursor: FtAggregateCursor {
                         count: self.max_count_per_cursor,
                         max_idle: CURSOR_IDLE_MS,
@@ -2378,6 +2428,10 @@ where
         };
 
         let (connection_manager, connect_id) = self.connection_manager.get_connection().await?;
+        // For garbage-collecting a listed record that fails to decode.
+        let delete_connection = connection_manager.clone();
+        let owned_index_value = index_value.to_string();
+        let key_prefix = self.key_prefix.clone();
         let stream = match run_ft_aggregate(connection_manager.clone()).await {
             // A demoted master answers READONLY and a dead/old master drops the
             // connection or times the command out. Both mean the master moved
@@ -2461,7 +2515,11 @@ where
             Ok(stream) => Ok(stream),
         }?;
 
-        Ok(stream.filter_map(|result| async move {
+        Ok(stream.filter_map(move |result| {
+            let delete_connection = delete_connection.clone();
+            let owned_index_value = owned_index_value.clone();
+            let key_prefix = key_prefix.clone();
+            async move {
             let raw_redis_map = match result {
                 Ok(v) => v,
                 Err(e) => {
@@ -2485,6 +2543,7 @@ where
             let mut redis_map_iter = redis_map.iter();
             let mut bytes_data: Option<Bytes> = None;
             let mut version: Option<i64> = None;
+            let mut doc_key: Option<String> = None;
             while let Some(key) = redis_map_iter.next() {
                 let value = redis_map_iter.next().unwrap();
                 let Value::BulkString(k) = key else {
@@ -2524,6 +2583,15 @@ where
                         };
                         version = Some(raw_version);
                     }
+                    DOC_KEY_FIELD_NAME => {
+                        let Ok(str_v) = str::from_utf8(v) else {
+                            return Some(Err(Error::new(
+                                Code::Internal,
+                                format!("Non-utf8 document key from ft_aggregate: {v:?}"),
+                            )));
+                        };
+                        doc_key = Some(str_v.to_string());
+                    }
                     other => {
                         if K::MAYBE_SORT_KEY == Some(other) {
                             // ignore sort keys
@@ -2542,11 +2610,50 @@ where
                     format!("Missing '{DATA_FIELD_NAME}' in ft_aggregate, got: {raw_redis_map:?}"),
                 )));
             };
-            Some(
-                K::decode(version.unwrap_or(0), found_bytes_data)
-                    .err_tip(|| "In RedisStore::search_by_index_prefix::decode"),
-            )
-        }))
+            let err = match K::decode(version.unwrap_or(0), found_bytes_data) {
+                Ok(decoded) => return Some(Ok(decoded)),
+                Err(err) => err,
+            };
+            // The record is in the index but its data does not decode (for
+            // example serialization drift across a rolling upgrade). It has
+            // no TTL and no deletion path, so without removal it is listed,
+            // skipped and counted by every sweep forever. Records are
+            // written atomically, so this is never a write in progress.
+            // Delete it only if the index opted in, its liveness guard says
+            // nothing is still waiting on it, and its version is unchanged
+            // since the listing; the row is still reported as lost so the
+            // caller counts it this one last time.
+            if err.code == Code::InvalidArgument
+                && let Some(doc_key) = doc_key
+            {
+                let record_key = doc_key.strip_prefix(&key_prefix).unwrap_or(&doc_key);
+                if let Some(guard_key) =
+                    K::lost_record_liveness_guard_key(&owned_index_value, record_key)
+                {
+                    let guard_key = format!("{key_prefix}{guard_key}");
+                    match delete_lost_record(
+                        delete_connection,
+                        &doc_key,
+                        &guard_key,
+                        version.unwrap_or(0),
+                    )
+                    .await
+                    {
+                        Ok(removed) => warn!(
+                            key = %doc_key,
+                            removed,
+                            "Undecodable record listed; removed if no longer live (1 = removed, 0 = version changed, -1 = liveness guard present)"
+                        ),
+                        Err(del_err) => warn!(
+                            key = %doc_key,
+                            ?del_err,
+                            "Failed to remove a listed record whose data cannot be decoded"
+                        ),
+                    }
+                }
+            }
+            Some(Err(err).err_tip(|| "In RedisStore::search_by_index_prefix::decode"))
+        }}))
     }
 
     async fn count_by_index_prefix<K>(&self, index: K) -> Result<u64, Error>

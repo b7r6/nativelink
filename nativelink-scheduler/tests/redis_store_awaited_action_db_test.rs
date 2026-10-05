@@ -35,6 +35,7 @@ use nativelink_scheduler::awaited_action_db::{
 };
 use nativelink_scheduler::default_scheduler_factory::retain_completed_for_s;
 use nativelink_scheduler::simple_scheduler::SimpleScheduler;
+use nativelink_scheduler::simple_scheduler_state_manager::SimpleSchedulerStateManager;
 use nativelink_scheduler::store_awaited_action_db::StoreAwaitedActionDb;
 use nativelink_scheduler::worker::Worker;
 use nativelink_scheduler::worker_scheduler::WorkerScheduler;
@@ -721,5 +722,97 @@ async fn an_update_against_a_vanished_record_leaves_nothing_behind() -> Result<(
 async fn unset_retention_is_the_shared_default_not_forever() -> Result<(), Error> {
     assert_eq!(retain_completed_for_s(0), 60);
     assert_eq!(retain_completed_for_s(30), 30);
+    Ok(())
+}
+
+/// A queued index entry whose backing record cannot be decoded (for example
+/// serialization drift across a rolling upgrade) has no TTL and, before the
+/// fix, no deletion path: every sweep listed it, skipped it and counted it
+/// as an orphan, forever. The sweep's listing must remove it, and must leave
+/// a healthy queued action alone.
+#[nativelink_test]
+async fn sweep_deletes_lost_queued_record() -> Result<(), Error> {
+    const CORRUPT_KEY: &str = "aa_corrupt-op";
+
+    let backend: FakeRedisBackend<RedisSubscriptionManager> = FakeRedisBackend::new();
+    let port = backend.clone().run().await;
+    let store = RedisStore::new_standard(RedisSpec {
+        addresses: vec![format!("redis://127.0.0.1:{port}")],
+        experimental_pub_sub_channel: Some("lost-record-sweep".to_string()),
+        ..Default::default()
+    })
+    .await?;
+    backend.set_subscription_manager(store.subscription_manager().await.unwrap());
+    let notify = Arc::new(Notify::new());
+    let db = StoreAwaitedActionDb::new(
+        store,
+        notify,
+        MockInstantWrapped::default,
+        OperationId::default,
+        60,
+        60,
+        false,
+    )
+    .await?;
+
+    // A healthy queued action whose client is still alive.
+    let healthy = make_awaited_action("healthy-op");
+    db.add_action(
+        OperationId::String("healthy-client-op".to_string()),
+        healthy.action_info().clone(),
+        Duration::from_secs(60),
+    )
+    .await?;
+
+    // The lost record: listed under the queued index, version intact, but
+    // its data does not decode.
+    backend.table.lock().unwrap().insert(
+        CORRUPT_KEY.to_string(),
+        HashMap::from([
+            (
+                "data".to_string(),
+                Value::BulkString(b"{this is not an AwaitedAction".to_vec()),
+            ),
+            ("version".to_string(), Value::BulkString(b"1".to_vec())),
+            ("state".to_string(), Value::BulkString(b"queued".to_vec())),
+            (
+                "sort_key".to_string(),
+                Value::BulkString(b"0000000000000000".to_vec()),
+            ),
+        ]),
+    );
+
+    let state_manager = SimpleSchedulerStateManager::new(
+        0_usize,
+        Duration::from_secs(60),
+        Duration::from_secs(60),
+        Duration::from_secs(600),
+        db,
+        MockInstantWrapped::default,
+        None,
+    );
+
+    // Several sweeps: without the fix the corrupt record survives every one
+    // of them (skip-and-count, never delete).
+    for _ in 0..3 {
+        state_manager.sweep_abandoned_queued_actions().await?;
+    }
+
+    assert!(
+        !backend.table.lock().unwrap().contains_key(CORRUPT_KEY),
+        "an undecodable queued record must be deleted by the sweep's listing",
+    );
+    assert_eq!(
+        backend
+            .table
+            .lock()
+            .unwrap()
+            .keys()
+            .filter(|k| k.starts_with("aa_"))
+            .count(),
+        1,
+        "the healthy queued action must survive the sweep",
+    );
+
     Ok(())
 }

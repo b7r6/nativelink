@@ -23,7 +23,6 @@ use futures::stream::FuturesUnordered;
 use nativelink_config::stores::{EvictionPolicy, ExistenceCacheSpec};
 use nativelink_error::{Error, ResultExt, error_if};
 use nativelink_metric::MetricsComponent;
-use nativelink_util::background_spawn;
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;
 use nativelink_util::evicting_map::{EvictingMap, LenEntry};
@@ -67,76 +66,6 @@ struct PauseState {
     pending: Vec<StoreKey<'static>>,
 }
 
-impl PauseState {
-    /// Release one hold. Returns the queued removals to drain iff this was the
-    /// last holder; otherwise returns an empty vec and leaves the queue for a
-    /// later holder to drain.
-    fn release(&mut self) -> Vec<StoreKey<'static>> {
-        self.pause_count = self
-            .pause_count
-            .checked_sub(1)
-            .expect("PauseState::release called without a matching pause");
-        if self.pause_count == 0 {
-            core::mem::take(&mut self.pending)
-        } else {
-            Vec::new()
-        }
-    }
-}
-
-/// RAII hold on the remove-callback pause.
-///
-/// Dropping the guard always decrements the pause count, so a cancelled
-/// operation cannot leave invalidation globally suspended (finding N6). The
-/// normal path calls [`PauseGuard::resume`] instead. If the guard is dropped
-/// while it is the last holder with a non-empty queue (only reachable on
-/// cancellation), those removals must still be applied — otherwise the cache
-/// keeps claiming a blob exists after the inner store evicted it (C20/N6 drop
-/// residual). Since `Drop` cannot await and the removal is async, `Drop` spawns
-/// a detached task (via the weak self-reference) to drain them.
-struct PauseGuard<'a, I: InstantWrapper> {
-    store: Option<&'a ExistenceCacheStore<I>>,
-}
-
-impl<I: InstantWrapper> PauseGuard<'_, I> {
-    /// Release the hold and drain queued removals if this was the last holder.
-    async fn resume(mut self) {
-        // Take the store so `Drop` becomes a no-op; we handle release here.
-        let Some(store) = self.store.take() else {
-            return;
-        };
-        let keys = store.pause_remove_callbacks.lock().release();
-        store.drain_pending_removals(keys).await;
-    }
-}
-
-impl<I: InstantWrapper> Drop for PauseGuard<'_, I> {
-    fn drop(&mut self) {
-        let Some(store) = self.store.take() else {
-            return;
-        };
-        // Cancellation path: release the count so the pause mechanism is never
-        // left permanently engaged (finding N6).
-        let keys = store.pause_remove_callbacks.lock().release();
-        if keys.is_empty() {
-            return;
-        }
-        // We were the last holder and there are removals that were queued
-        // *before* this operation was cancelled (C20/N6 drop residual). These
-        // must still be applied, otherwise the cache can keep claiming a blob
-        // exists after the inner store evicted it. `Drop` cannot await, and the
-        // removal is async, so spawn a detached task that drains them. The
-        // weak self-reference keeps this `'static` without extending the
-        // store's lifetime past its last strong owner.
-        let weak = store.self_ref.lock().clone();
-        if let Some(store) = weak.upgrade() {
-            background_spawn!("existence_cache_drain_pending_removals", async move {
-                store.drain_pending_removals(keys).await;
-            });
-        }
-    }
-}
-
 #[derive(Debug, MetricsComponent)]
 pub struct ExistenceCacheStore<I: InstantWrapper> {
     #[metric(group = "inner_store")]
@@ -146,12 +75,6 @@ pub struct ExistenceCacheStore<I: InstantWrapper> {
     // We need to pause remove callbacks temporarily while operating on the
     // inner store; see `PauseState`.
     pause_remove_callbacks: Mutex<PauseState>,
-
-    // A weak self-reference, set once at construction. The cancellation path in
-    // `PauseGuard::drop` needs an owned (`'static`) handle to the store so it
-    // can spawn the async drain of any removals queued before cancellation; a
-    // borrowed `&self` cannot outlive the `Drop` call. See `PauseGuard::drop`.
-    self_ref: Mutex<Weak<Self>>,
 }
 
 impl ExistenceCacheStore<SystemTime> {
@@ -217,9 +140,7 @@ impl<I: InstantWrapper> ExistenceCacheStore<I> {
             inner_store,
             existence_cache: EvictingMap::new(eviction_policy, anchor_time),
             pause_remove_callbacks: Mutex::new(PauseState::default()),
-            self_ref: Mutex::new(Weak::new()),
         });
-        *existence_cache_store.self_ref.lock() = Arc::downgrade(&existence_cache_store);
         let other_ref = Arc::downgrade(&existence_cache_store);
         existence_cache_store
             .inner_store
@@ -240,23 +161,30 @@ impl<I: InstantWrapper> ExistenceCacheStore<I> {
         self.existence_cache.remove(digest).await;
     }
 
-    /// Begin deferring remove callbacks for the duration of an operation and
-    /// return an RAII guard that releases the hold when dropped.
-    ///
-    /// The guard's `Drop` decrements the pause count unconditionally, so a
-    /// cancelled operation (e.g. an `update`/`get_part` future dropped mid-await
-    /// by a timeout) can never leave the pause count permanently elevated and
-    /// disable invalidation globally. On the normal path, call
-    /// [`PauseGuard::resume`] to release the hold *and* drain any queued
-    /// removals once the last holder is gone.
-    fn pause_remove_callbacks(&self) -> PauseGuard<'_, I> {
+    /// Begin deferring remove callbacks for the duration of an operation.
+    /// Must be paired with exactly one call to `resume_remove_callbacks`.
+    fn pause_remove_callbacks(&self) {
         self.pause_remove_callbacks.lock().pause_count += 1;
-        PauseGuard { store: Some(self) }
     }
 
-    /// Drain the queued removals when the last holder has released. Called by
-    /// [`PauseGuard::resume`]; the count has already been decremented there.
-    async fn drain_pending_removals(&self, keys: Vec<StoreKey<'static>>) {
+    /// Release one hold on the pause. If this was the last concurrent
+    /// holder, drain the queued removals now — after every holder has
+    /// finished inserting into the existence cache — so evictions that
+    /// fired during the paused window take effect (including for keys
+    /// that were just inserted).
+    async fn resume_remove_callbacks(&self) {
+        let keys = {
+            let mut state = self.pause_remove_callbacks.lock();
+            state.pause_count = state
+                .pause_count
+                .checked_sub(1)
+                .expect("resume_remove_callbacks called without matching pause");
+            if state.pause_count == 0 {
+                core::mem::take(&mut state.pending)
+            } else {
+                Vec::new()
+            }
+        };
         let mut callbacks: FuturesUnordered<_> = keys
             .into_iter()
             .map(|store_key| self.callback(store_key))
@@ -284,25 +212,12 @@ impl<I: InstantWrapper> ExistenceCacheStore<I> {
             return Ok(());
         }
 
-        // Pause remove callbacks over the inner `has` + the insert below
-        // (finding C13). The inner store may evict one of `not_cached_keys`
-        // between answering `has` positively and our insert; without the pause
-        // that eviction's callback would run before the insert and be a no-op,
-        // leaving the cache claiming existence of a blob the inner store
-        // dropped. Queuing it until after the insert lets the drain remove it.
-        let pause = self.pause_remove_callbacks();
-
         // Now query only the items not found in the cache.
         let mut inner_results = vec![None; not_cached_keys.len()];
-        let has_result = self
-            .inner_store
+        self.inner_store
             .has_with_results(&not_cached_keys, &mut inner_results)
             .await
-            .err_tip(|| "In ExistenceCacheStore::inner_has_with_results");
-        if let Err(err) = has_result {
-            pause.resume().await;
-            return Err(err);
-        }
+            .err_tip(|| "In ExistenceCacheStore::inner_has_with_results")?;
 
         // Insert found from previous query into our cache.
         {
@@ -317,10 +232,6 @@ impl<I: InstantWrapper> ExistenceCacheStore<I> {
                 .collect::<Vec<_>>();
             drop(self.existence_cache.insert_many(inserts).await);
         }
-
-        // Insert is done; release the pause and drain any eviction queued
-        // during the inner `has` so it lands after our insert (C13).
-        pause.resume().await;
 
         // Merge the results from the cache and the query.
         {
@@ -388,7 +299,7 @@ impl<I: InstantWrapper> StoreDriver for ExistenceCacheStore<I> {
                 .err_tip(|| "In ExistenceCacheStore::update")?;
             return Ok(size);
         }
-        let pause = self.pause_remove_callbacks();
+        self.pause_remove_callbacks();
         trace!(?digest, "Inserting into inner cache");
         let result = self.inner_store.update(digest, reader, size_info).await;
         if let Ok(size) = &result {
@@ -400,9 +311,8 @@ impl<I: InstantWrapper> StoreDriver for ExistenceCacheStore<I> {
         }
         // Note: the insert above happens *before* releasing the pause, so a
         // removal for `digest` queued during the inner update is applied
-        // after the insert and cannot be lost. If this future is cancelled
-        // before here, `pause`'s Drop still releases the hold.
-        pause.resume().await;
+        // after the insert and cannot be lost.
+        self.resume_remove_callbacks().await;
         result
     }
 
@@ -419,7 +329,7 @@ impl<I: InstantWrapper> StoreDriver for ExistenceCacheStore<I> {
         // filesystem store keeps streaming from an open file handle). The
         // eviction is queued and replayed after our insert, so the cache
         // cannot resurrect an entry the inner store dropped mid-read.
-        let pause = self.pause_remove_callbacks();
+        self.pause_remove_callbacks();
         let result = self
             .inner_store
             .get_part(digest, writer, offset, length)
@@ -430,7 +340,7 @@ impl<I: InstantWrapper> StoreDriver for ExistenceCacheStore<I> {
                 .insert(digest, ExistenceItem(digest.size_bytes()))
                 .await;
         }
-        pause.resume().await;
+        self.resume_remove_callbacks().await;
         result
     }
 

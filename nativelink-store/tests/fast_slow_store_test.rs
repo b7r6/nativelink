@@ -36,7 +36,7 @@ use nativelink_util::buf_channel::{
 use nativelink_util::common::{DigestInfo, fs, make_temp_path};
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
 use nativelink_util::store_trait::{
-    RemoveCallback, RemoveItemCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
+    RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
 };
 use pretty_assertions::assert_eq;
 use rand::rngs::SmallRng;
@@ -57,7 +57,6 @@ fn make_stores_direction(
             fast_direction,
             slow_direction,
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store.clone(),
@@ -115,7 +114,6 @@ async fn filesystem_fast_tier_recovers_missing_files_on_upload_and_read() -> Res
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast.clone(),
         slow.clone(),
@@ -411,7 +409,6 @@ async fn drop_on_eof_completes_store_futures() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast_store,
         slow_store,
@@ -446,7 +443,7 @@ async fn drop_on_eof_completes_store_futures() -> Result<(), Error> {
 }
 
 #[nativelink_test]
-async fn fast_store_only_value_is_reported_by_has() -> Result<(), Error> {
+async fn ignore_value_in_fast_store() -> Result<(), Error> {
     let fast_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Arc::new(FastSlowStore::new(
@@ -456,7 +453,6 @@ async fn fast_store_only_value_is_reported_by_has() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store,
@@ -465,12 +461,9 @@ async fn fast_store_only_value_is_reported_by_has() -> Result<(), Error> {
     fast_store
         .update_oneshot(digest, make_random_data(100).into())
         .await?;
-    // Fast-first: a blob resident only in the fast tier is reported present.
-    // (The historical slow-only probe is what wedged FindMissingBlobs.)
-    assert_eq!(
-        fast_slow_store.has(digest).await?,
-        Some(100),
-        "fast-only blob must be reported present under the fast-first contract",
+    assert!(
+        fast_slow_store.has(digest).await?.is_none(),
+        "Expected data to not exist in store"
     );
     Ok(())
 }
@@ -486,7 +479,6 @@ async fn has_checks_fast_store_when_noop() -> Result<(), Error> {
         fast_direction: StoreDirection::default(),
         slow_direction: StoreDirection::default(),
         bypass_dedup_threshold_bytes: 0,
-        slow_store_write_back: false,
     };
     let fast_slow_store = Arc::new(FastSlowStore::new(
         &fast_slow_store_config,
@@ -728,7 +720,6 @@ fn make_stores_with_lazy_slow() -> (Store, Store, Store) {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store.clone(),
@@ -877,7 +868,6 @@ fn make_fast_slow_with_instrumented_slow(
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes,
-            slow_store_write_back: false,
         },
         fast,
         Store::new(slow.clone()),
@@ -1126,7 +1116,6 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast,
         Store::new(slow.clone()),
@@ -1161,13 +1150,14 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
     // has_with_results above), so the only way this can be Some is via
     // the in-flight map wait.
     let observer_store = fast_slow.clone();
-    let observer = tokio::spawn(async move { observer_store.has(digest).await });
+    let mut observer = tokio::spawn(async move { observer_store.has(digest).await });
 
-    // Under the fast-first contract the observer may resolve as soon as the
-    // fast tier receives the blob (the write-through populates fast before the
-    // gated slow write completes); it is no longer required to block on the
-    // slow store. Give the fast write a moment to land.
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    // Prove that the observer is blocked waiting for the in-flight write.
+    // It should not resolve before the gate is released.
+    tokio::select! {
+        _ = &mut observer => panic!("Observer resolved before writer completed"),
+        () = tokio::time::sleep(Duration::from_millis(10)) => {}
+    }
 
     // Release the writer and confirm the in-flight tracker is cleaned up.
     gate_tx
@@ -1187,13 +1177,12 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
         "Concurrent has() must wait for and see in-flight slow write",
     );
 
-    // After completion the blob is resident in the fast tier, so fast-first
-    // has() reports it present (the historical slow-only probe returned None
-    // here and is exactly the wedge this contract removes).
+    // After completion the fast store still has the blob, but has() should
+    // return None since we never fallback to checking the fast store.
     assert_eq!(
         fast_slow.has(digest).await?,
-        Some(data.len() as u64),
-        "Post-write has() must see the fast-resident blob under fast-first",
+        None,
+        "Post-write has() should not see the blob via fast-store fallback",
     );
 
     Ok(())
@@ -1204,7 +1193,7 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
 /// here we additionally assert that when the slow store DOES have the blob,
 /// the fast store is NOT consulted (avoiding the extra round trip).
 #[nativelink_test]
-async fn has_checks_fast_store_first_and_skips_slow_on_fast_hit() -> Result<(), Error> {
+async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Error> {
     #[derive(MetricsComponent)]
     struct CountingFastStore {
         inner: Arc<MemoryStore>,
@@ -1280,7 +1269,6 @@ async fn has_checks_fast_store_first_and_skips_slow_on_fast_hit() -> Result<(), 
         has_calls: has_calls.clone(),
     }));
     let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
-    let fast_for_seed = fast.clone();
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
             fast: StoreSpec::Memory(MemorySpec::default()),
@@ -1288,7 +1276,6 @@ async fn has_checks_fast_store_first_and_skips_slow_on_fast_hit() -> Result<(), 
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast,
         slow.clone(),
@@ -1296,32 +1283,18 @@ async fn has_checks_fast_store_first_and_skips_slow_on_fast_hit() -> Result<(), 
 
     let data = make_random_data(128);
     let digest = DigestInfo::try_new(VALID_HASH, data.len()).unwrap();
+    slow.update_oneshot(digest, data.clone().into()).await?;
 
-    // Fast-first: a blob resident in the fast tier is answered from the fast
-    // tier, and the fast store IS consulted. (The historical slow-only probe
-    // is what wedged FindMissingBlobs under slow-tier throttling.)
-    fast_for_seed
-        .update_oneshot(digest, data.clone().into())
-        .await?;
     let before = has_calls.load(Ordering::Acquire);
     assert_eq!(
         fast_slow.has(digest).await?,
         Some(data.len() as u64),
-        "Fast-resident blob must be reported present",
+        "Slow-store-only blob must be reported via slow lookup",
     );
-    assert!(
-        has_calls.load(Ordering::Acquire) > before,
-        "Fast store has() must be consulted first under the fast-first contract",
-    );
-
-    // A fast-miss falls through to the slow tier (a bounded probe, not a wedge).
-    let other = make_random_data(64);
-    let other_digest = DigestInfo::try_new(VALID_HASH_B, other.len()).unwrap();
-    slow.update_oneshot(other_digest, other.clone().into()).await?;
+    let after = has_calls.load(Ordering::Acquire);
     assert_eq!(
-        fast_slow.has(other_digest).await?,
-        Some(other.len() as u64),
-        "Fast-miss must fall through and be found in the slow tier",
+        after, before,
+        "Fast store has() must not be consulted when the slow store already reports the blob",
     );
 
     Ok(())
@@ -1422,7 +1395,6 @@ async fn dropping_update_future_cleans_up_in_flight_entry() -> Result<(), Error>
             fast_direction: StoreDirection::ReadOnly,
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast,
         Store::new(slow.clone()),
@@ -1446,13 +1418,14 @@ async fn dropping_update_future_cleans_up_in_flight_entry() -> Result<(), Error>
         .map_err(|e| make_err!(Code::Internal, "started signal lost: {e:?}"))?;
 
     let observer_store = fast_slow.clone();
-    let observer = tokio::spawn(async move { observer_store.has(digest).await });
+    let mut observer = tokio::spawn(async move { observer_store.has(digest).await });
 
-    // Under the fast-first contract the observer may resolve as soon as the
-    // fast tier receives the blob (the write-through populates fast before the
-    // gated slow write completes); it is no longer required to block on the
-    // slow store. Give the fast write a moment to land.
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    // Prove that the observer is blocked waiting for the in-flight write.
+    // It should not resolve before the gate is released.
+    tokio::select! {
+        _ = &mut observer => panic!("Observer resolved before writer completed"),
+        () = tokio::time::sleep(Duration::from_millis(10)) => {}
+    }
 
     // Cancel the writer. The guard's Drop should remove the entry.
     writer.abort();
@@ -1589,7 +1562,6 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
             fast_direction: StoreDirection::ReadOnly,
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast.clone(),
         Store::new(slow.clone()),
@@ -1625,7 +1597,7 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
     ];
 
     let observer_store = fast_slow.clone();
-    let observer = tokio::spawn(async move {
+    let mut observer = tokio::spawn(async move {
         let mut results: [Option<u64>; 4] = [None; 4];
         observer_store
             .as_store_driver_pin()
@@ -1634,11 +1606,12 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
         Ok::<_, Error>(results)
     });
 
-    // Under the fast-first contract the observer may resolve as soon as the
-    // fast tier receives the blob (the write-through populates fast before the
-    // gated slow write completes); it is no longer required to block on the
-    // slow store. Give the fast write a moment to land.
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    // Prove that the observer is blocked waiting for the in-flight write.
+    // It should not resolve before the gate is released.
+    tokio::select! {
+        _ = &mut observer => panic!("Observer resolved before writer completed"),
+        () = tokio::time::sleep(Duration::from_millis(10)) => {}
+    }
 
     // Cleanup: release the gated writer.
     gate_tx
@@ -1655,9 +1628,8 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
     assert_eq!(results[0], Some(slow_only_size), "slow-only key");
     assert_eq!(results[1], Some(in_flight_size), "in-flight key");
     assert_eq!(
-        results[2],
-        Some(fast_only_size),
-        "fast-only key must be reported present under the fast-first contract",
+        results[2], None,
+        "fast-only key should be None because we do not check fast store"
     );
     assert_eq!(results[3], None, "missing key must stay None");
 
@@ -1760,7 +1732,6 @@ async fn huge_blob_bypasses_dedup_and_skips_populate() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: THRESHOLD,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store,
@@ -1826,7 +1797,6 @@ async fn small_blob_still_dedups_and_populates() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: THRESHOLD,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store,
@@ -1890,7 +1860,6 @@ async fn bypass_threshold_is_inclusive_at_exact_size() -> Result<(), Error> {
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: SIZE as u64,
-            slow_store_write_back: false,
         },
         fast_store.clone(),
         slow_store,
@@ -2014,7 +1983,6 @@ fn make_stores_with_stale_fast(
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         fast_store,
         slow_store.clone(),
@@ -2196,7 +2164,6 @@ async fn slow_store_not_found_under_the_read_names_the_digest() -> Result<(), Er
             fast_direction: StoreDirection::default(),
             slow_direction: StoreDirection::default(),
             bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
         },
         Store::new(MemoryStore::new(&MemorySpec::default())),
         Store::new(Arc::new(PartialThenGoneStore {
@@ -2216,266 +2183,6 @@ async fn slow_store_not_found_under_the_read_names_the_digest() -> Result<(), Er
             size: 4096,
         },
         "{err:?}"
-    );
-
-    Ok(())
-}
-
-/// With `slow_store_write_back` enabled, an update must return as soon as the
-/// fast store holds the data — it must not wait for, or be coupled to the
-/// liveness of, the slow store. The slow store is then populated by a
-/// background task. This is the regression test for the CAS write-path stall
-/// where a slow or stalled slow tier (e.g. a remote object store) would
-/// backpressure through the `join!` tee and freeze the client upload.
-#[nativelink_test]
-async fn write_back_decouples_update_from_slow_store() -> Result<(), Error> {
-    #[derive(MetricsComponent)]
-    struct GatedSlowStore {
-        /// Released by the test to let the background slow write complete.
-        gate: Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
-        /// Signalled once the slow-store `update` has begun.
-        started_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
-        /// Bytes drained by the slow store once the gate is released.
-        received_bytes: AtomicU64,
-    }
-
-    #[async_trait]
-    impl StoreDriver for GatedSlowStore {
-        async fn post_init(self: Arc<Self>) -> Result<(), Error> {
-            Ok(())
-        }
-
-        async fn has_with_results(
-            self: Pin<&Self>,
-            _keys: &[StoreKey<'_>],
-            results: &mut [Option<u64>],
-        ) -> Result<(), Error> {
-            for result in results.iter_mut() {
-                *result = None;
-            }
-            Ok(())
-        }
-
-        async fn update(
-            self: Pin<&Self>,
-            _key: StoreKey<'_>,
-            mut reader: DropCloserReadHalf,
-            _size_info: UploadSizeInfo,
-        ) -> Result<u64, Error> {
-            let started_tx = self.started_tx.lock().unwrap().take();
-            if let Some(tx) = started_tx {
-                let _ = tx.send(());
-            }
-            let gate = self.gate.lock().unwrap().take();
-            if let Some(rx) = gate {
-                let _ = rx.await;
-            }
-            let size = reader.drain().await?;
-            self.received_bytes.store(size, Ordering::Release);
-            Ok(size)
-        }
-
-        async fn get_part(
-            self: Pin<&Self>,
-            _key: StoreKey<'_>,
-            writer: &mut DropCloserWriteHalf,
-            _offset: u64,
-            _length: Option<u64>,
-        ) -> Result<(), Error> {
-            writer.send_eof()
-        }
-
-        fn inner_store(&self, _key: Option<StoreKey>) -> &'_ dyn StoreDriver {
-            self
-        }
-
-        fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
-            self
-        }
-
-        fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
-            self
-        }
-
-        fn register_remove_callback(
-            self: Arc<Self>,
-            _callback: Arc<dyn RemoveItemCallback>,
-        ) -> Result<(), Error> {
-            Ok(())
-        }
-    }
-
-    default_health_status_indicator!(GatedSlowStore);
-
-    let (gate_tx, gate_rx) = tokio::sync::oneshot::channel::<()>();
-    let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
-    let slow = Arc::new(GatedSlowStore {
-        gate: Mutex::new(Some(gate_rx)),
-        started_tx: Mutex::new(Some(started_tx)),
-        received_bytes: AtomicU64::new(0),
-    });
-    let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
-    let store = Store::new(FastSlowStore::new(
-        &FastSlowSpec {
-            fast: StoreSpec::Memory(MemorySpec::default()),
-            slow: StoreSpec::Memory(MemorySpec::default()),
-            fast_direction: StoreDirection::default(),
-            slow_direction: StoreDirection::default(),
-            bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: true,
-        },
-        fast.clone(),
-        Store::new(slow.clone()),
-    ));
-
-    let data = make_random_data(MEGABYTE_SZ);
-    let digest = DigestInfo::try_new(VALID_HASH, data.len()).unwrap();
-
-    // The slow store is gated (its `update` blocks). With write-back the client
-    // update must still complete promptly — coupled only to the fast store. A
-    // write-through store would hang here until the gate is released.
-    let update_result = tokio::time::timeout(
-        Duration::from_secs(10),
-        store.update_oneshot(digest, data.clone().into()),
-    )
-    .await;
-    assert!(
-        update_result.is_ok(),
-        "write-back update() hung on the gated slow store (write-through behavior)",
-    );
-    update_result.unwrap()?;
-
-    // The fast store has the blob immediately.
-    assert_eq!(
-        fast.has(digest).await?,
-        Some(data.len() as u64),
-        "fast store must hold the blob right after the write-back update returns",
-    );
-
-    // The background copy has begun draining the slow store, but is still gated,
-    // so the slow store has not yet received the data.
-    started_rx
-        .await
-        .map_err(|_| make_err!(Code::Internal, "background write-back copy never started"))?;
-    assert_eq!(
-        slow.received_bytes.load(Ordering::Acquire),
-        0,
-        "slow store must not have the blob while the background copy is gated",
-    );
-
-    // Release the gate; the background copy delivers the full blob to the slow
-    // store, preserving durability.
-    gate_tx
-        .send(())
-        .map_err(|()| make_err!(Code::Internal, "failed to release the slow-store gate"))?;
-    let mut waited = Duration::ZERO;
-    while slow.received_bytes.load(Ordering::Acquire) != data.len() as u64 {
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        waited += Duration::from_millis(10);
-        assert!(
-            waited < Duration::from_secs(10),
-            "slow store never received the background write-back copy",
-        );
-    }
-
-    Ok(())
-}
-
-/// Fire-fix completion: a fast-miss must fail-fast on a slow tier that hangs.
-/// `has_with_results` bounds the slow-tier existence probe with a short deadline
-/// (`SLOW_PROBE_DEADLINE` ~3s) and degrades the fast-miss to "missing" on timeout,
-/// rather than blocking on the slow store's full RPC timeout (e.g. a `GrpcStore`'s
-/// 60s). Without the deadline a cold build's tens-of-thousands of fast-misses
-/// each stall the hot ring long enough to wedge the worker.
-#[nativelink_test]
-async fn has_fast_miss_fails_fast_when_slow_tier_hangs() -> Result<(), Error> {
-    #[derive(MetricsComponent)]
-    struct HangingSlowStore {}
-
-    #[async_trait]
-    impl StoreDriver for HangingSlowStore {
-        async fn post_init(self: Arc<Self>) -> Result<(), Error> {
-            Ok(())
-        }
-
-        async fn has_with_results(
-            self: Pin<&Self>,
-            _keys: &[StoreKey<'_>],
-            _results: &mut [Option<u64>],
-        ) -> Result<(), Error> {
-            // Simulate a throttled/unreachable slow tier whose existence probe
-            // never returns within the caller's patience. Far longer than
-            // SLOW_PROBE_DEADLINE so the bound (not this future) decides.
-            tokio::time::sleep(Duration::from_secs(600)).await;
-            Ok(())
-        }
-
-        async fn update(
-            self: Pin<&Self>,
-            _key: StoreKey<'_>,
-            _reader: DropCloserReadHalf,
-            _size_info: UploadSizeInfo,
-        ) -> Result<u64, Error> {
-            Ok(0)
-        }
-
-        async fn get_part(
-            self: Pin<&Self>,
-            _key: StoreKey<'_>,
-            _writer: &mut DropCloserWriteHalf,
-            _offset: u64,
-            _length: Option<u64>,
-        ) -> Result<(), Error> {
-            Ok(())
-        }
-
-        fn inner_store(&self, _key: Option<StoreKey>) -> &'_ dyn StoreDriver {
-            self
-        }
-
-        fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
-            self
-        }
-
-        fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
-            self
-        }
-
-        fn register_remove_callback(
-            self: Arc<Self>,
-            _callback: RemoveCallback,
-        ) -> Result<(), Error> {
-            Ok(())
-        }
-    }
-
-    default_health_status_indicator!(HangingSlowStore);
-
-    let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
-    let slow = Store::new(Arc::new(HangingSlowStore {}));
-    let fast_slow = Arc::new(FastSlowStore::new(
-        &FastSlowSpec {
-            fast: StoreSpec::Memory(MemorySpec::default()),
-            slow: StoreSpec::Memory(MemorySpec::default()),
-            fast_direction: StoreDirection::default(),
-            slow_direction: StoreDirection::default(),
-            bypass_dedup_threshold_bytes: 0,
-            slow_store_write_back: false,
-        },
-        fast,
-        slow,
-    ));
-
-    let digest = DigestInfo::try_new(VALID_HASH, 128).unwrap();
-
-    // The fast tier misses; the slow probe hangs. The call must still return
-    // (degraded to "missing") well before the slow store's 600s hang, bounded
-    // by SLOW_PROBE_DEADLINE. Give generous client-side slack over the 3s bound.
-    let result = tokio::time::timeout(Duration::from_secs(30), fast_slow.has(digest)).await;
-    let has = result.expect("has() must fail-fast, not block on the hung slow tier")?;
-    assert_eq!(
-        has, None,
-        "a fast-miss against a hung slow tier must degrade to missing, not wedge",
     );
 
     Ok(())

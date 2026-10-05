@@ -689,6 +689,19 @@ impl SchedulerIndexProvider for SearchStateToAwaitedAction {
     fn index_value(&self) -> Cow<'_, str> {
         Cow::Borrowed(self.0)
     }
+
+    /// A queued record whose data cannot be decoded may be removed, but
+    /// only while no client keepalive exists for it: the keepalive is
+    /// written with a TTL of the client action timeout, so its absence
+    /// means no client has been listening for at least that long. Scoped
+    /// to the queued listing; records in any other stage are left alone.
+    fn lost_record_liveness_guard_key(index_value: &str, record_key: &str) -> Option<String> {
+        if index_value != get_state_prefix(SortedAwaitedActionState::Queued) {
+            return None;
+        }
+        let operation_id = record_key.strip_prefix(OPERATION_ID_TO_AWAITED_ACTION_KEY_PREFIX)?;
+        Some(format!("{CLIENT_KEEPALIVE_KEY_PREFIX}{operation_id}"))
+    }
 }
 impl SchedulerStoreDecodeTo for SearchStateToAwaitedAction {
     type DecodeOutput = AwaitedAction;

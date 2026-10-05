@@ -372,10 +372,14 @@ impl GrpcStore {
         context: &'static str,
         fut: impl Future<Output = Result<R, Error>> + Send,
     ) -> Result<R, Error> {
+        // Boxed so this wrapper adds a pointer to the caller's future, not a
+        // second inline copy of `fut` — the RPC futures it wraps are large,
+        // and embedding them twice measurably deepens poll stacks.
+        let mut fut = Box::pin(fut);
         if self.rpc_timeout.is_zero() {
-            return fut.await;
+            return fut.as_mut().await;
         }
-        match tokio::time::timeout(self.rpc_timeout, fut).await {
+        match tokio::time::timeout(self.rpc_timeout, fut.as_mut()).await {
             Ok(result) => result,
             Err(_elapsed) => Err(make_err!(
                 Code::DeadlineExceeded,
@@ -1679,10 +1683,6 @@ impl StoreDriver for GrpcStore {
             bytes_received: i64,
             /// Remainder of a buffer too large to send as one `WriteRequest`.
             pending: Bytes,
-            // Set once the finishing (finish_write=true) request has been emitted,
-            // so the next poll ends the stream instead of re-polling the drained
-            // reader after EOF.
-            finished: bool,
         }
 
         let is_digest_key = matches!(key, StoreKey::Digest(_));
@@ -1758,17 +1758,11 @@ impl StoreDriver for GrpcStore {
             did_error: false,
             bytes_received: 0,
             pending: Bytes::new(),
-            finished: false,
         };
 
         let stream = Box::pin(unfold(local_state, |mut local_state| async move {
             if local_state.did_error {
                 error!("GrpcStore::update() polled stream after error was returned");
-                return None;
-            }
-            // The finishing request was already emitted — end the stream rather
-            // than re-poll the drained reader.
-            if local_state.finished {
                 return None;
             }
             // Drain any remainder before reading more.
@@ -1799,20 +1793,17 @@ impl StoreDriver for GrpcStore {
             } else {
                 data
             };
-            // EOF is an empty polled chunk with nothing left pending.
-            let is_eof = data.is_empty() && local_state.pending.is_empty();
 
             let write_offset = local_state.bytes_received;
             local_state.bytes_received += data.len().try_into().unwrap_or(i64::MAX);
-            // This (is_eof) request carries finish_write=true; the next poll must
-            // end the stream rather than poll the drained reader again.
-            local_state.finished = is_eof;
 
             Some((
                 Ok(WriteRequest {
                     resource_name: local_state.resource_name.clone(),
                     write_offset,
-                    finish_write: is_eof,
+                    // EOF is when no data was polled. A split always leaves a
+                    // non-empty remainder, so this cannot fire early.
+                    finish_write: data.is_empty(),
                     data,
                 }),
                 local_state,

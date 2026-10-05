@@ -91,7 +91,6 @@ async fn same_worker_retry_conserves_resource_budget() -> Result<(), Error> {
             op.clone(),
             action_needing(4),
             NOW_TIME,
-            0,
         ))))
         .await?;
     assert_eq!(
@@ -108,7 +107,6 @@ async fn same_worker_retry_conserves_resource_budget() -> Result<(), Error> {
             op.clone(),
             action_needing(4),
             NOW_TIME,
-            1,
         ))))
         .await;
     // The worker may accept or reject the redundant dispatch; either way the
