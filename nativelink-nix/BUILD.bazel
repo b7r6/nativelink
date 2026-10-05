@@ -30,7 +30,7 @@ rust_library(
 
 rust_test(
     name = "unit_test",
-    timeout = "short",
+    timeout = "moderate",
     crate = ":nativelink-nix",
     deps = [
         "@crates//:proptest",

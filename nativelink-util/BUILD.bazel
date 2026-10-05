@@ -28,6 +28,7 @@ rust_library(
         "src/instant_wrapper.rs",
         "src/lib.rs",
         "src/metrics.rs",
+        "src/metrics_collector.rs",
         "src/metrics_utils.rs",
         "src/operation_state_manager.rs",
         "src/origin_event.rs",
