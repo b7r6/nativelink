@@ -366,6 +366,7 @@ rebase
 recc
 Recc
 Reclient
+recursed
 recursing
 Redis
 redispatch
