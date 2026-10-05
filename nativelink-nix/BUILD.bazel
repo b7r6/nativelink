@@ -33,6 +33,7 @@ rust_test(
     timeout = "short",
     crate = ":nativelink-nix",
     deps = [
+        "@crates//:proptest",
         "//nativelink-error",
         "//nativelink-proto",
         "@crates//:base64",

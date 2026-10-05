@@ -108,6 +108,7 @@ rust_test(
     timeout = "short",
     crate = ":nativelink-config",
     deps = [
+        "@crates//:proptest",
         "@crates//:pretty_assertions",
         "@crates//:serde_json",
         "@crates//:tracing-test",
