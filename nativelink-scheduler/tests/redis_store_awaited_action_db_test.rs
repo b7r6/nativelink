@@ -786,7 +786,7 @@ async fn sweep_deletes_lost_queued_record() -> Result<(), Error> {
         0_usize,
         Duration::from_mins(1),
         Duration::from_mins(1),
-        Duration::from_secs(600),
+        Duration::from_mins(10),
         db,
         MockInstantWrapped::default,
         None,
