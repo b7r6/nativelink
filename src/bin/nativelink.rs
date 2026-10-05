@@ -716,11 +716,14 @@ async fn inner_main(
                         // Collection walks shared component state and installs a
                         // scoped tracing subscriber; run it on a blocking thread
                         // so we never park the async runtime on it.
-                        let body = tokio::task::spawn_blocking(move || {
-                            let metrics =
-                                nativelink_util::metrics_collector::collect(&metrics_roots);
-                            nativelink_util::metrics_collector::render_prometheus(&metrics)
-                        })
+                        let body = nativelink_util::spawn_blocking!(
+                            "prometheus_metrics_collect",
+                            move || {
+                                let metrics =
+                                    nativelink_util::metrics_collector::collect(&metrics_roots);
+                                nativelink_util::metrics_collector::render_prometheus(&metrics)
+                            }
+                        )
                         .await
                         .unwrap_or_else(|e| format!("# metrics collection failed: {e}\n"));
                         (

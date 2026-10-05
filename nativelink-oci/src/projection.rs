@@ -713,7 +713,7 @@ mod tests {
         assert_eq!(file.digest.as_ref().unwrap().hash, expected_hash);
         assert_eq!(
             file.digest.as_ref().unwrap().size_bytes,
-            content.len() as i64
+            i64::try_from(content.len()).expect("test content length fits i64")
         );
     }
 
