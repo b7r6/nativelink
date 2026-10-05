@@ -760,7 +760,7 @@ async fn sweep_deletes_lost_queued_record() -> Result<(), Error> {
     db.add_action(
         OperationId::String("healthy-client-op".to_string()),
         healthy.action_info().clone(),
-        Duration::from_secs(60),
+        Duration::from_mins(1),
     )
     .await?;
 
@@ -784,9 +784,9 @@ async fn sweep_deletes_lost_queued_record() -> Result<(), Error> {
 
     let state_manager = SimpleSchedulerStateManager::new(
         0_usize,
-        Duration::from_secs(60),
-        Duration::from_secs(60),
-        Duration::from_secs(600),
+        Duration::from_mins(1),
+        Duration::from_mins(1),
+        Duration::from_mins(10),
         db,
         MockInstantWrapped::default,
         None,

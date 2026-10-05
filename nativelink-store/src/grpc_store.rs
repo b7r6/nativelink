@@ -2029,8 +2029,7 @@ impl StoreDriver for GrpcStore {
                     // bytes already delivered. `read_limit == 0` means "read to
                     // end" and must stay unbounded across resumes.
                     if local_state.read_limit != 0 {
-                        local_state.read_limit =
-                            local_state.read_limit.saturating_sub(length);
+                        local_state.read_limit = local_state.read_limit.saturating_sub(length);
                     }
                 }
             }))
