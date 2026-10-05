@@ -3060,7 +3060,8 @@ mod tests {
         max_nar_size_bytes: u64,
         max_nar_streams: usize,
     ) -> Arc<NixCacheInstance> {
-        let spool_dir = std::env::temp_dir()
+        let spool_dir = std::env::var_os("TEST_TMPDIR")
+            .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
             .join(DEFAULT_SPOOL_DIR_NAME)
             .join(format!("unit-test-{}", Uuid::new_v4()));
         prepare_spool_dir(&spool_dir).expect("prepare spool dir");
@@ -3082,14 +3083,14 @@ mod tests {
             compression_level: DEFAULT_ZSTD_LEVEL,
             preserve_upload_compression: true,
             max_nar_size_bytes,
-            nar_upload_idle_timeout: core::time::Duration::from_secs(60),
+            nar_upload_idle_timeout: core::time::Duration::from_mins(1),
             nar_stream_semaphore: Arc::new(tokio::sync::Semaphore::new(max_nar_streams)),
             transcode_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             transcode_inflight: std::sync::Mutex::new(std::collections::HashMap::new()),
             upstreams: vec![],
             http_client: reqwest::Client::new(),
             upstream_timeout: core::time::Duration::from_secs(30),
-            upstream_negative_ttl: core::time::Duration::from_secs(60),
+            upstream_negative_ttl: core::time::Duration::from_mins(1),
             negative_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
             readthrough_inflight: std::sync::Mutex::new(std::collections::HashMap::new()),
             narinfo_gets: CounterWithTime::default(),
@@ -3719,7 +3720,8 @@ mod tests {
     /// removed. Losing unrelated operator data here would be a data-loss bug.
     #[test]
     fn prepare_spool_dir_prunes_only_spool_files() {
-        let dir = std::env::temp_dir()
+        let dir = std::env::var_os("TEST_TMPDIR")
+            .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
             .join(DEFAULT_SPOOL_DIR_NAME)
             .join(format!("prune-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create dir");
