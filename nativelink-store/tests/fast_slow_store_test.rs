@@ -52,6 +52,7 @@ fn make_stores_direction(
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction,
@@ -109,6 +110,7 @@ async fn filesystem_fast_tier_recovers_missing_files_on_upload_and_read() -> Res
     let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
     let store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Filesystem(filesystem_spec),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -404,6 +406,7 @@ async fn drop_on_eof_completes_store_futures() -> Result<(), Error> {
 
     let fast_slow_store = FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -448,6 +451,7 @@ async fn ignore_value_in_fast_store() -> Result<(), Error> {
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -474,6 +478,7 @@ async fn has_checks_fast_store_when_noop() -> Result<(), Error> {
     let fast_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let slow_store = Store::new(NoopStore::new());
     let fast_slow_store_config = FastSlowSpec {
+            slow_store_write_back: Default::default(),
         fast: StoreSpec::Memory(MemorySpec::default()),
         slow: StoreSpec::Noop(NoopSpec::default()),
         fast_direction: StoreDirection::default(),
@@ -715,6 +720,7 @@ fn make_stores_with_lazy_slow() -> (Store, Store, Store) {
     }));
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -863,6 +869,7 @@ fn make_fast_slow_with_instrumented_slow(
     let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1111,6 +1118,7 @@ async fn has_sees_in_flight_slow_writes() -> Result<(), Error> {
     let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1271,6 +1279,7 @@ async fn has_does_not_consult_fast_store_when_slow_store_hits() -> Result<(), Er
     let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1390,6 +1399,7 @@ async fn dropping_update_future_cleans_up_in_flight_entry() -> Result<(), Error>
     let fast = Store::new(NoopStore::new());
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Noop(NoopSpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::ReadOnly,
@@ -1557,6 +1567,7 @@ async fn has_with_results_handles_mixed_key_sources() -> Result<(), Error> {
     let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow = Arc::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::ReadOnly,
@@ -1727,6 +1738,7 @@ async fn huge_blob_bypasses_dedup_and_skips_populate() -> Result<(), Error> {
     let slow_store = Store::new(counting);
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1792,6 +1804,7 @@ async fn small_blob_still_dedups_and_populates() -> Result<(), Error> {
     let slow_store = Store::new(counting);
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1855,6 +1868,7 @@ async fn bypass_threshold_is_inclusive_at_exact_size() -> Result<(), Error> {
     let slow_store = Store::new(counting);
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -1978,6 +1992,7 @@ fn make_stores_with_stale_fast(
     let slow_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),
@@ -2159,6 +2174,7 @@ async fn slow_store_not_found_under_the_read_names_the_digest() -> Result<(), Er
     let digest = DigestInfo::try_new(VALID_HASH, 4096).unwrap();
     let fast_slow_store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
+            slow_store_write_back: Default::default(),
             fast: StoreSpec::Memory(MemorySpec::default()),
             slow: StoreSpec::Memory(MemorySpec::default()),
             fast_direction: StoreDirection::default(),

@@ -148,6 +148,8 @@ rust_test(
     timeout = "short",
     crate = ":nativelink-service",
     proc_macro_deps = [
+        "@crates//:tracing-test",
+        "@crates//:proptest",
         "//nativelink-macro",
         "@crates//:async-trait",
     ],
