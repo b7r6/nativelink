@@ -227,9 +227,18 @@ impl CacheFixture {
                 path_info_store: "{PATH_INFO_STORE_NAME}",
                 alias_store: "{ALIAS_STORE_NAME}",
                 signing_key_files: ["{}"],
+                // Spool under the fixture's own temp dir: the serde default
+                // (`<system temp>/nativelink-nix-spool`) is unwritable inside
+                // the bazel test sandbox.
+                spool_path: "{}",
                 {extra_json5}
             }}"#,
-            self.signing_key_path.display()
+            self.signing_key_path.display(),
+            self.signing_key_path
+                .parent()
+                .expect("signing key path has a parent dir")
+                .join("nar-spool")
+                .display()
         ))
         .expect("NixCacheConfig json5 parses")
     }
