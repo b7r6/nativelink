@@ -1069,7 +1069,6 @@ async fn batch_update_blobs_splits_an_oversized_batch_across_rpcs() -> Result<()
     Ok(())
 }
 
-
 /// A 10-byte payload, longer than the partial-forward below, so a bounded read
 /// has a meaningful remaining window to carry across a resume.
 const RESUME_PAYLOAD: &[u8] = b"0123456789";
@@ -1097,12 +1096,7 @@ async fn bounded_read_resume_shrinks_read_limit() -> Result<(), Error> {
     let digest = DigestInfo::try_new(VALID_HASH, requested_len).unwrap();
 
     let (tx, mut rx) = make_buf_channel_pair();
-    let get_fut = store.get_part(
-        digest,
-        tx,
-        0,
-        Some(u64::try_from(requested_len).unwrap()),
-    );
+    let get_fut = store.get_part(digest, tx, 0, Some(u64::try_from(requested_len).unwrap()));
     let drain_fut = async move {
         let mut total = 0usize;
         loop {
@@ -1121,7 +1115,11 @@ async fn bounded_read_resume_shrinks_read_limit() -> Result<(), Error> {
     );
 
     let reqs = server.read_requests.lock().await;
-    assert!(reqs.len() >= 2, "expected a resume read, saw {}", reqs.len());
+    assert!(
+        reqs.len() >= 2,
+        "expected a resume read, saw {}",
+        reqs.len()
+    );
     let limit = i64::try_from(requested_len).unwrap();
     let fwd = i64::try_from(FORWARDED).unwrap();
     assert_eq!(reqs[0].request.read_offset, 0);
