@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use nativelink_error::Error;
+use nativelink_error::{Code, Error};
 use walkdir::WalkDir;
 
 // A transport-layer failure (mid-stream connection reset) is reported by tonic
