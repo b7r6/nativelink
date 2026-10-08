@@ -1609,6 +1609,21 @@ impl ApiWorkerScheduler {
         load: Option<WorkerLoad>,
         keepalive: bool,
     ) -> Result<(), Error> {
+        // TL1: stamp the independent registry liveness signal on RECEIPT, before
+        // taking `inner.lock()`. The registry is the second liveness source that
+        // `remove_timedout_workers` consults ("alive if EITHER source"), but it
+        // was previously stamped only AFTER the inner.lock block below — which
+        // holds the lock across an await (the unacked-dispatch sweep). A punctual
+        // keepalive whose inner.lock acquisition is contended, or whose task is
+        // starved on a saturated runtime, then refreshed NEITHER liveness source
+        // before the eviction sweep read them, falsely evicting a live worker. The
+        // registry write is a lightweight RwLock insert (no await-under-lock, no
+        // store, no sweep), so stamping it first decouples the monotone liveness
+        // FACT from the coordinated state write; it can no longer be starved.
+        let now = UNIX_EPOCH + Duration::from_secs(timestamp);
+        self.worker_registry
+            .update_worker_heartbeat(worker_id, now)
+            .await;
         {
             let mut inner = self.inner.lock().await;
             inner
@@ -1650,10 +1665,6 @@ impl ApiWorkerScheduler {
                 }
             }
         }
-        let now = UNIX_EPOCH + Duration::from_secs(timestamp);
-        self.worker_registry
-            .update_worker_heartbeat(worker_id, now)
-            .await;
         Ok(())
     }
 
