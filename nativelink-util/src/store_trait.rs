@@ -1002,6 +1002,23 @@ pub trait SchedulerIndexProvider {
 
     /// The value of the index.
     fn index_value(&self) -> Cow<'_, str>;
+
+    /// Opts an index into garbage-collecting a listed record whose data
+    /// exists but cannot be decoded (for example serialization drift across
+    /// a rolling upgrade). Such a record has no TTL, and no reader or
+    /// writer can ever use it again, so without removal it is listed,
+    /// skipped and counted forever.
+    ///
+    /// Returning `Some(guard_key)` permits deletion of `record_key` only
+    /// while `guard_key` does not exist; the guard should be a liveness
+    /// marker (such as a client keepalive) so a record something still
+    /// cares about is never removed. `None`, the default, means a record
+    /// listed by this index is never deleted. Both keys are store keys
+    /// before any store-level key prefix is applied.
+    #[must_use]
+    fn lost_record_liveness_guard_key(_index_value: &str, _record_key: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Provides a key to lookup data in the store.
