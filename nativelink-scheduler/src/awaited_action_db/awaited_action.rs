@@ -298,7 +298,7 @@ impl AwaitedAction {
         self.last_worker_updated_timestamp = now;
     }
 
-    pub(crate) const fn last_client_keepalive_timestamp(&self) -> SystemTime {
+    pub const fn last_client_keepalive_timestamp(&self) -> SystemTime {
         self.last_client_keepalive_timestamp
     }
 

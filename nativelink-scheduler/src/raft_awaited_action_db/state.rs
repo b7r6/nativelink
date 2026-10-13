@@ -293,6 +293,25 @@ impl AppliedState {
         });
     }
 
+    /// Point `client_operation_id` at `operation_id`. If the client pointed
+    /// at another operation that no client refers to any more, that one is
+    /// removed (as replacing the memory backend's client entry drops it) and
+    /// returned.
+    fn map_client(
+        &mut self,
+        client_operation_id: OperationId,
+        operation_id: &OperationId,
+    ) -> Option<OperationId> {
+        let previous = self
+            .client_to_operation
+            .insert(client_operation_id, operation_id.clone())?;
+        if &previous == operation_id || self.client_to_operation.values().any(|o| o == &previous) {
+            return None;
+        }
+        self.remove_operation(&previous);
+        Some(previous)
+    }
+
     /// Remove client mappings, then every operation no client refers to any
     /// more. Returns the removed operation ids.
     fn drop_clients(&mut self, client_operation_ids: &[OperationId]) -> Vec<OperationId> {
@@ -391,12 +410,15 @@ impl AppliedState {
         epoch: u64,
         now_unix_nanos: u128,
     ) -> Vec<OperationId> {
-        let owned: Vec<OperationId> = self
+        let mut owned: Vec<OperationId> = self
             .operation_owner
             .iter()
             .filter(|(_, o)| &o.worker_id == worker_id && o.session_epoch == epoch)
             .map(|(op, _)| op.clone())
             .collect();
+        // `operation_owner` is a HashMap: its order differs per replica.
+        // Requeue in operation id order so every replica returns the same.
+        owned.sort();
         let mut requeued = Vec::new();
         for op in owned {
             if self.requeue_operation(&op, now_unix_nanos) {
@@ -702,16 +724,17 @@ impl AppliedState {
                     && let Some(existing_action) = self.operations.get(existing)
                     && !existing_action.state().stage.is_finished()
                 {
-                    self.client_to_operation
-                        .insert(client_operation_id, existing.clone());
+                    let existing = existing.clone();
                     let awaited = existing_action.clone();
                     let revision = awaited.version_public();
+                    let mut changed = vec![existing.clone()];
+                    changed.extend(self.map_client(client_operation_id, &existing));
                     return (
                         CommandResponse::Applied {
                             awaited_action: Some(Box::new(awaited)),
                             revision,
                         },
-                        vec![existing.clone()],
+                        changed,
                     );
                 }
 
@@ -733,19 +756,20 @@ impl AppliedState {
                     self.unique_key_to_operation
                         .insert(unique_key.clone(), operation_id.clone());
                 }
-                self.client_to_operation
-                    .insert(client_operation_id, operation_id.clone());
+                let replaced = self.map_client(client_operation_id, &operation_id);
                 self.leases.insert(operation_id.clone(), now_unix_nanos);
                 self.operation_attempt.insert(operation_id.clone(), 0);
                 self.record_transition(&awaited, None, Some(&ActionStage::Queued));
                 self.operations
                     .insert(operation_id.clone(), awaited.clone());
+                let mut changed = vec![operation_id];
+                changed.extend(replaced);
                 (
                     CommandResponse::Applied {
                         awaited_action: Some(Box::new(awaited)),
                         revision,
                     },
-                    vec![operation_id],
+                    changed,
                 )
             }
             Command::AssignToWorker {

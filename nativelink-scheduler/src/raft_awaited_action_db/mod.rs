@@ -19,6 +19,9 @@ pub mod store;
 pub mod types;
 mod wal;
 
+#[cfg(test)]
+mod state_model_tests;
+
 pub use types::{Command, CommandResponse, NodeId, RejectReason, TypeConfig};
 
 use core::future::Future;
@@ -518,18 +521,25 @@ where
     ) -> Result<Self, Error> {
         let db = Self::new(config, tasks_change_notify, now_fn)?;
         db.raft().await?;
-        // Clients restored from a snapshot get a full retention period from
-        // now, not from whenever they were last seen before the restart.
         let now = (db.now_fn)().now();
-        let restored: Vec<OperationId> = db
+        // What this replica knew about its clients died with the process.
+        // Give every restored client a full retention and keepalive window
+        // from now to come back, rather than judging it by timestamps from
+        // before the restart.
+        let restored: Vec<(OperationId, OperationId)> = db
             .shared
             .sm
-            .with_state(|s| s.client_to_operation.keys().cloned().collect())
+            .with_state(|s| {
+                s.client_to_operation
+                    .iter()
+                    .map(|(client, op)| (client.clone(), op.clone()))
+                    .collect()
+            })
             .await;
         {
             let mut clients = db.shared.clients.lock();
-            for client in &restored {
-                clients.touch(client, now);
+            for (client, op) in &restored {
+                clients.keep_alive(client, op, now);
             }
         }
         Ok(db)
@@ -945,7 +955,11 @@ where
         else {
             return Ok(None);
         };
-        self.shared.clients.lock().touch(client_operation_id, now);
+        // A client asking for its operation is a live client.
+        self.shared
+            .clients
+            .lock()
+            .keep_alive(client_operation_id, &op_id, now);
         self.subscribe_op(&op_id, Some(client_operation_id.clone()))
             .await
     }

@@ -172,6 +172,41 @@ async fn restart_after_a_torn_final_write_keeps_every_acknowledged_entry() -> Re
     Ok(())
 }
 
+/// Client keepalives are this replica's own observations and are not in the
+/// log, so a restart must not judge restored clients by the keepalive they
+/// had before it: the scheduler would time out every operation whose client
+/// is reconnecting (found by rechaos restart-chaos: `WaitExecution` after a
+/// restart got `NOT_FOUND` because its own lookup timed the operation out).
+#[nativelink_test]
+async fn restart_gives_restored_clients_a_fresh_keepalive() -> Result<(), Error> {
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    let client = OperationId::default();
+    let before = {
+        let db = open(dir.path()).await?;
+        let sub = db
+            .add_action(client.clone(), action_info(1), Duration::from_secs(60))
+            .await?;
+        let before = sub.borrow().await?.last_client_keepalive_timestamp();
+        db.shutdown().await?;
+        before
+    };
+    // The process is down for a while.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let reopened_at = SystemTime::now();
+    let db = open(dir.path()).await?;
+    let sub = db
+        .get_awaited_action_by_id(&client)
+        .await?
+        .ok_or_else(|| nativelink_error::make_err!(nativelink_error::Code::NotFound, "lost"))?;
+    let after = sub.borrow().await?.last_client_keepalive_timestamp();
+    assert!(
+        after >= reopened_at && after > before,
+        "restored client keepalive {after:?} must be from after the restart ({reopened_at:?})",
+    );
+    Ok(())
+}
+
 /// A leader whose clock is behind the log's time stamps commands in the past.
 /// Apply clamps them, so log time never moves backwards and nothing derived
 /// from it (leases, deadlines) regresses (#2900 class).
