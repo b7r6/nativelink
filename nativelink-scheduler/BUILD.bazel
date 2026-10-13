@@ -81,6 +81,7 @@ rust_test_suite(
         "tests/action_messages_test.rs",
         "tests/admin_test.rs",
         "tests/backpressure_test.rs",
+        "tests/client_retention_test.rs",
         "tests/cache_lookup_scheduler_test.rs",
         "tests/dispatch_ack_test.rs",
         "tests/escalation_test.rs",

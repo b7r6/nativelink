@@ -104,6 +104,8 @@ pub(crate) enum ActionEvent {
     ClientKeepAlive(OperationId),
     /// A client has dropped and pointed to `OperationId`.
     ClientDroppedOperation(OperationId),
+    /// A client stopped waiting on its operation: its entry may now expire.
+    StoppedWaiting(OperationId),
 }
 
 /// Information required to track an individual client
@@ -157,6 +159,17 @@ impl<I: InstantWrapper, NowFn: Fn() -> I> MemoryAwaitedActionSubscriber<I, NowFn
                 now_fn,
                 event_tx,
             }),
+        }
+    }
+}
+
+impl<I: InstantWrapper, NowFn: Fn() -> I> Drop for MemoryAwaitedActionSubscriber<I, NowFn> {
+    fn drop(&mut self) {
+        if let Some(client_info) = &self.client_info {
+            // Failing to send just means the database is gone.
+            drop(client_info.event_tx.send(ActionEvent::StoppedWaiting(
+                client_info.client_operation_id.clone(),
+            )));
         }
     }
 }
@@ -349,6 +362,10 @@ impl<I: InstantWrapper, NowFn: Fn() -> I + Clone + Send + Sync> AwaitedActionDbI
         self.operation_id_to_awaited_action
             .get(client_awaited_action.operation_id())
             .map(|tx| {
+                // While a client waits, its entry must not expire, however
+                // long the action runs; retention starts when it stops.
+                self.client_operation_to_awaited_action
+                    .lease_key(client_operation_id.clone());
                 Some(MemoryAwaitedActionSubscriber::new_with_client(
                     tx.subscribe(),
                     client_operation_id.clone(),
@@ -470,6 +487,18 @@ impl<I: InstantWrapper, NowFn: Fn() -> I + Clone + Send + Sync> AwaitedActionDbI
                             "Expected maybe_sorted_awaited_action to have {sort_key:?}",
                         );
                     }
+                }
+                ActionEvent::StoppedWaiting(client_id) => {
+                    // Refresh the entry while it is still leased, so its
+                    // retention counts from now, then let it expire.
+                    drop(
+                        self.client_operation_to_awaited_action
+                            .get(&client_id)
+                            .await,
+                    );
+                    self.client_operation_to_awaited_action
+                        .release_key(&client_id)
+                        .await;
                 }
                 ActionEvent::ClientKeepAlive(client_id) => {
                     if let Some(client_awaited_action) = self
@@ -833,6 +862,8 @@ impl<I: InstantWrapper, NowFn: Fn() -> I + Clone + Send + Sync> AwaitedActionDbI
             )
             .err_tip(|| "In AwaitedActionDb::subscribe_or_add_action")?;
 
+        self.client_operation_to_awaited_action
+            .lease_key(client_operation_id.clone());
         Ok(MemoryAwaitedActionSubscriber::new_with_client(
             rx,
             client_operation_id,
@@ -904,6 +935,8 @@ impl<I: InstantWrapper, NowFn: Fn() -> I + Clone + Send + Sync> AwaitedActionDbI
             )
             .await;
 
+        self.client_operation_to_awaited_action
+            .lease_key(client_operation_id.clone());
         Ok(Some(MemoryAwaitedActionSubscriber::new_with_client(
             subscription,
             client_operation_id.clone(),

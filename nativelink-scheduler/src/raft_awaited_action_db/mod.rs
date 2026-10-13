@@ -24,7 +24,7 @@ pub use types::{Command, CommandResponse, NodeId, RejectReason, TypeConfig};
 use core::future::Future;
 use core::ops::Bound;
 use core::time::Duration;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -158,6 +158,12 @@ struct ClientTracker {
     by_time: BTreeSet<(SystemTime, OperationId)>,
     /// operation id -> newest client keepalive seen here.
     keepalive: HashMap<OperationId, SystemTime>,
+    /// client operation id -> live subscribers waiting on it here. An
+    /// attached client is never stale: retention starts when it detaches.
+    attached: HashMap<OperationId, u32>,
+    /// Clients a `DropClients` has been proposed for and not yet applied, so
+    /// concurrent evictions do not propose them again.
+    dropping: HashSet<OperationId>,
 }
 
 impl ClientTracker {
@@ -180,25 +186,58 @@ impl ClientTracker {
         *entry = (*entry).max(now);
     }
 
-    /// Whether `client_operation_id` was last used longer than `retain` ago.
+    fn attach(&mut self, client_operation_id: &OperationId) {
+        *self
+            .attached
+            .entry(client_operation_id.clone())
+            .or_insert(0) += 1;
+    }
+
+    /// A subscriber went away; the client's retention starts now.
+    fn detach(&mut self, client_operation_id: &OperationId, now: SystemTime) {
+        if let Some(count) = self.attached.get_mut(client_operation_id) {
+            *count -= 1;
+            if *count == 0 {
+                self.attached.remove(client_operation_id);
+            }
+        }
+        if self.last_touch.contains_key(client_operation_id) {
+            self.touch(client_operation_id, now);
+        }
+    }
+
+    fn is_evictable(&self, client_operation_id: &OperationId) -> bool {
+        !self.attached.contains_key(client_operation_id)
+            && !self.dropping.contains(client_operation_id)
+    }
+
+    /// Whether `client_operation_id` is detached and was last used longer
+    /// than `retain` ago.
     fn is_stale(
         &self,
         client_operation_id: &OperationId,
         now: SystemTime,
         retain: Duration,
     ) -> bool {
-        self.last_touch
-            .get(client_operation_id)
-            .is_some_and(|touched| now > *touched + retain)
+        self.is_evictable(client_operation_id)
+            && self
+                .last_touch
+                .get(client_operation_id)
+                .is_some_and(|touched| now > *touched + retain)
     }
 
-    /// Every client last used longer than `retain` ago.
-    fn stale(&self, now: SystemTime, retain: Duration) -> Vec<OperationId> {
-        self.by_time
+    /// Every detached client last used longer than `retain` ago, marked as
+    /// being dropped.
+    fn take_stale(&mut self, now: SystemTime, retain: Duration) -> Vec<OperationId> {
+        let stale: Vec<OperationId> = self
+            .by_time
             .iter()
             .take_while(|(touched, _)| now > *touched + retain)
+            .filter(|(_, client)| self.is_evictable(client))
             .map(|(_, client)| client.clone())
-            .collect()
+            .collect();
+        self.dropping.extend(stale.iter().cloned());
+        stale
     }
 
     /// Apply the locally known keepalive to a record read from the log.
@@ -212,6 +251,7 @@ impl ClientTracker {
 
     fn forget(&mut self, client_operation_ids: &[OperationId], removed_ops: &[OperationId]) {
         for client in client_operation_ids {
+            self.dropping.remove(client);
             if let Some(touched) = self.last_touch.remove(client) {
                 self.by_time.remove(&(touched, client.clone()));
             }
@@ -238,6 +278,15 @@ pub struct RaftAwaitedActionSubscriber<I: InstantWrapper, NowFn: Fn() -> I> {
     rx: watch::Receiver<AwaitedAction>,
     client: Option<ClientInfo<I, NowFn>>,
     clients: Arc<SyncMutex<ClientTracker>>,
+}
+
+impl<I: InstantWrapper, NowFn: Fn() -> I> Drop for RaftAwaitedActionSubscriber<I, NowFn> {
+    fn drop(&mut self) {
+        if let Some(client) = &self.client {
+            let now = (client.now_fn)().now();
+            self.clients.lock().detach(&client.client_operation_id, now);
+        }
+    }
 }
 
 impl<I: InstantWrapper, NowFn: Fn() -> I> RaftAwaitedActionSubscriber<I, NowFn> {
@@ -603,10 +652,13 @@ where
         };
         let mut rx = tx.subscribe();
         rx.mark_changed();
-        let client = client_operation_id.map(|client_operation_id| ClientInfo {
-            client_operation_id,
-            last_keep_alive: I::from_secs(0),
-            now_fn: self.now_fn.clone(),
+        let client = client_operation_id.map(|client_operation_id| {
+            self.shared.clients.lock().attach(&client_operation_id);
+            ClientInfo {
+                client_operation_id,
+                last_keep_alive: I::from_secs(0),
+                now_fn: self.now_fn.clone(),
+            }
         });
         Ok(Some(RaftAwaitedActionSubscriber {
             rx,
@@ -622,12 +674,23 @@ where
         if clients.is_empty() {
             return Ok(());
         }
-        let resp = self
+        let proposed = self
             .propose(Command::DropClients {
                 client_operation_ids: clients.clone(),
                 now_unix_nanos: unix_nanos(now),
             })
-            .await?;
+            .await;
+        let resp = match proposed {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Not dropped: let a later eviction try again.
+                let mut tracker = self.shared.clients.lock();
+                for client in &clients {
+                    tracker.dropping.remove(client);
+                }
+                return Err(e);
+            }
+        };
         let removed = match resp {
             CommandResponse::Dropped { removed } => removed,
             _ => Vec::new(),
@@ -645,7 +708,7 @@ where
             .shared
             .clients
             .lock()
-            .stale(now, self.config.retain_client);
+            .take_stale(now, self.config.retain_client);
         self.drop_clients(stale, now).await
     }
 
@@ -865,6 +928,11 @@ where
             self.config.retain_client,
         );
         if stale {
+            self.shared
+                .clients
+                .lock()
+                .dropping
+                .insert(client_operation_id.clone());
             self.drop_clients(vec![client_operation_id.clone()], now)
                 .await?;
             return Ok(None);
