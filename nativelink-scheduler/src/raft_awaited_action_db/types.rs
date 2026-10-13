@@ -15,7 +15,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use nativelink_scheduler::awaited_action_db::AwaitedAction;
+use crate::awaited_action_db::AwaitedAction;
 use nativelink_util::action_messages::{ActionInfo, ActionState, OperationId, WorkerId};
 use nativelink_util::origin_event::OriginMetadata;
 use openraft::{RaftTypeConfig, declare_raft_types};

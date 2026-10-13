@@ -24,7 +24,7 @@ use core::time::Duration;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_scheduler::awaited_action_db::{
+use crate::awaited_action_db::{
     AwaitedAction, SortedAwaitedAction, SortedAwaitedActionState,
 };
 use nativelink_util::action_messages::{
@@ -32,7 +32,7 @@ use nativelink_util::action_messages::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Command, CommandResponse, RejectReason};
+use super::types::{Command, CommandResponse, RejectReason};
 
 /// The five sorted indices, keyed by lifecycle stage, exactly as the memory
 /// backend keeps them.

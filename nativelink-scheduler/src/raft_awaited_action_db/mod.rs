@@ -14,6 +14,14 @@
 
 //! The raft-backed `AwaitedActionDb` (single node).
 
+//! A raft-replicated `AwaitedActionDb`. See `DESIGN.md` in this directory.
+
+pub mod state;
+pub mod store;
+pub mod types;
+
+pub use types::{Command, CommandResponse, NodeId, RejectReason, TypeConfig};
+
 use core::future::Future;
 use core::ops::Bound;
 use core::time::Duration;
@@ -24,7 +32,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use futures::{Stream, stream};
 use nativelink_error::{Code, Error, make_err};
 use nativelink_metric::MetricsComponent;
-use nativelink_scheduler::awaited_action_db::{
+use crate::awaited_action_db::{
     AwaitedAction, AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedAction,
     SortedAwaitedActionState, capture_origin_metadata,
 };
@@ -38,9 +46,8 @@ use openraft::raft::{
 use openraft::{BasicNode, Config, Raft};
 use tokio::sync::{Mutex, mpsc, watch};
 
-use crate::state::AppliedState;
-use crate::store::{LogStore, StateMachineStore};
-use crate::types::{Command, CommandResponse, NodeId, TypeConfig};
+use self::state::AppliedState;
+use self::store::{LogStore, StateMachineStore};
 
 /// A network that goes nowhere: a single voter never dials a peer. Every method
 /// is unreachable for a one-node cluster, so they error rather than lie.
@@ -220,7 +227,7 @@ impl RaftAwaitedActionDb {
             .map_err(|e| make_err!(Code::Internal, "raft init failed: {e}"))?;
 
         // Elect ourselves the single voter.
-        let mut members = std::collections::BTreeMap::new();
+        let mut members = BTreeMap::new();
         members.insert(1u64, BasicNode::default());
         raft.initialize(members)
             .await

@@ -15,7 +15,7 @@
 //! In-memory openraft storage (v2): `RaftLogStorage` + `RaftStateMachine`.
 //!
 //! The log lives in a `BTreeMap<u64, Entry>`; the state machine is
-//! [`crate::state::AppliedState`]. On each `apply` we run the command through
+//! [`super::state::AppliedState`]. On each `apply` we run the command through
 //! the applied state and push the changed operation ids to a broadcast so the
 //! db layer can wake watchers.
 
@@ -33,8 +33,8 @@ use openraft::{
 };
 use tokio::sync::{RwLock, mpsc};
 
-use crate::state::{AppliedState, PortableState};
-use crate::types::{CommandResponse, Entry, NodeId, TypeConfig};
+use super::state::{AppliedState, PortableState};
+use super::types::{CommandResponse, Entry, NodeId, TypeConfig};
 
 type StorageResult<T> = Result<T, StorageError<NodeId>>;
 

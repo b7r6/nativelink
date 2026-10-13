@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_raft::{CommandResponse, RaftAwaitedActionDb};
+use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, RaftAwaitedActionDb};
 use nativelink_scheduler::awaited_action_db::{
     AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedActionState,
 };

@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_raft::{CommandResponse, RaftAwaitedActionDb, RejectReason};
+use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, RaftAwaitedActionDb, RejectReason};
 use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
 use nativelink_util::action_messages::{
     ActionInfo, ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
@@ -84,7 +84,7 @@ async fn add_queued(
     client: &str,
     digest: DigestInfo,
 ) -> (
-    nativelink_raft::RaftAwaitedActionSubscriber,
+    nativelink_scheduler::raft_awaited_action_db::RaftAwaitedActionSubscriber,
     OperationId,
     i64,
 ) {
@@ -470,7 +470,7 @@ async fn add_action_origin_metadata_is_from_command_not_ambient() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn snapshot_roundtrips_nonempty_cacheable_state() {
-    use nativelink_raft::state::AppliedState;
+    use nativelink_scheduler::raft_awaited_action_db::state::AppliedState;
 
     let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
@@ -496,7 +496,7 @@ async fn snapshot_roundtrips_nonempty_cacheable_state() {
 
     let bytes = serde_json::to_vec(&state.to_portable())
         .expect("nonempty cacheable state serializes via the pair-sequence encoding");
-    let restored_portable: nativelink_raft::state::PortableState =
+    let restored_portable: nativelink_scheduler::raft_awaited_action_db::state::PortableState =
         serde_json::from_slice(&bytes).expect("round-trips");
     let restored = AppliedState::from_portable(restored_portable);
 

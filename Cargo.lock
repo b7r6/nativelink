@@ -3145,23 +3145,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nativelink-raft"
-version = "1.7.2"
-dependencies = [
- "async-trait",
- "futures",
- "nativelink-error",
- "nativelink-metric",
- "nativelink-scheduler",
- "nativelink-util",
- "openraft",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "nativelink-redis-tester"
 version = "1.7.5"
 dependencies = [
@@ -3181,6 +3164,7 @@ dependencies = [
  "async-lock",
  "async-trait",
  "bytes",
+ "crc32fast",
  "futures",
  "humantime",
  "lru",
@@ -3193,6 +3177,7 @@ dependencies = [
  "nativelink-redis-tester",
  "nativelink-store",
  "nativelink-util",
+ "openraft",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "parking_lot",
@@ -3203,6 +3188,7 @@ dependencies = [
  "serde",
  "serde_json",
  "static_assertions",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "tonic",
