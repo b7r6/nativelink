@@ -137,7 +137,7 @@ use crate::match_outcome::{
     MatchOutcome, PropertyShape, UnsatisfiableReason, explain_unsatisfiable,
 };
 use crate::platform_property_manager::PlatformPropertyManager;
-use crate::worker::{ActionInfoWithProps, Worker, WorkerTimestamp, WorkerUpdate};
+use crate::worker::{ActionInfoWithProps, AttemptMatch, Worker, WorkerTimestamp, WorkerUpdate};
 use crate::worker_capability_index::WorkerCapabilityIndex;
 use crate::worker_registry::SharedWorkerRegistry;
 use crate::worker_scheduler::{WorkerScheduler, WorkerSummary};
@@ -1158,6 +1158,7 @@ impl ApiWorkerSchedulerImpl {
         &mut self,
         worker_id: WorkerId,
         operation_id: OperationId,
+        attempt: u64,
         action_info: ActionInfoWithProps,
         dispatched_at: WorkerTimestamp,
     ) -> Result<(), Error> {
@@ -1165,6 +1166,7 @@ impl ApiWorkerSchedulerImpl {
             let notify_worker_result = worker
                 .notify_update(WorkerUpdate::RunAction(Box::new((
                     operation_id.clone(),
+                    attempt,
                     action_info.clone(),
                     dispatched_at,
                 ))))
@@ -1266,26 +1268,49 @@ impl ApiWorkerSchedulerImpl {
     /// reached is evicted, the same as for a failed run request.
     /// The worker acknowledged a dispatch. A late acknowledgement for an
     /// operation no longer on the worker is nothing to act on.
-    fn dispatch_accepted(&mut self, worker_id: &WorkerId, operation_id: &OperationId) {
+    fn dispatch_accepted(
+        &mut self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        attempt: u64,
+    ) {
         let Some(worker) = self.workers.get_mut(worker_id) else {
             return;
         };
-        if worker.mark_accepted(operation_id) {
+        let held_attempt = worker.held_attempt(operation_id);
+        if worker.mark_accepted(operation_id, attempt) {
             return;
         }
         // Messages from a worker arrive in order and the acknowledgement
-        // comes before the run, so an acknowledgement for an operation not
-        // on this worker means the sweep took the dispatch back already: the
-        // worker is about to run an action that now belongs elsewhere. Tell
-        // it to stop now, not at the next revoked-operation sweep.
+        // comes before the run, so an acknowledgement for an attempt not on
+        // this worker means the sweep took the dispatch back already: the
+        // worker is about to run an action that now belongs elsewhere, or
+        // to a later attempt on this same worker. Tell it to stop the
+        // attempt it acknowledged now, not at the next revoked-operation
+        // sweep. The kill names that attempt, so a later one survives it.
         info!(
             ?worker_id,
             %operation_id,
+            attempt,
+            ?held_attempt,
             "Acknowledgement for a dispatch already taken back; telling the worker to stop it"
         );
-        if let Err(err) = worker.kill_unknown_operation(operation_id) {
-            warn!(?worker_id, %operation_id, ?err, "Could not tell the worker to stop the operation");
+        if let Err(err) = worker.kill_unknown_operation(operation_id, attempt) {
+            warn!(?worker_id, %operation_id, attempt, ?err, "Could not tell the worker to stop the operation");
         }
+    }
+
+    /// Whether a message naming `attempt` of the operation is from a
+    /// dispatch this worker no longer holds while it holds a later one.
+    fn is_stale_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        attempt: u64,
+    ) -> bool {
+        self.workers.peek(worker_id).is_some_and(|worker| {
+            worker.attempt_match(operation_id, attempt) == AttemptMatch::Stale
+        })
     }
 
     /// The worker declined a dispatch: the ledger is restored, the action
@@ -1299,15 +1324,17 @@ impl ApiWorkerSchedulerImpl {
         &mut self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         reason: String,
         needs_kb: Option<u64>,
     ) -> Result<bool, Error> {
-        let holds_it = self
-            .workers
-            .peek(worker_id)
-            .is_some_and(|worker| worker.running_action_infos.contains_key(operation_id));
+        // A decline of an earlier attempt says nothing about the one the
+        // worker holds now.
+        let holds_it = self.workers.peek(worker_id).is_some_and(|worker| {
+            worker.attempt_match(operation_id, attempt) == AttemptMatch::Current
+        });
         if !holds_it {
-            debug!(?worker_id, %operation_id, %reason, "Decline for an operation not on this worker");
+            debug!(?worker_id, %operation_id, attempt, %reason, "Decline for a dispatch not on this worker");
             return Ok(false);
         }
         info!(?worker_id, %operation_id, %reason, ?needs_kb, "Worker declined dispatch");
@@ -1367,13 +1394,16 @@ impl ApiWorkerSchedulerImpl {
         &mut self,
         worker_id: &WorkerId,
         operation_id: OperationId,
+        attempt: u64,
     ) -> Result<(), Error> {
         let Some(worker) = self.workers.get_mut(worker_id) else {
             // Gone between the snapshot and now; its actions were requeued.
             return Ok(());
         };
-        // Already told, or finished in the meantime; nothing more to send.
-        if !worker.running_action_infos.contains_key(&operation_id)
+        // Already told, or finished in the meantime, or taken back and sent
+        // to this worker again as a later attempt since the snapshot that
+        // found it revoked; nothing to send.
+        if worker.held_attempt(&operation_id) != Some(attempt)
             || worker.is_kill_requested(&operation_id)
         {
             return Ok(());
@@ -1583,10 +1613,13 @@ impl ApiWorkerScheduler {
 
     /// `dispatched_at` is the scheduler's clock at the send; the
     /// acknowledgement timeout counts from it.
+    /// `attempt` is the dispatch attempt the state manager minted for
+    /// this assignment; it goes to the worker in `StartExecute.attempt`.
     pub async fn worker_notify_run_action(
         &self,
         worker_id: WorkerId,
         operation_id: OperationId,
+        attempt: u64,
         action_info: ActionInfoWithProps,
         dispatched_at: WorkerTimestamp,
     ) -> Result<(), Error> {
@@ -1595,7 +1628,7 @@ impl ApiWorkerScheduler {
             .fetch_add(1, Ordering::Relaxed);
         let mut inner = self.inner.lock().await;
         inner
-            .worker_notify_run_action(worker_id, operation_id, action_info, dispatched_at)
+            .worker_notify_run_action(worker_id, operation_id, attempt, action_info, dispatched_at)
             .await
     }
 
@@ -1628,9 +1661,12 @@ impl ApiWorkerScheduler {
                         "Dispatch never acknowledged, requeuing untried"
                     );
                     match inner
+                        // Attempt 0: whatever the worker holds for the
+                        // operation is what went unacknowledged.
                         .dispatch_declined(
                             worker_id,
                             &operation_id,
+                            0,
                             "unacknowledged".to_string(),
                             None,
                         )
@@ -1791,6 +1827,7 @@ impl WorkerScheduler for ApiWorkerScheduler {
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         mut resource_usage: ActionResourceUsage,
     ) -> Result<(), Error> {
         // The worker API talks to this `ApiWorkerScheduler` (it is the
@@ -1804,10 +1841,15 @@ impl WorkerScheduler for ApiWorkerScheduler {
         {
             // The result follows this report; what it says decides whether
             // that result is a kill to escalate.
+            // A report from an earlier attempt must not decide whether the
+            // current attempt's result is a kill.
             let mut inner = self.inner.lock().await;
             if let Some(pending) = inner
                 .workers
                 .get_mut(worker_id)
+                .filter(|worker| {
+                    worker.attempt_match(operation_id, attempt) == AttemptMatch::Current
+                })
                 .and_then(|worker| worker.running_action_infos.get_mut(operation_id))
             {
                 pending.last_usage = Some(resource_usage.clone());
@@ -1935,7 +1977,37 @@ impl WorkerScheduler for ApiWorkerScheduler {
         operation_id: &OperationId,
         update: UpdateOperationType,
     ) -> Result<(), Error> {
+        self.update_action_for_attempt(worker_id, operation_id, 0, update)
+            .await
+    }
+
+    async fn update_action_for_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        attempt: u64,
+        update: UpdateOperationType,
+    ) -> Result<(), Error> {
         let mut inner = self.inner.lock().await;
+        // Checked under the same lock as the update, so a redispatch cannot
+        // slip in between the check and the update it guards.
+        if inner.is_stale_attempt(worker_id, operation_id, attempt) {
+            let held_attempt = inner
+                .workers
+                .peek(worker_id)
+                .and_then(|worker| worker.held_attempt(operation_id));
+            warn!(
+                %operation_id,
+                ?worker_id,
+                attempt,
+                ?held_attempt,
+                "Dropping update from an earlier dispatch attempt of an operation the worker now runs again"
+            );
+            return Err(make_err!(
+                Code::FailedPrecondition,
+                "Update for attempt {attempt} of operation {operation_id} on worker {worker_id}, which now holds attempt {held_attempt:?}"
+            ));
+        }
         let (update, escalated) = inner.maybe_escalate(worker_id, operation_id, update);
         if escalated {
             record_dispatch_requeue("memory_escalation");
@@ -1947,9 +2019,10 @@ impl WorkerScheduler for ApiWorkerScheduler {
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
     ) -> Result<(), Error> {
         let mut inner = self.inner.lock().await;
-        inner.dispatch_accepted(worker_id, operation_id);
+        inner.dispatch_accepted(worker_id, operation_id, attempt);
         Ok(())
     }
 
@@ -1957,13 +2030,14 @@ impl WorkerScheduler for ApiWorkerScheduler {
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         reason: String,
         needs_kb: Option<u64>,
     ) -> Result<(), Error> {
         let mut inner = self.inner.lock().await;
         // Counted once the action is back in the queue, not per message.
         if inner
-            .dispatch_declined(worker_id, operation_id, reason, needs_kb)
+            .dispatch_declined(worker_id, operation_id, attempt, reason, needs_kb)
             .await?
         {
             self.metrics
@@ -2184,7 +2258,7 @@ impl WorkerScheduler for ApiWorkerScheduler {
     async fn kill_revoked_operations(&self) -> Result<(), Error> {
         let (worker_state_manager, running) = {
             let inner = self.inner.lock().await;
-            let running: Vec<(WorkerId, OperationId)> = inner
+            let running: Vec<(WorkerId, OperationId, u64)> = inner
                 .workers
                 .iter()
                 .flat_map(|(worker_id, worker)| {
@@ -2201,7 +2275,13 @@ impl WorkerScheduler for ApiWorkerScheduler {
                         .filter(|(_, pending_action_info)| {
                             pending_action_info.kill_requested_at.is_none()
                         })
-                        .map(|(operation_id, _)| (worker_id.clone(), operation_id.clone()))
+                        .map(|(operation_id, pending_action_info)| {
+                            (
+                                worker_id.clone(),
+                                operation_id.clone(),
+                                pending_action_info.attempt,
+                            )
+                        })
                 })
                 .collect();
             (inner.worker_state_manager.clone(), running)
@@ -2209,8 +2289,8 @@ impl WorkerScheduler for ApiWorkerScheduler {
 
         // On store-backed deployments each check is a network round-trip,
         // so run them lock-free with bounded concurrency.
-        let revoked: Vec<(WorkerId, OperationId)> = futures::stream::iter(running)
-            .map(|(worker_id, operation_id)| {
+        let revoked: Vec<(WorkerId, OperationId, u64)> = futures::stream::iter(running)
+            .map(|(worker_id, operation_id, attempt)| {
                 let worker_state_manager = worker_state_manager.clone();
                 async move {
                     match worker_state_manager
@@ -2218,7 +2298,7 @@ impl WorkerScheduler for ApiWorkerScheduler {
                         .await
                     {
                         Ok(true) => None,
-                        Ok(false) => Some((worker_id, operation_id)),
+                        Ok(false) => Some((worker_id, operation_id, attempt)),
                         // Only kill on positive evidence; try again next pass.
                         Err(err) => {
                             warn!(
@@ -2246,7 +2326,7 @@ impl WorkerScheduler for ApiWorkerScheduler {
         // The remaining TOCTOU window is fine: worker_notify_kill_operation
         // re-guards with contains_key + is_kill_requested under the lock.
         let mut confirmed = Vec::new();
-        for (worker_id, operation_id) in revoked {
+        for (worker_id, operation_id, attempt) in revoked {
             // A result of Ok(true) or Err(_) means the operation was
             // reassigned to this worker after the first check, or the state
             // manager went quiet: nothing to kill on this pass.
@@ -2255,7 +2335,7 @@ impl WorkerScheduler for ApiWorkerScheduler {
                 .await
                 .is_ok_and(|executing| !executing);
             if revoked {
-                confirmed.push((worker_id, operation_id));
+                confirmed.push((worker_id, operation_id, attempt));
             }
         }
 
@@ -2265,10 +2345,10 @@ impl WorkerScheduler for ApiWorkerScheduler {
 
         let mut inner = self.inner.lock().await;
         let mut result = Ok(());
-        for (worker_id, operation_id) in confirmed {
+        for (worker_id, operation_id, attempt) in confirmed {
             result = result.merge(
                 inner
-                    .worker_notify_kill_operation(&worker_id, operation_id)
+                    .worker_notify_kill_operation(&worker_id, operation_id, attempt)
                     .await,
             );
         }

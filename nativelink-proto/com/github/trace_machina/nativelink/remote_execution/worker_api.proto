@@ -128,13 +128,22 @@ message ExecuteResult {
     /// Worker-observed resource usage for this action execution.
     ActionResourceUsage resource_usage = 5;
 
-    reserved 6; // NextId.
+    /// The dispatch attempt this message is about, echoed from
+    /// `StartExecute.attempt`. 0 means the peer predates attempts.
+    uint64 attempt = 6;
+    reserved 7; // NextId.
 }
 
 /// The result of an ExecutionComplete.
 message ExecuteComplete {
     /// The operation ID that was executed.
     string operation_id = 1;
+
+    /// The dispatch attempt this message is about, echoed from
+    /// `StartExecute.attempt`. 0 means the peer predates attempts.
+    uint64 attempt = 2;
+
+    reserved 3; // NextId.
 }
 
 /// How an action ended, as the worker saw it. Separate from the exit code:
@@ -229,7 +238,12 @@ message ConnectionResult {
 /// this arrives the scheduler has only charged its ledger on the send.
 message ExecuteAccepted {
     string operation_id = 1;
-    reserved 2; // NextId.
+
+    /// The dispatch attempt this message is about, echoed from
+    /// `StartExecute.attempt`. 0 means the peer predates attempts.
+    uint64 attempt = 2;
+
+    reserved 3; // NextId.
 }
 
 /// The worker will not run the action it was sent. The scheduler restores
@@ -257,14 +271,23 @@ message ExecuteDeclined {
     uint64 needed_kb = 4;
     uint64 free_kb = 5;
 
-    reserved 6; // NextId.
+    /// The dispatch attempt this message is about, echoed from
+    /// `StartExecute.attempt`. 0 means the peer predates attempts.
+    uint64 attempt = 6;
+
+    reserved 7; // NextId.
 }
 
 /// Request to kill a running operation sent from the scheduler to a worker.
 message KillOperationRequest {
     /// The the operation id for the operation to be killed.
     string operation_id = 1;
-    reserved 2; // NextId.
+
+    /// The dispatch attempt to kill, from `StartExecute.attempt`. 0 means
+    /// any attempt of the operation (the scheduler predates attempts).
+    uint64 attempt = 2;
+
+    reserved 3; // NextId.
 }
 /// Communication from the scheduler to the worker.
 message UpdateForWorker {
@@ -354,11 +377,22 @@ message StartExecute {
     /// The ID of the worker that is executing the action.
     string worker_id = 6;
 
-    reserved 7; // NextId.
+    /// Formerly `digest_function` (removed in #899). Never reuse: an old
+    /// binary would decode a varint here as a digest function.
+    reserved 7;
 
     /// Original execution metadata, including the build tool and invocation.
     /// Workers must not infer a Buck2 file session from an action digest alone.
     build.bazel.remote.execution.v2.RequestMetadata request_metadata = 8;
+
+    /// Dispatch sequence number of this operation, incremented by the
+    /// scheduler every time it assigns the operation to a worker. Together
+    /// with `operation_id` it names one attempt: a requeued action keeps its
+    /// `operation_id` but gets a new `attempt`. The worker echoes it on every
+    /// message about this action. 0 means the scheduler predates attempts.
+    uint64 attempt = 9;
+
+    reserved 10; // NextId.
 }
 
 /// This is a special message used to save actions into the CAS that can be used

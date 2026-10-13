@@ -367,6 +367,7 @@ pub async fn server_does_not_timeout_if_execute_complete_test()
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             operation_id.clone(),
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -385,6 +386,7 @@ pub async fn server_does_not_timeout_if_execute_complete_test()
     test_context
         .worker_stream
         .send(Update::ExecuteComplete(ExecuteComplete {
+            attempt: 0,
             operation_id: operation_id.to_string(),
         }))
         .await
@@ -469,6 +471,7 @@ pub async fn stream_end_requeues_running_actions_as_disconnect_test()
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             operation_id.clone(),
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -701,6 +704,7 @@ pub async fn execution_response_success_test() -> Result<(), Box<dyn core::error
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             expected_operation_id.clone(),
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -778,6 +782,7 @@ pub async fn execution_response_success_test() -> Result<(), Box<dyn core::error
         message: "TODO(palfrey) We should put a reference something like bb_browser".to_string(),
     };
     let result = ExecuteResult {
+        attempt: 0,
         instance_name,
         operation_id: expected_operation_id.to_string(),
         result: Some(execute_result::Result::ExecuteResponse(
@@ -845,6 +850,7 @@ pub async fn execution_response_lands_when_clock_steps_backwards_test()
     *now_timestamp.lock().unwrap() = BASE_NOW_S - 2;
 
     let result = ExecuteResult {
+        attempt: 0,
         instance_name: "instance_name".to_string(),
         operation_id: operation_id.to_string(),
         result: Some(execute_result::Result::InternalError(ProtoStatus {
@@ -914,6 +920,7 @@ pub async fn evicted_worker_late_result_never_reaches_state_manager_test()
     test_context
         .worker_stream
         .send(Update::ExecuteResult(ExecuteResult {
+            attempt: 0,
             instance_name: "instance_name".to_string(),
             operation_id: operation_id.to_string(),
             result: Some(execute_result::Result::InternalError(ProtoStatus {
@@ -997,6 +1004,7 @@ pub async fn workers_only_allow_max_tasks() -> Result<(), Box<dyn core::error::E
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             expected_operation_id,
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -1070,6 +1078,7 @@ pub async fn acknowledgement_is_recorded_before_the_sweep_it_carries_test()
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             operation_id.clone(),
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -1087,6 +1096,7 @@ pub async fn acknowledgement_is_recorded_before_the_sweep_it_carries_test()
     test_context
         .worker_stream
         .send(Update::ExecuteAccepted(ExecuteAccepted {
+            attempt: 0,
             operation_id: operation_id.to_string(),
         }))
         .await
@@ -1141,6 +1151,7 @@ async fn dispatch(test_context: &TestContext, seed: u8) -> Result<OperationId, E
         .worker_notify_run_action(
             test_context.worker_id.clone(),
             operation_id.clone(),
+            0,
             ActionInfoWithProps {
                 inner: action_info,
                 platform_properties,
@@ -1188,6 +1199,7 @@ pub async fn a_decline_keeps_the_worker_paused_until_a_keepalive_test()
     let decline = test_context
         .worker_stream
         .send(Update::ExecuteDeclined(ExecuteDeclined {
+            attempt: 0,
             operation_id: operation_id.to_string(),
             reason: execute_declined::Reason::Load as i32,
             detail: String::new(),
@@ -1327,6 +1339,7 @@ pub async fn a_slow_result_does_not_stop_the_stream_reads_test()
     test_context
         .worker_stream
         .send(Update::ExecuteResult(ExecuteResult {
+            attempt: 0,
             instance_name: "instance_name".to_string(),
             operation_id: operation_id.to_string(),
             result: Some(execute_result::Result::InternalError(

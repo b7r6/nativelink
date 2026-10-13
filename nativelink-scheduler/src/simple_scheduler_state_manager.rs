@@ -996,6 +996,21 @@ where
         maybe_worker_id: Option<&WorkerId>,
         update: UpdateOperationType,
     ) -> Result<(), Error> {
+        self.inner_update_operation_attempt(operation_id, maybe_worker_id, update)
+            .await
+            .map(|_| ())
+    }
+
+    /// `inner_update_operation`, returning the operation's dispatch attempt
+    /// as written: for an assignment to a worker, the attempt just minted.
+    /// 0 when nothing was written (the operation is gone, or a keepalive or
+    /// completion that needed no write).
+    async fn inner_update_operation_attempt(
+        &self,
+        operation_id: &OperationId,
+        maybe_worker_id: Option<&WorkerId>,
+        update: UpdateOperationType,
+    ) -> Result<u64, Error> {
         let update_type_str = match &update {
             UpdateOperationType::KeepAlive => "KeepAlive",
             UpdateOperationType::UpdateWithActionStage(stage) => match stage {
@@ -1051,7 +1066,7 @@ where
                     %operation_id,
                     "Unable to update action due to it being missing, probably dropped"
                 );
-                return Ok(());
+                return Ok(0);
             };
 
             let mut awaited_action = awaited_action_subscriber
@@ -1091,7 +1106,7 @@ where
                     UpdateOperationType::UpdateWithDisconnect | UpdateOperationType::KeepAlive => {
                         // No need to error a keep-alive when it's completed, it's just
                         // unnecessary log noise.
-                        return Ok(());
+                        return Ok(0);
                     }
                     _ => {
                         return Err(make_err!(
@@ -1118,7 +1133,7 @@ where
                             last_err = Some(err);
                             continue;
                         }
-                        result => return result,
+                        result => return result.map(|()| 0),
                     }
                 }
                 UpdateOperationType::UpdateWithActionStage(stage) => {
@@ -1127,6 +1142,12 @@ where
                     {
                         warn!(state = ?awaited_action.state(), "Action already assigned");
                         return Err(make_err!(Code::Aborted, "Action already assigned"));
+                    }
+                    // Every assignment to a worker is a new attempt, even
+                    // to the worker that ran the last one: the operation id
+                    // stays the same across requeues, the attempt does not.
+                    if stage == &ActionStage::Executing && maybe_worker_id.is_some() {
+                        awaited_action.dispatch_attempt += 1;
                     }
                     stage.clone()
                 }
@@ -1252,7 +1273,7 @@ where
                 }
                 UpdateOperationType::ExecutionComplete => {
                     warn!("inner_update_operation got an ExecutionComplete, that's unexpected.");
-                    return Ok(());
+                    return Ok(0);
                 }
             };
             let now = (self.now_fn)().now();
@@ -1312,7 +1333,7 @@ where
                 update_type = %update_type_str,
                 "inner_update_operation SUCCESS"
             );
-            return Ok(());
+            return Ok(awaited_action.dispatch_attempt);
         }
 
         warn!(
@@ -1653,6 +1674,19 @@ where
         };
         self.inner_update_operation(operation_id, maybe_worker_id, update)
             .await
+    }
+
+    async fn assign_operation_to_worker(
+        &self,
+        operation_id: &OperationId,
+        worker_id: &WorkerId,
+    ) -> Result<u64, Error> {
+        self.inner_update_operation_attempt(
+            operation_id,
+            Some(worker_id),
+            UpdateOperationType::UpdateWithActionStage(ActionStage::Executing),
+        )
+        .await
     }
 
     async fn fail_queued_operation(

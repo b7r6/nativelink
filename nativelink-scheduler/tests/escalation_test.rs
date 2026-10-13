@@ -158,6 +158,7 @@ async fn report_memory_kill(
         .record_action_resource_usage(
             &worker_id,
             &operation_id,
+            0,
             ActionResourceUsage {
                 peak_memory_kb: reserved_kb + reserved_kb / 5,
                 sampled: true,

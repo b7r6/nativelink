@@ -208,6 +208,21 @@ pub trait MatchingEngineStateManager: Sync + Send + MetricsComponent {
         worker_id_or_reason_for_unassign: Result<&WorkerId, Error>,
     ) -> Result<(), Error>;
 
+    /// Assigns an operation to a worker and returns its dispatch attempt:
+    /// a number the state manager increments on every assignment, so a
+    /// requeued operation sent to a worker again (even the same one) is a
+    /// different attempt. 0 means the state manager does not number
+    /// attempts, and the worker messages for it are not checked against one.
+    async fn assign_operation_to_worker(
+        &self,
+        operation_id: &OperationId,
+        worker_id: &WorkerId,
+    ) -> Result<u64, Error> {
+        self.assign_operation(operation_id, Ok(worker_id))
+            .await
+            .map(|()| 0)
+    }
+
     /// Completes a queued operation with `err`, without retrying it. Does
     /// nothing if the operation is no longer queued. Returns whether the
     /// operation was completed by this call.

@@ -1200,6 +1200,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1332,6 +1333,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1479,6 +1481,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1666,6 +1669,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1850,6 +1854,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2088,6 +2093,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2242,6 +2248,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2393,6 +2400,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2549,6 +2557,7 @@ mod tests {
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -2753,6 +2762,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -2952,6 +2962,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -3110,6 +3121,7 @@ exit 0
         properties: &[(&str, String)],
     ) -> StartExecute {
         StartExecute {
+            attempt: 0,
             request_metadata: None,
             execute_request: Some(ExecuteRequest {
                 action_digest: Some(action_digest.into()),
@@ -3353,6 +3365,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -3465,6 +3478,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -3896,7 +3910,7 @@ exit 0
             let operation_id = operation_id.clone();
             async move {
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                manager.kill_operation(&operation_id).await
+                manager.kill_operation(&operation_id, 0).await
             }
         };
         let (kill_res, prepare_res) = tokio::join!(killer, action.clone().prepare_action());
@@ -3919,6 +3933,115 @@ exit 0
             !Path::new(&action_directory).exists(),
             "the work directory is gone after cleanup"
         );
+        Ok(())
+    }
+
+    /// N1: a kill that arrives between the dispatch and the action's
+    /// registration (the dispatch is still in transit: preconditions, the
+    /// acknowledgement) is held, and the action is refused as `Aborted`
+    /// when it gets here, the way a kill during its fetch ends it. Before,
+    /// the kill found nothing registered, was logged and dropped, and the
+    /// action ran to the end for a scheduler that had given it up.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn a_kill_before_registration_is_honored() -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, action_digest, _store) =
+            hung_fetch_setup(Duration::from_mins(1)).await?;
+        let operation_id = OperationId::default();
+        running_actions_manager
+            .kill_operation(&operation_id, 3)
+            .await?;
+        assert_eq!(running_actions_manager.kill_tombstone_count(), 1);
+        let err = running_actions_manager
+            .create_and_add_action(
+                "test-worker".to_string(),
+                StartExecute {
+                    attempt: 3,
+                    ..start_execute_for(action_digest, &operation_id.to_string())
+                },
+            )
+            .await
+            .expect_err("a killed attempt must not be registered");
+        assert_eq!(err.code, Code::Aborted, "{err:?}");
+        assert_eq!(
+            running_actions_manager.kill_tombstone_count(),
+            0,
+            "the kill is spent on the attempt it named"
+        );
+        tokio::time::timeout(Duration::from_secs(5), running_actions_manager.kill_all())
+            .await
+            .expect("nothing was registered");
+        Ok(())
+    }
+
+    /// A kill from a scheduler that does not number attempts (attempt 0)
+    /// held for an operation not registered yet stops whatever attempt of
+    /// it registers.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn an_attempt_zero_kill_before_registration_matches_any_attempt()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, action_digest, _store) =
+            hung_fetch_setup(Duration::from_mins(1)).await?;
+        let operation_id = OperationId::default();
+        running_actions_manager
+            .kill_operation(&operation_id, 0)
+            .await?;
+        let err = running_actions_manager
+            .create_and_add_action(
+                "test-worker".to_string(),
+                StartExecute {
+                    attempt: 5,
+                    ..start_execute_for(action_digest, &operation_id.to_string())
+                },
+            )
+            .await
+            .expect_err("a killed operation must not be registered");
+        assert_eq!(err.code, Code::Aborted, "{err:?}");
+        Ok(())
+    }
+
+    /// A kill names an attempt, and only that attempt dies: a held kill for
+    /// attempt 1 does not stop attempt 2 from registering, and a kill for
+    /// attempt 1 while attempt 2 runs does not reach attempt 2 (it fails on
+    /// its own hung fetch, not as killed).
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn a_kill_for_another_attempt_spares_this_one() -> Result<(), Box<dyn core::error::Error>>
+    {
+        let (running_actions_manager, action_digest, _store) =
+            hung_fetch_setup(Duration::from_secs(1)).await?;
+        let operation_id = OperationId::default();
+        running_actions_manager
+            .kill_operation(&operation_id, 1)
+            .await?;
+        let action = running_actions_manager
+            .create_and_add_action(
+                "test-worker".to_string(),
+                StartExecute {
+                    attempt: 2,
+                    ..start_execute_for(action_digest, &operation_id.to_string())
+                },
+            )
+            .await?;
+        assert_eq!(action.attempt(), 2);
+        running_actions_manager
+            .kill_operation(&operation_id, 1)
+            .await?;
+        let err = action
+            .clone()
+            .prepare_action()
+            .await
+            .expect_err("the fetch never completes");
+        assert_eq!(
+            err.code,
+            Code::DeadlineExceeded,
+            "attempt 2 was not killed: {err:?}"
+        );
+        action.cleanup().await?;
+        tokio::time::timeout(Duration::from_secs(5), running_actions_manager.kill_all())
+            .await
+            .expect("an entry was left behind");
         Ok(())
     }
 
@@ -3947,7 +4070,7 @@ exit 0
             let operation_id = operation_id.clone();
             async move {
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                manager.kill_operation(&operation_id).await
+                manager.kill_operation(&operation_id, 0).await
             }
         };
         let (kill_res, upload_res) = tokio::join!(killer, async {
@@ -4074,6 +4197,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4214,6 +4338,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4397,6 +4522,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4539,6 +4665,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4645,6 +4772,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4804,6 +4932,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -5284,6 +5413,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -5470,6 +5600,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6065,6 +6196,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6159,6 +6291,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6253,6 +6386,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6392,6 +6526,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6551,6 +6686,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6712,6 +6848,7 @@ exit 1
                     .create_and_add_action(
                         WORKER_ID.to_string(),
                         StartExecute {
+                            attempt: 0,
                             request_metadata: None,
                             execute_request: Some(execute_request),
                             operation_id: format!("kill-race-{iteration}-{i}"),
@@ -7193,6 +7330,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -7376,7 +7514,7 @@ while [ ! -f "$0.d/release" ]; do "{sleep}" 0.01; done
             let run = tokio::spawn(run_action(action));
             if outcome == "cancel" {
                 wait_for_file(&work.join("running")).await?;
-                manager.kill_operation(&operation_id).await?;
+                manager.kill_operation(&operation_id, 0).await?;
             }
             if outcome == "bazel" {
                 assert!(
@@ -7506,6 +7644,7 @@ while [ ! -f "$0.d/release" ]; do "{sleep}" 0.01; done
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(ExecuteRequest {
                             action_digest: Some(action_digest.into()),
@@ -7731,6 +7870,7 @@ done
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -7920,6 +8060,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -8052,6 +8193,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id: operation_id.clone(),
@@ -8176,6 +8318,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request.clone()),
                     operation_id: operation_id.clone(),
@@ -8198,6 +8341,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id: operation_id.clone(),
@@ -8301,6 +8445,7 @@ done
             .create_and_add_action(
                 "foo_worker_id".to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -8458,6 +8603,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -8589,6 +8735,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -8813,6 +8960,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,

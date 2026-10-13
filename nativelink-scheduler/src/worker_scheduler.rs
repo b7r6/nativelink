@@ -56,25 +56,32 @@ pub trait WorkerScheduler: Sync + Send + Unpin + RootMetricsComponent + 'static 
     /// Adds a worker to the scheduler and begin using it to execute actions (when able).
     async fn add_worker(&self, worker: Worker) -> Result<(), Error>;
 
-    /// The worker took the dispatched operation.
+    /// The worker took the dispatched operation. `attempt` is the
+    /// dispatch attempt the worker echoed; an acknowledgement for an attempt
+    /// other than the one the worker holds is stale, and the worker is told
+    /// to kill that attempt. 0 is a worker that does not echo attempts.
     async fn worker_dispatch_accepted(
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
     ) -> Result<(), Error>;
 
     /// The worker will not run the dispatched operation; `reason` is the
     /// worker's word for why, `needs_kb` what it said the action wanted
-    /// when the reason was load.
+    /// when the reason was load. A decline for a stale `attempt` is ignored.
     async fn worker_dispatch_declined(
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         reason: String,
         needs_kb: Option<u64>,
     ) -> Result<(), Error>;
 
     /// Updates the status of an action to the scheduler from the worker.
+    /// Not checked against any dispatch attempt; see
+    /// [`Self::update_action_for_attempt`].
     async fn update_action(
         &self,
         worker_id: &WorkerId,
@@ -82,11 +89,28 @@ pub trait WorkerScheduler: Sync + Send + Unpin + RootMetricsComponent + 'static 
         update: UpdateOperationType,
     ) -> Result<(), Error>;
 
-    /// Records worker-observed resource usage for a running action.
+    /// [`Self::update_action`] for a message that names the dispatch
+    /// attempt it is about. An update for an attempt other than the one the
+    /// worker holds is from a dispatch already taken back, and is refused:
+    /// it must not finish the later attempt. 0 is a worker that does not
+    /// echo attempts, and is applied as `update_action` would.
+    async fn update_action_for_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        _attempt: u64,
+        update: UpdateOperationType,
+    ) -> Result<(), Error> {
+        self.update_action(worker_id, operation_id, update).await
+    }
+
+    /// Records worker-observed resource usage for a running action, for
+    /// the dispatch `attempt` the worker echoed (0 when it does not).
     async fn record_action_resource_usage(
         &self,
         _worker_id: &WorkerId,
         _operation_id: &OperationId,
+        _attempt: u64,
         _resource_usage: ActionResourceUsage,
     ) -> Result<(), Error> {
         Ok(())

@@ -53,21 +53,45 @@ pub struct ActionInfoWithProps {
 /// Notifications to send worker about a requested state change.
 #[derive(Debug)]
 pub enum WorkerUpdate {
-    /// Requests that the worker begin executing this action, dispatched at
-    /// this scheduler time.
-    RunAction(Box<(OperationId, ActionInfoWithProps, WorkerTimestamp)>),
+    /// Requests that the worker begin executing this action as this
+    /// dispatch attempt, dispatched at this scheduler time.
+    RunAction(Box<(OperationId, u64, ActionInfoWithProps, WorkerTimestamp)>),
 
     /// Request that the worker is no longer in the pool and may discard any jobs.
     Disconnect,
 
-    /// Requests that the worker stop executing this operation.
+    /// Requests that the worker stop executing this operation. The kill
+    /// names the attempt the worker holds, so it cannot reach a later
+    /// dispatch of the same operation.
     KillOperation(OperationId),
+}
+
+/// How the attempt a worker message names relates to the dispatch this
+/// worker holds for the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttemptMatch {
+    /// The worker holds the operation and the message is about the
+    /// dispatch it holds. A message or a dispatch with attempt 0 (a peer
+    /// that predates attempts) matches whatever is held, as before
+    /// attempts existed.
+    Current,
+    /// The worker holds the operation, but as a later attempt than the
+    /// message names: the message is from a dispatch that was taken back
+    /// and sent again.
+    Stale,
+    /// The worker does not hold the operation.
+    NotHeld,
 }
 
 #[derive(Debug, MetricsComponent)]
 pub struct PendingActionInfoData {
     #[metric]
     pub action_info: ActionInfoWithProps,
+    /// The dispatch attempt sent in `StartExecute.attempt`; every worker
+    /// message about this dispatch echoes it. 0 when the state manager does
+    /// not number attempts.
+    #[metric(help = "The dispatch attempt of this operation on the worker.")]
+    pub attempt: u64,
     /// When the worker was told to kill this operation, recorded as the
     /// worker's last-seen timestamp at send time; keepalives keep that
     /// within the worker timeout of now, so a deadline computed from it
@@ -274,8 +298,8 @@ impl Worker {
     pub async fn notify_update(&mut self, worker_update: WorkerUpdate) -> Result<(), Error> {
         match worker_update {
             WorkerUpdate::RunAction(action) => {
-                let (operation_id, action_info, dispatched_at) = *action;
-                self.run_action(operation_id, action_info, dispatched_at)
+                let (operation_id, attempt, action_info, dispatched_at) = *action;
+                self.run_action(operation_id, attempt, action_info, dispatched_at)
                     .await
             }
             WorkerUpdate::Disconnect => {
@@ -296,29 +320,58 @@ impl Worker {
                 // Set before the send so a racing update_action cannot slip
                 // through in between.
                 pending_action_info.kill_requested_at = Some(last_seen);
+                let attempt = pending_action_info.attempt;
                 self.metrics.kill_operation.inc();
                 send_msg_to_worker(
                     &self.tx,
                     update_for_worker::Update::KillOperationRequest(KillOperationRequest {
                         operation_id: operation_id.to_string(),
+                        attempt,
                     }),
                 )
             }
         }
     }
 
-    /// Tells the worker to stop an operation this scheduler no longer holds
-    /// for it: a late acknowledgement of a dispatch the sweep already took
-    /// back means the worker is about to run an action that now belongs
-    /// elsewhere. Nothing to book, since the operation is not on the ledger.
-    pub(crate) fn kill_unknown_operation(&self, operation_id: &OperationId) -> Result<(), Error> {
+    /// Tells the worker to stop an attempt of an operation this scheduler
+    /// no longer holds for it: a late acknowledgement of a dispatch the
+    /// sweep already took back means the worker is about to run an action
+    /// that now belongs elsewhere, or to a later attempt. Nothing to book,
+    /// since the attempt is not on the ledger. Attempt 0 (a worker that
+    /// does not echo attempts) kills whatever the worker runs for the
+    /// operation, as before attempts existed.
+    pub(crate) fn kill_unknown_operation(
+        &self,
+        operation_id: &OperationId,
+        attempt: u64,
+    ) -> Result<(), Error> {
         self.metrics.kill_operation.inc();
         send_msg_to_worker(
             &self.tx,
             update_for_worker::Update::KillOperationRequest(KillOperationRequest {
                 operation_id: operation_id.to_string(),
+                attempt,
             }),
         )
+    }
+
+    /// Whether a worker message naming `attempt` of `operation_id` is about
+    /// the dispatch this worker holds. See [`AttemptMatch`].
+    pub fn attempt_match(&self, operation_id: &OperationId, attempt: u64) -> AttemptMatch {
+        match self.running_action_infos.get(operation_id) {
+            None => AttemptMatch::NotHeld,
+            Some(pending) if attempt == 0 || pending.attempt == 0 || pending.attempt == attempt => {
+                AttemptMatch::Current
+            }
+            Some(_) => AttemptMatch::Stale,
+        }
+    }
+
+    /// The dispatch attempt this worker holds for the operation.
+    pub fn held_attempt(&self, operation_id: &OperationId) -> Option<u64> {
+        self.running_action_infos
+            .get(operation_id)
+            .map(|pending| pending.attempt)
     }
 
     /// Forgets a kill request whose message never reached the worker, so
@@ -353,16 +406,17 @@ impl Worker {
         })
     }
 
-    /// The worker said it took this operation. False when the operation is
-    /// not on this worker, which a late acknowledgement can cause.
-    pub fn mark_accepted(&mut self, operation_id: &OperationId) -> bool {
-        match self.running_action_infos.get_mut(operation_id) {
-            Some(pending) => {
-                pending.accepted = true;
-                true
-            }
-            None => false,
+    /// The worker said it took this attempt of the operation. False when
+    /// the attempt is not the one on this worker, which a late
+    /// acknowledgement can cause.
+    pub fn mark_accepted(&mut self, operation_id: &OperationId, attempt: u64) -> bool {
+        if self.attempt_match(operation_id, attempt) != AttemptMatch::Current {
+            return false;
         }
+        if let Some(pending) = self.running_action_infos.get_mut(operation_id) {
+            pending.accepted = true;
+        }
+        true
     }
 
     /// Operations dispatched at or before `cutoff` that the worker never
@@ -378,6 +432,7 @@ impl Worker {
     async fn run_action(
         &mut self,
         operation_id: OperationId,
+        attempt: u64,
         action_info: ActionInfoWithProps,
         dispatched_at: WorkerTimestamp,
     ) -> Result<(), Error> {
@@ -397,6 +452,7 @@ impl Worker {
                     platform: Some((&action_info.platform_properties).into()),
                     worker_id,
                     request_metadata: action_info.origin_metadata.bazel_metadata.clone(),
+                    attempt,
                 };
                 // Send first: a channel that will not take the message
                 // leaves the ledger untouched, and the caller requeues.
@@ -409,6 +465,7 @@ impl Worker {
                     operation_id,
                     PendingActionInfoData {
                         action_info,
+                        attempt,
                         kill_requested_at: None,
                         dispatched_at,
                         accepted: false,
