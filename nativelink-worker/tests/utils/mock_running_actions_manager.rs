@@ -110,6 +110,15 @@ impl MockRunningActionsManager {
         *req
     }
 
+    /// Asserts the manager is not called within `within`: no action is
+    /// created and no result cached.
+    pub(crate) async fn expect_no_call(&self, within: core::time::Duration) {
+        let mut rx_call_lock = self.rx_call.lock().await;
+        if let Ok(call) = tokio::time::timeout(within, rx_call_lock.recv()).await {
+            panic!("expected no call to the running actions manager, got {call:?}");
+        }
+    }
+
     pub(crate) async fn expect_cache_action_result(
         &self,
     ) -> (DigestInfo, ActionResult, DigestHasherFunc) {

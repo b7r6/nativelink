@@ -27,7 +27,7 @@ use nativelink_config::schedulers::{PropertyType, SimpleSpec};
 use nativelink_error::{Error, ResultExt};
 use nativelink_macro::nativelink_test;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
-    StartExecute, UpdateForWorker, WorkerLoad, update_for_worker,
+    KillOperationRequest, StartExecute, UpdateForWorker, WorkerLoad, update_for_worker,
 };
 use nativelink_scheduler::default_scheduler_factory::memory_awaited_action_db_factory;
 use nativelink_scheduler::simple_scheduler::SimpleScheduler;
@@ -659,5 +659,169 @@ async fn a_late_acknowledgement_is_answered_with_a_kill() -> Result<(), Error> {
         )
         .await?;
     assert_eq!(next_kill(&mut rx).await, first.operation_id);
+    Ok(())
+}
+
+async fn next_kill_request(rx: &mut mpsc::Receiver<UpdateForWorker>) -> KillOperationRequest {
+    let msg = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+        .await
+        .expect("a kill within two seconds")
+        .expect("the channel is open");
+    let Some(update_for_worker::Update::KillOperationRequest(kill)) = msg.update else {
+        panic!("expected a KillOperationRequest, got {msg:?}");
+    };
+    kill
+}
+
+/// Dispatches one action, lets the sweep take it back unacknowledged, and
+/// has it dispatched again to the same worker. A requeue keeps the
+/// operation id, so only the attempt tells the two dispatches apart.
+async fn redispatched_to_the_same_worker(
+    worker_scheduler: &dyn WorkerScheduler,
+    rx: &mut mpsc::Receiver<UpdateForWorker>,
+) -> Result<(StartExecute, StartExecute), Error> {
+    let first = next_dispatch(rx).await;
+    assert_eq!(first.attempt, 1, "the first dispatch is attempt 1");
+    // Past the acknowledgement timeout: taken back untried, worker paused.
+    keepalive(worker_scheduler, NOW_TIME + 6, None).await?;
+    no_dispatch(rx).await;
+    // The next keepalive lifts the pause and the action comes back here.
+    keepalive(worker_scheduler, NOW_TIME + 7, None).await?;
+    let second = next_dispatch(rx).await;
+    assert_eq!(second.operation_id, first.operation_id);
+    assert_eq!(second.attempt, 2, "a dispatch again is a new attempt");
+    Ok((first, second))
+}
+
+/// N2 on the wire: a late acknowledgement of attempt 1 arriving after the
+/// operation was dispatched again to the same worker as attempt 2 is not
+/// taken as acknowledging attempt 2. The worker is told to kill attempt 1,
+/// by number, so attempt 2 survives the kill, and attempt 2 is still
+/// unacknowledged, so the sweep takes it back in its turn.
+#[nativelink_test]
+async fn a_stale_acknowledgement_after_a_redispatch_to_the_same_worker_kills_only_its_attempt()
+-> Result<(), Error> {
+    let (scheduler, worker_scheduler) = make_scheduler(1, 5);
+    let mut rx = add_worker(&scheduler).await?;
+    let _listener = add_action(&scheduler, 6).await?;
+    let (first, second) =
+        redispatched_to_the_same_worker(worker_scheduler.as_ref(), &mut rx).await?;
+    let operation_id = OperationId::from(first.operation_id.as_str());
+
+    worker_scheduler
+        .worker_dispatch_accepted(&worker_id(), &operation_id, first.attempt)
+        .await?;
+    let kill = next_kill_request(&mut rx).await;
+    assert_eq!(kill.operation_id, first.operation_id);
+    assert_eq!(
+        kill.attempt, first.attempt,
+        "the kill names the stale attempt"
+    );
+
+    // A stale decline is nothing either: attempt 2 stays on the worker.
+    worker_scheduler
+        .worker_dispatch_declined(
+            &worker_id(),
+            &operation_id,
+            first.attempt,
+            "at_capacity".to_string(),
+            None,
+        )
+        .await?;
+    no_dispatch(&mut rx).await;
+
+    // Attempt 2 was never acknowledged: the sweep takes it back and the
+    // operation is dispatched a third time.
+    keepalive(worker_scheduler.as_ref(), NOW_TIME + 13, None).await?;
+    keepalive(worker_scheduler.as_ref(), NOW_TIME + 14, None).await?;
+    let third = next_dispatch(&mut rx).await;
+    assert_eq!(third.operation_id, second.operation_id);
+    assert_eq!(third.attempt, 3);
+    Ok(())
+}
+
+/// A result from attempt 1, arriving after the operation was dispatched
+/// again to the same worker, does not complete attempt 2: it is refused,
+/// and the operation completes with what attempt 2 reports.
+#[nativelink_test]
+async fn a_stale_result_does_not_complete_the_new_attempt() -> Result<(), Error> {
+    let (scheduler, worker_scheduler) = make_scheduler(1, 5);
+    let mut rx = add_worker(&scheduler).await?;
+    let mut listener = add_action(&scheduler, 7).await?;
+    let (first, second) =
+        redispatched_to_the_same_worker(worker_scheduler.as_ref(), &mut rx).await?;
+    let operation_id = OperationId::from(first.operation_id.as_str());
+    worker_scheduler
+        .worker_dispatch_accepted(&worker_id(), &operation_id, second.attempt)
+        .await?;
+    no_dispatch(&mut rx).await;
+
+    let stale = worker_scheduler
+        .update_action_for_attempt(
+            &worker_id(),
+            &operation_id,
+            first.attempt,
+            UpdateOperationType::UpdateWithActionStage(ActionStage::Completed(ActionResult {
+                exit_code: 42,
+                ..ActionResult::default()
+            })),
+        )
+        .await;
+    assert!(stale.is_err(), "a stale result is refused: {stale:?}");
+    let pending = tokio::time::timeout(
+        Duration::from_millis(200),
+        wait_for_completion(&mut listener),
+    )
+    .await;
+    assert!(
+        pending.is_err(),
+        "a stale result must not complete the operation: {pending:?}"
+    );
+
+    worker_scheduler
+        .update_action_for_attempt(
+            &worker_id(),
+            &operation_id,
+            second.attempt,
+            UpdateOperationType::UpdateWithActionStage(ActionStage::Completed(ActionResult {
+                exit_code: 0,
+                ..ActionResult::default()
+            })),
+        )
+        .await?;
+    let result = wait_for_completion(&mut listener).await;
+    assert_eq!(result.exit_code, 0, "attempt 2's result, not attempt 1's");
+    assert!(result.error.is_none(), "{:?}", result.error);
+    Ok(())
+}
+
+/// Messages with attempt 0 come from a worker that predates attempts and
+/// are taken as before: they apply to whatever the worker holds.
+#[nativelink_test]
+async fn attempt_zero_messages_apply_to_whatever_the_worker_holds() -> Result<(), Error> {
+    let (scheduler, worker_scheduler) = make_scheduler(1, 5);
+    let mut rx = add_worker(&scheduler).await?;
+    let mut listener = add_action(&scheduler, 8).await?;
+    let (first, _second) =
+        redispatched_to_the_same_worker(worker_scheduler.as_ref(), &mut rx).await?;
+    let operation_id = OperationId::from(first.operation_id.as_str());
+    worker_scheduler
+        .worker_dispatch_accepted(&worker_id(), &operation_id, 0)
+        .await?;
+    // Acknowledged: no kill, and the sweep leaves it alone.
+    keepalive(worker_scheduler.as_ref(), NOW_TIME + 20, None).await?;
+    no_dispatch(&mut rx).await;
+    worker_scheduler
+        .update_action_for_attempt(
+            &worker_id(),
+            &operation_id,
+            0,
+            UpdateOperationType::UpdateWithActionStage(ActionStage::Completed(
+                ActionResult::default(),
+            )),
+        )
+        .await?;
+    let result = wait_for_completion(&mut listener).await;
+    assert!(result.error.is_none(), "{:?}", result.error);
     Ok(())
 }

@@ -2058,3 +2058,94 @@ async fn registration_flag_follows_the_scheduler_connection() -> Result<(), Erro
     }
     Ok(())
 }
+
+/// A dispatch of `operation_id` as `attempt` to worker "foobar".
+fn start_attempt(operation_id: &str, attempt: u64) -> UpdateForWorker {
+    let action_info = ActionInfo {
+        command_digest: DigestInfo::new([1u8; 32], 10),
+        input_root_digest: DigestInfo::new([2u8; 32], 10),
+        timeout: Duration::from_secs(1),
+        platform_properties: HashMap::new(),
+        priority: 0,
+        load_timestamp: SystemTime::UNIX_EPOCH,
+        insert_timestamp: SystemTime::UNIX_EPOCH,
+        unique_qualifier: ActionUniqueQualifier::Uncacheable(ActionUniqueKey {
+            execution_scope: None,
+            instance_name: INSTANCE_NAME.to_string(),
+            digest_function: DigestHasherFunc::Blake3,
+            digest: DigestInfo::new([3u8; 32], 10),
+        }),
+    };
+    UpdateForWorker {
+        update: Some(Update::StartAction(StartExecute {
+            execute_request: Some((&action_info).into()),
+            operation_id: operation_id.to_string(),
+            platform: Some(Platform::default()),
+            worker_id: "foobar".to_string(),
+            attempt,
+            ..Default::default()
+        })),
+    }
+}
+
+/// The scheduler sends a dispatch at least once. A `StartExecute` for an
+/// `(operation, attempt)` already running here is acknowledged again, not
+/// started a second time (and not refused, which would fail the action),
+/// and every message about the action echoes the attempt: the
+/// acknowledgements, the kill handed to the manager, and the result.
+#[nativelink_test]
+async fn a_duplicate_dispatch_is_acknowledged_again_and_runs_once() -> Result<(), Error> {
+    let test_context = connect_memory_worker(LocalWorkerConfig::default()).await?;
+
+    send_update(&test_context, &start_attempt("op", 7)).await?;
+    let accepted = test_context.client.expect_execute_accepted(Ok(())).await;
+    assert_eq!(accepted.operation_id, "op");
+    assert_eq!(accepted.attempt, 7);
+    let running_action = Arc::new(MockRunningAction::new());
+    let (_, start_execute) = test_context
+        .actions_manager
+        .expect_create_and_add_action(Ok(running_action.clone()))
+        .await;
+    assert_eq!(start_execute.attempt, 7);
+
+    // The resend: acknowledged again, nothing created.
+    send_update(&test_context, &start_attempt("op", 7)).await?;
+    let accepted = test_context.client.expect_execute_accepted(Ok(())).await;
+    assert_eq!(accepted.operation_id, "op");
+    assert_eq!(accepted.attempt, 7);
+    test_context
+        .actions_manager
+        .expect_no_call(Duration::from_millis(200))
+        .await;
+
+    // A kill names the attempt to the manager.
+    send_update(
+        &test_context,
+        &UpdateForWorker {
+            update: Some(Update::KillOperationRequest(KillOperationRequest {
+                operation_id: "op".to_string(),
+                attempt: 7,
+            })),
+        },
+    )
+    .await?;
+    let (killed, attempt) = test_context
+        .actions_manager
+        .expect_kill_operation_attempt()
+        .await;
+    assert_eq!(killed, OperationId::from("op"));
+    assert_eq!(attempt, 7);
+
+    // The result echoes the attempt.
+    running_action
+        .simple_expect_get_finished_result(Ok(ActionResult::default()))
+        .await?;
+    test_context
+        .actions_manager
+        .expect_cache_action_result()
+        .await;
+    let result = test_context.client.expect_execution_response(Ok(())).await;
+    assert_eq!(result.operation_id, "op");
+    assert_eq!(result.attempt, 7);
+    Ok(())
+}
