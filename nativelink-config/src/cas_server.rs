@@ -449,6 +449,17 @@ pub struct HealthConfig {
     /// Timeout on health checks. Default: 5s.
     #[serde(default)]
     pub timeout_seconds: u64,
+
+    /// Path of the readiness check, the stricter sibling of `path`: it
+    /// answers 503 while any component is still initializing, where `path`
+    /// answers 200. A worker's registration with its scheduler is such a
+    /// component, so a Kubernetes readiness probe on this path turns Ready
+    /// only once the worker can take work. Must differ from `path`; the
+    /// same path for both is refused at startup.
+    ///
+    /// Default: "/ready"
+    #[serde(default)]
+    pub readiness_path: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -743,7 +754,106 @@ pub struct ServerConfig {
     pub experimental_identity_header: IdentityHeaderSpec,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+/// The scale a CPU property is advertised on.
+#[derive(Copy, Clone, Deserialize, Serialize, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub enum CpuUnit {
+    /// Whole cores, rounded down: what `cpu_count: { query_cmd: "nproc" }`
+    /// advertises and what an action asking for `cpu_count=1` means.
+    #[default]
+    Cores,
+    /// Thousandths of a core, for a fleet whose actions and workers already
+    /// speak that scale.
+    Millicores,
+}
+
+/// Advertise CPU and memory from what the worker can actually see. The
+/// worker reads `cpu.max` and `memory.max` from its own cgroup v2 directory
+/// (found through `/proc/self/cgroup`, so a privileged container that sees
+/// the host's tree still finds its own) up to the nearest limited ancestor,
+/// the pod's limits on Kubernetes; with no limit at any level the configured
+/// properties stand. It takes off what it needs for itself, divides
+/// the memory by the enforcement headroom, and sets the two properties to
+/// the result at registration. What the scheduler packs against is then
+/// derived from the one number that is enforced, instead of typed in twice.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct CapacityConfig {
+    /// Property that carries CPU, on the scale `cpu_unit` names.
+    /// Default: `cpu_count`
+    #[serde(
+        default = "default_capacity_cpu_property_name",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub cpu_property_name: String,
+
+    /// Property that carries memory, in KiB.
+    /// Default: `memory_kb`
+    #[serde(
+        default = "default_capacity_memory_property_name",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub memory_property_name: String,
+
+    /// The scale the CPU property is advertised on. Whole cores by default,
+    /// the scale every other example in this configuration uses; a fleet
+    /// that advertises and requests thousandths of a core sets `millicores`.
+    /// Getting this wrong is a thousandfold error in how many actions the
+    /// scheduler packs onto the worker.
+    /// Default: cores
+    #[serde(default)]
+    pub cpu_unit: CpuUnit,
+
+    /// CPU the worker keeps for itself, in thousandths of a core whatever
+    /// `cpu_unit` says.
+    /// Default: 1000
+    #[serde(
+        default = "default_capacity_overhead_cpu_millicores",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub overhead_cpu_millicores: u64,
+
+    /// Memory the worker keeps for itself (the process, its directory cache,
+    /// output buffers), in KiB.
+    /// Default: 2097152 (2 GiB)
+    #[serde(
+        default = "default_capacity_overhead_memory_kb",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub overhead_memory_kb: u64,
+
+    /// Percent the advertised memory is reduced by, so that actions at their
+    /// enforcement ceiling (reservation plus headroom) still fit the limit.
+    /// Unset, it follows `resource_enforcement.memory_headroom_percent`
+    /// while memory enforcement is on, and is 0 otherwise, so the two
+    /// cannot drift apart by being typed twice.
+    /// Default: unset
+    #[serde(
+        default,
+        deserialize_with = "convert_optional_numeric_with_shellexpand"
+    )]
+    pub memory_headroom_percent: Option<u64>,
+}
+
+fn default_capacity_cpu_property_name() -> String {
+    "cpu_count".to_string()
+}
+
+fn default_capacity_memory_property_name() -> String {
+    "memory_kb".to_string()
+}
+
+const fn default_capacity_overhead_cpu_millicores() -> u64 {
+    1000
+}
+
+const fn default_capacity_overhead_memory_kb() -> u64 {
+    2_097_152
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
 pub enum WorkerProperty {
@@ -767,12 +877,139 @@ pub struct EndpointConfig {
     #[serde(deserialize_with = "convert_string_with_shellexpand")]
     pub uri: String,
 
-    /// Timeout in seconds that a request should take.
+    /// Timeout in seconds for connecting to the endpoint and for a request
+    /// to be answered. The worker's messages to the scheduler (keepalives,
+    /// acknowledgements, results) ride on the one `ConnectWorker` stream
+    /// opened at registration, which this does not bound; the `GoingAway`
+    /// sent at shutdown is bounded by it, so a stalled connection cannot
+    /// hold a pod past its grace period. A keepalive goes out every half of
+    /// it.
     /// Default: 5 seconds
     pub timeout: Option<f32>,
 
+    /// TCP keepalive interval (seconds), probing the socket under the
+    /// scheduler connection so a dead peer is noticed at the OS level.
+    /// If not set or 0, defaults to 30 seconds.
+    #[serde(default, deserialize_with = "convert_duration_with_shellexpand")]
+    pub tcp_keepalive_s: u64,
+
+    /// HTTP/2 keepalive interval (seconds): PING frames on the scheduler
+    /// connection, so one that has gone dead underneath fails instead of
+    /// hanging every message on it.
+    /// If not set or 0, defaults to 30 seconds.
+    #[serde(default, deserialize_with = "convert_duration_with_shellexpand")]
+    pub http2_keepalive_interval_s: u64,
+
+    /// HTTP/2 keepalive timeout (seconds): a PING unanswered for this long
+    /// ends the connection, and the worker reconnects.
+    /// If not set or 0, defaults to 20 seconds.
+    #[serde(default, deserialize_with = "convert_duration_with_shellexpand")]
+    pub http2_keepalive_timeout_s: u64,
+
     /// The TLS configuration to use to connect to the endpoint.
     pub tls_config: Option<ClientTlsConfig>,
+}
+
+#[derive(Copy, Clone, Deserialize, Serialize, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub enum MemoryEnforcement {
+    /// Measure only.
+    None,
+    /// Kill the action's process group once two consecutive samples exceed
+    /// the reservation plus headroom, or one sample exceeds twice it.
+    #[default]
+    Soft,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct ResourceEnforcementConfig {
+    /// What to do with an action that exceeds its memory reservation.
+    /// Default: soft
+    #[serde(default)]
+    pub memory: MemoryEnforcement,
+
+    /// Whether to refuse an action whose disk reservation exceeds the free
+    /// space under the work directory, less what the actions already
+    /// admitted reserved, before its inputs are fetched. The
+    /// refusal is `ResourceExhausted`, which the scheduler requeues without
+    /// counting an attempt and holds off this worker until its next
+    /// keepalive.
+    /// Default: none
+    #[serde(default)]
+    pub disk: DiskEnforcement,
+
+    /// Platform property carrying the action's disk reservation in KiB.
+    /// Default: `disk_kb`
+    #[serde(
+        default = "default_disk_property_name",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub disk_property_name: String,
+
+    /// Platform property carrying the action's memory reservation in KiB,
+    /// as the scheduler sends it. An action without the property is not
+    /// enforced.
+    /// Default: `memory_kb`
+    #[serde(
+        default = "default_memory_property_name",
+        deserialize_with = "convert_string_with_shellexpand"
+    )]
+    pub memory_property_name: String,
+
+    /// Percent above the reservation an action may reach before it is
+    /// killed.
+    /// Default: 20
+    #[serde(
+        default = "default_memory_headroom_percent",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub memory_headroom_percent: u64,
+
+    /// Percent above its disk reservation an action's own files may reach
+    /// before it is killed, with `disk: soft`.
+    /// Default: 20
+    #[serde(
+        default = "default_memory_headroom_percent",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub disk_headroom_percent: u64,
+}
+
+fn default_memory_property_name() -> String {
+    "memory_kb".to_string()
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+fn default_disk_property_name() -> String {
+    "disk_kb".to_string()
+}
+
+#[derive(Copy, Clone, Deserialize, Serialize, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub enum DiskEnforcement {
+    /// Fetch inputs regardless of free space.
+    #[default]
+    None,
+    /// Refuse the action when the free space under the work directory is
+    /// below its reservation.
+    Guard,
+    /// `guard`, and kill an action whose files under its own directory
+    /// grow past its reservation plus `disk_headroom_percent`. Sampled
+    /// every ten seconds by walking the action directory, counting only
+    /// files the action itself wrote (inputs are hard links into the CAS
+    /// and are not counted).
+    Soft,
+}
+
+const fn default_memory_headroom_percent() -> u64 {
+    20
 }
 
 #[derive(Copy, Clone, Deserialize, Serialize, Debug, Default)]
@@ -905,6 +1142,68 @@ pub struct UploadActionResultConfig {
     pub failure_message_template: String,
 }
 
+/// The pool of persistent worker processes (Bazel `supports-workers`).
+#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct PersistentWorkersConfig {
+    /// Run an action whose platform properties carry `supports-workers=1`
+    /// in a pooled worker process that outlives it and serves the next
+    /// action with the same executable, startup arguments and environment.
+    /// Off, every such action runs as a one-shot process like any other.
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Most worker processes kept per key (executable, startup arguments,
+    /// environment, protocol). An action whose key is at the cap and has
+    /// no idle process waits `acquire_timeout_s` for one to come back, then
+    /// runs one-shot. 0 takes the default.
+    /// Default: 4
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub max_workers_per_key: usize,
+
+    /// Seconds an idle worker process is kept before the sweeper shuts it
+    /// down. 0 takes the default.
+    /// Default: 300
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub idle_timeout_s: u64,
+
+    /// Requests a worker process serves before it is retired and replaced,
+    /// which bounds what a long-lived process accumulates. 0 takes the
+    /// default.
+    /// Default: 200
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub max_requests_per_worker: u64,
+
+    /// Milliseconds a worker process being shut down gets to exit on its
+    /// own (its stdin is closed) before SIGKILL. 0 takes the default.
+    /// Default: 5000
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub shutdown_grace_ms: u64,
+
+    /// Seconds an action waits for a worker process to come back when its
+    /// key is at `max_workers_per_key` with none idle, before it runs
+    /// one-shot instead. 0 takes the default.
+    /// Default: 30
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub acquire_timeout_s: u64,
+}
+
+/// The same as an absent block: the pool on, every size at its default.
+impl Default for PersistentWorkersConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_workers_per_key: 0,
+            idle_timeout_s: 0,
+            max_requests_per_worker: 0,
+            shutdown_grace_ms: 0,
+            acquire_timeout_s: 0,
+        }
+    }
+}
+
 /// Opt-in file capture for the actual container executing a Buck2 action.
 /// Requires a fresh single-use container with no outer execution wrapper or
 /// separate action mount namespace. For nested runtimes, run `NativeLink` and the
@@ -952,6 +1251,10 @@ pub struct Buck2FileCaptureConfig {
     pub finalize_timeout_s: usize,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent on/off switches of one worker; a nested struct per flag would not read better"
+)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
@@ -988,6 +1291,21 @@ pub struct LocalWorkerConfig {
         alias = "max_upload_timeout"
     )]
     pub max_upload_timeout_s: usize,
+
+    /// Maximum time allowed for fetching an action's inputs into the worker's
+    /// store and its directory before the command runs. A fetch that hangs
+    /// (a store that never answers) otherwise holds the action's slot for
+    /// good while the worker looks healthy; past this the action fails with
+    /// `DeadlineExceeded` and may be retried by the scheduler, and a warning
+    /// names the action every minute before that. Value in seconds.
+    ///
+    /// Default: 10 minutes
+    #[serde(
+        default,
+        deserialize_with = "convert_duration_with_shellexpand",
+        alias = "max_download_timeout"
+    )]
+    pub max_download_timeout_s: usize,
 
     /// Maximum time to wait for action directory cleanup before timing out.
     /// Value in seconds.
@@ -1047,6 +1365,31 @@ pub struct LocalWorkerConfig {
     #[serde(default)]
     pub timeout_handled_externally: bool,
 
+    /// On shutdown, tell the scheduler at once that this worker is draining
+    /// so it stops dispatching here, then finish the running actions (up to
+    /// `max_action_timeout_s`) and exit. Off, the worker finishes first and
+    /// only then announces itself, while the scheduler keeps offering it
+    /// work it has to refuse. Needs a scheduler that understands the drain
+    /// flag (v1.7.3+); an older one removes the worker and requeues its
+    /// actions as soon as the message arrives.
+    /// Default: false
+    #[serde(default)]
+    pub drain_on_shutdown: bool,
+
+    /// Kill an action that grows past its memory reservation before the
+    /// pod's cgroup limit does. On cgroup v2 the container cgroup carries
+    /// `memory.oom.group`, so the kernel's kill takes the worker and every
+    /// action on it; this one takes only the offender and fails it with
+    /// `FailedPrecondition`. Linux only; accepted and ignored elsewhere.
+    /// Actions run through a persistent worker are not covered, since that
+    /// process outlives the action and serves others. With either axis on,
+    /// the worker reads an action's platform properties from the
+    /// scheduler's `StartExecute` rather than the client's request, so a
+    /// reservation the scheduler placed the action by is the one enforced
+    /// and exported to the environment.
+    #[serde(default)]
+    pub resource_enforcement: Option<ResourceEnforcementConfig>,
+
     /// The command to execute on every execution request. This will be parsed as
     /// a command + arguments (not shell).
     /// Example: "run.sh" and a job with command: "sleep 5" will result in a
@@ -1064,6 +1407,51 @@ pub struct LocalWorkerConfig {
     /// actions until there is enough resource available on the machine to
     /// handle them.
     pub experimental_precondition_script: Option<String>,
+
+    /// Milliseconds the precondition script may run before it counts as
+    /// failed and the action is refused as backpressure. A script that
+    /// hangs used to hold the action forever.
+    /// Default: 30000
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub precondition_timeout_ms: u64,
+
+    /// Bytes of an action's stdout or stderr kept in memory. Past this the
+    /// output spills to a file under the action directory and is uploaded
+    /// from disk, so an action that prints gigabytes does not grow the
+    /// worker by that much. 0 keeps everything in memory.
+    /// Default: 0
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub max_captured_output_bytes: u64,
+
+    /// Seconds between sweeps of `work_directory` for action directories no
+    /// running action owns, left by a cleanup that failed. 0 disables the
+    /// sweep; the directory is still purged at startup.
+    /// Default: 0
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub orphan_sweep_interval_s: u64,
+
+    /// Milliseconds between the SIGTERM a timed-out or cancelled action
+    /// receives and the SIGKILL that follows if it is still running, so a
+    /// tool that handles SIGTERM can write its own cleanup. The memory
+    /// reservation kill skips the grace and sends SIGKILL at once. Linux
+    /// only; elsewhere the kill is immediate. 0 takes the default.
+    /// Default: 5000
+    #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
+    pub kill_grace_ms: u64,
+
+    /// Give every action its own `TMPDIR` under its action directory,
+    /// removed with it, so concurrent actions writing the same file name
+    /// under `$TMPDIR` no longer collide. A `TMPDIR` in the action's own
+    /// environment still wins. Code that hard-codes `/tmp` is unaffected.
+    /// Default: true
+    #[serde(default = "default_true")]
+    pub set_tmpdir: bool,
+
+    /// Bazel persistent workers: how an action whose platform properties
+    /// carry `supports-workers=1` is run and how the pool of worker
+    /// processes is sized. Unset takes every default below.
+    #[serde(default)]
+    pub persistent_workers: Option<PersistentWorkersConfig>,
 
     /// Underlying CAS store that the worker will use to download CAS artifacts.
     /// This store must be a `FastSlowStore`. The `fast` store must be a
@@ -1090,6 +1478,15 @@ pub struct LocalWorkerConfig {
     /// and used to tell the scheduler to restrict what should be executed on this
     /// worker.
     pub platform_properties: HashMap<String, WorkerProperty>,
+
+    /// Derive the CPU and memory properties from the worker's own cgroup
+    /// limits instead of the values above; see `CapacityConfig`. When the
+    /// cgroup cannot be read (not Linux, cgroup v1, no permission) the
+    /// values above stand and a warning says so; if they carry neither
+    /// property the worker refuses to start rather than register unable to
+    /// take any action that asks for CPU or memory.
+    #[serde(default)]
+    pub capacity: Option<CapacityConfig>,
 
     /// An optional mapping of environment names to set for the execution
     /// as well as those specified in the action itself. If set, will set each
@@ -1140,6 +1537,34 @@ pub struct LocalWorkerConfig {
     /// error.
     /// Default: False.
     pub use_mount_namespace: Option<bool>,
+
+    /// Whether to give each action a private `/tmp` inside its mount
+    /// namespace: the action's own `tmp` directory (the one `TMPDIR` points
+    /// at) is bound over `/tmp`, so tools that hardcode `/tmp` write there
+    /// too. Concurrent actions no longer collide on predictable paths under
+    /// `/tmp`, nothing leaks between actions through it, and what an action
+    /// writes there is removed with the action.
+    ///
+    /// This is only available on Linux and requires `use_namespaces` and
+    /// `use_mount_namespace` to be true. If explicitly set to true without
+    /// both the worker will exit with an error. Set it to false to keep the
+    /// host's `/tmp` visible to actions, for example when a tool they need
+    /// lives there. The bound `/tmp` carries the work volume's mount options
+    /// (`noexec`, `nodev`, `nosuid` if the volume has them), not the host
+    /// `/tmp`'s.
+    ///
+    /// The private `/tmp` lives on the worker's disk under the work
+    /// directory, not in memory, so it is bounded by the volume that holds
+    /// the work directory and seen by the disk guard, and a tool filling it
+    /// cannot take the worker's memory with it.
+    ///
+    /// If `/tmp` does not exist on the worker, for example in a minimal
+    /// container image, there is nothing for actions to collide on, so the
+    /// default is False there and a warning is logged at startup.
+    ///
+    /// Default: True when `use_mount_namespace` is true and `/tmp` exists,
+    /// otherwise False.
+    pub isolate_tmp: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

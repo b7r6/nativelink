@@ -279,6 +279,13 @@ impl GrpcStore {
         jitter_fn: Arc<dyn Fn(Duration) -> Duration + Send + Sync>,
     ) -> Result<Arc<Self>, Error> {
         error_if!(
+            matches!(
+                spec.store_type,
+                nativelink_config::stores::StoreType::EventSink
+            ) && spec.experimental_read_batching.is_some(),
+            "An event sink cannot batch reads"
+        );
+        error_if!(
             spec.endpoints.is_empty(),
             "Expected at least 1 endpoint in GrpcStore"
         );
@@ -855,6 +862,91 @@ impl GrpcStore {
     {
         const RESUMABLE: bool = true;
         self.write_internal(stream, RESUMABLE).await
+    }
+
+    /// Writes one event to an event sink. A sink takes an upload only from
+    /// offset zero, so where `write` resumes a retry from its last cached
+    /// messages (mid-event, for an event over one `WriteRequest`), this
+    /// resends the whole event on every attempt. Events are bounded, so the
+    /// event is held in memory for its retries.
+    async fn update_event(
+        &self,
+        resource_name: String,
+        mut reader: DropCloserReadHalf,
+        digest: DigestInfo,
+    ) -> Result<u64, Error> {
+        let size = digest.size_bytes();
+        let data = reader
+            .consume(Some(
+                usize::try_from(size).err_tip(|| "Event size in GrpcStore::update_event")?,
+            ))
+            .await
+            .err_tip(|| "In GrpcStore::update_event")?;
+        let response = self
+            .retrier
+            .retry(unfold((), move |()| {
+                let mut requests: Vec<WriteRequest> = data
+                    .chunks(MAX_WRITE_REQUEST_DATA_BYTES)
+                    .scan(0usize, |offset, chunk| {
+                        let start = *offset;
+                        *offset += chunk.len();
+                        Some(WriteRequest {
+                            resource_name: resource_name.clone(),
+                            write_offset: i64::try_from(start).unwrap_or(i64::MAX),
+                            finish_write: false,
+                            data: data.slice(start..*offset),
+                        })
+                    })
+                    .collect();
+                requests.push(WriteRequest {
+                    resource_name: resource_name.clone(),
+                    write_offset: i64::try_from(data.len()).unwrap_or(i64::MAX),
+                    finish_write: true,
+                    data: Bytes::new(),
+                });
+                async move {
+                    let rpc = self
+                        .connection_manager
+                        .connection("update_event".into())
+                        .and_then(|channel| async move {
+                            ByteStreamClient::new(channel)
+                                .write(enrich_request(
+                                    Request::new(futures::stream::iter(requests)),
+                                    &self.headers,
+                                    &self.forward_headers,
+                                ))
+                                .await
+                                .err_tip(|| "in GrpcStore::update_event")
+                        });
+                    let result = if self.rpc_timeout > Duration::ZERO {
+                        tokio::time::timeout(self.rpc_timeout, rpc)
+                            .await
+                            .unwrap_or_else(|_elapsed| {
+                                Err(make_err!(
+                                    Code::DeadlineExceeded,
+                                    "GrpcStore::update_event RPC timed out after {}s",
+                                    self.rpc_timeout.as_secs()
+                                ))
+                            })
+                    } else {
+                        rpc.await
+                    };
+                    if let Err(err) = &result {
+                        warn!(instance_name = %self.instance_name, ?err, "GrpcStore::update_event: RPC failed; a retry resends the whole event");
+                    }
+                    Some((result.map_or_else(RetryResult::Retry, RetryResult::Ok), ()))
+                }
+            }))
+            .await?;
+        if u64::try_from(response.get_ref().committed_size).ok() != Some(size) {
+            return Err(make_err!(
+                Code::DataLoss,
+                "Event sink acknowledged {} bytes; expected {}",
+                response.get_ref().committed_size,
+                size
+            ));
+        }
+        Ok(size)
     }
 
     async fn write_internal<T, E>(
@@ -1565,6 +1657,15 @@ impl StoreDriver for GrpcStore {
         keys: &[StoreKey<'_>],
         results: &mut [Option<u64>],
     ) -> Result<(), Error> {
+        if matches!(
+            self.store_type,
+            nativelink_config::stores::StoreType::EventSink
+        ) {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Event sinks do not support existence checks"
+            ));
+        }
         if matches!(self.store_type, nativelink_config::stores::StoreType::Ac) {
             keys.iter()
                 .zip(results.iter_mut())
@@ -1629,7 +1730,7 @@ impl StoreDriver for GrpcStore {
         self: Pin<&Self>,
         key: StoreKey<'_>,
         reader: DropCloserReadHalf,
-        _size_info: UploadSizeInfo,
+        size_info: UploadSizeInfo,
     ) -> Result<u64, Error> {
         struct LocalState {
             resource_name: String,
@@ -1641,7 +1742,27 @@ impl StoreDriver for GrpcStore {
         }
 
         let is_digest_key = matches!(key, StoreKey::Digest(_));
-        let digest = key.into_digest();
+        let mut digest = key.into_digest();
+        if matches!(
+            self.store_type,
+            nativelink_config::stores::StoreType::EventSink
+        ) {
+            let UploadSizeInfo::ExactSize(size) = size_info else {
+                return Err(make_err!(
+                    Code::InvalidArgument,
+                    "Event sinks require an exact upload size"
+                ));
+            };
+            if is_digest_key {
+                return Err(make_err!(
+                    Code::InvalidArgument,
+                    "Event sinks require string keys"
+                ));
+            }
+            // String-key digests normally encode the key's length. Event bytes
+            // have a different length and must pass the stream size validator.
+            digest = DigestInfo::try_new(&digest.packed_hash().to_string(), size)?;
+        }
         if matches!(self.store_type, nativelink_config::stores::StoreType::Ac) {
             return self.update_action_result_from_bytes(digest, reader).await;
         }
@@ -1687,6 +1808,12 @@ impl StoreDriver for GrpcStore {
             digest_size = digest.size_bytes(),
             "GrpcStore::update: starting upload for digest",
         );
+        if matches!(
+            self.store_type,
+            nativelink_config::stores::StoreType::EventSink
+        ) {
+            return self.update_event(resource_name, reader, digest).await;
+        }
         let local_state = LocalState {
             resource_name,
             reader,
@@ -1768,6 +1895,16 @@ impl StoreDriver for GrpcStore {
             writer: &'a mut DropCloserWriteHalf,
             read_offset: i64,
             read_limit: i64,
+        }
+
+        if matches!(
+            self.store_type,
+            nativelink_config::stores::StoreType::EventSink
+        ) {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Event sinks do not support reads"
+            ));
         }
 
         let is_digest_key = matches!(key, StoreKey::Digest(_));

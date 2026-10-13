@@ -1,8 +1,8 @@
-// Copyright 2025 The NativeLink Authors. All rights reserved.
+// Copyright 2025 Trace Machina, Inc. All rights reserved.
 //
 // Licensed under the Business Source License, Version 1.1 (the "License");
 // you may not use this file except in compliance with the License.
-// You may requested a copy of the License by emailing contact@nativelink.com.
+// You may request a copy of the License by emailing contact@nativelink.com.
 //
 // Use of this module requires an enterprise license agreement, which can be
 // attained by emailing contact@nativelink.com or signing up for Nativelink
@@ -32,6 +32,7 @@ pub const EXECUTION_RESULT: &str = "execution.result";
 pub const EXECUTION_INSTANCE: &str = "execution.instance";
 pub const EXECUTION_PRIORITY: &str = "execution.priority";
 pub const EXECUTION_WORKER_ID: &str = "execution.worker_id";
+pub const EXECUTION_OUTCOME: &str = "execution.outcome";
 pub const EXECUTION_ACTION_MNEMONIC: &str = "execution.action_mnemonic";
 pub const EXECUTION_EXIT_CODE: &str = "execution.exit_code";
 pub const EXECUTION_ACTION_DIGEST: &str = "execution.action_digest";
@@ -706,12 +707,17 @@ pub struct ExecutionMetrics {
 /// Wall time is already covered by `execution.stage.duration`. This is the
 /// other half: an action pinning eight cores for a minute and one sleeping
 /// for a minute look identical by wall time and nothing alike here.
-pub fn record_execution_cpu_time(cpu_time_ms: u64, instance_name: &str, action_mnemonic: &str) {
+pub fn record_execution_cpu_time(
+    cpu_time_ms: u64,
+    instance_name: &str,
+    action_mnemonic: &str,
+    outcome: &str,
+) {
     #[expect(clippy::cast_precision_loss)] // Milliseconds; f64 is exact well past any real action.
     let seconds = cpu_time_ms as f64 / 1000.0;
     EXECUTION_METRICS.execution_cpu_time.record(
         seconds,
-        &execution_sample_attributes(instance_name, action_mnemonic),
+        &execution_sample_attributes(instance_name, action_mnemonic, outcome),
     );
 }
 
@@ -725,23 +731,31 @@ pub fn record_execution_peak_memory(
     peak_memory_kb: u64,
     instance_name: &str,
     action_mnemonic: &str,
+    outcome: &str,
 ) {
     EXECUTION_METRICS.execution_peak_memory.record(
         peak_memory_sample(peak_memory_kb),
-        &execution_sample_attributes(instance_name, action_mnemonic),
+        &execution_sample_attributes(instance_name, action_mnemonic, outcome),
     );
 }
 
 /// Attributes for a per-action resource sample. The mnemonic is attached only
 /// when known: an empty value on every sample from an unattributed client
 /// would read as a real mnemonic named "".
-fn execution_sample_attributes(instance_name: &str, action_mnemonic: &str) -> Vec<KeyValue> {
+fn execution_sample_attributes(
+    instance_name: &str,
+    action_mnemonic: &str,
+    outcome: &str,
+) -> Vec<KeyValue> {
     let mut attrs = vec![KeyValue::new(EXECUTION_INSTANCE, instance_name.to_string())];
     if !action_mnemonic.is_empty() {
         attrs.push(KeyValue::new(
             EXECUTION_ACTION_MNEMONIC,
             action_mnemonic.to_string(),
         ));
+    }
+    if !outcome.is_empty() {
+        attrs.push(KeyValue::new(EXECUTION_OUTCOME, outcome.to_string()));
     }
     attrs
 }
@@ -886,6 +900,11 @@ pub static WORKER_METRICS: LazyLock<WorkerMetrics> = LazyLock::new(|| {
             .with_unit("{worker}")
             .build(),
 
+        dispatch_requeues: meter
+            .u64_counter("scheduler.dispatch.requeues")
+            .with_description("Dispatches sent back to the queue untried, by reason: declined, channel_full, unacknowledged")
+            .build(),
+
         worker_keepalives: meter
             .u64_counter("worker.keepalives")
             .with_description("Total worker keepalives received")
@@ -928,6 +947,8 @@ pub struct WorkerMetrics {
     pub worker_connections: metrics::Counter<u64>,
     /// Workers that have left, cumulative, by reason.
     pub worker_disconnections: metrics::Counter<u64>,
+    /// Dispatches requeued untried, by reason.
+    pub dispatch_requeues: metrics::Counter<u64>,
     /// Keepalives received, cumulative.
     pub worker_keepalives: metrics::Counter<u64>,
     /// Seconds between consecutive messages from a worker.
@@ -970,6 +991,14 @@ pub fn record_worker_state(state: &'static str, entered: bool) {
         if entered { 1 } else { -1 },
         &[KeyValue::new(WORKER_STATE, state)],
     );
+}
+
+/// Records a dispatch going back to the queue untried: the worker declined
+/// it, its channel was full, or it never acknowledged it.
+pub fn record_dispatch_requeue(reason: &'static str) {
+    WORKER_METRICS
+        .dispatch_requeues
+        .add(1, &[KeyValue::new("reason", reason)]);
 }
 
 /// Records a keepalive from a worker.
@@ -1091,6 +1120,14 @@ pub static SCHEDULER_METRICS: LazyLock<SchedulerOtlpMetrics> = LazyLock::new(|| 
             .with_unit("{action}")
             .build(),
 
+        parked_dispatched: meter
+            .u64_counter("scheduler.matching.parked_dispatched")
+            .with_description(
+                "Queued actions dispatched onto room that opened while the matching pass was past them, taken ahead of the newer actions the pass was reading",
+            )
+            .with_unit("{action}")
+            .build(),
+
         awaited_action_orphans: meter
             .u64_counter("scheduler.awaited_action.orphans")
             .with_description(
@@ -1103,6 +1140,14 @@ pub static SCHEDULER_METRICS: LazyLock<SchedulerOtlpMetrics> = LazyLock::new(|| 
             .u64_counter("scheduler.sweep.failures")
             .with_description("Abandoned-queue sweeps that ended in an error before finishing")
             .with_unit("{sweep}")
+            .build(),
+
+        hint_resolutions: meter
+            .u64_counter("scheduler.hints.resolutions")
+            .with_description(
+                "Actions the historical resource scheduler sized, by where the numbers came from: a hint keyed by target, action digest, command digest or mnemonic, the cold start, or nothing",
+            )
+            .with_unit("{action}")
             .build(),
     }
 });
@@ -1129,10 +1174,15 @@ pub struct SchedulerOtlpMetrics {
     pub queue_depth: metrics::Gauge<u64>,
     /// Queued actions retired for having no client.
     pub queue_retired: metrics::Counter<u64>,
+    /// Actions a pass parked for want of room and dispatched when room
+    /// opened before the pass ended, ahead of the newer actions it was reading.
+    pub parked_dispatched: metrics::Counter<u64>,
     /// Listed operations whose record was gone on read, by site.
     pub awaited_action_orphans: metrics::Counter<u64>,
     /// Abandoned-queue sweeps that failed before finishing.
     pub sweep_failures: metrics::Counter<u64>,
+    /// Actions sized by the historical resource scheduler, by source.
+    pub hint_resolutions: metrics::Counter<u64>,
 }
 
 /// Records a completed matching pass.
@@ -1166,6 +1216,15 @@ pub fn record_queue_retired(count: u64) {
     }
 }
 
+/// Records parked actions a pass sent to a worker onto room that opened
+/// mid-pass: confirmed sends, not attempts. A dispatch that failed or lost
+/// the assignment race to another scheduler is not counted.
+pub fn record_parked_dispatched(count: u64) {
+    if count > 0 {
+        SCHEDULER_METRICS.parked_dispatched.add(count, &[]);
+    }
+}
+
 /// Records an operation the queue listed whose record was gone when read;
 /// `site` is where it was met (`matching`, `sweep`).
 pub fn record_awaited_action_orphan(site: &'static str) {
@@ -1177,6 +1236,15 @@ pub fn record_awaited_action_orphan(site: &'static str) {
 /// Records an abandoned-queue sweep that failed before finishing.
 pub fn record_sweep_failure() {
     SCHEDULER_METRICS.sweep_failures.add(1, &[]);
+}
+
+/// Records where an action's reservation came from: `target`,
+/// `action_digest`, `command_digest`, `mnemonic`, `cold_start` or `none`.
+/// The cold-start share of a run is `cold_start` over the total.
+pub fn record_hint_resolution(source: &'static str) {
+    SCHEDULER_METRICS
+        .hint_resolutions
+        .add(1, &[KeyValue::new("source", source)]);
 }
 
 /// Records a queued action failed for being unsatisfiable. `properties`

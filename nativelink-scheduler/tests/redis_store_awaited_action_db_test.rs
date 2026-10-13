@@ -33,6 +33,7 @@ use nativelink_redis_tester::FakeRedisBackend;
 use nativelink_scheduler::awaited_action_db::{
     AwaitedAction, AwaitedActionDb, AwaitedActionSubscriber,
 };
+use nativelink_scheduler::default_scheduler_factory::retain_completed_for_s;
 use nativelink_scheduler::simple_scheduler::SimpleScheduler;
 use nativelink_scheduler::store_awaited_action_db::StoreAwaitedActionDb;
 use nativelink_scheduler::worker::Worker;
@@ -50,7 +51,6 @@ use nativelink_util::store_trait::SchedulerStore;
 use parking_lot::Mutex;
 use pretty_assertions::assert_eq;
 use redis::Value;
-use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::{Notify, mpsc};
 use tonic::Code;
 use utils::scheduler_utils::update_eq;
@@ -63,13 +63,15 @@ const INSTANCE_NAME: &str = "instance_name";
 
 async fn verify_initial_connection_message(
     worker_id: WorkerId,
-    rx: &mut mpsc::UnboundedReceiver<UpdateForWorker>,
+    rx: &mut mpsc::Receiver<UpdateForWorker>,
 ) {
     // Worker should have been sent an execute command.
     let expected_msg_for_worker = UpdateForWorker {
         update: Some(update_for_worker::Update::ConnectionResult(
             ConnectionResult {
                 worker_id: worker_id.into(),
+                dispatch_ack: true,
+                memory_property: String::new(),
             },
         )),
     };
@@ -83,8 +85,8 @@ async fn setup_new_worker(
     scheduler: &SimpleScheduler,
     worker_id: WorkerId,
     props: PlatformProperties,
-) -> Result<mpsc::UnboundedReceiver<UpdateForWorker>, Error> {
-    let (tx, mut rx) = unbounded_channel();
+) -> Result<mpsc::Receiver<UpdateForWorker>, Error> {
+    let (tx, mut rx) = mpsc::channel(64);
     let worker = Worker::new(worker_id.clone(), props, tx, NOW_TIME, 0);
     scheduler
         .add_worker(worker)
@@ -710,5 +712,14 @@ async fn an_update_against_a_vanished_record_leaves_nothing_behind() -> Result<(
          no expiry, and the index will carry it forever"
     );
 
+    Ok(())
+}
+
+/// The Redis backend gets the same retention default as the memory backend.
+/// Passed through as 0 it wrote every completed record without an expiry.
+#[nativelink_test]
+async fn unset_retention_is_the_shared_default_not_forever() -> Result<(), Error> {
+    assert_eq!(retain_completed_for_s(0), 60);
+    assert_eq!(retain_completed_for_s(30), 30);
     Ok(())
 }

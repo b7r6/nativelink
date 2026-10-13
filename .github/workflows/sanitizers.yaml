@@ -7,11 +7,13 @@ on:
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+      - '**/*.md'
   pull_request:
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+      - '**/*.md'
 
 permissions: read-all
 
@@ -60,4 +62,4 @@ jobs:
           exec: ${{ runner.os == 'Linux' && 'on' || 'off' }}
 
       - name: Run Bazel tests
-        run: bazel test --config=${{ matrix.sanitizer }} --lockfile_mode=error --verbose_failures //...
+        run: bazel test --config=${{ matrix.sanitizer }} --config=nl-quiet --lockfile_mode=error --verbose_failures //...

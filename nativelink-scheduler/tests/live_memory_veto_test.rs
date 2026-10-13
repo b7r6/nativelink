@@ -1,3 +1,17 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use core::time::Duration;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,8 +61,8 @@ async fn add_worker(
     scheduler: &SimpleScheduler,
     name: &str,
     properties: HashMap<String, PlatformPropertyValue>,
-) -> Result<mpsc::UnboundedReceiver<UpdateForWorker>, Error> {
-    let (tx, mut rx) = mpsc::unbounded_channel();
+) -> Result<mpsc::Receiver<UpdateForWorker>, Error> {
+    let (tx, mut rx) = mpsc::channel(64);
     let worker = Worker::new(
         WorkerId(name.to_string()),
         PlatformProperties::new(properties),
@@ -87,7 +101,7 @@ async fn add_action(
     Ok(())
 }
 
-fn dispatched(rx: &mut mpsc::UnboundedReceiver<UpdateForWorker>) -> usize {
+fn dispatched(rx: &mut mpsc::Receiver<UpdateForWorker>) -> usize {
     let mut count = 0;
     while let Ok(msg) = rx.try_recv() {
         if matches!(msg.update, Some(update_for_worker::Update::StartAction(_))) {
@@ -175,6 +189,36 @@ async fn live_memory_veto_skips_a_worker_that_reports_no_room() -> Result<(), Er
 /// A worker that reported no room and then reports room again has to wake
 /// the matcher itself. With the fallback pass off nothing else would, and
 /// the vetoed action would wait for an unrelated event.
+/// The connection result names the property the veto reads, so the worker
+/// declines for load against the same one the scheduler would have vetoed.
+#[nativelink_test]
+async fn the_connection_result_names_the_veto_property() -> Result<(), Error> {
+    let scheduler = make_scheduler(&SimpleSpec {
+        supported_platform_properties: Some(HashMap::from([(
+            "memory_kb".to_string(),
+            PropertyType::Minimum,
+        )])),
+        live_memory_veto: Some("memory_kb".to_string()),
+        ..SimpleSpec::default()
+    });
+    let (tx, mut rx) = mpsc::channel(64);
+    scheduler
+        .add_worker(Worker::new(
+            WorkerId("told".to_string()),
+            PlatformProperties::new(memory_worker(100_000)),
+            tx,
+            NOW_TIME,
+            /* max_inflight_tasks */ 4,
+        ))
+        .await?;
+    let connected = rx.recv().await.unwrap();
+    let Some(update_for_worker::Update::ConnectionResult(result)) = connected.update else {
+        panic!("expected a ConnectionResult, got {connected:?}");
+    };
+    assert_eq!(result.memory_property, "memory_kb");
+    Ok(())
+}
+
 #[nativelink_test]
 async fn a_load_report_with_room_again_wakes_the_matcher() -> Result<(), Error> {
     let scheduler = make_scheduler(&SimpleSpec {

@@ -1,3 +1,17 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use core::pin::Pin;
 use core::time::Duration;
 use std::collections::HashMap;
@@ -28,8 +42,10 @@ use nativelink_store::grpc_store::GrpcStore;
 use nativelink_util::background_spawn;
 use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_util::common::DigestInfo;
-use nativelink_util::proto_stream_utils::WriteRequestStreamWrapper;
-use nativelink_util::store_trait::{StoreLike, UploadSizeInfo};
+use nativelink_util::proto_stream_utils::{
+    MAX_WRITE_REQUEST_DATA_BYTES, WriteRequestStreamWrapper,
+};
+use nativelink_util::store_trait::{StoreKey, StoreLike, UploadSizeInfo};
 use nativelink_util::telemetry::ClientHeaders;
 use opentelemetry::Context;
 use regex::Regex;
@@ -99,6 +115,11 @@ struct FakeStreamServer {
     /// Record every `WriteRequest`, not just the first, so a test can assert
     /// on how the client chunked the stream.
     drain_all: bool,
+    committed_size_override: Option<i64>,
+    fail_after_commit: Arc<Mutex<bool>>,
+    /// Take this many `WriteRequest`s of the next upload, then fail it, as a
+    /// server that restarts mid-upload does. Zero is off.
+    fail_mid_upload: Arc<Mutex<usize>>,
 }
 
 impl FakeStreamServer {
@@ -107,6 +128,9 @@ impl FakeStreamServer {
             write_requests: Arc::new(Mutex::new(vec![])),
             read_requests: Arc::new(Mutex::new(vec![])),
             drain_all: false,
+            committed_size_override: None,
+            fail_after_commit: Arc::new(Mutex::new(false)),
+            fail_mid_upload: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -170,6 +194,15 @@ impl ByteStream for FakeStreamServer {
         grpc_request: Request<Streaming<WriteRequest>>,
     ) -> Result<Response<WriteResponse>, Status> {
         let mut stream = grpc_request.into_inner();
+        let take = core::mem::take(&mut *self.fail_mid_upload.lock().await);
+        if take > 0 {
+            for _ in 0..take {
+                if let Some(req) = stream.next().await {
+                    self.write_requests.lock().await.push(req?);
+                }
+            }
+            return Err(Status::unavailable("simulated restart mid-upload"));
+        }
         if self.drain_all {
             let mut committed_size = 0i64;
             while let Some(req) = stream.next().await {
@@ -177,7 +210,14 @@ impl ByteStream for FakeStreamServer {
                 committed_size += i64::try_from(req.data.len()).unwrap();
                 self.write_requests.lock().await.push(req);
             }
-            return Ok(Response::new(WriteResponse { committed_size }));
+            if core::mem::take(&mut *self.fail_after_commit.lock().await) {
+                return Err(Status::unavailable(
+                    "simulated lost acknowledgement after commit",
+                ));
+            }
+            return Ok(Response::new(WriteResponse {
+                committed_size: self.committed_size_override.unwrap_or(committed_size),
+            }));
         }
         let write_request = match stream.next().await {
             None => {
@@ -274,6 +314,154 @@ async fn write_update_works() -> Result<(), Error> {
 async fn write_update_works_with_legacy_resource_names() -> Result<(), Error> {
     let upload_pattern = Regex::new("/uploads/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/blobs/0123456789abcdef000000000000000000010000000000000123456789abcdef/3").unwrap();
     write_update_works_core(true, upload_pattern).await
+}
+
+#[nativelink_test]
+async fn event_sink_uses_payload_size_and_rejects_cache_operations() -> Result<(), Error> {
+    let (server, port) = make_fake_bytestream_server_draining().await;
+    let mut spec = test_spec(format!("http://localhost:{port}"), false);
+    spec.store_type = StoreType::EventSink;
+    spec.instance_name = "bep".into();
+    let store = GrpcStore::new(&spec)?;
+    let key = StoreKey::from("BepEvent:be:test:1");
+    let payload = b"event payload with a length different from its storage key";
+    store
+        .update_oneshot(key.borrow(), payload.as_slice().into())
+        .await?;
+    let writes = server.write_requests.lock().await;
+    assert!(writes[0].resource_name.starts_with("bep/uploads/"));
+    assert!(writes[0].resource_name.ends_with(&format!(
+        "/{}/{}",
+        key.borrow().into_digest().packed_hash(),
+        payload.len()
+    )));
+    assert_eq!(
+        writes
+            .iter()
+            .flat_map(|request| request.data.iter().copied())
+            .collect::<Vec<_>>(),
+        payload
+    );
+    assert!(writes.last().unwrap().finish_write);
+    drop(writes);
+    assert_eq!(
+        store.has(key.borrow()).await.unwrap_err().code,
+        tonic::Code::Unimplemented
+    );
+    let (tx, _rx) = make_buf_channel_pair();
+    assert_eq!(
+        store
+            .get_part(key.borrow(), tx, 0, None)
+            .await
+            .unwrap_err()
+            .code,
+        tonic::Code::Unimplemented
+    );
+    let digest = DigestInfo::try_new(VALID_HASH, payload.len())?;
+    assert_eq!(
+        store
+            .update_oneshot(digest, payload.as_slice().into())
+            .await
+            .unwrap_err()
+            .code,
+        tonic::Code::InvalidArgument
+    );
+    let (_tx, rx) = make_buf_channel_pair();
+    assert_eq!(
+        store
+            .update(key, rx, UploadSizeInfo::MaxSize(100))
+            .await
+            .unwrap_err()
+            .code,
+        tonic::Code::InvalidArgument
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn event_sink_rejects_incomplete_acknowledgement() -> Result<(), Error> {
+    let server = FakeStreamServer {
+        committed_size_override: Some(0),
+        ..FakeStreamServer::new_draining()
+    };
+    let (_, port) = spawn_bytestream_server(server).await;
+    let mut spec = test_spec(format!("http://localhost:{port}"), false);
+    spec.store_type = StoreType::EventSink;
+    let store = GrpcStore::new(&spec)?;
+    let err = store
+        .update_oneshot(StoreKey::from("event-ack"), "event payload".into())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, tonic::Code::DataLoss);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn event_sink_retry_preserves_upload_identity_after_lost_ack() -> Result<(), Error> {
+    let server = FakeStreamServer::new_draining();
+    *server.fail_after_commit.lock().await = true;
+    let (server, port) = spawn_bytestream_server(server).await;
+    let mut spec = test_spec(format!("http://localhost:{port}"), false);
+    spec.store_type = StoreType::EventSink;
+    spec.retry.max_retries = 1;
+    let store = GrpcStore::new(&spec)?;
+    let payload = b"event delivered before the acknowledgement was lost";
+    store
+        .update_oneshot(StoreKey::from("event-retry"), payload.as_slice().into())
+        .await?;
+    let requests = server.write_requests.lock().await;
+    let writes: Vec<_> = requests
+        .iter()
+        .filter(|request| !request.data.is_empty())
+        .collect();
+    assert_eq!(writes.len(), 2);
+    assert_eq!(writes[0].resource_name, writes[1].resource_name);
+    assert_eq!(writes[0].write_offset, writes[1].write_offset);
+    assert_eq!(writes[0].data, payload.as_slice());
+    assert_eq!(writes[1].data, payload.as_slice());
+    Ok(())
+}
+
+#[nativelink_test]
+async fn event_sink_retry_resends_a_multi_chunk_event_from_zero() -> Result<(), Error> {
+    let server = FakeStreamServer::new_draining();
+    // Cut off after three chunks: more than the two messages `write` caches
+    // to resume from, so resuming would start mid-event.
+    *server.fail_mid_upload.lock().await = 3;
+    let (server, port) = spawn_bytestream_server(server).await;
+    let mut spec = test_spec(format!("http://localhost:{port}"), false);
+    spec.store_type = StoreType::EventSink;
+    spec.retry.max_retries = 1;
+    // Two attempts move about 12 MiB; the shared one-second limit is too
+    // tight for that under CI's trace-level logging.
+    spec.rpc_timeout_s = 30;
+    let store = GrpcStore::new(&spec)?;
+    // Four WriteRequests of data.
+    let payload: Vec<u8> = (0..=3 * MAX_WRITE_REQUEST_DATA_BYTES)
+        .map(|i| u8::try_from(i % 251).unwrap())
+        .collect();
+    store
+        .update_oneshot(StoreKey::from("event-large"), payload.clone().into())
+        .await?;
+    let requests = server.write_requests.lock().await;
+    // The cut-off attempt delivered three chunks; the retry starts over.
+    let (cut_off, retry) = requests.split_at(3);
+    assert_eq!(cut_off[0].write_offset, 0);
+    assert_eq!(retry[0].write_offset, 0);
+    assert!(
+        retry
+            .iter()
+            .all(|request| request.resource_name == cut_off[0].resource_name)
+    );
+    assert_eq!(
+        retry
+            .iter()
+            .flat_map(|request| request.data.iter().copied())
+            .collect::<Vec<_>>(),
+        payload
+    );
+    assert!(retry.last().unwrap().finish_write);
+    Ok(())
 }
 
 async fn read_works_core<F>(
@@ -531,9 +719,9 @@ async fn update_splits_buffers_larger_than_the_grpc_message_limit() -> Result<()
     let (server, port) = make_fake_bytestream_server_draining().await;
     let mut spec = test_spec(format!("http://localhost:{port}"), false);
     // This test moves and reassembles almost 10 MiB under instrumented builds.
-    // Keep the RPC deadline comfortably above sanitizer overhead; timeout
-    // behavior is not what this test exercises.
-    spec.rpc_timeout_s = 5;
+    // The deadline is headroom for that, not part of the test: at 5 s the
+    // ASan job timed out on a loaded runner with nothing else wrong.
+    spec.rpc_timeout_s = 30;
     let store = GrpcStore::new(&spec)?;
     let digest = DigestInfo::try_new(VALID_HASH, BLOB_LEN).unwrap();
 
@@ -691,7 +879,8 @@ async fn batch_update_blobs_splits_an_oversized_batch_across_rpcs() -> Result<()
     let (server, port) = make_fake_cas_server().await;
     let mut spec = test_spec(format!("http://localhost:{port}"), false);
     spec.instance_name = "backend_instance".to_string();
-    spec.rpc_timeout_s = 5;
+    // Over 10 MiB through the fake server; headroom for sanitizer builds.
+    spec.rpc_timeout_s = 30;
     let store = GrpcStore::new(&spec)?;
 
     let requests: Vec<batch_update_blobs_request::Request> = (0..ENTRIES)

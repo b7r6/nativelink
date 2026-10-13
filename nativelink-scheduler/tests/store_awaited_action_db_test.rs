@@ -1,5 +1,20 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #![allow(clippy::todo)]
 
+use core::ops::Bound;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::time::Duration;
 use std::collections::HashMap;
@@ -7,12 +22,13 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use bytes::Bytes;
-use futures::{Stream, stream};
+use futures::{Stream, StreamExt, stream};
 use mock_instant::thread_local::{MockClock, SystemTime as MockSystemTime};
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
 use nativelink_scheduler::awaited_action_db::{
-    AwaitedAction, AwaitedActionDb, PersistedSortKey, SortedAwaitedAction,
+    AwaitedAction, AwaitedActionDb, AwaitedActionSubscriber, PersistedSortKey, SortedAwaitedAction,
+    SortedAwaitedActionState,
 };
 use nativelink_scheduler::store_awaited_action_db::{
     StoreAwaitedActionDb, inner_update_awaited_action,
@@ -157,7 +173,7 @@ async fn test_inner_update_awaited_action() -> Result<(), Error> {
     assert_eq!(
         update.0,
         Bytes::from(
-            "{\"version\":0,\"action_info\":{\"command_digest\":\"0101010101010101010101010101010101010101010101010101010101010101-10\",\"input_root_digest\":\"0202020202020202020202020202020202020202020202020202020202020202-10\",\"timeout\":{\"secs\":1,\"nanos\":0},\"platform_properties\":{},\"priority\":0,\"load_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"insert_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"unique_qualifier\":{\"Uncacheable\":{\"instance_name\":\"foo\",\"digest_function\":\"Sha256\",\"digest\":\"0303030303030303030303030303030303030303030303030303030303030303-10\"}}},\"operation_id\":{\"String\":\"DEMO_OPERATION_ID\"},\"sort_key\":9223372041149743103,\"last_worker_updated_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"last_client_keepalive_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"worker_id\":null,\"state\":{\"stage\":\"Queued\",\"last_transition_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"client_operation_id\":{\"String\":\"DEMO_OPERATION_ID\"},\"action_digest\":\"0303030303030303030303030303030303030303030303030303030303030303-10\"},\"maybe_origin_metadata\":null,\"attempts\":0}"
+            "{\"version\":0,\"action_info\":{\"command_digest\":\"0101010101010101010101010101010101010101010101010101010101010101-10\",\"input_root_digest\":\"0202020202020202020202020202020202020202020202020202020202020202-10\",\"timeout\":{\"secs\":1,\"nanos\":0},\"platform_properties\":{},\"priority\":0,\"load_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"insert_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"unique_qualifier\":{\"Uncacheable\":{\"instance_name\":\"foo\",\"digest_function\":\"Sha256\",\"digest\":\"0303030303030303030303030303030303030303030303030303030303030303-10\"}}},\"operation_id\":{\"String\":\"DEMO_OPERATION_ID\"},\"sort_key\":9223372041149743103,\"last_worker_updated_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"last_client_keepalive_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"worker_id\":null,\"state\":{\"stage\":\"Queued\",\"last_transition_timestamp\":{\"secs_since_epoch\":0,\"nanos_since_epoch\":0},\"client_operation_id\":{\"String\":\"DEMO_OPERATION_ID\"},\"action_digest\":\"0303030303030303030303030303030303030303030303030303030303030303-10\"},\"maybe_origin_metadata\":null,\"attempts\":0,\"worker_losses\":0,\"escalations\":0}"
         ),
         "{update:#?}"
     );
@@ -695,5 +711,155 @@ async fn index_keys_from_both_versions_serve_older_entries_first() -> Result<(),
         keys.sort_unstable_by(|a, b| b.cmp(a));
         assert_eq!(keys, vec![old, new], "priority {priority}");
     }
+    Ok(())
+}
+
+/// Fake `SchedulerStore` whose listing returns the given actions and which
+/// counts every `get_and_decode` by key prefix, so a test can see what a
+/// listed subscriber reads when borrowed.
+struct ListingStore {
+    encoded_actions: Vec<Bytes>,
+    reads_by_prefix: Mutex<HashMap<String, usize>>,
+}
+
+impl ListingStore {
+    fn new(actions: &[AwaitedAction]) -> Self {
+        Self {
+            encoded_actions: actions
+                .iter()
+                .map(|action| Bytes::from(serde_json::to_vec(action).expect("serialize")))
+                .collect(),
+            reads_by_prefix: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl SchedulerStore for ListingStore {
+    type SubscriptionManager = PendingSubscriptionManager;
+
+    fn subscription_manager(
+        &self,
+    ) -> impl Future<Output = Result<Arc<Self::SubscriptionManager>, Error>> {
+        std::future::ready(Ok(Arc::new(PendingSubscriptionManager)))
+    }
+
+    fn update_data<T>(
+        &self,
+        _data: T,
+        _expiry: Option<Duration>,
+    ) -> impl Future<Output = Result<Option<i64>, Error>>
+    where
+        T: SchedulerStoreDataProvider
+            + SchedulerStoreKeyProvider
+            + SchedulerCurrentVersionProvider
+            + Send,
+    {
+        std::future::ready(Ok(Some(1)))
+    }
+
+    fn search_by_index_prefix<K>(
+        &self,
+        _index: K,
+    ) -> impl Future<
+        Output = Result<
+            impl Stream<Item = Result<<K as SchedulerStoreDecodeTo>::DecodeOutput, Error>> + Send,
+            Error,
+        >,
+    >
+    where
+        K: SchedulerIndexProvider + SchedulerStoreDecodeTo + Send,
+        <K as SchedulerStoreDecodeTo>::DecodeOutput: Send,
+    {
+        let items: Vec<_> = self
+            .encoded_actions
+            .iter()
+            .map(|encoded| K::decode(1, encoded.clone()))
+            .collect();
+        std::future::ready(Ok(stream::iter(items)))
+    }
+
+    async fn count_by_index_prefix<K>(&self, _index: K) -> Result<u64, Error>
+    where
+        K: SchedulerIndexProvider + Send,
+    {
+        Ok(self.encoded_actions.len() as u64)
+    }
+
+    async fn get_and_decode<K>(
+        &self,
+        key: K,
+    ) -> Result<Option<<K as SchedulerStoreDecodeTo>::DecodeOutput>, Error>
+    where
+        K: SchedulerStoreKeyProvider + SchedulerStoreDecodeTo + Send,
+    {
+        let key = key.get_key().as_str().to_string();
+        let prefix = key.split('_').next().unwrap_or("").to_string();
+        *self.reads_by_prefix.lock().await.entry(prefix).or_default() += 1;
+        Ok(None)
+    }
+}
+
+/// A listing already loads every record it returns, so borrowing a listed
+/// subscriber must not read the record again. Only the client keepalive,
+/// kept under its own key, is read, and once per subscriber.
+#[nativelink_test]
+async fn listed_subscriber_borrows_without_reading_the_record_again() -> Result<(), Error> {
+    fn new_op_id() -> OperationId {
+        OperationId::from("new-operation")
+    }
+    let actions: Vec<AwaitedAction> = (0..3)
+        .map(|i| {
+            AwaitedAction::new(
+                OperationId::from(format!("op-{i}")),
+                make_cacheable_action_info(),
+                MockSystemTime::now().into(),
+            )
+        })
+        .collect();
+    let store = Arc::new(ListingStore::new(&actions));
+    let now_fn: fn() -> MockInstantWrapped = MockInstantWrapped::default;
+    let op_id_fn: fn() -> OperationId = new_op_id;
+    let db = StoreAwaitedActionDb::new(
+        store.clone(),
+        Arc::new(Notify::new()),
+        now_fn,
+        op_id_fn,
+        60,
+        60,
+        false,
+    )
+    .await?;
+
+    let subscribers: Vec<_> = db
+        .get_range_of_actions(
+            SortedAwaitedActionState::Queued,
+            Bound::Unbounded,
+            Bound::Unbounded,
+            true,
+        )
+        .await?
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(subscribers.len(), 3);
+    for (subscriber, action) in subscribers.iter().zip(&actions) {
+        let subscriber = subscriber.as_ref().map_err(Clone::clone)?;
+        // Borrowed twice, as the matcher does.
+        assert_eq!(
+            subscriber.borrow().await?.operation_id(),
+            action.operation_id()
+        );
+        assert_eq!(
+            subscriber.borrow().await?.operation_id(),
+            action.operation_id()
+        );
+    }
+
+    let reads = store.reads_by_prefix.lock().await;
+    assert_eq!(reads.get("aa"), None, "the record is not read again");
+    assert_eq!(
+        reads.get("ck"),
+        Some(&3),
+        "the keepalive is read once per subscriber"
+    );
     Ok(())
 }

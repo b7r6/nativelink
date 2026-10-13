@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use futures::{Future, StreamExt, future};
@@ -31,8 +31,9 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
 use nativelink_util::action_messages::{ActionInfo, ActionState, OperationId, WorkerId};
 use nativelink_util::instant_wrapper::InstantWrapper;
 use nativelink_util::metrics::{
-    record_awaited_action_orphan, record_matching_pass, record_queue_depth, record_sweep_failure,
-    record_unsatisfiable_failed, record_unsatisfiable_queued,
+    record_awaited_action_orphan, record_matching_pass, record_parked_dispatched,
+    record_queue_depth, record_sweep_failure, record_unsatisfiable_failed,
+    record_unsatisfiable_queued,
 };
 use nativelink_util::operation_state_manager::{
     ActionStateResult, ActionStateResultStream, ClientStateManager, MatchingEngineStateManager,
@@ -58,11 +59,13 @@ use crate::awaited_action_db::{AwaitedActionDb, CLIENT_KEEPALIVE_DURATION};
 use crate::known_platform_property_provider::KnownPlatformPropertyProvider;
 use crate::match_outcome::{MatchOutcome, PropertyShape, UnsatisfiableReason};
 use crate::platform_property_manager::PlatformPropertyManager;
-use crate::simple_scheduler_state_manager::{SimpleSchedulerStateManager, is_lost_record};
+use crate::simple_scheduler_state_manager::{
+    RetryLimits, SimpleSchedulerStateManager, is_lost_record,
+};
 use crate::unsatisfiable_tracker::UnsatisfiableTracker;
 use crate::worker::{ActionInfoWithProps, Worker, WorkerTimestamp};
 use crate::worker_registry::WorkerRegistry;
-use crate::worker_scheduler::WorkerScheduler;
+use crate::worker_scheduler::{WorkerScheduler, WorkerSummary};
 
 /// Default timeout for workers in seconds: four default keepalive intervals
 /// (2.5s each). The old value of two meant one late keepalive under load
@@ -214,6 +217,14 @@ pub struct SimpleScheduler {
     /// (`no_worker_action_timeout_s`); `None` when that timeout is off.
     no_worker_tracker: Option<Mutex<UnsatisfiableTracker>>,
 
+    /// Typed platform properties by the hash of the raw ones. Typing is a
+    /// lookup and a parse per property per queued action per pass, and the
+    /// raw properties of a queued action rarely change (an escalation is
+    /// the exception, and it changes the hash), so the pass reuses the
+    /// typed set. Cleared when full rather than evicted, like
+    /// `static_verdicts`.
+    typed_properties: Mutex<HashMap<u64, PlatformProperties>>,
+
     /// The number of unsatisfiable actions still queued at the end of the last
     /// matching pass, used to size the next pass's per-pass fail cap so a large
     /// burst drains in a few passes. See `unsatisfiable_fail_cap`.
@@ -240,6 +251,37 @@ impl core::fmt::Debug for SimpleScheduler {
             .field("task_fleet_exchange_spawn", &self.task_fleet_exchange_spawn)
             .finish_non_exhaustive()
     }
+}
+
+/// How many typed property sets the pass keeps before starting over.
+const MAX_TYPED_PROPERTIES: usize = 10_000;
+
+/// The typed form of an action's raw properties, from the cache when the
+/// same raw set was typed before.
+fn typed_properties_for(
+    cache: &Mutex<HashMap<u64, PlatformProperties>>,
+    manager: &PlatformPropertyManager,
+    raw: &HashMap<String, String>,
+) -> Result<PlatformProperties, Error> {
+    use core::hash::{Hash, Hasher};
+    let mut pairs: Vec<(&String, &String)> = raw.iter().collect();
+    pairs.sort();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for (name, value) in &pairs {
+        name.hash(&mut hasher);
+        value.hash(&mut hasher);
+    }
+    let key = hasher.finish();
+    if let Some(typed) = cache.lock().get(&key) {
+        return Ok(typed.clone());
+    }
+    let typed = manager.make_platform_properties(raw.clone())?;
+    let mut cache = cache.lock();
+    if cache.len() >= MAX_TYPED_PROPERTIES {
+        cache.clear();
+    }
+    cache.insert(key, typed.clone());
+    Ok(typed)
 }
 
 impl SimpleScheduler {
@@ -514,27 +556,26 @@ impl SimpleScheduler {
             Ok(())
         }
 
-        #[expect(clippy::too_many_arguments)]
-        async fn match_action_to_worker(
-            action_state_result: &dyn ActionStateResult,
-            workers: &ApiWorkerScheduler,
-            matching_engine_state_manager: &dyn MatchingEngineStateManager,
+        /// A listed action with what matching needs of it.
+        struct Loaded {
+            action_state_result: Box<dyn ActionStateResult>,
+            action_info: ActionInfoWithProps,
+        }
+
+        /// Reads what matching needs of a listed action. `None` when the
+        /// record cannot be read: gone from the store (eviction), or
+        /// unreadable. Counted so an operator can see the store losing
+        /// records, skipped so the rest of the pass still runs, and not an
+        /// error, since an error here made the pass rerun at once and log
+        /// ten times a second until the entry went away.
+        async fn load_action(
+            action_state_result: Box<dyn ActionStateResult>,
             platform_property_manager: &PlatformPropertyManager,
-            maybe_origin_event_tx: Option<&mpsc::Sender<OriginEvent>>,
-            full_worker_logging: bool,
-            unsatisfiable_pass: &UnsatisfiablePass<'_>,
-            no_worker_pass: Option<&UnsatisfiablePass<'_>>,
-        ) -> Result<(), Error> {
+            typed_properties: &Mutex<HashMap<u64, PlatformProperties>>,
+        ) -> Result<Option<Loaded>, Error> {
             let (action_info, maybe_origin_metadata) =
                 match action_state_result.as_action_info().await {
                     Ok(found) => found,
-                    // Listed by the queue, and its record is gone from the
-                    // store (eviction) or cannot be decoded. Nothing to
-                    // match. Counted so an operator can see the store losing
-                    // records, skipped so the rest of the pass still runs,
-                    // and not an error, since an error here made the pass
-                    // rerun at once and log ten times a second until the
-                    // entry went away.
                     Err(err) if is_lost_record(&err) => {
                         if err.code == Code::NotFound {
                             debug!(
@@ -548,7 +589,7 @@ impl SimpleScheduler {
                             );
                         }
                         record_awaited_action_orphan("matching");
-                        return Ok(());
+                        return Ok(None);
                     }
                     // The store itself failed, so the pass is incomplete:
                     // an error here reruns it at once, as before.
@@ -559,70 +600,46 @@ impl SimpleScheduler {
                     }
                 };
 
-            // TODO(palfrey) We should not compute this every time and instead store
-            // it with the ActionInfo when we receive it.
-            let platform_properties = platform_property_manager
-                .make_platform_properties(action_info.platform_properties.clone())
-                .err_tip(
-                    || "Failed to make platform properties in SimpleScheduler::do_try_match",
-                )?;
+            let platform_properties = typed_properties_for(
+                typed_properties,
+                platform_property_manager,
+                &action_info.platform_properties,
+            )
+            .err_tip(|| "Failed to make platform properties in SimpleScheduler::do_try_match")?;
 
-            let origin_metadata = maybe_origin_metadata.unwrap_or_default();
-            let action_info = ActionInfoWithProps {
-                inner: action_info,
-                platform_properties,
-                origin_metadata: origin_metadata.clone(),
-                scheduler_start_execute_event_id: None,
-            };
+            Ok(Some(Loaded {
+                action_state_result,
+                action_info: ActionInfoWithProps {
+                    inner: action_info,
+                    platform_properties,
+                    origin_metadata: maybe_origin_metadata.unwrap_or_default(),
+                    scheduler_start_execute_event_id: None,
+                },
+            }))
+        }
 
-            // Try to find a worker for the action.
-            let worker_id = {
-                match workers
-                    .find_worker_for_action(
-                        &action_info.platform_properties,
-                        full_worker_logging,
-                        unsatisfiable_pass.now,
-                    )
-                    .await
-                {
-                    MatchOutcome::Matched(worker_id) => worker_id,
-                    // The action can run once a worker has room, so we have
-                    // nothing to do.
-                    MatchOutcome::WaitingForCapacity => {
-                        return Ok(());
-                    }
-                    // Nothing to wait for; a worker connecting starts a new
-                    // pass, unless the no-worker clock is running.
-                    MatchOutcome::NoWorkersConnected => {
-                        let Some(no_worker_pass) = no_worker_pass else {
-                            return Ok(());
-                        };
-                        return handle_unsatisfiable(
-                            action_state_result,
-                            matching_engine_state_manager,
-                            workers,
-                            &action_info.platform_properties,
-                            action_info.inner.insert_timestamp,
-                            &UnsatisfiableReason::no_workers(),
-                            no_worker_pass,
-                        )
-                        .await;
-                    }
-                    MatchOutcome::Unsatisfiable(reason) => {
-                        return handle_unsatisfiable(
-                            action_state_result,
-                            matching_engine_state_manager,
-                            workers,
-                            &action_info.platform_properties,
-                            action_info.inner.insert_timestamp,
-                            &reason,
-                            unsatisfiable_pass,
-                        )
-                        .await;
-                    }
-                }
-            };
+        /// What became of a dispatch that did not fail.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Dispatch {
+            /// The worker was told to run the action.
+            Sent,
+            /// Another scheduler assigned the action first; nothing was sent.
+            LostRace,
+        }
 
+        /// Hands a matched action to its worker. `Ok(Dispatch::Sent)` means
+        /// the worker was actually told; a lost assignment race is not an
+        /// error but sends nothing.
+        async fn dispatch_to_worker(
+            action_state_result: &dyn ActionStateResult,
+            workers: &ApiWorkerScheduler,
+            matching_engine_state_manager: &dyn MatchingEngineStateManager,
+            maybe_origin_event_tx: Option<&mpsc::Sender<OriginEvent>>,
+            worker_id: WorkerId,
+            action_info: ActionInfoWithProps,
+            now_fn: &(dyn Fn() -> SystemTime + Send + Sync),
+        ) -> Result<Dispatch, Error> {
+            let origin_metadata = action_info.origin_metadata.clone();
             let event_origin_metadata = origin_metadata.clone();
             let attach_operation_fut = async move {
                 // Extract the operation_id from the action_state.
@@ -643,7 +660,7 @@ impl SimpleScheduler {
                     if err.code == Code::Aborted {
                         // If the operation was aborted, it means that the operation was
                         // cancelled due to another operation being assigned to the worker.
-                        return Ok(());
+                        return Ok(Dispatch::LostRace);
                     }
                     // Any other error is a real error.
                     return Err(err);
@@ -662,8 +679,12 @@ impl SimpleScheduler {
                 });
 
                 debug!(%worker_id, %operation_id, ?action_info, "Notifying worker of operation");
+                let dispatched_at = now_fn()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
                 workers
-                    .worker_notify_run_action(worker_id, operation_id, action_info)
+                    .worker_notify_run_action(worker_id, operation_id, action_info, dispatched_at)
                     .await
                     .err_tip(|| {
                         "Failed to run worker_notify_run_action in SimpleScheduler::do_try_match"
@@ -679,7 +700,7 @@ impl SimpleScheduler {
                     .await;
                 }
 
-                Ok(())
+                Ok(Dispatch::Sent)
             };
             tokio::pin!(attach_operation_fut);
 
@@ -692,6 +713,114 @@ impl SimpleScheduler {
                 .in_scope(|| attach_operation_fut)
                 .with_context(ctx)
                 .await
+        }
+
+        /// Actions this pass read that found no room, in the order the
+        /// queue listed them: highest priority first, then oldest. That is
+        /// the order room is offered to them in, before the action the
+        /// pass is reading, whenever the fleet's capacity changes. Parking
+        /// is a push; a replay walks the list once and asks the fleet once
+        /// per property shape it meets, since every action of one shape
+        /// asks the same of a worker: a shape whose first parked action
+        /// finds no room is skipped for the rest of that replay.
+        #[derive(Default)]
+        struct Parked {
+            /// Each with its shape, computed once at parking.
+            queue: VecDeque<(PropertyShape, Loaded)>,
+            /// Actions that were not parked because the list was full.
+            cap_dropped: u64,
+        }
+
+        /// Past this many parked actions a pass stops parking, so a newer
+        /// action past that point may take room ahead of one of them. The
+        /// head of the queue, which is what a client waits on, is always
+        /// parked.
+        const PARKED_CAP: usize = 10_000;
+
+        impl Parked {
+            fn park(&mut self, loaded: Loaded) {
+                if self.queue.len() >= PARKED_CAP {
+                    self.cap_dropped += 1;
+                    return;
+                }
+                let shape = PropertyShape::from(&loaded.action_info.platform_properties);
+                self.queue.push_back((shape, loaded));
+            }
+
+            fn is_empty(&self) -> bool {
+                self.queue.is_empty()
+            }
+        }
+
+        /// What one pass did with its parked actions.
+        #[derive(Default)]
+        struct Placement {
+            /// Parked actions that found a worker and were dispatched to it.
+            attempted: u64,
+            /// Of those, the ones the worker was actually told to run.
+            dispatched: u64,
+            /// Of those, the ones another scheduler assigned first.
+            lost_race: u64,
+            /// Of those, the ones whose dispatch failed.
+            failed: u64,
+        }
+
+        /// Offers the room that opened since the pass last looked to the
+        /// parked actions in listing order. Every parked action that found
+        /// a worker leaves the list, whatever its dispatch came to.
+        #[expect(clippy::too_many_arguments)]
+        async fn place_parked(
+            parked: &mut Parked,
+            placement: &mut Placement,
+            workers: &ApiWorkerScheduler,
+            matching_engine_state_manager: &dyn MatchingEngineStateManager,
+            maybe_origin_event_tx: Option<&mpsc::Sender<OriginEvent>>,
+            full_worker_logging: bool,
+            now: SystemTime,
+            now_fn: &(dyn Fn() -> SystemTime + Send + Sync),
+        ) -> Result<(), Error> {
+            let mut result = Ok(());
+            let mut blocked: HashSet<PropertyShape> = HashSet::new();
+            let mut still_parked = VecDeque::with_capacity(parked.queue.len());
+            while let Some((shape, loaded)) = parked.queue.pop_front() {
+                if blocked.contains(&shape) {
+                    still_parked.push_back((shape, loaded));
+                    continue;
+                }
+                let MatchOutcome::Matched(worker_id) = workers
+                    .find_worker_for_action(
+                        &loaded.action_info.platform_properties,
+                        full_worker_logging,
+                        now,
+                    )
+                    .await
+                else {
+                    still_parked.push_back((shape.clone(), loaded));
+                    blocked.insert(shape);
+                    continue;
+                };
+                placement.attempted += 1;
+                match dispatch_to_worker(
+                    loaded.action_state_result.as_ref(),
+                    workers,
+                    matching_engine_state_manager,
+                    maybe_origin_event_tx,
+                    worker_id,
+                    loaded.action_info,
+                    now_fn,
+                )
+                .await
+                {
+                    Ok(Dispatch::Sent) => placement.dispatched += 1,
+                    Ok(Dispatch::LostRace) => placement.lost_race += 1,
+                    Err(err) => {
+                        placement.failed += 1;
+                        result = result.merge(Err(err));
+                    }
+                }
+            }
+            parked.queue = still_parked;
+            result
         }
 
         let mut result = Ok(());
@@ -725,6 +854,7 @@ impl SimpleScheduler {
             }
             _ => None,
         };
+        let no_workers_reason = UnsatisfiableReason::no_workers();
 
         let mut stream = self
             .get_queued_operations()
@@ -739,21 +869,141 @@ impl SimpleScheduler {
             );
         }
 
+        let workers = self.worker_scheduler.as_ref();
+        let matching_engine_state_manager = self.matching_engine_state_manager.as_ref();
+        let maybe_origin_event_tx = self.maybe_origin_event_tx.as_ref();
+        let mut parked = Parked::default();
+        let mut placement = Placement::default();
+        let mut capacity_seen = workers.capacity_generation();
         let mut queued_seen: u64 = 0;
         while let Some(action_state_result) = stream.next().await {
             queued_seen += 1;
+            let loaded = match load_action(
+                action_state_result,
+                self.platform_property_manager.as_ref(),
+                &self.typed_properties,
+            )
+            .await
+            {
+                Ok(Some(loaded)) => loaded,
+                Ok(None) => continue,
+                Err(err) => {
+                    result = result.merge(Err(err));
+                    continue;
+                }
+            };
+
+            // Room that opened since the pass last placed anything belongs
+            // to the oldest action still waiting, not to this one, which is
+            // newer than everything parked. The generation is read under the
+            // placement lock, so a change cannot slip between the two.
+            let outcome = loop {
+                let (outcome, generation) = workers
+                    .find_worker_for_action_observed(
+                        &loaded.action_info.platform_properties,
+                        full_worker_logging,
+                        unsatisfiable_pass.now,
+                    )
+                    .await;
+                if generation == capacity_seen || parked.is_empty() {
+                    capacity_seen = generation;
+                    break outcome;
+                }
+                capacity_seen = generation;
+                result = result.merge(
+                    place_parked(
+                        &mut parked,
+                        &mut placement,
+                        workers,
+                        matching_engine_state_manager,
+                        maybe_origin_event_tx,
+                        full_worker_logging,
+                        unsatisfiable_pass.now,
+                        self.now_fn.as_ref(),
+                    )
+                    .await,
+                );
+            };
+
+            match outcome {
+                MatchOutcome::Matched(worker_id) => {
+                    result = result.merge(
+                        dispatch_to_worker(
+                            loaded.action_state_result.as_ref(),
+                            workers,
+                            matching_engine_state_manager,
+                            maybe_origin_event_tx,
+                            worker_id,
+                            loaded.action_info,
+                            self.now_fn.as_ref(),
+                        )
+                        .await
+                        .map(|_| ()),
+                    );
+                }
+                // A worker could run it once one has room.
+                MatchOutcome::WaitingForCapacity => parked.park(loaded),
+                // Nothing to wait for; a worker connecting starts a new pass,
+                // unless the no-worker clock is running.
+                MatchOutcome::NoWorkersConnected => {
+                    if let Some(no_worker_pass) = &no_worker_pass {
+                        result = result.merge(
+                            handle_unsatisfiable(
+                                loaded.action_state_result.as_ref(),
+                                matching_engine_state_manager,
+                                workers,
+                                &loaded.action_info.platform_properties,
+                                loaded.action_info.inner.insert_timestamp,
+                                &no_workers_reason,
+                                no_worker_pass,
+                            )
+                            .await,
+                        );
+                    }
+                }
+                MatchOutcome::Unsatisfiable(reason) => {
+                    result = result.merge(
+                        handle_unsatisfiable(
+                            loaded.action_state_result.as_ref(),
+                            matching_engine_state_manager,
+                            workers,
+                            &loaded.action_info.platform_properties,
+                            loaded.action_info.inner.insert_timestamp,
+                            &reason,
+                            &unsatisfiable_pass,
+                        )
+                        .await,
+                    );
+                }
+            }
+        }
+        // Room that opened after the last action was read.
+        if !parked.is_empty() && workers.capacity_generation() != capacity_seen {
             result = result.merge(
-                match_action_to_worker(
-                    action_state_result.as_ref(),
-                    self.worker_scheduler.as_ref(),
-                    self.matching_engine_state_manager.as_ref(),
-                    self.platform_property_manager.as_ref(),
-                    self.maybe_origin_event_tx.as_ref(),
+                place_parked(
+                    &mut parked,
+                    &mut placement,
+                    workers,
+                    matching_engine_state_manager,
+                    maybe_origin_event_tx,
                     full_worker_logging,
-                    &unsatisfiable_pass,
-                    no_worker_pass.as_ref(),
+                    unsatisfiable_pass.now,
+                    self.now_fn.as_ref(),
                 )
                 .await,
+            );
+        }
+        record_parked_dispatched(placement.dispatched);
+        if placement.attempted > 0 || parked.cap_dropped > 0 {
+            debug!(
+                attempted = placement.attempted,
+                dispatched = placement.dispatched,
+                lost_race = placement.lost_race,
+                failed = placement.failed,
+                cap_dropped = parked.cap_dropped,
+                still_parked = parked.queue.len(),
+                elapsed_ms = start.elapsed().as_millis(),
+                "Parked actions offered the room that opened mid-pass"
             );
         }
 
@@ -926,8 +1176,19 @@ impl SimpleScheduler {
         let record_ttl = fleet_exchange_interval * FLEET_RECORD_TTL_INTERVALS;
 
         let has_peers = awaited_action_db.shares_state();
-        let state_manager = SimpleSchedulerStateManager::new(
+        let retry_limits = RetryLimits {
             max_job_retries,
+            max_worker_loss_retries: if spec.max_worker_loss_retries == 0 {
+                RetryLimits::DEFAULT_WORKER_LOSS_RETRIES
+            } else {
+                spec.max_worker_loss_retries
+            },
+            max_escalations: spec.memory_escalation.as_ref().map_or(0, |policy| {
+                usize::try_from(policy.max_steps).unwrap_or(usize::MAX)
+            }),
+        };
+        let state_manager = SimpleSchedulerStateManager::new(
+            retry_limits,
             Duration::from_secs(worker_timeout_s),
             Duration::from_secs(client_action_timeout_s),
             Duration::from_secs(spec.max_action_executing_timeout_s),
@@ -941,9 +1202,11 @@ impl SimpleScheduler {
             platform_property_manager.clone(),
             spec.allocation_strategy,
             spec.live_memory_veto.clone(),
+            spec.memory_escalation.clone(),
             worker_change_notify.clone(),
             worker_timeout_s,
             unacknowledged_kill_timeout_s,
+            spec.dispatch_ack_timeout_s,
             worker_registry,
             maybe_origin_event_tx.clone(),
             has_peers,
@@ -1207,6 +1470,7 @@ impl SimpleScheduler {
                 task_abandoned_sweep_spawn,
                 task_fleet_exchange_spawn,
                 worker_match_logging_interval,
+                typed_properties: Mutex::new(HashMap::new()),
                 unsatisfiable_tracker: Mutex::new(UnsatisfiableTracker::new(
                     unsatisfiable_action_timeout,
                 )),
@@ -1262,6 +1526,28 @@ impl WorkerScheduler for SimpleScheduler {
         self.worker_scheduler.add_worker(worker).await
     }
 
+    async fn worker_dispatch_accepted(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+    ) -> Result<(), Error> {
+        self.worker_scheduler
+            .worker_dispatch_accepted(worker_id, operation_id)
+            .await
+    }
+
+    async fn worker_dispatch_declined(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        reason: String,
+        needs_kb: Option<u64>,
+    ) -> Result<(), Error> {
+        self.worker_scheduler
+            .worker_dispatch_declined(worker_id, operation_id, reason, needs_kb)
+            .await
+    }
+
     async fn update_action(
         &self,
         worker_id: &WorkerId,
@@ -1281,6 +1567,16 @@ impl WorkerScheduler for SimpleScheduler {
     ) -> Result<(), Error> {
         self.worker_scheduler
             .worker_keep_alive_received(worker_id, timestamp, load)
+            .await
+    }
+
+    async fn worker_liveness_refreshed(
+        &self,
+        worker_id: &WorkerId,
+        timestamp: WorkerTimestamp,
+    ) -> Result<(), Error> {
+        self.worker_scheduler
+            .worker_liveness_refreshed(worker_id, timestamp)
             .await
     }
 
@@ -1306,6 +1602,10 @@ impl WorkerScheduler for SimpleScheduler {
         self.worker_scheduler
             .set_drain_worker(worker_id, is_draining)
             .await
+    }
+
+    async fn worker_snapshot(&self) -> Vec<WorkerSummary> {
+        self.worker_scheduler.worker_snapshot().await
     }
 
     async fn kill_revoked_operations(&self) -> Result<(), Error> {
