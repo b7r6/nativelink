@@ -216,6 +216,7 @@ async fn a_decline_requeues_untried_and_pauses_until_the_load_fits() -> Result<(
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
             "load".to_string(),
             Some(2_000),
         )
@@ -237,6 +238,7 @@ async fn a_decline_requeues_untried_and_pauses_until_the_load_fits() -> Result<(
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(second.operation_id.as_str()),
+            0,
             "at_capacity".to_string(),
             None,
         )
@@ -321,6 +323,7 @@ async fn a_decline_from_an_idle_worker_lifts_and_is_not_offered_again() -> Resul
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
             "load".to_string(),
             Some(5_000),
         )
@@ -379,6 +382,7 @@ async fn a_decline_from_a_worker_that_admits_when_idle_lifts_once_it_holds_nothi
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
             "load".to_string(),
             Some(2_000),
         )
@@ -420,6 +424,7 @@ async fn a_busy_worker_that_admits_when_idle_waits_for_room() -> Result<(), Erro
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
             "load".to_string(),
             Some(2_000),
         )
@@ -552,6 +557,7 @@ async fn an_unacknowledged_dispatch_is_requeued_after_the_timeout() -> Result<()
         .worker_dispatch_accepted(
             &worker_id(),
             &OperationId::from(second.operation_id.as_str()),
+            0,
         )
         .await?;
     keepalive(worker_scheduler.as_ref(), NOW_TIME + 20, None).await?;
@@ -581,6 +587,7 @@ async fn a_late_decline_does_not_pause_the_worker() -> Result<(), Error> {
         .worker_dispatch_declined(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
             "load".to_string(),
             Some(5_000),
         )
@@ -622,6 +629,7 @@ async fn the_acknowledgement_clock_starts_at_the_dispatch() -> Result<(), Error>
         .worker_dispatch_accepted(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
         )
         .await?;
     keepalive(worker_scheduler.as_ref(), NOW_TIME + 20, None).await?;
@@ -647,6 +655,7 @@ async fn a_late_acknowledgement_is_answered_with_a_kill() -> Result<(), Error> {
         .worker_dispatch_accepted(
             &worker_id(),
             &OperationId::from(first.operation_id.as_str()),
+            0,
         )
         .await?;
     assert_eq!(next_kill(&mut rx).await, first.operation_id);

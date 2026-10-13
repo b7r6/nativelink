@@ -294,6 +294,7 @@ impl SimpleScheduler {
     fn scheduler_start_execute_event(
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         action_info: &ActionInfoWithProps,
     ) -> Event {
         let start_execute = StartExecute {
@@ -303,6 +304,7 @@ impl SimpleScheduler {
             platform: Some((&action_info.platform_properties).into()),
             worker_id: worker_id.to_string(),
             request_metadata: action_info.origin_metadata.bazel_metadata.clone(),
+            attempt,
         };
         Event {
             event: Some(event::Event::Request(RequestEvent {
@@ -652,25 +654,28 @@ impl SimpleScheduler {
                 };
 
                 // Tell the matching engine that the operation is being assigned to a worker.
+                // The attempt it returns names this dispatch on the wire.
                 let assign_result = matching_engine_state_manager
-                    .assign_operation(&operation_id, Ok(&worker_id))
+                    .assign_operation_to_worker(&operation_id, &worker_id)
                     .await
                     .err_tip(|| "Failed to assign operation in do_try_match");
-                if let Err(err) = assign_result {
-                    if err.code == Code::Aborted {
+                let attempt = match assign_result {
+                    Ok(attempt) => attempt,
+                    Err(err) if err.code == Code::Aborted => {
                         // If the operation was aborted, it means that the operation was
                         // cancelled due to another operation being assigned to the worker.
                         return Ok(Dispatch::LostRace);
                     }
                     // Any other error is a real error.
-                    return Err(err);
-                }
+                    Err(err) => return Err(err),
+                };
 
                 let mut action_info = action_info;
                 let scheduler_start_execute_event = maybe_origin_event_tx.map(|_| {
                     let event = SimpleScheduler::scheduler_start_execute_event(
                         &worker_id,
                         &operation_id,
+                        attempt,
                         &action_info,
                     );
                     let event_id = SimpleScheduler::origin_event_id(&event);
@@ -678,13 +683,19 @@ impl SimpleScheduler {
                     (event_id, event)
                 });
 
-                debug!(%worker_id, %operation_id, ?action_info, "Notifying worker of operation");
+                debug!(%worker_id, %operation_id, attempt, ?action_info, "Notifying worker of operation");
                 let dispatched_at = now_fn()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
                 workers
-                    .worker_notify_run_action(worker_id, operation_id, action_info, dispatched_at)
+                    .worker_notify_run_action(
+                        worker_id,
+                        operation_id,
+                        attempt,
+                        action_info,
+                        dispatched_at,
+                    )
                     .await
                     .err_tip(|| {
                         "Failed to run worker_notify_run_action in SimpleScheduler::do_try_match"
@@ -1530,9 +1541,10 @@ impl WorkerScheduler for SimpleScheduler {
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
     ) -> Result<(), Error> {
         self.worker_scheduler
-            .worker_dispatch_accepted(worker_id, operation_id)
+            .worker_dispatch_accepted(worker_id, operation_id, attempt)
             .await
     }
 
@@ -1540,11 +1552,12 @@ impl WorkerScheduler for SimpleScheduler {
         &self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
+        attempt: u64,
         reason: String,
         needs_kb: Option<u64>,
     ) -> Result<(), Error> {
         self.worker_scheduler
-            .worker_dispatch_declined(worker_id, operation_id, reason, needs_kb)
+            .worker_dispatch_declined(worker_id, operation_id, attempt, reason, needs_kb)
             .await
     }
 
@@ -1556,6 +1569,18 @@ impl WorkerScheduler for SimpleScheduler {
     ) -> Result<(), Error> {
         self.worker_scheduler
             .update_action(worker_id, operation_id, update)
+            .await
+    }
+
+    async fn update_action_for_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: &OperationId,
+        attempt: u64,
+        update: UpdateOperationType,
+    ) -> Result<(), Error> {
+        self.worker_scheduler
+            .update_action_for_attempt(worker_id, operation_id, attempt, update)
             .await
     }
 

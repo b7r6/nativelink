@@ -161,6 +161,7 @@ async fn basic_add_action_with_one_worker_test() -> Result<(), Error> {
         // Worker should have been sent an execute command.
         let expected_msg_for_worker = UpdateForWorker {
             update: Some(update_for_worker::Update::StartAction(StartExecute {
+                attempt: 1,
                 request_metadata: None,
                 execute_request: Some(ExecuteRequest {
                     instance_name: INSTANCE_NAME.to_string(),
@@ -319,6 +320,7 @@ async fn scheduler_start_execute_origin_event_includes_resource_hints() -> Resul
         .record_action_resource_usage(
             &worker_id,
             &OperationId::from(start_action.operation_id.as_str()),
+            0,
             ActionResourceUsage {
                 peak_memory_kb: 12_345,
                 sampled: true,
@@ -497,6 +499,7 @@ async fn find_executing_action() -> Result<(), Error> {
         // Worker should have been sent an execute command.
         let expected_msg_for_worker = UpdateForWorker {
             update: Some(update_for_worker::Update::StartAction(StartExecute {
+                attempt: 1,
                 request_metadata: None,
                 execute_request: Some(ExecuteRequest {
                     instance_name: INSTANCE_NAME.to_string(),
@@ -577,6 +580,7 @@ async fn remove_worker_reschedules_multiple_running_job_test() -> Result<(), Err
     .await?;
 
     let mut expected_start_execute_for_worker1 = StartExecute {
+        attempt: 1,
         request_metadata: None,
         execute_request: Some(ExecuteRequest {
             instance_name: INSTANCE_NAME.to_string(),
@@ -591,6 +595,7 @@ async fn remove_worker_reschedules_multiple_running_job_test() -> Result<(), Err
     };
 
     let mut expected_start_execute_for_worker2 = StartExecute {
+        attempt: 1,
         request_metadata: None,
         execute_request: Some(ExecuteRequest {
             instance_name: INSTANCE_NAME.to_string(),
@@ -702,6 +707,8 @@ async fn remove_worker_reschedules_multiple_running_job_test() -> Result<(), Err
         let msg_for_worker = rx_from_worker2.recv().await.unwrap();
         expected_start_execute_for_worker1.operation_id = operation_id1.to_string();
         expected_start_execute_for_worker1.worker_id = worker_id2.to_string();
+        // Same operation, dispatched again: a new attempt.
+        expected_start_execute_for_worker1.attempt = 2;
         assert_eq!(
             msg_for_worker,
             UpdateForWorker {
@@ -716,6 +723,7 @@ async fn remove_worker_reschedules_multiple_running_job_test() -> Result<(), Err
         let msg_for_worker = rx_from_worker2.recv().await.unwrap();
         expected_start_execute_for_worker2.operation_id = operation_id2.to_string();
         expected_start_execute_for_worker2.worker_id = worker_id2.to_string();
+        expected_start_execute_for_worker2.attempt = 2;
         assert_eq!(
             msg_for_worker,
             UpdateForWorker {
@@ -879,6 +887,7 @@ async fn worker_should_not_queue_if_properties_dont_match_test() -> Result<(), E
         // Worker should have been sent an execute command.
         let expected_msg_for_worker = UpdateForWorker {
             update: Some(update_for_worker::Update::StartAction(StartExecute {
+                attempt: 1,
                 request_metadata: None,
                 execute_request: Some(ExecuteRequest {
                     instance_name: INSTANCE_NAME.to_string(),
@@ -979,6 +988,7 @@ async fn cacheable_items_join_same_action_queued_test() -> Result<(), Error> {
         // Worker should have been sent an execute command.
         let expected_msg_for_worker = UpdateForWorker {
             update: Some(update_for_worker::Update::StartAction(StartExecute {
+                attempt: 1,
                 request_metadata: None,
                 execute_request: Some(ExecuteRequest {
                     instance_name: INSTANCE_NAME.to_string(),
@@ -1346,6 +1356,7 @@ async fn worker_timesout_reschedules_running_job_test() -> Result<(), Error> {
     .await?;
 
     let mut start_execute = StartExecute {
+        attempt: 1,
         request_metadata: None,
         execute_request: Some(ExecuteRequest {
             instance_name: INSTANCE_NAME.to_string(),
@@ -1429,6 +1440,8 @@ async fn worker_timesout_reschedules_running_job_test() -> Result<(), Error> {
     }
     {
         start_execute.worker_id = worker_id2.to_string();
+        // Same operation, dispatched again: a new attempt.
+        start_execute.attempt = 2;
         // Worker2 should now see execution request.
         let msg_for_worker = rx_from_worker2.recv().await.unwrap();
         assert_eq!(
@@ -1822,6 +1835,7 @@ async fn does_not_crash_if_operation_joined_then_relaunched() -> Result<(), Erro
         // Worker should have been sent an execute command.
         let expected_msg_for_worker = UpdateForWorker {
             update: Some(update_for_worker::Update::StartAction(StartExecute {
+                attempt: 1,
                 request_metadata: None,
                 execute_request: Some(ExecuteRequest {
                     instance_name: INSTANCE_NAME.to_string(),
@@ -3491,6 +3505,7 @@ async fn revoked_operation_is_killed_once_and_its_report_frees_the_slot() -> Res
         UpdateForWorker {
             update: Some(update_for_worker::Update::KillOperationRequest(
                 KillOperationRequest {
+                    attempt: 1,
                     operation_id: operation_id.to_string(),
                 }
             )),

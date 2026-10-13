@@ -45,8 +45,8 @@ pub(crate) struct MockRunningActionsManager {
     rx_kill_all: Mutex<mpsc::UnboundedReceiver<()>>,
     tx_kill_all: mpsc::UnboundedSender<()>,
 
-    rx_kill_operation: Mutex<mpsc::UnboundedReceiver<OperationId>>,
-    tx_kill_operation: mpsc::UnboundedSender<OperationId>,
+    rx_kill_operation: Mutex<mpsc::UnboundedReceiver<(OperationId, u64)>>,
+    tx_kill_operation: mpsc::UnboundedSender<(OperationId, u64)>,
     metrics: Arc<Metrics>,
 }
 
@@ -135,6 +135,11 @@ impl MockRunningActionsManager {
     }
 
     pub(crate) async fn expect_kill_operation(&self) -> OperationId {
+        self.expect_kill_operation_attempt().await.0
+    }
+
+    /// The operation and the attempt the next kill named.
+    pub(crate) async fn expect_kill_operation_attempt(&self) -> (OperationId, u64) {
         let mut rx_kill_operation_lock = self.rx_kill_operation.lock().await;
         rx_kill_operation_lock
             .recv()
@@ -183,9 +188,9 @@ impl RunningActionsManager for MockRunningActionsManager {
         Ok(())
     }
 
-    async fn kill_operation(&self, operation_id: &OperationId) -> Result<(), Error> {
+    async fn kill_operation(&self, operation_id: &OperationId, attempt: u64) -> Result<(), Error> {
         self.tx_kill_operation
-            .send(operation_id.clone())
+            .send((operation_id.clone(), attempt))
             .expect("Could not send request to mpsc");
         Ok(())
     }

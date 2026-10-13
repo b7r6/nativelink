@@ -271,6 +271,7 @@ async fn reconnects_when_action_stuck_in_transit_on_disconnect() -> Result<(), E
         .send(Frame::data(
             encode_stream_proto(&UpdateForWorker {
                 update: Some(Update::StartAction(StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some((&action_info).into()),
                     operation_id: String::new(),
@@ -369,6 +370,7 @@ async fn blake3_digest_function_registered_properly() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -488,6 +490,7 @@ async fn start_action_lifecycle_test(single_use: bool) -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -592,6 +595,7 @@ async fn start_action_lifecycle_test(single_use: bool) -> Result<(), Error> {
     assert_eq!(
         execution_response,
         ExecuteResult {
+            attempt: 0,
             instance_name: INSTANCE_NAME.to_string(),
             operation_id: String::new(),
             result: Some(execute_result::Result::ExecuteResponse(
@@ -821,6 +825,7 @@ async fn experimental_precondition_script_fails() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -842,6 +847,7 @@ async fn experimental_precondition_script_fails() -> Result<(), Error> {
     assert_eq!(
         execution_response,
         ExecuteResult {
+            attempt: 0,
             instance_name: INSTANCE_NAME.to_string(),
             operation_id: String::new(),
             result: Some(execute_result::Result::InternalError(
@@ -919,6 +925,7 @@ async fn kill_action_request_kills_action() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: operation_id.to_string(),
@@ -946,6 +953,7 @@ async fn kill_action_request_kills_action() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::KillOperationRequest(KillOperationRequest {
+                        attempt: 0,
                         operation_id: operation_id.to_string(),
                     })),
                 })
@@ -1023,6 +1031,7 @@ async fn cas_not_found_returns_failed_precondition_test() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -1081,6 +1090,7 @@ async fn cas_not_found_returns_failed_precondition_test() -> Result<(), Error> {
     assert_eq!(
         execution_response,
         ExecuteResult {
+            attempt: 0,
             instance_name: INSTANCE_NAME.to_string(),
             operation_id: String::new(),
             result: Some(execute_result::Result::ExecuteResponse(
@@ -1153,6 +1163,7 @@ async fn non_cas_not_found_returns_internal_error_test() -> Result<(), Error> {
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -1191,6 +1202,7 @@ async fn non_cas_not_found_returns_internal_error_test() -> Result<(), Error> {
     assert_eq!(
         execution_response,
         ExecuteResult {
+            attempt: 0,
             instance_name: INSTANCE_NAME.to_string(),
             operation_id: String::new(),
             result: Some(execute_result::Result::InternalError(
@@ -1419,6 +1431,7 @@ async fn a_hung_acknowledgement_does_not_block_the_loop() -> Result<(), Error> {
         .send(Frame::data(
             encode_stream_proto(&UpdateForWorker {
                 update: Some(Update::StartAction(StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some((&action_info).into()),
                     operation_id: "first".to_string(),
@@ -1438,6 +1451,7 @@ async fn a_hung_acknowledgement_does_not_block_the_loop() -> Result<(), Error> {
         .send(Frame::data(
             encode_stream_proto(&UpdateForWorker {
                 update: Some(Update::KillOperationRequest(KillOperationRequest {
+                    attempt: 0,
                     operation_id: "first".to_string(),
                 })),
             })
@@ -1521,6 +1535,7 @@ async fn a_failed_acknowledgement_leaves_a_single_use_worker_unspent() -> Result
     };
     let start = |operation_id: &str| UpdateForWorker {
         update: Some(Update::StartAction(StartExecute {
+            attempt: 0,
             request_metadata: None,
             execute_request: Some((&action_info).into()),
             operation_id: operation_id.to_string(),
@@ -1664,6 +1679,7 @@ async fn disconnect_with_action_in_transit(single_use: bool) -> Result<(), Error
             .send(Frame::data(
                 encode_stream_proto(&UpdateForWorker {
                     update: Some(Update::StartAction(StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some((&action_info).into()),
                         operation_id: String::new(),
@@ -1774,6 +1790,7 @@ async fn a_worker_at_capacity_declines_the_next_dispatch() -> Result<(), Error> 
     };
     let start = |operation_id: &str| UpdateForWorker {
         update: Some(Update::StartAction(StartExecute {
+            attempt: 0,
             request_metadata: None,
             execute_request: Some((&action_info).into()),
             operation_id: operation_id.to_string(),
@@ -1868,6 +1885,7 @@ fn start_reserving(operation_id: &str, memory_kb: u64) -> UpdateForWorker {
     };
     UpdateForWorker {
         update: Some(Update::StartAction(StartExecute {
+            attempt: 0,
             request_metadata: None,
             execute_request: Some((&action_info).into()),
             operation_id: operation_id.to_string(),

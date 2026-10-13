@@ -1200,6 +1200,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1332,6 +1333,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1479,6 +1481,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1666,6 +1669,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -1850,6 +1854,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2088,6 +2093,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2242,6 +2248,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2393,6 +2400,7 @@ mod tests {
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -2549,6 +2557,7 @@ mod tests {
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -2753,6 +2762,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -2952,6 +2962,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -3110,6 +3121,7 @@ exit 0
         properties: &[(&str, String)],
     ) -> StartExecute {
         StartExecute {
+            attempt: 0,
             request_metadata: None,
             execute_request: Some(ExecuteRequest {
                 action_digest: Some(action_digest.into()),
@@ -3353,6 +3365,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -3465,6 +3478,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -3896,7 +3910,7 @@ exit 0
             let operation_id = operation_id.clone();
             async move {
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                manager.kill_operation(&operation_id).await
+                manager.kill_operation(&operation_id, 0).await
             }
         };
         let (kill_res, prepare_res) = tokio::join!(killer, action.clone().prepare_action());
@@ -3947,7 +3961,7 @@ exit 0
             let operation_id = operation_id.clone();
             async move {
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                manager.kill_operation(&operation_id).await
+                manager.kill_operation(&operation_id, 0).await
             }
         };
         let (kill_res, upload_res) = tokio::join!(killer, async {
@@ -4074,6 +4088,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4214,6 +4229,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4397,6 +4413,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4539,6 +4556,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4645,6 +4663,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -4804,6 +4823,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -5284,6 +5304,7 @@ exit 0
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -5470,6 +5491,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6065,6 +6087,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6159,6 +6182,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6253,6 +6277,7 @@ exit 1
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -6392,6 +6417,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6551,6 +6577,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -6712,6 +6739,7 @@ exit 1
                     .create_and_add_action(
                         WORKER_ID.to_string(),
                         StartExecute {
+                            attempt: 0,
                             request_metadata: None,
                             execute_request: Some(execute_request),
                             operation_id: format!("kill-race-{iteration}-{i}"),
@@ -7193,6 +7221,7 @@ exit 1
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -7376,7 +7405,7 @@ while [ ! -f "$0.d/release" ]; do "{sleep}" 0.01; done
             let run = tokio::spawn(run_action(action));
             if outcome == "cancel" {
                 wait_for_file(&work.join("running")).await?;
-                manager.kill_operation(&operation_id).await?;
+                manager.kill_operation(&operation_id, 0).await?;
             }
             if outcome == "bazel" {
                 assert!(
@@ -7506,6 +7535,7 @@ while [ ! -f "$0.d/release" ]; do "{sleep}" 0.01; done
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(ExecuteRequest {
                             action_digest: Some(action_digest.into()),
@@ -7731,6 +7761,7 @@ done
                 .create_and_add_action(
                     WORKER_ID.to_string(),
                     StartExecute {
+                        attempt: 0,
                         request_metadata: None,
                         execute_request: Some(execute_request),
                         operation_id,
@@ -7920,6 +7951,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -8052,6 +8084,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id: operation_id.clone(),
@@ -8176,6 +8209,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request.clone()),
                     operation_id: operation_id.clone(),
@@ -8198,6 +8232,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id: operation_id.clone(),
@@ -8301,6 +8336,7 @@ done
             .create_and_add_action(
                 "foo_worker_id".to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -8458,6 +8494,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(ExecuteRequest {
                         action_digest: Some(action_digest.into()),
@@ -8589,6 +8626,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,
@@ -8813,6 +8851,7 @@ done
             .create_and_add_action(
                 WORKER_ID.to_string(),
                 StartExecute {
+                    attempt: 0,
                     request_metadata: None,
                     execute_request: Some(execute_request),
                     operation_id,

@@ -2084,6 +2084,9 @@ struct RunningActionImplState {
 #[derive(Debug)]
 pub struct RunningActionImpl {
     operation_id: OperationId,
+    /// The dispatch attempt from `StartExecute.attempt`; 0 from a scheduler
+    /// that does not number attempts.
+    attempt: u64,
     action_directory: String,
     work_directory: String,
     action_info: ActionInfo,
@@ -2122,6 +2125,7 @@ impl RunningActionImpl {
         Self {
             kill_token,
             operation_id,
+            attempt: 0,
             action_directory,
             work_directory,
             action_info,
@@ -2153,6 +2157,12 @@ impl RunningActionImpl {
     )]
     fn metrics(&self) -> &Arc<Metrics> {
         &self.running_actions_manager.metrics
+    }
+
+    /// The dispatch attempt this action runs as; 0 from a scheduler that
+    /// does not number attempts.
+    pub const fn attempt(&self) -> u64 {
+        self.attempt
     }
 
     /// Prepares any actions needed to execute this action. This action will do the following:
@@ -3660,6 +3670,15 @@ impl RunningAction for RunningActionImpl {
         let operation_id = self.operation_id.clone();
         let metrics = self.metrics().clone();
         let mut kill_rx = self.kill_token.subscribe();
+        // Killed before it started (a kill that arrived before the action
+        // was registered, held as a tombstone): nothing is fetched.
+        if *kill_rx.borrow_and_update() {
+            warn!(%operation_id, "prepare_action: killed before it started");
+            return Err(make_err!(
+                Code::Aborted,
+                "Operation {operation_id} was killed before it started"
+            ));
+        }
         // Boxed: the prepare state machine is large, and pinning it on the
         // stack next to the select below overflowed a test thread.
         let mut prepare_fut = Box::pin(
@@ -3859,9 +3878,14 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
 
     fn kill_all(&self) -> impl Future<Output = ()> + Send;
 
+    /// Kills `attempt` of the operation; attempt 0 (a scheduler that does
+    /// not number attempts) kills whatever attempt of it runs. A kill for
+    /// an attempt that is not registered yet (still in transit from the
+    /// dispatch) is held, and the action is killed as it registers.
     fn kill_operation(
         &self,
         operation_id: &OperationId,
+        attempt: u64,
     ) -> impl Future<Output = Result<(), Error>> + Send;
 
     fn metrics(&self) -> &Arc<Metrics>;
@@ -4272,6 +4296,96 @@ pub enum UseNamespaces {
     },
 }
 
+/// How long a kill for an attempt that has not registered yet is held: long
+/// enough for any dispatch in transit to register.
+pub const DEFAULT_KILL_TOMBSTONE_TTL: Duration = Duration::from_secs(60);
+
+/// At most this many kills are held; past it the oldest go first.
+pub const MAX_KILL_TOMBSTONES: usize = 4096;
+
+/// Kills for attempts not registered yet, by `(operation, attempt)`. A
+/// registration that finds its own attempt here (or attempt 0, a scheduler
+/// that does not number attempts, which matches any) is killed at once and
+/// takes the entry with it. Bounded in count and in age, so a kill for an
+/// action that never arrives costs nothing for long.
+#[derive(Debug)]
+struct KillTombstones {
+    ttl: Duration,
+    /// Insertion order: `(sequence, expiry, key)`. May hold entries already
+    /// taken or replaced; an entry is current only while `live` holds its
+    /// sequence number.
+    order: VecDeque<(u64, SystemTime, (OperationId, u64))>,
+    /// The current entry per key: its sequence number.
+    live: HashMap<(OperationId, u64), u64>,
+    next_sequence: u64,
+}
+
+impl KillTombstones {
+    fn new(ttl: Duration) -> Self {
+        Self {
+            ttl,
+            order: VecDeque::new(),
+            live: HashMap::new(),
+            next_sequence: 0,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.live.len()
+    }
+
+    /// Drops entries that have expired or been taken, and the oldest past
+    /// the cap.
+    fn prune(&mut self, now: SystemTime) {
+        while let Some((sequence, expires, key)) = self.order.front() {
+            let current = self.live.get(key) == Some(sequence);
+            if current && *expires > now && self.live.len() <= MAX_KILL_TOMBSTONES {
+                break;
+            }
+            if current {
+                self.live.remove(key);
+            }
+            self.order.pop_front();
+        }
+        // Entries taken behind a live front entry stay queued until it
+        // goes; bound them too.
+        if self.order.len() > 2 * MAX_KILL_TOMBSTONES {
+            let live = &self.live;
+            self.order
+                .retain(|(sequence, _, key)| live.get(key) == Some(sequence));
+        }
+    }
+
+    fn insert(&mut self, now: SystemTime, operation_id: OperationId, attempt: u64) {
+        let sequence = self.next_sequence;
+        self.next_sequence += 1;
+        let key = (operation_id, attempt);
+        self.live.insert(key.clone(), sequence);
+        self.order.push_back((sequence, now + self.ttl, key));
+        self.prune(now);
+    }
+
+    /// Whether a kill is held for this attempt of the operation, taking it.
+    /// The clock is read only when something is held, so the common case
+    /// (no kills pending) costs one empty check.
+    fn take(
+        &mut self,
+        now_fn: impl FnOnce() -> SystemTime,
+        operation_id: &OperationId,
+        attempt: u64,
+    ) -> bool {
+        if self.order.is_empty() {
+            return false;
+        }
+        self.prune(now_fn());
+        let exact = self.live.remove(&(operation_id.clone(), attempt)).is_some();
+        // A kill from a scheduler that does not number attempts names no
+        // attempt, so it is for whatever attempt registers.
+        let any = attempt != 0 && self.live.remove(&(operation_id.clone(), 0)).is_some();
+        exact || any
+    }
+}
+
 #[derive(Debug)]
 pub struct RunningActionsManagerArgs<'a> {
     pub root_action_directory: String,
@@ -4334,6 +4448,10 @@ pub struct RunningActionsManagerImpl {
     #[cfg(target_os = "linux")]
     use_namespaces: UseNamespaces,
     running_actions: Mutex<HashMap<OperationId, Weak<RunningActionImpl>>>,
+    /// Kills that arrived for an attempt not registered yet. Only touched
+    /// while `running_actions` is held, so a kill and a registration of the
+    /// same operation cannot pass each other.
+    kill_tombstones: Mutex<KillTombstones>,
     // Note: We don't use Notify because we need to support a .wait_for()-like function, which
     // Notify does not support.
     action_done_tx: watch::Sender<()>,
@@ -4401,6 +4519,7 @@ impl RunningActionsManagerImpl {
             max_download_timeout: args.max_download_timeout,
             timeout_handled_externally: args.timeout_handled_externally,
             running_actions: Mutex::new(HashMap::new()),
+            kill_tombstones: Mutex::new(KillTombstones::new(DEFAULT_KILL_TOMBSTONE_TTL)),
             action_done_tx,
             callbacks,
             metrics: Arc::new(Metrics {
@@ -4422,6 +4541,20 @@ impl RunningActionsManagerImpl {
         })
     }
 
+    /// How long a kill for an attempt that has not registered yet is held
+    /// for it. Default: [`DEFAULT_KILL_TOMBSTONE_TTL`].
+    #[must_use]
+    pub fn with_kill_tombstone_ttl(self, ttl: Duration) -> Self {
+        self.kill_tombstones.lock().ttl = ttl;
+        self
+    }
+
+    /// Kills held for attempts not registered yet; for tests and metrics.
+    pub fn kill_tombstone_count(&self) -> usize {
+        let _running_actions = self.running_actions.lock();
+        self.kill_tombstones.lock().len()
+    }
+
     pub fn new(args: RunningActionsManagerArgs<'_>) -> Result<Self, Error> {
         Self::new_with_callbacks(
             args,
@@ -4430,6 +4563,14 @@ impl RunningActionsManagerImpl {
                 sleep_fn: |duration| Box::pin(tokio::time::sleep(duration)),
             },
         )
+    }
+
+    /// Whether a kill is held for this attempt of the operation, taking it.
+    fn take_kill_tombstone(&self, operation_id: &OperationId, attempt: u64) -> bool {
+        let _running_actions = self.running_actions.lock();
+        self.kill_tombstones
+            .lock()
+            .take(self.callbacks.now_fn, operation_id, attempt)
     }
 
     /// Fixes a race condition that occurs when an action fails to execute on a worker, and the same worker
@@ -4794,8 +4935,20 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                     .queued_timestamp
                     .and_then(|time| time.try_into().ok())
                     .unwrap_or(SystemTime::UNIX_EPOCH);
-                let operation_id = start_execute
+                let operation_id: OperationId = start_execute
                     .operation_id.as_str().into();
+                let attempt = start_execute.attempt;
+                // A kill that arrived before this dispatch got here: nothing
+                // is fetched or created. Checked again as the action
+                // registers, for a kill that lands in between.
+                if self.take_kill_tombstone(&operation_id, attempt) {
+                    self.metrics.killed_before_start.inc();
+                    warn!(%operation_id, attempt, "Action killed before it started; not running it");
+                    return Err(make_err!(
+                        Code::Aborted,
+                        "Operation {operation_id} was killed before it started"
+                    ));
+                }
                 let action_info = self.create_action_info(start_execute, queued_timestamp).await?;
                 debug!(
                     ?action_info,
@@ -4834,15 +4987,17 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 } else {
                     timeout
                 };
-                let running_action = Arc::new(RunningActionImpl::new(
+                let mut running_action = RunningActionImpl::new(
                     execution_metadata,
                     operation_id.clone(),
                     action_directory,
                     action_info,
                     timeout,
                     self.clone(),
-                ));
-                {
+                );
+                running_action.attempt = attempt;
+                let running_action = Arc::new(running_action);
+                let killed_before_start = {
                     let mut running_actions = self.running_actions.lock();
                     // Check if action already exists and is still alive
                     if let Some(existing_weak) = running_actions.get(&operation_id)
@@ -4857,6 +5012,18 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                     running_action
                         .has_manager_entry
                         .store(true, Ordering::Release);
+                    // Under the same lock as the insert: a kill either finds
+                    // the action registered or left a tombstone seen here.
+                    self.kill_tombstones
+                        .lock()
+                        .take(self.callbacks.now_fn, &operation_id, attempt)
+                };
+                if killed_before_start {
+                    // Registered and killed at once, so it ends the way any
+                    // killed action does: prepare refuses it, cleanup runs.
+                    self.metrics.killed_before_start.inc();
+                    warn!(%operation_id, attempt, "Action killed as it registered; not running it");
+                    Self::kill_operation(running_action.clone()).await;
                 }
                 if let Some(config) = &self.execution_configuration.buck2_file_capture
                     && Buck2FileCapture::eligible(capture_metadata.as_ref()) {
@@ -4900,15 +5067,32 @@ impl RunningActionsManager for RunningActionsManagerImpl {
             .await
     }
 
-    async fn kill_operation(&self, operation_id: &OperationId) -> Result<(), Error> {
+    async fn kill_operation(&self, operation_id: &OperationId, attempt: u64) -> Result<(), Error> {
         let running_action = {
             let running_actions = self.running_actions.lock();
-            running_actions
+            let running_action = running_actions
                 .get(operation_id)
                 .and_then(Weak::upgrade)
-                .ok_or_else(|| make_input_err!("Failed to get running action {operation_id}"))?
+                .filter(|action| attempt == 0 || action.attempt == 0 || action.attempt == attempt);
+            if running_action.is_none() {
+                // Not registered (yet): the dispatch may still be in
+                // transit, between its `StartExecute` and registration.
+                // Dropping the kill here let that action run to the end
+                // for a scheduler that had already given it up. Held under
+                // the `running_actions` lock, so a registration racing
+                // this kill sees it.
+                self.kill_tombstones.lock().insert(
+                    (self.callbacks.now_fn)(),
+                    operation_id.clone(),
+                    attempt,
+                );
+                info!(%operation_id, attempt, "Kill for an action not registered; holding it for the action");
+            }
+            running_action
         };
-        Self::kill_operation(running_action).await;
+        if let Some(running_action) = running_action {
+            Self::kill_operation(running_action).await;
+        }
         Ok(())
     }
 
@@ -4978,6 +5162,8 @@ pub struct Metrics {
     get_finished_result: AsyncCounterWrapper,
     #[metric(help = "Number of times an action waited for cleanup to complete.")]
     cleanup_waits: CounterWithTime,
+    #[metric(help = "Actions killed by a kill that arrived before they registered.")]
+    killed_before_start: CounterWithTime,
     #[metric(help = "Number of stale directories removed during action retries.")]
     stale_removals: CounterWithTime,
     #[metric(help = "Orphaned action directories removed by the periodic sweep.")]
@@ -5022,4 +5208,72 @@ pub struct Metrics {
         help = "Stats about the input-directory cache (hits, misses, subtree reuse, evictions, size)."
     )]
     directory_cache: Option<Weak<crate::directory_cache::DirectoryCache>>,
+}
+
+#[cfg(test)]
+mod kill_tombstone_tests {
+    use super::*;
+
+    const TTL: Duration = Duration::from_secs(60);
+
+    fn at(secs: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn a_held_kill_is_taken_once() {
+        let mut tombstones = KillTombstones::new(TTL);
+        let operation_id = OperationId::from("op");
+        tombstones.insert(at(0), operation_id.clone(), 2);
+        assert!(
+            !tombstones.take(|| at(1), &operation_id, 1),
+            "another attempt"
+        );
+        assert!(tombstones.take(|| at(1), &operation_id, 2));
+        assert!(!tombstones.take(|| at(1), &operation_id, 2), "spent");
+        assert_eq!(tombstones.len(), 0);
+    }
+
+    #[test]
+    fn an_attempt_zero_kill_matches_any_attempt() {
+        let mut tombstones = KillTombstones::new(TTL);
+        let operation_id = OperationId::from("op");
+        tombstones.insert(at(0), operation_id.clone(), 0);
+        assert!(!tombstones.take(|| at(1), &OperationId::from("other"), 4));
+        assert!(tombstones.take(|| at(1), &operation_id, 4));
+        assert_eq!(tombstones.len(), 0);
+    }
+
+    #[test]
+    fn a_held_kill_expires_after_the_ttl() {
+        let mut tombstones = KillTombstones::new(TTL);
+        let operation_id = OperationId::from("op");
+        tombstones.insert(at(0), operation_id.clone(), 1);
+        assert!(!tombstones.take(|| at(61), &operation_id, 1));
+        assert_eq!(tombstones.len(), 0);
+    }
+
+    #[test]
+    fn the_oldest_kills_go_past_the_cap() {
+        let mut tombstones = KillTombstones::new(TTL);
+        for n in 0..=MAX_KILL_TOMBSTONES {
+            tombstones.insert(at(0), OperationId::from(format!("op{n}").as_str()), 1);
+        }
+        assert_eq!(tombstones.len(), MAX_KILL_TOMBSTONES);
+        assert!(
+            !tombstones.take(|| at(0), &OperationId::from("op0"), 1),
+            "evicted"
+        );
+        assert!(tombstones.take(
+            || at(0),
+            &OperationId::from(format!("op{MAX_KILL_TOMBSTONES}").as_str()),
+            1
+        ));
+        // Taking and re-adding does not grow the queue without bound.
+        for _ in 0..(4 * MAX_KILL_TOMBSTONES) {
+            tombstones.insert(at(0), OperationId::from("churn"), 1);
+            assert!(tombstones.take(|| at(0), &OperationId::from("churn"), 1));
+        }
+        assert!(tombstones.order.len() <= 2 * MAX_KILL_TOMBSTONES + 1);
+    }
 }

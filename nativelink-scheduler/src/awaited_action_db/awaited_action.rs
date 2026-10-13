@@ -106,6 +106,16 @@ pub struct AwaitedAction {
     #[serde(default)]
     #[metric(help = "How many times the AwaitedAction was escalated")]
     pub escalations: usize,
+
+    /// Dispatch sequence number: incremented every time the action is
+    /// assigned to a worker, never reset. Not a budget like the three
+    /// above: it names the attempt on the wire (`StartExecute.attempt`) so
+    /// a late message from an earlier dispatch of the same operation can be
+    /// told apart from the current one. 0 means never dispatched. Absent in
+    /// older records.
+    #[serde(default)]
+    #[metric(help = "How many times the AwaitedAction was dispatched to a worker")]
+    pub dispatch_attempt: u64,
 }
 
 /// Read the origin metadata out of the ambient tracing context/baggage.
@@ -158,6 +168,7 @@ impl AwaitedAction {
             attempts: 0,
             worker_losses: 0,
             escalations: 0,
+            dispatch_attempt: 0,
             last_worker_updated_timestamp: now,
             last_client_keepalive_timestamp: now,
             maybe_origin_metadata,
@@ -197,6 +208,7 @@ impl AwaitedAction {
             attempts: 0,
             worker_losses: 0,
             escalations: 0,
+            dispatch_attempt: 0,
             last_worker_updated_timestamp: now,
             last_client_keepalive_timestamp: now,
             maybe_origin_metadata,
@@ -207,7 +219,7 @@ impl AwaitedAction {
 
     /// Public read of the origin metadata, so a replicated backend can round-trip
     /// it explicitly instead of re-reading ambient context.
-    pub fn origin_metadata(&self) -> Option<&OriginMetadata> {
+    pub const fn origin_metadata(&self) -> Option<&OriginMetadata> {
         self.maybe_origin_metadata.as_ref()
     }
 
@@ -306,7 +318,7 @@ impl AwaitedAction {
 
     /// Public accessor for the worker id, needed by out-of-crate replicated
     /// `AwaitedActionDb` backends (e.g. the raft spike) to build log commands.
-    pub fn worker_id_public(&self) -> Option<&WorkerId> {
+    pub const fn worker_id_public(&self) -> Option<&WorkerId> {
         self.worker_id.as_ref()
     }
 
@@ -317,7 +329,7 @@ impl AwaitedAction {
     }
 
     /// Public form of `worker_keep_alive` for out-of-crate replicated backends.
-    pub fn worker_keep_alive_public(&mut self, now: SystemTime) {
+    pub const fn worker_keep_alive_public(&mut self, now: SystemTime) {
         self.worker_keep_alive(now);
     }
 

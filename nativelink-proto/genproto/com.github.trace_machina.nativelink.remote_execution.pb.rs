@@ -90,6 +90,10 @@ pub struct ExecuteResult {
     /// / Worker-observed resource usage for this action execution.
     #[prost(message, optional, tag = "5")]
     pub resource_usage: ::core::option::Option<ActionResourceUsage>,
+    /// / The dispatch attempt this message is about, echoed from
+    /// / `StartExecute.attempt`. 0 means the peer predates attempts.
+    #[prost(uint64, tag = "6")]
+    pub attempt: u64,
     /// / The actual response data.
     #[prost(oneof = "execute_result::Result", tags = "3, 4")]
     pub result: ::core::option::Option<execute_result::Result>,
@@ -118,6 +122,10 @@ pub struct ExecuteComplete {
     /// / The operation ID that was executed.
     #[prost(string, tag = "1")]
     pub operation_id: ::prost::alloc::string::String,
+    /// / The dispatch attempt this message is about, echoed from
+    /// / `StartExecute.attempt`. 0 means the peer predates attempts.
+    #[prost(uint64, tag = "2")]
+    pub attempt: u64,
 }
 /// / The reservation an action was admitted under, echoed by the worker so
 /// / the measurement and the number it was measured against travel together.
@@ -196,6 +204,10 @@ pub struct ConnectionResult {
 pub struct ExecuteAccepted {
     #[prost(string, tag = "1")]
     pub operation_id: ::prost::alloc::string::String,
+    /// / The dispatch attempt this message is about, echoed from
+    /// / `StartExecute.attempt`. 0 means the peer predates attempts.
+    #[prost(uint64, tag = "2")]
+    pub attempt: u64,
 }
 /// / The worker will not run the action it was sent. The scheduler restores
 /// / its ledger and requeues the action without counting an attempt, and
@@ -214,6 +226,10 @@ pub struct ExecuteDeclined {
     pub needed_kb: u64,
     #[prost(uint64, tag = "5")]
     pub free_kb: u64,
+    /// / The dispatch attempt this message is about, echoed from
+    /// / `StartExecute.attempt`. 0 means the peer predates attempts.
+    #[prost(uint64, tag = "6")]
+    pub attempt: u64,
 }
 /// Nested message and enum types in `ExecuteDeclined`.
 pub mod execute_declined {
@@ -270,6 +286,10 @@ pub struct KillOperationRequest {
     /// / The the operation id for the operation to be killed.
     #[prost(string, tag = "1")]
     pub operation_id: ::prost::alloc::string::String,
+    /// / The dispatch attempt to kill, from `StartExecute.attempt`. 0 means
+    /// / any attempt of the operation (the scheduler predates attempts).
+    #[prost(uint64, tag = "2")]
+    pub attempt: u64,
 }
 /// / Communication from the scheduler to the worker.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -382,6 +402,13 @@ pub struct StartExecute {
     pub request_metadata: ::core::option::Option<
         super::super::super::super::super::build::bazel::remote::execution::v2::RequestMetadata,
     >,
+    /// / Dispatch sequence number of this operation, incremented by the
+    /// / scheduler every time it assigns the operation to a worker. Together
+    /// / with `operation_id` it names one attempt: a requeued action keeps its
+    /// / `operation_id` but gets a new `attempt`. The worker echoes it on every
+    /// / message about this action. 0 means the scheduler predates attempts.
+    #[prost(uint64, tag = "9")]
+    pub attempt: u64,
 }
 /// / This is a special message used to save actions into the CAS that can be used
 /// / by programs like bb_browser to inspect the history of a build.

@@ -436,10 +436,18 @@ impl WorkerConnection {
     async fn inner_execution_response(&self, execute_result: ExecuteResult) -> Result<(), Error> {
         self.touch_liveness_best_effort().await;
         let operation_id = OperationId::from(execute_result.operation_id.clone());
+        // The dispatch attempt the worker echoed; 0 from a worker that does
+        // not. A result from an earlier attempt is refused by the scheduler.
+        let attempt = execute_result.attempt;
 
         if let Some(resource_usage) = execute_result.resource_usage {
             self.scheduler
-                .record_action_resource_usage(&self.worker_id, &operation_id, resource_usage)
+                .record_action_resource_usage(
+                    &self.worker_id,
+                    &operation_id,
+                    attempt,
+                    resource_usage,
+                )
                 .await
                 .err_tip(|| {
                     format!("Failed to record resource usage for operation {operation_id}")
@@ -455,9 +463,10 @@ impl WorkerConnection {
                     .try_into()
                     .err_tip(|| "Failed to convert ExecuteResponse into an ActionStage")?;
                 self.scheduler
-                    .update_action(
+                    .update_action_for_attempt(
                         &self.worker_id,
                         &operation_id,
+                        attempt,
                         UpdateOperationType::UpdateWithActionStage(action_stage),
                     )
                     .await
@@ -465,9 +474,10 @@ impl WorkerConnection {
             }
             execute_result::Result::InternalError(e) => {
                 self.scheduler
-                    .update_action(
+                    .update_action_for_attempt(
                         &self.worker_id,
                         &operation_id,
+                        attempt,
                         UpdateOperationType::UpdateWithError(e.into()),
                     )
                     .await
@@ -483,7 +493,7 @@ impl WorkerConnection {
     async fn dispatch_accepted(&self, execute_accepted: ExecuteAccepted) -> Result<(), Error> {
         let operation_id = OperationId::from(execute_accepted.operation_id);
         self.scheduler
-            .worker_dispatch_accepted(&self.worker_id, &operation_id)
+            .worker_dispatch_accepted(&self.worker_id, &operation_id, execute_accepted.attempt)
             .await
             .err_tip(|| format!("Failed to record acceptance of operation {operation_id}"))?;
         self.touch_liveness_best_effort().await;
@@ -502,7 +512,13 @@ impl WorkerConnection {
             why.push_str(&execute_declined.detail);
         }
         self.scheduler
-            .worker_dispatch_declined(&self.worker_id, &operation_id, why, needs_kb)
+            .worker_dispatch_declined(
+                &self.worker_id,
+                &operation_id,
+                execute_declined.attempt,
+                why,
+                needs_kb,
+            )
             .await
             .err_tip(|| format!("Failed to record decline of operation {operation_id}"))?;
         self.touch_liveness_best_effort().await;
@@ -513,9 +529,10 @@ impl WorkerConnection {
         self.touch_liveness_best_effort().await;
         let operation_id = OperationId::from(execute_complete.operation_id);
         self.scheduler
-            .update_action(
+            .update_action_for_attempt(
                 &self.worker_id,
                 &operation_id,
+                execute_complete.attempt,
                 UpdateOperationType::ExecutionComplete,
             )
             .await

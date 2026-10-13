@@ -1321,6 +1321,15 @@ pub struct LocalWorkerConfig {
     #[serde(default, deserialize_with = "convert_duration_with_shellexpand")]
     pub max_cleanup_backoff_ms: usize,
 
+    /// How long a kill from the scheduler for an action that has not
+    /// registered on this worker yet (its dispatch is still in transit) is
+    /// held for it. The action is killed as it registers instead of running
+    /// for a scheduler that already gave it up. Value in seconds.
+    ///
+    /// Default: 60 seconds
+    #[serde(default, deserialize_with = "convert_duration_with_shellexpand")]
+    pub kill_tombstone_ttl_s: u64,
+
     /// Maximum number of inflight tasks this worker can cope with.
     ///
     /// Default: 0 (infinite tasks)

@@ -18,7 +18,7 @@ use core::str;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use core::time::Duration;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::process::Stdio;
 use std::sync::{Arc, Weak};
@@ -47,6 +47,7 @@ use nativelink_util::shutdown_guard::ShutdownGuard;
 use nativelink_util::store_trait::Store;
 use nativelink_util::{background_spawn, spawn, spawn_blocking, tls_utils};
 use opentelemetry::context::Context;
+use parking_lot::Mutex;
 use tokio::sync::{broadcast, mpsc};
 use tokio::{process, time};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -54,9 +55,9 @@ use tonic::{Streaming, async_trait};
 use tracing::{Level, debug, error, event, info, info_span, instrument, trace, warn};
 
 use crate::running_actions_manager::{
-    ExecutionConfiguration, MISSING_INPUT_ERROR_TIP, Metrics as RunningActionManagerMetrics,
-    ResourceEnforcement, RunningAction, RunningActionsManager, RunningActionsManagerArgs,
-    RunningActionsManagerImpl,
+    DEFAULT_KILL_TOMBSTONE_TTL, ExecutionConfiguration, MISSING_INPUT_ERROR_TIP,
+    Metrics as RunningActionManagerMetrics, ResourceEnforcement, RunningAction,
+    RunningActionsManager, RunningActionsManagerArgs, RunningActionsManagerImpl,
 };
 use crate::worker_api_client_wrapper::{WorkerApiClientTrait, WorkerApiClientWrapper};
 use crate::worker_utils::make_connect_worker_request;
@@ -84,6 +85,35 @@ impl ActionsInTransitGuard {
 impl Drop for ActionsInTransitGuard {
     fn drop(&mut self) {
         self.actions_in_transit.fetch_sub(1, Ordering::Release);
+    }
+}
+
+/// The dispatch attempts this worker has taken and not finished, by
+/// `(operation_id, attempt)`: from the acknowledgement until the result is
+/// sent. A `StartExecute` for one of them is a resend of a dispatch already
+/// running here, not a second action.
+type LiveAttempts = Arc<Mutex<HashSet<(String, u64)>>>;
+
+/// Holds a dispatch attempt in [`LiveAttempts`] for as long as the action
+/// future that owns it lives, however that future ends.
+struct LiveAttemptGuard {
+    live_attempts: LiveAttempts,
+    key: (String, u64),
+}
+
+impl LiveAttemptGuard {
+    fn new(live_attempts: &LiveAttempts, key: (String, u64)) -> Self {
+        live_attempts.lock().insert(key.clone());
+        Self {
+            live_attempts: live_attempts.clone(),
+            key,
+        }
+    }
+}
+
+impl Drop for LiveAttemptGuard {
+    fn drop(&mut self) {
+        self.live_attempts.lock().remove(&self.key);
     }
 }
 
@@ -188,6 +218,9 @@ struct LocalWorkerImpl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsM
     /// as every earlier release did.
     dispatch_ack: bool,
     memory: MemoryAdmission,
+    /// See [`LiveAttempts`]. Only attempts the scheduler numbered (not 0)
+    /// are held: without a number, a resend cannot be told from a requeue.
+    live_attempts: LiveAttempts,
     metrics: Arc<Metrics>,
 }
 
@@ -212,7 +245,7 @@ enum Refusal {
 }
 
 impl Refusal {
-    fn into_declined(self, operation_id: String) -> ExecuteDeclined {
+    fn into_declined(self, operation_id: String, attempt: u64) -> ExecuteDeclined {
         let (reason, detail, needed_kb, free_kb) = match self {
             Self::AtCapacity { in_flight, max } => (
                 execute_declined::Reason::AtCapacity,
@@ -239,6 +272,7 @@ impl Refusal {
             detail,
             needed_kb,
             free_kb,
+            attempt,
         }
     }
 }
@@ -347,6 +381,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
             // on by the scheduler.
             actions_in_transit: Arc::new(AtomicU64::new(0)),
             accepted_action: Arc::new(AtomicBool::new(false)),
+            live_attempts: Arc::new(Mutex::new(HashSet::new())),
             metrics,
         }
     }
@@ -415,13 +450,27 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
     fn decline(
         &self,
         operation_id: String,
+        attempt: u64,
         refusal: Refusal,
     ) -> BoxFuture<'static, Result<(), Error>> {
         self.metrics.actions_declined.inc();
         let mut grpc_client = self.grpc_client.clone();
         self.scheduler_send("ExecuteDeclined", async move {
             grpc_client
-                .execute_declined(refusal.into_declined(operation_id))
+                .execute_declined(refusal.into_declined(operation_id, attempt))
+                .await
+        })
+    }
+
+    /// Acknowledges a dispatch: the action is (or will be) running here.
+    fn accept(&self, operation_id: String, attempt: u64) -> BoxFuture<'static, Result<(), Error>> {
+        let mut grpc_client = self.grpc_client.clone();
+        self.scheduler_send("ExecuteAccepted", async move {
+            grpc_client
+                .execute_accepted(ExecuteAccepted {
+                    operation_id,
+                    attempt,
+                })
                 .await
         })
     }
@@ -542,20 +591,40 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                         }
                         Update::KillOperationRequest(kill_operation_request) => {
                             let operation_id = OperationId::from(kill_operation_request.operation_id);
-                            if let Err(err) = self.running_actions_manager.kill_operation(&operation_id).await {
+                            let attempt = kill_operation_request.attempt;
+                            if let Err(err) = self.running_actions_manager.kill_operation(&operation_id, attempt).await {
                                 error!(
                                     %operation_id,
+                                    attempt,
                                     ?err,
                                     "Failed to send kill request for operation"
                                 );
                             }
                         }
                         Update::StartAction(start_execute) => {
+                            let attempt = start_execute.attempt;
+                            // A resend of a dispatch already taken here (the
+                            // scheduler sends at least once): the action is
+                            // not started again, the acknowledgement is.
+                            if attempt != 0
+                                && self.live_attempts.lock().contains(&(start_execute.operation_id.clone(), attempt))
+                            {
+                                info!(
+                                    operation_id = %start_execute.operation_id,
+                                    attempt,
+                                    "Dispatch already running here; acknowledging it again"
+                                );
+                                self.metrics.duplicate_start_actions.inc();
+                                if self.dispatch_ack {
+                                    futures.push(self.accept(start_execute.operation_id, attempt));
+                                }
+                                continue;
+                            }
                             // Don't accept any new requests if we're shutting down.
                             if shutting_down || (self.config.single_use
                                 && self.accepted_action.load(Ordering::Acquire)) {
                                 if self.dispatch_ack {
-                                    futures.push(self.decline(start_execute.operation_id, Refusal::ShuttingDown));
+                                    futures.push(self.decline(start_execute.operation_id, attempt, Refusal::ShuttingDown));
                                 } else if let Some(instance_name) = start_execute.execute_request.map(|request| request.instance_name) {
                                     let mut grpc_client = self.grpc_client.clone();
                                     let operation_id = start_execute.operation_id;
@@ -566,6 +635,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                                 operation_id,
                                                 result: Some(execute_result::Result::InternalError(make_err!(Code::ResourceExhausted, "Worker shutting down").into())),
                                                 resource_usage: None,
+                                                attempt,
                                             }
                                         ).await
                                     }));
@@ -593,19 +663,22 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                     &start_execute,
                                     actions_in_flight.load(Ordering::Acquire),
                                 ) {
-                                    futures.push(self.decline(start_execute.operation_id, refusal));
+                                    futures.push(self.decline(start_execute.operation_id, attempt, refusal));
                                     continue;
                                 }
-                                let mut grpc_client = self.grpc_client.clone();
-                                let operation_id = start_execute.operation_id.clone();
-                                Some(self.scheduler_send("ExecuteAccepted", async move {
-                                    grpc_client
-                                        .execute_accepted(ExecuteAccepted { operation_id })
-                                        .await
-                                }))
+                                Some(self.accept(start_execute.operation_id.clone(), attempt))
                             } else {
                                 None
                             };
+                            // Held from here until the result is sent, so a
+                            // resend of this dispatch meanwhile is
+                            // acknowledged, not run a second time.
+                            let live_attempt = (attempt != 0).then(|| {
+                                LiveAttemptGuard::new(
+                                    &self.live_attempts,
+                                    (start_execute.operation_id.clone(), attempt),
+                                )
+                            });
                             // Admitted: a single-use worker is spent by this
                             // action once it is acknowledged. A decline above
                             // must not spend it, or every dispatch it turns
@@ -655,6 +728,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                 let mut grpc_client = self.grpc_client.clone();
                                 let complete = ExecuteComplete {
                                     operation_id: operation_id.clone(),
+                                    attempt,
                                 };
                                 let single_use = self.config.single_use;
                                 self.metrics.clone().wrap(move |metrics| async move {
@@ -734,6 +808,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                                     operation_id,
                                                     result: Some(execute_result::Result::ExecuteResponse(action_stage.into())),
                                                     resource_usage,
+                                                    attempt,
                                                 }
                                             )
                                             .await
@@ -770,6 +845,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                                     operation_id,
                                                     result: Some(execute_result::Result::ExecuteResponse(action_stage.into())),
                                                     resource_usage: None,
+                                                    attempt,
                                                 }).await.err_tip(|| "Error calling execution_response with missing inputs")?;
                                             } else {
                                                 grpc_client.execution_response(ExecuteResult{
@@ -777,6 +853,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                                     operation_id,
                                                     result: Some(execute_result::Result::InternalError(e.into())),
                                                     resource_usage: None,
+                                                    attempt,
                                                 }).await.err_tip(|| "Error calling execution_response with error")?;
                                             }
                                         },
@@ -833,6 +910,7 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                                     }
                                     add_future_channel
                                         .send(make_publish_future(res).then(move |res| {
+                                            drop(live_attempt);
                                             actions_in_flight.fetch_sub(1, Ordering::Release);
                                             actions_notify.notify_one();
                                             core::future::ready(res)
@@ -1211,8 +1289,8 @@ pub async fn new_local_worker(
     #[cfg(not(target_os = "linux"))]
     let persistent_workers_namespaced = false;
 
-    let running_actions_manager =
-        Arc::new(RunningActionsManagerImpl::new(RunningActionsManagerArgs {
+    let running_actions_manager = Arc::new(
+        RunningActionsManagerImpl::new(RunningActionsManagerArgs {
             root_action_directory: config.work_directory.clone(),
             execution_configuration: ExecutionConfiguration {
                 max_captured_output_bytes: config.max_captured_output_bytes,
@@ -1248,7 +1326,12 @@ pub async fn new_local_worker(
             active_input_leases: config.experimental_active_input_leases,
             #[cfg(target_os = "linux")]
             use_namespaces,
-        })?);
+        })?
+        .with_kill_tombstone_ttl(seconds_or(
+            config.kill_tombstone_ttl_s,
+            DEFAULT_KILL_TOMBSTONE_TTL,
+        )),
+    );
     // What actions leave behind is reaped here; see `crate::reaper`.
     if let Err(err) = crate::reaper::become_subreaper() {
         warn!(
@@ -1592,6 +1675,8 @@ pub struct Metrics {
         help = "Total number of actions sent to this worker to process. This does not mean it started them, it just means it received a request to execute it."
     )]
     start_actions_received: CounterWithTime,
+    #[metric(help = "StartExecute resends for a dispatch already running, acknowledged again.")]
+    duplicate_start_actions: CounterWithTime,
     #[metric(help = "Total number of disconnects received from the scheduler.")]
     disconnects_received: CounterWithTime,
     #[metric(
@@ -1618,6 +1703,7 @@ impl Metrics {
     fn new(running_actions_manager_metrics: Weak<RunningActionManagerMetrics>) -> Self {
         Self {
             start_actions_received: CounterWithTime::default(),
+            duplicate_start_actions: CounterWithTime::default(),
             disconnects_received: CounterWithTime::default(),
             actions_declined: CounterWithTime::default(),
             keep_alives_received: CounterWithTime::default(),
