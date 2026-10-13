@@ -195,6 +195,8 @@ impl AwaitedAction {
             operation_id,
             sort_key,
             attempts: 0,
+            worker_losses: 0,
+            escalations: 0,
             last_worker_updated_timestamp: now,
             last_client_keepalive_timestamp: now,
             maybe_origin_metadata,
