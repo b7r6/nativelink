@@ -198,8 +198,14 @@ impl<A: AwaitedActionDb, B: AwaitedActionDb> AwaitedActionDb for EitherAwaitedAc
         ttl: Duration,
     ) -> Result<Vec<PlatformProperties>, Error> {
         match self {
-            Self::Left(a) => a.exchange_fleet_capabilities(scheduler_id, local, ttl).await,
-            Self::Right(b) => b.exchange_fleet_capabilities(scheduler_id, local, ttl).await,
+            Self::Left(a) => {
+                a.exchange_fleet_capabilities(scheduler_id, local, ttl)
+                    .await
+            }
+            Self::Right(b) => {
+                b.exchange_fleet_capabilities(scheduler_id, local, ttl)
+                    .await
+            }
         }
     }
 

@@ -207,7 +207,7 @@ impl AwaitedAction {
 
     /// Public read of the origin metadata, so a replicated backend can round-trip
     /// it explicitly instead of re-reading ambient context.
-    pub fn origin_metadata(&self) -> Option<&OriginMetadata> {
+    pub const fn origin_metadata(&self) -> Option<&OriginMetadata> {
         self.maybe_origin_metadata.as_ref()
     }
 
@@ -306,7 +306,7 @@ impl AwaitedAction {
 
     /// Public accessor for the worker id, needed by out-of-crate replicated
     /// `AwaitedActionDb` backends (e.g. the raft spike) to build log commands.
-    pub fn worker_id_public(&self) -> Option<&WorkerId> {
+    pub const fn worker_id_public(&self) -> Option<&WorkerId> {
         self.worker_id.as_ref()
     }
 
@@ -317,7 +317,7 @@ impl AwaitedAction {
     }
 
     /// Public form of `worker_keep_alive` for out-of-crate replicated backends.
-    pub fn worker_keep_alive_public(&mut self, now: SystemTime) {
+    pub const fn worker_keep_alive_public(&mut self, now: SystemTime) {
         self.worker_keep_alive(now);
     }
 

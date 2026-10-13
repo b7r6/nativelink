@@ -18,14 +18,15 @@
 //! pre-fix code did wrong (the defect Astra found).
 
 use core::time::Duration;
+use nativelink_macro::nativelink_test;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
 use nativelink_scheduler::raft_awaited_action_db::{
     CommandResponse, RejectReason, SystemRaftAwaitedActionDb,
 };
-use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
 use nativelink_util::action_messages::{
     ActionInfo, ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
     ExecutionMetadata, OperationId, WorkerId,
@@ -80,7 +81,7 @@ fn completed_result() -> ActionResult {
     }
 }
 
-/// Add a queued action and return (subscriber, operation_id, its revision).
+/// Add a queued action and return (subscriber, `operation_id`, its revision).
 async fn add_queued(
     db: &SystemRaftAwaitedActionDb,
     client: &str,
@@ -113,9 +114,11 @@ async fn add_queued(
 // unconditionally and always returned success, so BOTH matchers would believe
 // they had assigned the op and could dispatch (N2/N3 resurface).
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn s0_two_assignments_one_queued_revision_exactly_one_wins() {
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let wa = WorkerId("WA".to_string());
     let wb = WorkerId("WB".to_string());
     db.worker_join(wa.clone(), 1).await.unwrap();
@@ -165,9 +168,11 @@ async fn s0_two_assignments_one_queued_revision_exactly_one_wins() {
 // Pre-fix defect: a stale Queued/Executing UpdateAwaitedAction committed after
 // completion would un-finish the op (and could delete a replacement's claim).
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn s0_completed_rejects_stale_nonterminal_update() {
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -232,9 +237,11 @@ async fn s0_completed_rejects_stale_nonterminal_update() {
 // cloned the OLD stored attempts, so a per-attempt increment was dropped and a
 // positive retry limit could never be reached.
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn attempts_counter_survives_and_hits_retry_cap() {
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -328,9 +335,11 @@ async fn attempts_counter_survives_and_hits_retry_cap() {
 // Pre-fix defect: Heartbeat named only the operation and unconditionally
 // overwrote the lease with its own (possibly older) time.
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn heartbeat_identity_and_monotonic_lease() {
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -419,11 +428,15 @@ async fn heartbeat_identity_and_monotonic_lease() {
 // stored metadata depended on whatever context the apply task happened to run
 // under, not on the request that was proposed.
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn add_action_origin_metadata_is_from_command_not_ambient() {
     // Two independent state machines; apply runs on their own scheduler tasks.
-    let db1 = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot1");
-    let db2 = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot2");
+    let db1 = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot1");
+    let db2 = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot2");
 
     let digest = DigestInfo::new([6u8; 32], 6);
     let s1 = db1
@@ -470,11 +483,13 @@ async fn add_action_origin_metadata_is_from_command_not_ambient() {
 // nonempty HashMap<ActionUniqueKey, OperationId>, which errors. Empty-state
 // tests missed it — so this test deliberately populates a cacheable action.
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn snapshot_roundtrips_nonempty_cacheable_state() {
     use nativelink_scheduler::raft_awaited_action_db::state::AppliedState;
 
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -537,9 +552,11 @@ async fn snapshot_roundtrips_nonempty_cacheable_state() {
 // unconditionally with a value captured before taking the watchers lock, so a
 // stale capture could pin subscribers at an old revision indefinitely.
 // ---------------------------------------------------------------------------
-#[tokio::test]
+#[nativelink_test]
 async fn subscriber_never_regresses_revision() {
-    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node()
+        .await
+        .expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 

@@ -13,14 +13,15 @@
 // limitations under the License.
 
 use core::time::Duration;
+use nativelink_macro::nativelink_test;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, SystemRaftAwaitedActionDb};
 use nativelink_scheduler::awaited_action_db::{
     AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedActionState,
 };
+use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, SystemRaftAwaitedActionDb};
 use nativelink_util::action_messages::{
     ActionInfo, ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
     ExecutionMetadata, OperationId, WorkerId,
@@ -75,11 +76,11 @@ fn completed_result() -> ActionResult {
     }
 }
 
-/// Drive a full AwaitedAction lifecycle THROUGH THE RAFT LOG:
-///   add_action (Queued) -> Executing -> Completed
+/// Drive a full `AwaitedAction` lifecycle THROUGH THE RAFT LOG:
+///   `add_action` (Queued) -> Executing -> Completed
 /// asserting a subscriber observes each transition and that the replicated
 /// state (the sorted indices and the operation map) matches at each step.
-#[tokio::test]
+#[nativelink_test]
 async fn full_lifecycle_through_the_log() {
     let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
@@ -224,7 +225,7 @@ async fn full_lifecycle_through_the_log() {
 /// applying an `Expire` command to the log: the leader compares the
 /// log-recorded lease timestamp against the log-recorded `now`. Every replica
 /// requeues the same set, deterministically.
-#[tokio::test]
+#[nativelink_test]
 async fn worker_death_requeues_through_the_log() {
     let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
@@ -354,7 +355,7 @@ async fn drive_to_executing(
 /// requeued and its ownership cleared, so the ownership map can never point at
 /// a session membership has already replaced. This is the N1/N2-family bug
 /// (Astra's N-wave) at the worker-session membership layer.
-#[tokio::test]
+#[nativelink_test]
 async fn same_id_rejoin_supersedes_without_orphan() {
     let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
@@ -449,11 +450,11 @@ async fn same_id_rejoin_supersedes_without_orphan() {
 /// CROSSED-OFF #5 — the fleet-generation epoch counter has nothing to detect.
 ///
 /// Matching reads a consistent worker-set snapshot from applied state. Across a
-/// WorkerJoin and a WorkerLeave, each snapshot is a single point in the totally
+/// `WorkerJoin` and a `WorkerLeave`, each snapshot is a single point in the totally
 /// ordered log: a snapshot taken before a membership change never observes half
 /// of it, and one taken after observes all of it. There is no "the worker set
 /// changed under me" to detect, so no generation counter is needed.
-#[tokio::test]
+#[nativelink_test]
 async fn matching_reads_consistent_worker_set_without_generation_counter() {
     let db = SystemRaftAwaitedActionDb::new_single_node()
         .await

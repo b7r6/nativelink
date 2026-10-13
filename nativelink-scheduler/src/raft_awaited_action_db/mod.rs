@@ -112,7 +112,6 @@ fn unreachable_peer<E: std::error::Error>(target: NodeId) -> RPCError<NodeId, Ba
     ))))
 }
 
-
 fn unix_nanos(t: SystemTime) -> u128 {
     t.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()
 }
@@ -164,19 +163,30 @@ struct ClientTracker {
 impl ClientTracker {
     fn touch(&mut self, client_operation_id: &OperationId, now: SystemTime) {
         if let Some(previous) = self.last_touch.insert(client_operation_id.clone(), now) {
-            self.by_time.remove(&(previous, client_operation_id.clone()));
+            self.by_time
+                .remove(&(previous, client_operation_id.clone()));
         }
         self.by_time.insert((now, client_operation_id.clone()));
     }
 
-    fn keep_alive(&mut self, client_operation_id: &OperationId, operation_id: &OperationId, now: SystemTime) {
+    fn keep_alive(
+        &mut self,
+        client_operation_id: &OperationId,
+        operation_id: &OperationId,
+        now: SystemTime,
+    ) {
         self.touch(client_operation_id, now);
         let entry = self.keepalive.entry(operation_id.clone()).or_insert(now);
         *entry = (*entry).max(now);
     }
 
     /// Whether `client_operation_id` was last used longer than `retain` ago.
-    fn is_stale(&self, client_operation_id: &OperationId, now: SystemTime, retain: Duration) -> bool {
+    fn is_stale(
+        &self,
+        client_operation_id: &OperationId,
+        now: SystemTime,
+        retain: Duration,
+    ) -> bool {
         self.last_touch
             .get(client_operation_id)
             .is_some_and(|touched| now > *touched + retain)
@@ -193,10 +203,10 @@ impl ClientTracker {
 
     /// Apply the locally known keepalive to a record read from the log.
     fn overlay(&self, action: &mut AwaitedAction) {
-        if let Some(ts) = self.keepalive.get(action.operation_id()) {
-            if *ts > action.last_client_keepalive_timestamp() {
-                action.update_client_keep_alive(*ts);
-            }
+        if let Some(ts) = self.keepalive.get(action.operation_id())
+            && *ts > action.last_client_keepalive_timestamp()
+        {
+            action.update_client_keep_alive(*ts);
         }
     }
 
@@ -260,9 +270,11 @@ where
                     if client.last_keep_alive.elapsed() > CLIENT_KEEPALIVE_DURATION {
                         client.last_keep_alive = (client.now_fn)();
                         let now = client.last_keep_alive.now();
-                        self.clients
-                            .lock()
-                            .keep_alive(&client.client_operation_id, &operation_id, now);
+                        self.clients.lock().keep_alive(
+                            &client.client_operation_id,
+                            &operation_id,
+                            now,
+                        );
                     }
                     let sleep_fut = (client.now_fn)().sleep(CLIENT_KEEPALIVE_DURATION);
                     tokio::select! {
@@ -302,26 +314,22 @@ impl Watchers {
     /// what the channel already holds. Creating a fresh channel always seeds it.
     /// Returns true if the channel value advanced.
     fn publish(&mut self, op_id: &OperationId, action: &AwaitedAction) -> bool {
-        match self.txs.get(op_id) {
-            Some(tx) => {
-                let current_rev = tx.borrow().version_public();
-                if action.version_public() <= current_rev {
-                    // Older than what was delivered: drop it, so a stale value
-                    // never overwrites a newer one. The same revision: nothing
-                    // changed (every accepted mutation bumps it), so do not wake
-                    // subscribers for it. Revision order, not stage order — an
-                    // Executing->Queued retry has a HIGHER revision and is kept.
-                    return false;
-                }
-                tx.send_replace(action.clone());
-                true
+        if let Some(tx) = self.txs.get(op_id) {
+            let current_rev = tx.borrow().version_public();
+            if action.version_public() <= current_rev {
+                // Older than what was delivered: drop it, so a stale value
+                // never overwrites a newer one. The same revision: nothing
+                // changed (every accepted mutation bumps it), so do not wake
+                // subscribers for it. Revision order, not stage order — an
+                // Executing->Queued retry has a HIGHER revision and is kept.
+                return false;
             }
-            None => {
-                let (tx, _rx) = watch::channel(action.clone());
-                self.txs.insert(op_id.clone(), tx);
-                true
-            }
+            tx.send_replace(action.clone());
+        } else {
+            let (tx, _rx) = watch::channel(action.clone());
+            self.txs.insert(op_id.clone(), tx);
         }
+        true
     }
 
     /// Drop the channel of an operation that left the state: its subscribers
@@ -588,7 +596,10 @@ where
         // the channel to our captured (older) value (Astra premortem S3).
         w.publish(op_id, &action);
         let Some(tx) = w.txs.get(op_id) else {
-            return Err(make_err!(Code::Internal, "publish did not create a channel"));
+            return Err(make_err!(
+                Code::Internal,
+                "publish did not create a channel"
+            ));
         };
         let mut rx = tx.subscribe();
         rx.mark_changed();
@@ -630,7 +641,11 @@ where
     /// does, so it follows an injected clock exactly.
     async fn evict_stale_clients(&self) -> Result<(), Error> {
         let now = self.now();
-        let stale = self.shared.clients.lock().stale(now, self.config.retain_client);
+        let stale = self
+            .shared
+            .clients
+            .lock()
+            .stale(now, self.config.retain_client);
         self.drop_clients(stale, now).await
     }
 
@@ -650,7 +665,7 @@ where
 
     /// Assign a currently-eligible (Queued) operation to a worker session,
     /// through the log with validation in apply. Returns the applied response so
-    /// callers can see acceptance vs. a `RevisionConflict` — "client_write
+    /// callers can see acceptance vs. a `RevisionConflict` — "`client_write`
     /// succeeded" does NOT mean "assignment accepted" (Astra premortem S0).
     pub async fn assign_to_worker(
         &self,
@@ -758,7 +773,7 @@ where
     }
 
     /// A consistent snapshot of the worker-set as the applied log defines it:
-    /// worker_id -> current session epoch. Matching reads this; there is no
+    /// `worker_id` -> current session epoch. Matching reads this; there is no
     /// "changed under me" epoch to detect because the snapshot is a point in
     /// the totally-ordered log (CROSSED-OFF #5).
     pub async fn worker_sessions_snapshot(&self) -> HashMap<WorkerId, u64> {
@@ -844,11 +859,11 @@ where
         // A lookup evicts only its own key, and only if it expired; otherwise
         // it counts as a use (`EvictingMap::get`).
         let now = self.now();
-        let stale = self
-            .shared
-            .clients
-            .lock()
-            .is_stale(client_operation_id, now, self.config.retain_client);
+        let stale = self.shared.clients.lock().is_stale(
+            client_operation_id,
+            now,
+            self.config.retain_client,
+        );
         if stale {
             self.drop_clients(vec![client_operation_id.clone()], now)
                 .await?;
@@ -867,25 +882,21 @@ where
             .await
     }
 
-    fn get_all_awaited_actions(
+    async fn get_all_awaited_actions(
         &self,
-    ) -> impl Future<
-        Output = Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error>,
-    > + Send {
-        async move {
-            let op_ids: Vec<OperationId> = self
-                .shared
-                .sm
-                .with_state(|s| s.operations.keys().cloned().collect())
-                .await;
-            let mut subs = Vec::with_capacity(op_ids.len());
-            for op_id in op_ids {
-                if let Some(sub) = self.subscribe_op(&op_id, None).await? {
-                    subs.push(Ok(sub));
-                }
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        let op_ids: Vec<OperationId> = self
+            .shared
+            .sm
+            .with_state(|s| s.operations.keys().cloned().collect())
+            .await;
+        let mut subs = Vec::with_capacity(op_ids.len());
+        for op_id in op_ids {
+            if let Some(sub) = self.subscribe_op(&op_id, None).await? {
+                subs.push(Ok(sub));
             }
-            Ok(stream::iter(subs))
         }
+        Ok(stream::iter(subs))
     }
 
     async fn get_by_operation_id(
@@ -895,39 +906,35 @@ where
         self.subscribe_op(operation_id, None).await
     }
 
-    fn get_range_of_actions(
+    async fn get_range_of_actions(
         &self,
         state: SortedAwaitedActionState,
         start: Bound<SortedAwaitedAction>,
         end: Bound<SortedAwaitedAction>,
         desc: bool,
-    ) -> impl Future<
-        Output = Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error>,
-    > + Send {
-        async move {
-            let mut sorted: Vec<SortedAwaitedAction> = self
-                .shared
-                .sm
-                .with_state(|applied| {
-                    applied
-                        .sorted
-                        .btree_for_sorted_state(state)
-                        .range((start, end))
-                        .cloned()
-                        .collect()
-                })
-                .await;
-            if desc {
-                sorted.reverse();
-            }
-            let mut subs = Vec::with_capacity(sorted.len());
-            for sa in sorted {
-                if let Some(sub) = self.subscribe_op(&sa.operation_id, None).await? {
-                    subs.push(Ok(sub));
-                }
-            }
-            Ok(stream::iter(subs))
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        let mut sorted: Vec<SortedAwaitedAction> = self
+            .shared
+            .sm
+            .with_state(|applied| {
+                applied
+                    .sorted
+                    .btree_for_sorted_state(state)
+                    .range((start, end))
+                    .cloned()
+                    .collect()
+            })
+            .await;
+        if desc {
+            sorted.reverse();
         }
+        let mut subs = Vec::with_capacity(sorted.len());
+        for sa in sorted {
+            if let Some(sub) = self.subscribe_op(&sa.operation_id, None).await? {
+                subs.push(Ok(sub));
+            }
+        }
+        Ok(stream::iter(subs))
     }
 
     async fn update_awaited_action(&self, new_awaited_action: AwaitedAction) -> Result<(), Error> {
@@ -974,7 +981,7 @@ where
             operation_id: operation_id.clone(),
             action_info,
             now_unix_nanos: unix_nanos(now),
-            origin_metadata,
+            origin_metadata: origin_metadata.map(Box::new),
         })
         .await?;
         // The applied command may have joined an existing operation, so read the

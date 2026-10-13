@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 pub type NodeId = u64;
 
 /// Why a command was rejected during apply. A rejected command IS committed to
-/// the log (every replica must agree it was rejected) — "client_write
+/// the log (every replica must agree it was rejected) — "`client_write`
 /// succeeded" therefore does NOT mean "the transition was accepted". Callers
 /// must inspect the [`CommandResponse`]. See Astra premortem S0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +69,7 @@ pub enum Command {
         /// Origin metadata captured from the request's ambient context BEFORE
         /// proposing, so apply never reads `Context::current()` and is a pure
         /// function of the command bytes. See Astra premortem S6d.
-        origin_metadata: Option<OriginMetadata>,
+        origin_metadata: Option<Box<OriginMetadata>>,
     },
     /// Assign a currently-eligible operation to a worker session.
     ///
@@ -185,7 +185,7 @@ pub enum CommandResponse {
     /// applied record revision after the mutation, so a caller can use it as its
     /// next `expected_revision`.
     Applied {
-        awaited_action: Option<AwaitedAction>,
+        awaited_action: Option<Box<AwaitedAction>>,
         revision: i64,
     },
     /// The command was committed but NOT applied: the transition was illegal

@@ -37,6 +37,7 @@ use openraft::{
 use tokio::sync::RwLock;
 
 use nativelink_util::action_messages::ActionStage;
+use nativelink_util::spawn_blocking;
 
 use crate::awaited_action_db::AwaitedAction;
 use nativelink_util::metrics::{
@@ -101,7 +102,11 @@ fn emit_stage_metrics(transitions: &[StageTransition]) {
 /// Rewrite the log file once this many purged entries are still in it.
 const COMPACT_AFTER_PURGED: u64 = 10_000;
 
-fn io_err(subject: ErrorSubject<NodeId>, verb: ErrorVerb, e: std::io::Error) -> StorageError<NodeId> {
+fn io_err(
+    subject: ErrorSubject<NodeId>,
+    verb: ErrorVerb,
+    e: std::io::Error,
+) -> StorageError<NodeId> {
     StorageError::from_io_error(subject, verb, e)
 }
 
@@ -120,7 +125,7 @@ impl LogInner {
     fn apply_record(&mut self, record: WalRecord) {
         match record {
             WalRecord::Entry(entry) => {
-                self.log.insert(entry.get_log_id().index, entry);
+                self.log.insert(entry.get_log_id().index, *entry);
             }
             WalRecord::Vote(vote) => self.vote = Some(vote),
             WalRecord::Truncate(index) => {
@@ -144,7 +149,12 @@ impl LogInner {
             records.push(WalRecord::Purge(last_purged));
         }
         records.push(WalRecord::Committed(self.committed));
-        records.extend(self.log.values().cloned().map(WalRecord::Entry));
+        records.extend(
+            self.log
+                .values()
+                .cloned()
+                .map(|e| WalRecord::Entry(Box::new(e))),
+        );
         records
     }
 }
@@ -186,7 +196,7 @@ impl LogStore {
         let Some(wal) = self.wal.clone() else {
             return Ok(());
         };
-        tokio::task::spawn_blocking(move || {
+        spawn_blocking!("raft_log_append", move || {
             wal.lock()
                 .map_err(|_| std::io::Error::other("raft log mutex poisoned"))?
                 .append(&records)
@@ -199,7 +209,7 @@ impl LogStore {
         let Some(wal) = self.wal.clone() else {
             return Ok(());
         };
-        tokio::task::spawn_blocking(move || {
+        spawn_blocking!("raft_log_rewrite", move || {
             wal.lock()
                 .map_err(|_| std::io::Error::other("raft log mutex poisoned"))?
                 .rewrite(&records)
@@ -274,7 +284,11 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         I::IntoIter: OptionalSend,
     {
         let entries: Vec<Entry> = entries.into_iter().collect();
-        let records: Vec<WalRecord> = entries.iter().cloned().map(WalRecord::Entry).collect();
+        let records: Vec<WalRecord> = entries
+            .iter()
+            .cloned()
+            .map(|e| WalRecord::Entry(Box::new(e)))
+            .collect();
         // Durable first, then visible, then acknowledged: openraft may count
         // this node toward a quorum as soon as the callback fires.
         let result = self.persist(records).await;
@@ -387,10 +401,7 @@ impl StateMachineStore {
     /// Open a state machine whose snapshots live in `dir`. If a snapshot is
     /// already there, the applied state starts from it; openraft then replays
     /// the log entries after `last_applied`.
-    pub fn open(
-        dir: &Path,
-        on_apply: OnApply,
-    ) -> std::io::Result<Self> {
+    pub fn open(dir: &Path, on_apply: OnApply) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let mut inner = StateMachineInner::default();
         if let Some(data) = read_optional(dir, SNAPSHOT_FILE)? {
@@ -441,9 +452,13 @@ impl StateMachineStore {
             data: snapshot.data.clone(),
         })
         .map_err(std::io::Error::other)?;
-        tokio::task::spawn_blocking(move || write_atomic(&dir, SNAPSHOT_FILE, &bytes))
-            .await
-            .map_err(std::io::Error::other)?
+        spawn_blocking!("raft_snapshot_write", move || write_atomic(
+            &dir,
+            SNAPSHOT_FILE,
+            &bytes
+        ))
+        .await
+        .map_err(std::io::Error::other)?
     }
 }
 
@@ -534,14 +549,14 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     let (resp, changed) = inner.state.apply(cmd);
                     emit_stage_metrics(&inner.state.transitions);
                     if !changed.is_empty() {
-                        let changes: Vec<(OperationId, Option<AwaitedAction>)> = changed
+                        let published: Vec<(OperationId, Option<AwaitedAction>)> = changed
                             .into_iter()
                             .map(|op| {
                                 let action = inner.state.operations.get(&op).cloned();
                                 (op, action)
                             })
                             .collect();
-                        (self.on_apply)(changes);
+                        (self.on_apply)(published);
                     }
                     responses.push(resp);
                 }

@@ -50,7 +50,7 @@ const MAX_RECORD_LEN: u32 = 256 * 1024 * 1024;
 /// reconstructs the log, the vote and the committed id.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum WalRecord {
-    Entry(Entry),
+    Entry(Box<Entry>),
     Vote(Vote<NodeId>),
     /// Delete every entry at or after this index.
     Truncate(u64),
@@ -215,20 +215,23 @@ mod tests {
         {
             let (mut wal, records) = Wal::open(dir.path())?;
             assert!(records.is_empty());
-            wal.append(&[WalRecord::Entry(entry(1)), WalRecord::Entry(entry(2))])?;
+            wal.append(&[
+                WalRecord::Entry(Box::new(entry(1))),
+                WalRecord::Entry(Box::new(entry(2))),
+            ])?;
         }
         // Simulate a crash mid-write: half a frame at the end of the file.
         let path = dir.path().join(LOG_FILE);
         let mut bytes = fs::read(&path)?;
         let full_len = bytes.len();
-        bytes.extend_from_slice(&encode(&[WalRecord::Entry(entry(3))])?[..10]);
+        bytes.extend_from_slice(&encode(&[WalRecord::Entry(Box::new(entry(3)))])?[..10]);
         fs::write(&path, &bytes)?;
 
         let (mut wal, records) = Wal::open(dir.path())?;
         assert_eq!(records.len(), 2);
         assert_eq!(fs::metadata(&path)?.len(), full_len as u64);
         // The log keeps working after the truncation.
-        wal.append(&[WalRecord::Entry(entry(3))])?;
+        wal.append(&[WalRecord::Entry(Box::new(entry(3)))])?;
         drop(wal);
         let (_wal, records) = Wal::open(dir.path())?;
         assert_eq!(records.len(), 3);
@@ -240,8 +243,8 @@ mod tests {
         let dir = tempfile::tempdir()?;
         {
             let (mut wal, _) = Wal::open(dir.path())?;
-            wal.append(&[WalRecord::Entry(entry(1))])?;
-            wal.append(&[WalRecord::Entry(entry(2))])?;
+            wal.append(&[WalRecord::Entry(Box::new(entry(1)))])?;
+            wal.append(&[WalRecord::Entry(Box::new(entry(2)))])?;
         }
         let path = dir.path().join(LOG_FILE);
         let mut bytes = fs::read(&path)?;
@@ -249,7 +252,11 @@ mod tests {
         bytes[last] ^= 0x01;
         fs::write(&path, &bytes)?;
         let (_wal, records) = Wal::open(dir.path())?;
-        assert_eq!(records.len(), 1, "the record with the flipped byte is dropped");
+        assert_eq!(
+            records.len(),
+            1,
+            "the record with the flipped byte is dropped"
+        );
         Ok(())
     }
 
@@ -257,9 +264,12 @@ mod tests {
     fn rewrite_replaces_contents() -> io::Result<()> {
         let dir = tempfile::tempdir()?;
         let (mut wal, _) = Wal::open(dir.path())?;
-        wal.append(&[WalRecord::Entry(entry(1)), WalRecord::Entry(entry(2))])?;
-        wal.rewrite(&[WalRecord::Entry(entry(2))])?;
-        wal.append(&[WalRecord::Entry(entry(3))])?;
+        wal.append(&[
+            WalRecord::Entry(Box::new(entry(1))),
+            WalRecord::Entry(Box::new(entry(2))),
+        ])?;
+        wal.rewrite(&[WalRecord::Entry(Box::new(entry(2)))])?;
+        wal.append(&[WalRecord::Entry(Box::new(entry(3)))])?;
         drop(wal);
         let (_wal, records) = Wal::open(dir.path())?;
         let indexes: Vec<u64> = records

@@ -24,9 +24,7 @@ use core::time::Duration;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::awaited_action_db::{
-    AwaitedAction, SortedAwaitedAction, SortedAwaitedActionState,
-};
+use crate::awaited_action_db::{AwaitedAction, SortedAwaitedAction, SortedAwaitedActionState};
 use nativelink_util::action_messages::{
     ActionStage, ActionUniqueKey, ActionUniqueQualifier, OperationId, WorkerId,
 };
@@ -46,7 +44,7 @@ pub struct SortedIndices {
 }
 
 impl SortedIndices {
-    fn btree_for_state(&mut self, stage: &ActionStage) -> &mut BTreeSet<SortedAwaitedAction> {
+    const fn btree_for_state(&mut self, stage: &ActionStage) -> &mut BTreeSet<SortedAwaitedAction> {
         match stage {
             ActionStage::Unknown => &mut self.unknown,
             ActionStage::CacheCheck => &mut self.cache_check,
@@ -90,33 +88,33 @@ pub struct StageTransition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedState {
-    /// operation_id -> the last-applied AwaitedAction.
+    /// `operation_id` -> the last-applied `AwaitedAction`.
     pub operations: BTreeMap<OperationId, AwaitedAction>,
-    /// client_operation_id -> operation_id.
+    /// `client_operation_id` -> `operation_id`.
     pub client_to_operation: HashMap<OperationId, OperationId>,
-    /// unique action key -> operation_id (the dedup map).
+    /// unique action key -> `operation_id` (the dedup map).
     pub unique_key_to_operation: HashMap<ActionUniqueKey, OperationId>,
     /// The sorted lifecycle indices.
     pub sorted: SortedIndices,
-    /// worker-session lease: operation_id -> last heartbeat (unix nanos).
+    /// worker-session lease: `operation_id` -> last heartbeat (unix nanos).
     pub leases: HashMap<OperationId, u128>,
-    /// Worker-session membership as a log fact: worker_id -> the epoch of the
+    /// Worker-session membership as a log fact: `worker_id` -> the epoch of the
     /// session currently registered under that id. A `WorkerJoin` with a
     /// higher epoch supersedes the recorded one.
     pub sessions: HashMap<WorkerId, u64>,
     /// Which worker session owns each in-flight operation:
-    /// operation_id -> (worker_id, session_epoch, attempt). This and `sessions`
+    /// `operation_id` -> (`worker_id`, `session_epoch`, attempt). This and `sessions`
     /// are the SAME deterministic function of the log, so they cannot disagree:
     /// there is no window in which ownership points at a session membership has
     /// already replaced. Set on assignment; cleared on requeue / finish /
     /// supersession — all inside one apply.
     pub operation_owner: HashMap<OperationId, WorkerOwnership>,
-    /// operation_id -> current revision. Bumped on every accepted mutation. A
+    /// `operation_id` -> current revision. Bumped on every accepted mutation. A
     /// validated command carries the revision the caller last saw; apply
     /// rejects it if this has moved on. This is the version-CAS, moved inside
     /// apply as a semantic guard (Astra premortem S0).
     pub operation_revision: HashMap<OperationId, i64>,
-    /// operation_id -> current attempt number. Bumped on each assignment. Names
+    /// `operation_id` -> current attempt number. Bumped on each assignment. Names
     /// the attempt for heartbeat/finish ownership so a delayed message from a
     /// superseded attempt cannot affect its replacement (S6d).
     pub operation_attempt: HashMap<OperationId, u64>,
@@ -282,10 +280,10 @@ impl AppliedState {
         from: Option<&ActionStage>,
         to: Option<&ActionStage>,
     ) {
-        if let (Some(from), Some(to)) = (from, to) {
-            if from.is_same_stage(to) {
-                return;
-            }
+        if let (Some(from), Some(to)) = (from, to)
+            && from.is_same_stage(to)
+        {
+            return;
         }
         self.transitions.push(StageTransition {
             from: from.cloned(),
@@ -372,7 +370,11 @@ impl AppliedState {
             .insert(SortedAwaitedAction::from(&updated));
         self.leases.insert(op.clone(), now_unix_nanos);
         self.operation_owner.remove(op);
-        self.record_transition(&updated, Some(&ActionStage::Executing), Some(&ActionStage::Queued));
+        self.record_transition(
+            &updated,
+            Some(&ActionStage::Executing),
+            Some(&ActionStage::Queued),
+        );
         // The attempt that was running is over; the next assignment starts a new
         // one. Keep operation_attempt as the high-water mark so attempts never
         // reuse a number.
@@ -507,12 +509,16 @@ impl AppliedState {
             .btree_for_state(&ActionStage::Executing)
             .insert(SortedAwaitedAction::from(&updated));
         self.leases.insert(operation_id.clone(), now_unix_nanos);
-        self.record_transition(&updated, Some(&ActionStage::Queued), Some(&ActionStage::Executing));
+        self.record_transition(
+            &updated,
+            Some(&ActionStage::Queued),
+            Some(&ActionStage::Executing),
+        );
         self.operations
             .insert(operation_id.clone(), updated.clone());
         (
             CommandResponse::Applied {
-                awaited_action: Some(updated),
+                awaited_action: Some(Box::new(updated)),
                 revision,
             },
             vec![operation_id],
@@ -581,14 +587,12 @@ impl AppliedState {
         self.sorted
             .btree_for_state(&new_stage)
             .insert(SortedAwaitedAction::from(&updated));
-        if new_stage.is_finished() {
-            if let ActionUniqueQualifier::Cacheable(unique_key) =
+        if new_stage.is_finished()
+            && let ActionUniqueQualifier::Cacheable(unique_key) =
                 &updated.action_info().unique_qualifier
-            {
-                if self.unique_key_to_operation.get(unique_key) == Some(&operation_id) {
-                    self.unique_key_to_operation.remove(unique_key);
-                }
-            }
+            && self.unique_key_to_operation.get(unique_key) == Some(&operation_id)
+        {
+            self.unique_key_to_operation.remove(unique_key);
         }
         let revision = self.bump_revision(&operation_id, &mut updated);
         self.leases.insert(operation_id.clone(), now_unix_nanos);
@@ -597,7 +601,7 @@ impl AppliedState {
             .insert(operation_id.clone(), updated.clone());
         (
             CommandResponse::Applied {
-                awaited_action: Some(updated),
+                awaited_action: Some(Box::new(updated)),
                 revision,
             },
             vec![operation_id],
@@ -610,7 +614,7 @@ impl AppliedState {
     fn apply_heartbeat(
         &mut self,
         operation_id: OperationId,
-        worker_id: WorkerId,
+        worker_id: &WorkerId,
         session_epoch: u64,
         attempt: u64,
         now_unix_nanos: u128,
@@ -623,7 +627,7 @@ impl AppliedState {
                 Vec::new(),
             );
         };
-        if owner.worker_id != worker_id
+        if owner.worker_id != *worker_id
             || owner.session_epoch != session_epoch
             || owner.attempt != attempt
         {
@@ -648,7 +652,7 @@ impl AppliedState {
                 .unwrap_or(0);
             return (
                 CommandResponse::Applied {
-                    awaited_action: awaited,
+                    awaited_action: awaited.map(Box::new),
                     revision,
                 },
                 Vec::new(),
@@ -667,7 +671,7 @@ impl AppliedState {
             .unwrap_or(0);
         (
             CommandResponse::Applied {
-                awaited_action: awaited,
+                awaited_action: awaited.map(Box::new),
                 revision,
             },
             vec![operation_id],
@@ -694,24 +698,21 @@ impl AppliedState {
                 // `try_subscribe` — but with no two-search + 20ms sleep race,
                 // because the log is the single writer (see CROSSED-OFF N7).
                 if let ActionUniqueQualifier::Cacheable(unique_key) = &action_info.unique_qualifier
+                    && let Some(existing) = self.unique_key_to_operation.get(unique_key)
+                    && let Some(existing_action) = self.operations.get(existing)
+                    && !existing_action.state().stage.is_finished()
                 {
-                    if let Some(existing) = self.unique_key_to_operation.get(unique_key) {
-                        if let Some(existing_action) = self.operations.get(existing) {
-                            if !existing_action.state().stage.is_finished() {
-                                self.client_to_operation
-                                    .insert(client_operation_id, existing.clone());
-                                let awaited = existing_action.clone();
-                                let revision = awaited.version_public();
-                                return (
-                                    CommandResponse::Applied {
-                                        awaited_action: Some(awaited),
-                                        revision,
-                                    },
-                                    vec![existing.clone()],
-                                );
-                            }
-                        }
-                    }
+                    self.client_to_operation
+                        .insert(client_operation_id, existing.clone());
+                    let awaited = existing_action.clone();
+                    let revision = awaited.version_public();
+                    return (
+                        CommandResponse::Applied {
+                            awaited_action: Some(Box::new(awaited)),
+                            revision,
+                        },
+                        vec![existing.clone()],
+                    );
                 }
 
                 // Pure constructor: origin metadata was captured on the request
@@ -720,7 +721,7 @@ impl AppliedState {
                     operation_id.clone(),
                     action_info.clone(),
                     nanos_to_system_time(now_unix_nanos),
-                    origin_metadata,
+                    origin_metadata.map(|m| *m),
                 );
                 let revision = self.bump_revision(&operation_id, &mut awaited);
                 let sorted = SortedAwaitedAction::from(&awaited);
@@ -741,7 +742,7 @@ impl AppliedState {
                     .insert(operation_id.clone(), awaited.clone());
                 (
                     CommandResponse::Applied {
-                        awaited_action: Some(awaited),
+                        awaited_action: Some(Box::new(awaited)),
                         revision,
                     },
                     vec![operation_id],
@@ -779,7 +780,7 @@ impl AppliedState {
                 now_unix_nanos,
             } => self.apply_heartbeat(
                 operation_id,
-                worker_id,
+                &worker_id,
                 session_epoch,
                 attempt,
                 now_unix_nanos,

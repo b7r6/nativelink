@@ -26,11 +26,10 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nativelink_error::Error;
+use nativelink_macro::nativelink_test;
 use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
 use nativelink_scheduler::raft_awaited_action_db::state::AppliedState;
-use nativelink_scheduler::raft_awaited_action_db::{
-    Command, RaftAwaitedActionDb, RaftDbConfig,
-};
+use nativelink_scheduler::raft_awaited_action_db::{Command, RaftAwaitedActionDb, RaftDbConfig};
 use nativelink_util::action_messages::{
     ActionInfo, ActionStage, ActionUniqueKey, ActionUniqueQualifier, OperationId,
 };
@@ -96,9 +95,10 @@ async fn state_of(db: &Db) -> AppliedState {
     db.applied_state_for_test().await
 }
 
-#[tokio::test]
+#[nativelink_test]
 async fn restart_rebuilds_state_from_the_log_alone() -> Result<(), Error> {
-    let dir = tempfile::tempdir().map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
     let (before, clients) = {
         let db = open(dir.path()).await?;
         let clients = populate(&db, 1, 3).await?;
@@ -120,9 +120,10 @@ async fn restart_rebuilds_state_from_the_log_alone() -> Result<(), Error> {
     Ok(())
 }
 
-#[tokio::test]
+#[nativelink_test]
 async fn restart_rebuilds_state_from_snapshot_plus_log_tail() -> Result<(), Error> {
-    let dir = tempfile::tempdir().map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
     let before = {
         let db = open(dir.path()).await?;
         populate(&db, 1, 2).await?;
@@ -141,9 +142,10 @@ async fn restart_rebuilds_state_from_snapshot_plus_log_tail() -> Result<(), Erro
     Ok(())
 }
 
-#[tokio::test]
+#[nativelink_test]
 async fn restart_after_a_torn_final_write_keeps_every_acknowledged_entry() -> Result<(), Error> {
-    let dir = tempfile::tempdir().map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
     let before = {
         let db = open(dir.path()).await?;
         populate(&db, 1, 3).await?;
@@ -161,7 +163,10 @@ async fn restart_after_a_torn_final_write_keeps_every_acknowledged_entry() -> Re
     drop(log);
 
     let db = open(dir.path()).await?;
-    assert_eq!(before.canonical_json(), state_of(&db).await.canonical_json());
+    assert_eq!(
+        before.canonical_json(),
+        state_of(&db).await.canonical_json()
+    );
     populate(&db, 30, 1).await?;
     assert_eq!(state_of(&db).await.operations.len(), 4);
     Ok(())
