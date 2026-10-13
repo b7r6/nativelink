@@ -21,7 +21,7 @@ use mock_instant::thread_local::MockClock;
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
 use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
-use nativelink_scheduler::default_scheduler_factory::memory_awaited_action_db_factory;
+use nativelink_scheduler::either_awaited_action_db::test_awaited_action_db_factory as memory_awaited_action_db_factory;
 use nativelink_util::action_messages::{ActionStage, OperationId};
 use nativelink_util::common::DigestInfo;
 use nativelink_util::instant_wrapper::MockInstantWrapped;

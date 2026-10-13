@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::time::Duration;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 
 use nativelink_config::schedulers::{
-    ExperimentalSimpleSchedulerBackend, PropertyType, SchedulerSpec, SimpleSpec,
+    ExperimentalRaftSchedulerBackend, ExperimentalSimpleSchedulerBackend, PropertyType,
+    SchedulerSpec, SimpleSpec,
 };
 use nativelink_config::stores::EvictionPolicy;
 use nativelink_error::{Error, ResultExt, make_input_err};
@@ -33,6 +36,7 @@ use crate::historical_resource_scheduler::HistoricalResourceScheduler;
 use crate::known_platform_property_provider::KnownPlatformPropertyProvider;
 use crate::memory_awaited_action_db::MemoryAwaitedActionDb;
 use crate::property_modifier_scheduler::PropertyModifierScheduler;
+use crate::raft_awaited_action_db::{RaftAwaitedActionDb, RaftDbConfig};
 use crate::simple_scheduler::SimpleScheduler;
 use crate::store_awaited_action_db::StoreAwaitedActionDb;
 use crate::worker_scheduler::WorkerScheduler;
@@ -229,6 +233,50 @@ async fn simple_scheduler_factory(
             );
             Ok((Some(action_scheduler), Some(worker_scheduler)))
         }
+        ExperimentalSimpleSchedulerBackend::Raft(raft_config) => {
+            let task_change_notify = Arc::new(Notify::new());
+            let awaited_action_db = RaftAwaitedActionDb::open(
+                raft_db_config(raft_config, spec),
+                task_change_notify.clone(),
+                SystemTime::now,
+            )
+            .await
+            .err_tip(|| "In state_manager_factory::raft_state_manager")?;
+            let (action_scheduler, worker_scheduler) = SimpleScheduler::new(
+                spec,
+                awaited_action_db,
+                task_change_notify,
+                maybe_origin_event_tx.cloned(),
+            );
+            Ok((Some(action_scheduler), Some(worker_scheduler)))
+        }
+    }
+}
+
+/// The raft db settings for a scheduler spec, with the same retention and
+/// retry cap the memory backend applies.
+#[must_use]
+pub fn raft_db_config(
+    raft_config: &ExperimentalRaftSchedulerBackend,
+    spec: &SimpleSpec,
+) -> RaftDbConfig {
+    let defaults = RaftDbConfig::default();
+    RaftDbConfig {
+        node_id: if raft_config.node_id == 0 {
+            defaults.node_id
+        } else {
+            raft_config.node_id
+        },
+        data_dir: raft_config.data_dir.as_ref().map(PathBuf::from),
+        retain_client: Duration::from_secs(u64::from(retain_completed_for_s(
+            spec.retain_completed_for_s,
+        ))),
+        retry_limit: spec.max_job_retries,
+        snapshot_every: if raft_config.snapshot_every == 0 {
+            defaults.snapshot_every
+        } else {
+            raft_config.snapshot_every
+        },
     }
 }
 

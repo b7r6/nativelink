@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, RaftAwaitedActionDb};
+use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, SystemRaftAwaitedActionDb};
 use nativelink_scheduler::awaited_action_db::{
     AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedActionState,
 };
@@ -81,7 +81,7 @@ fn completed_result() -> ActionResult {
 /// state (the sorted indices and the operation map) matches at each step.
 #[tokio::test]
 async fn full_lifecycle_through_the_log() {
-    let db = RaftAwaitedActionDb::new_single_node()
+    let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
         .expect("single-node raft boots");
 
@@ -226,7 +226,7 @@ async fn full_lifecycle_through_the_log() {
 /// requeues the same set, deterministically.
 #[tokio::test]
 async fn worker_death_requeues_through_the_log() {
-    let db = RaftAwaitedActionDb::new_single_node()
+    let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
         .expect("single-node raft boots");
 
@@ -325,7 +325,7 @@ async fn worker_death_requeues_through_the_log() {
 /// through the validated `AssignToWorker` command (which sets ownership).
 /// Asserts the assignment was accepted.
 async fn drive_to_executing(
-    db: &RaftAwaitedActionDb,
+    db: &SystemRaftAwaitedActionDb,
     queued: &nativelink_scheduler::awaited_action_db::AwaitedAction,
     worker: &WorkerId,
     session_epoch: u64,
@@ -356,7 +356,7 @@ async fn drive_to_executing(
 /// (Astra's N-wave) at the worker-session membership layer.
 #[tokio::test]
 async fn same_id_rejoin_supersedes_without_orphan() {
-    let db = RaftAwaitedActionDb::new_single_node()
+    let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
         .expect("single-node raft boots");
 
@@ -455,7 +455,7 @@ async fn same_id_rejoin_supersedes_without_orphan() {
 /// changed under me" to detect, so no generation counter is needed.
 #[tokio::test]
 async fn matching_reads_consistent_worker_set_without_generation_counter() {
-    let db = RaftAwaitedActionDb::new_single_node()
+    let db = SystemRaftAwaitedActionDb::new_single_node()
         .await
         .expect("single-node raft boots");
 

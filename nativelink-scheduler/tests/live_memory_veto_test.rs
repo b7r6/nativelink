@@ -24,7 +24,7 @@ use nativelink_macro::nativelink_test;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     UpdateForWorker, WorkerLoad, update_for_worker,
 };
-use nativelink_scheduler::default_scheduler_factory::memory_awaited_action_db_factory;
+use nativelink_scheduler::either_awaited_action_db::test_awaited_action_db_factory as memory_awaited_action_db_factory;
 use nativelink_scheduler::simple_scheduler::SimpleScheduler;
 use nativelink_scheduler::worker::Worker;
 use nativelink_scheduler::worker_scheduler::WorkerScheduler;

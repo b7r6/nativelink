@@ -16,7 +16,7 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use crate::awaited_action_db::AwaitedAction;
-use nativelink_util::action_messages::{ActionInfo, ActionState, OperationId, WorkerId};
+use nativelink_util::action_messages::{ActionInfo, OperationId, WorkerId};
 use nativelink_util::origin_event::OriginMetadata;
 use openraft::{RaftTypeConfig, declare_raft_types};
 use serde::{Deserialize, Serialize};
@@ -96,9 +96,11 @@ pub enum Command {
     UpdateAwaitedAction {
         operation_id: OperationId,
         expected_revision: i64,
-        new_state: Arc<ActionState>,
-        worker_id: Option<WorkerId>,
-        attempts: usize,
+        /// The caller's whole record, as the memory backend stores it: stage,
+        /// worker, and every counter (`attempts`, `worker_losses`,
+        /// `escalations`) and the possibly rewritten `action_info` travel
+        /// together, so none is silently reset to the stored value.
+        awaited_action: Box<AwaitedAction>,
         now_unix_nanos: u128,
     },
     /// A worker session heartbeat that NAMES the attempt and session it renews.
@@ -148,6 +150,32 @@ pub enum Command {
         session_epoch: u64,
         now_unix_nanos: u128,
     },
+    /// Forget client operation ids. Decided by the replica that serves those
+    /// clients (it alone sees their requests and keepalives), so no node
+    /// compares its clock against another's. An operation left with no client
+    /// is removed from the state, as the memory backend does when its last
+    /// client mapping is evicted.
+    DropClients {
+        client_operation_ids: Vec<OperationId>,
+        now_unix_nanos: u128,
+    },
+}
+
+impl Command {
+    /// The leader-stamped time this command carries. Apply clamps it so log
+    /// time never moves backwards, whichever leader stamped it.
+    pub const fn now_mut(&mut self) -> &mut u128 {
+        match self {
+            Self::AddAction { now_unix_nanos, .. }
+            | Self::AssignToWorker { now_unix_nanos, .. }
+            | Self::UpdateAwaitedAction { now_unix_nanos, .. }
+            | Self::Heartbeat { now_unix_nanos, .. }
+            | Self::Expire { now_unix_nanos, .. }
+            | Self::WorkerJoin { now_unix_nanos, .. }
+            | Self::WorkerLeave { now_unix_nanos, .. }
+            | Self::DropClients { now_unix_nanos, .. } => now_unix_nanos,
+        }
+    }
 }
 
 /// What `apply` returns to the caller that proposed the command.
@@ -173,6 +201,8 @@ pub enum CommandResponse {
         applied: bool,
         requeued: Vec<OperationId>,
     },
+    /// The operations a `DropClients` removed because no client remained.
+    Dropped { removed: Vec<OperationId> },
 }
 
 declare_raft_types!(

@@ -31,7 +31,7 @@ use nativelink_scheduler::awaited_action_db::{
     AwaitedAction, AwaitedActionDb, AwaitedActionSubscriber, SortedAwaitedAction,
     SortedAwaitedActionState,
 };
-use nativelink_scheduler::default_scheduler_factory::memory_awaited_action_db_factory;
+use nativelink_scheduler::either_awaited_action_db::test_awaited_action_db_factory as memory_awaited_action_db_factory;
 use nativelink_scheduler::simple_scheduler::SimpleScheduler;
 use nativelink_scheduler::simple_scheduler_state_manager::{
     SimpleSchedulerStateManager, TimeoutCause,

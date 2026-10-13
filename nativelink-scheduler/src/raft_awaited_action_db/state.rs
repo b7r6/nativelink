@@ -78,6 +78,16 @@ pub const DEFAULT_RETRY_LIMIT: usize = 5;
 
 /// The applied state machine. Deterministic in the log: identical bytes on
 /// every replica.
+/// A stage change an apply made, reported as data so apply stays pure; the
+/// store turns these into metrics. `None` means "not in the state".
+#[derive(Debug, Clone, PartialEq)]
+pub struct StageTransition {
+    pub from: Option<ActionStage>,
+    pub to: Option<ActionStage>,
+    pub priority: i32,
+    pub action_digest: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedState {
     /// operation_id -> the last-applied AwaitedAction.
@@ -113,6 +123,14 @@ pub struct AppliedState {
     /// The retry cap. A finish reporting failure past this many attempts fails
     /// the op instead of requeueing it.
     pub retry_limit: usize,
+    /// Log time: the largest command timestamp applied so far. Every command's
+    /// timestamp is clamped up to it before apply, so a new leader with a
+    /// slower clock cannot move time backwards.
+    pub log_now: u128,
+    /// Stage changes made by the last apply, drained by the store. Not part
+    /// of the replicated state.
+    #[serde(skip)]
+    pub transitions: Vec<StageTransition>,
 }
 
 /// Who owns an in-flight operation: a worker session and the attempt number.
@@ -136,6 +154,8 @@ impl Default for AppliedState {
             operation_revision: HashMap::new(),
             operation_attempt: HashMap::new(),
             retry_limit: DEFAULT_RETRY_LIMIT,
+            log_now: 0,
+            transitions: Vec::new(),
         }
     }
 }
@@ -161,6 +181,8 @@ pub struct PortableState {
     operation_revision: Vec<(OperationId, i64)>,
     operation_attempt: Vec<(OperationId, u64)>,
     retry_limit: usize,
+    #[serde(default)]
+    log_now: u128,
 }
 
 impl AppliedState {
@@ -201,7 +223,37 @@ impl AppliedState {
                 .map(|(k, v)| (k.clone(), *v))
                 .collect(),
             retry_limit: self.retry_limit,
+            log_now: self.log_now,
         }
+    }
+
+    /// A canonical text form of the whole state: every map's entries sorted,
+    /// so two replicas (or one node before and after a restart) holding the
+    /// same state produce the same string regardless of hash-map order.
+    pub fn canonical_json(&self) -> String {
+        fn sorted<K: Serialize, V: Serialize>(pairs: &[(K, V)]) -> Vec<String> {
+            let mut out: Vec<String> = pairs
+                .iter()
+                .map(|pair| serde_json::to_string(pair).unwrap_or_default())
+                .collect();
+            out.sort();
+            out
+        }
+        let p = self.to_portable();
+        serde_json::json!({
+            "operations": sorted(&p.operations),
+            "client_to_operation": sorted(&p.client_to_operation),
+            "unique_key_to_operation": sorted(&p.unique_key_to_operation),
+            "sorted": serde_json::to_value(&p.sorted).unwrap_or_default(),
+            "leases": sorted(&p.leases),
+            "sessions": sorted(&p.sessions),
+            "operation_owner": sorted(&p.operation_owner),
+            "operation_revision": sorted(&p.operation_revision),
+            "operation_attempt": sorted(&p.operation_attempt),
+            "retry_limit": p.retry_limit,
+            "log_now": p.log_now.to_string(),
+        })
+        .to_string()
     }
 
     /// Rebuild from the snapshot-safe encoding.
@@ -217,11 +269,71 @@ impl AppliedState {
             operation_revision: p.operation_revision.into_iter().collect(),
             operation_attempt: p.operation_attempt.into_iter().collect(),
             retry_limit: p.retry_limit,
+            log_now: p.log_now,
+            transitions: Vec::new(),
         }
     }
 }
 
 impl AppliedState {
+    fn record_transition(
+        &mut self,
+        action: &AwaitedAction,
+        from: Option<&ActionStage>,
+        to: Option<&ActionStage>,
+    ) {
+        if let (Some(from), Some(to)) = (from, to) {
+            if from.is_same_stage(to) {
+                return;
+            }
+        }
+        self.transitions.push(StageTransition {
+            from: from.cloned(),
+            to: to.cloned(),
+            priority: action.action_info().priority,
+            action_digest: action.action_info().digest().to_string(),
+        });
+    }
+
+    /// Remove client mappings, then every operation no client refers to any
+    /// more. Returns the removed operation ids.
+    fn drop_clients(&mut self, client_operation_ids: &[OperationId]) -> Vec<OperationId> {
+        let mut affected: Vec<OperationId> = client_operation_ids
+            .iter()
+            .filter_map(|client| self.client_to_operation.remove(client))
+            .collect();
+        affected.sort();
+        affected.dedup();
+        affected.retain(|op| !self.client_to_operation.values().any(|o| o == op));
+        for op in &affected {
+            self.remove_operation(op);
+        }
+        affected
+    }
+
+    /// Remove every trace of an operation from the applied state.
+    fn remove_operation(&mut self, op: &OperationId) {
+        let Some(action) = self.operations.remove(op) else {
+            return;
+        };
+        self.record_transition(&action, Some(&action.state().stage.clone()), None);
+        self.sorted
+            .btree_for_state(&action.state().stage)
+            .remove(&SortedAwaitedAction::from(&action));
+        if let ActionUniqueQualifier::Cacheable(unique_key) = &action.action_info().unique_qualifier
+        {
+            // Only if it still points here: a newer operation for the same key
+            // may have claimed the entry after this one finished.
+            if self.unique_key_to_operation.get(unique_key) == Some(op) {
+                self.unique_key_to_operation.remove(unique_key);
+            }
+        }
+        self.leases.remove(op);
+        self.operation_owner.remove(op);
+        self.operation_revision.remove(op);
+        self.operation_attempt.remove(op);
+    }
+
     /// Bump and return the new revision for an operation, and stamp it onto the
     /// record so a published `AwaitedAction` carries its own revision.
     fn bump_revision(&mut self, op: &OperationId, action: &mut AwaitedAction) -> i64 {
@@ -260,6 +372,7 @@ impl AppliedState {
             .insert(SortedAwaitedAction::from(&updated));
         self.leases.insert(op.clone(), now_unix_nanos);
         self.operation_owner.remove(op);
+        self.record_transition(&updated, Some(&ActionStage::Executing), Some(&ActionStage::Queued));
         // The attempt that was running is over; the next assignment starts a new
         // one. Keep operation_attempt as the high-water mark so attempts never
         // reuse a number.
@@ -394,6 +507,7 @@ impl AppliedState {
             .btree_for_state(&ActionStage::Executing)
             .insert(SortedAwaitedAction::from(&updated));
         self.leases.insert(operation_id.clone(), now_unix_nanos);
+        self.record_transition(&updated, Some(&ActionStage::Queued), Some(&ActionStage::Executing));
         self.operations
             .insert(operation_id.clone(), updated.clone());
         (
@@ -411,98 +525,74 @@ impl AppliedState {
         &mut self,
         operation_id: OperationId,
         expected_revision: i64,
-        new_state: std::sync::Arc<nativelink_util::action_messages::ActionState>,
-        worker_id: Option<WorkerId>,
-        attempts: usize,
+        incoming: AwaitedAction,
         now_unix_nanos: u128,
     ) -> (CommandResponse, Vec<OperationId>) {
+        let reject = |reason| (CommandResponse::Rejected { reason }, Vec::new());
         let Some(existing) = self.operations.get(&operation_id) else {
-            return (
-                CommandResponse::Rejected {
-                    reason: RejectReason::NoSuchOperation,
-                },
-                Vec::new(),
-            );
+            return reject(RejectReason::NoSuchOperation);
         };
+        if incoming.operation_id() != &operation_id {
+            return reject(RejectReason::NoSuchOperation);
+        }
         let actual = self
             .operation_revision
             .get(&operation_id)
             .copied()
             .unwrap_or(0);
         if actual != expected_revision {
-            return (
-                CommandResponse::Rejected {
-                    reason: RejectReason::RevisionConflict {
-                        expected: expected_revision,
-                        actual,
-                    },
-                },
-                Vec::new(),
-            );
+            return reject(RejectReason::RevisionConflict {
+                expected: expected_revision,
+                actual,
+            });
         }
+        let new_stage = incoming.state().stage.clone();
         // A terminal op absorbs no further nonterminal update: it cannot be
         // resurrected (protects N7's "one live op per qualifier" — a stale
         // Queued/Executing write can neither un-finish X nor delete Y's claim).
-        if existing.state().stage.is_finished() && !new_state.stage.is_finished() {
-            return (
-                CommandResponse::Rejected {
-                    reason: RejectReason::AlreadyTerminal,
-                },
-                Vec::new(),
-            );
+        if existing.state().stage.is_finished() && !new_stage.is_finished() {
+            return reject(RejectReason::AlreadyTerminal);
         }
-        // Retry cap: a requeue (back to Queued for another attempt) past the cap
-        // is refused, so a persistently failing action does not loop forever.
-        // The caller carries the running attempt count; the decision lives here.
-        if matches!(new_state.stage, ActionStage::Queued) && attempts > self.retry_limit {
-            return (
-                CommandResponse::Rejected {
-                    reason: RejectReason::RetryCapExceeded {
-                        attempts,
-                        limit: self.retry_limit,
-                    },
-                },
-                Vec::new(),
-            );
+        // Retry cap: a requeue past the cap is refused, so a persistently
+        // failing action cannot loop forever even if a caller miscounts.
+        if matches!(new_stage, ActionStage::Queued) && incoming.attempts > self.retry_limit {
+            return reject(RejectReason::RetryCapExceeded {
+                attempts: incoming.attempts,
+                limit: self.retry_limit,
+            });
         }
 
         let old_stage = existing.state().stage.clone();
         let old_sorted = SortedAwaitedAction::from(existing);
-        let mut updated = existing.clone();
-        let now = nanos_to_system_time(now_unix_nanos);
-        updated.set_worker_id(worker_id.clone(), now);
-        updated.worker_set_state(new_state.clone(), now);
-        // Preserve the caller's retry counter rather than the stored one, so a
-        // per-attempt increment is not silently dropped (adapter defect, S0).
-        updated.attempts = attempts;
+        let kept_keepalive = existing
+            .last_client_keepalive_timestamp()
+            .max(incoming.last_client_keepalive_timestamp());
+        let mut updated = incoming;
+        updated.update_client_keep_alive(kept_keepalive);
 
         // Ownership: a finish or a move off Executing clears ownership.
-        if new_state.stage.is_finished() || !matches!(new_state.stage, ActionStage::Executing) {
+        if !matches!(new_stage, ActionStage::Executing) {
             self.operation_owner.remove(&operation_id);
         }
 
-        if !old_stage.is_same_stage(&new_state.stage) {
-            self.sorted.btree_for_state(&old_stage).remove(&old_sorted);
-            let new_sorted = SortedAwaitedAction::from(&updated);
-            self.sorted
-                .btree_for_state(&new_state.stage)
-                .insert(new_sorted);
-            if new_state.stage.is_finished() {
-                if let ActionUniqueQualifier::Cacheable(unique_key) =
-                    &updated.action_info().unique_qualifier
-                {
-                    if self
-                        .unique_key_to_operation
-                        .get(unique_key)
-                        .is_some_and(|id| id == &operation_id)
-                    {
-                        self.unique_key_to_operation.remove(unique_key);
-                    }
+        // The sort key can change without a stage change (an escalation
+        // rewrites the action's properties), so always re-index.
+        self.sorted.btree_for_state(&old_stage).remove(&old_sorted);
+        self.sorted
+            .btree_for_state(&new_stage)
+            .insert(SortedAwaitedAction::from(&updated));
+        if new_stage.is_finished() {
+            if let ActionUniqueQualifier::Cacheable(unique_key) =
+                &updated.action_info().unique_qualifier
+            {
+                if self.unique_key_to_operation.get(unique_key) == Some(&operation_id) {
+                    self.unique_key_to_operation.remove(unique_key);
                 }
             }
         }
         let revision = self.bump_revision(&operation_id, &mut updated);
         self.leases.insert(operation_id.clone(), now_unix_nanos);
+        self.record_transition(&updated, Some(&old_stage), Some(&new_stage));
         self.operations
             .insert(operation_id.clone(), updated.clone());
         (
@@ -586,7 +676,11 @@ impl AppliedState {
 
     /// Apply one log command. Returns the response and the set of operation ids
     /// whose `AwaitedAction` changed (so the db layer can wake their watchers).
-    pub fn apply(&mut self, cmd: Command) -> (CommandResponse, Vec<OperationId>) {
+    pub fn apply(&mut self, mut cmd: Command) -> (CommandResponse, Vec<OperationId>) {
+        self.transitions.clear();
+        let now = cmd.now_mut();
+        self.log_now = self.log_now.max(*now);
+        *now = self.log_now;
         match cmd {
             Command::AddAction {
                 client_operation_id,
@@ -642,6 +736,7 @@ impl AppliedState {
                     .insert(client_operation_id, operation_id.clone());
                 self.leases.insert(operation_id.clone(), now_unix_nanos);
                 self.operation_attempt.insert(operation_id.clone(), 0);
+                self.record_transition(&awaited, None, Some(&ActionStage::Queued));
                 self.operations
                     .insert(operation_id.clone(), awaited.clone());
                 (
@@ -668,16 +763,12 @@ impl AppliedState {
             Command::UpdateAwaitedAction {
                 operation_id,
                 expected_revision,
-                new_state,
-                worker_id,
-                attempts,
+                awaited_action,
                 now_unix_nanos,
             } => self.apply_update(
                 operation_id,
                 expected_revision,
-                new_state,
-                worker_id,
-                attempts,
+                *awaited_action,
                 now_unix_nanos,
             ),
             Command::Heartbeat {
@@ -754,6 +845,18 @@ impl AppliedState {
                         requeued,
                     },
                     changed,
+                )
+            }
+            Command::DropClients {
+                client_operation_ids,
+                now_unix_nanos: _,
+            } => {
+                let removed = self.drop_clients(&client_operation_ids);
+                (
+                    CommandResponse::Dropped {
+                        removed: removed.clone(),
+                    },
+                    removed,
                 )
             }
             Command::WorkerLeave {

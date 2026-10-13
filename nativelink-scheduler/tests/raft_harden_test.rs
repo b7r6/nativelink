@@ -22,7 +22,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nativelink_scheduler::raft_awaited_action_db::{CommandResponse, RaftAwaitedActionDb, RejectReason};
+use nativelink_scheduler::raft_awaited_action_db::{
+    CommandResponse, RejectReason, SystemRaftAwaitedActionDb,
+};
 use nativelink_scheduler::awaited_action_db::{AwaitedActionDb, AwaitedActionSubscriber};
 use nativelink_util::action_messages::{
     ActionInfo, ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
@@ -80,11 +82,11 @@ fn completed_result() -> ActionResult {
 
 /// Add a queued action and return (subscriber, operation_id, its revision).
 async fn add_queued(
-    db: &RaftAwaitedActionDb,
+    db: &SystemRaftAwaitedActionDb,
     client: &str,
     digest: DigestInfo,
 ) -> (
-    nativelink_scheduler::raft_awaited_action_db::RaftAwaitedActionSubscriber,
+    nativelink_scheduler::raft_awaited_action_db::SystemRaftAwaitedActionSubscriber,
     OperationId,
     i64,
 ) {
@@ -113,7 +115,7 @@ async fn add_queued(
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn s0_two_assignments_one_queued_revision_exactly_one_wins() {
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let wa = WorkerId("WA".to_string());
     let wb = WorkerId("WB".to_string());
     db.worker_join(wa.clone(), 1).await.unwrap();
@@ -165,7 +167,7 @@ async fn s0_two_assignments_one_queued_revision_exactly_one_wins() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn s0_completed_rejects_stale_nonterminal_update() {
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -232,7 +234,7 @@ async fn s0_completed_rejects_stale_nonterminal_update() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn attempts_counter_survives_and_hits_retry_cap() {
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -289,7 +291,7 @@ async fn attempts_counter_survives_and_hits_retry_cap() {
                     "the attempts counter is preserved, not reset (attempt {attempt_no})"
                 );
                 rev = db.revision_of(&op).await.unwrap();
-                let _ = sub.changed().await;
+                drop(sub.changed().await);
             }
             Err(e) => {
                 // Past the cap the requeue is refused.
@@ -328,7 +330,7 @@ async fn attempts_counter_survives_and_hits_retry_cap() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn heartbeat_identity_and_monotonic_lease() {
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -420,8 +422,8 @@ async fn heartbeat_identity_and_monotonic_lease() {
 #[tokio::test]
 async fn add_action_origin_metadata_is_from_command_not_ambient() {
     // Two independent state machines; apply runs on their own scheduler tasks.
-    let db1 = RaftAwaitedActionDb::new_single_node().await.expect("boot1");
-    let db2 = RaftAwaitedActionDb::new_single_node().await.expect("boot2");
+    let db1 = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot1");
+    let db2 = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot2");
 
     let digest = DigestInfo::new([6u8; 32], 6);
     let s1 = db1
@@ -472,7 +474,7 @@ async fn add_action_origin_metadata_is_from_command_not_ambient() {
 async fn snapshot_roundtrips_nonempty_cacheable_state() {
     use nativelink_scheduler::raft_awaited_action_db::state::AppliedState;
 
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 
@@ -537,7 +539,7 @@ async fn snapshot_roundtrips_nonempty_cacheable_state() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn subscriber_never_regresses_revision() {
-    let db = RaftAwaitedActionDb::new_single_node().await.expect("boot");
+    let db = SystemRaftAwaitedActionDb::new_single_node().await.expect("boot");
     let worker = WorkerId("W".to_string());
     db.worker_join(worker.clone(), 1).await.unwrap();
 

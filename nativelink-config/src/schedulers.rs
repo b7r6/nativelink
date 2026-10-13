@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::serde_utils::{
     convert_duration_with_shellexpand, convert_duration_with_shellexpand_and_negative,
-    convert_numeric_with_shellexpand, convert_string_with_shellexpand,
+    convert_numeric_with_shellexpand, convert_optional_string_with_shellexpand,
+    convert_string_with_shellexpand,
 };
 use crate::stores::{GrpcEndpoint, Retry, StoreRefName};
 
@@ -359,6 +360,32 @@ pub enum ExperimentalSimpleSchedulerBackend {
     Memory,
     /// Use a redis store for the scheduler.
     Redis(ExperimentalRedisSchedulerBackend),
+    /// Keep the scheduler state in a raft-replicated log on local disk.
+    /// Survives a scheduler restart; see
+    /// `nativelink-scheduler/src/raft_awaited_action_db/DESIGN.md`.
+    Raft(ExperimentalRaftSchedulerBackend),
+}
+
+#[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "dev-schema", derive(JsonSchema))]
+pub struct ExperimentalRaftSchedulerBackend {
+    /// This scheduler's raft node id.
+    /// Default: 1
+    #[serde(default)]
+    pub node_id: u64,
+
+    /// Directory for the raft log and snapshots. Unset keeps them in memory,
+    /// so a restart loses all state, as with the memory backend.
+    /// Default: unset
+    #[serde(default, deserialize_with = "convert_optional_string_with_shellexpand")]
+    pub data_dir: Option<String>,
+
+    /// Build a snapshot, and allow the log before it to be discarded, after
+    /// this many log entries.
+    /// Default: 50000
+    #[serde(default)]
+    pub snapshot_every: u64,
 }
 
 #[derive(Deserialize, Serialize, Debug, Default)]

@@ -17,6 +17,7 @@ pub mod api_worker_scheduler;
 pub mod awaited_action_db;
 pub mod cache_lookup_scheduler;
 pub mod default_scheduler_factory;
+pub mod either_awaited_action_db;
 pub mod grpc_scheduler;
 pub mod historical_resource_scheduler;
 pub mod known_platform_property_provider;
