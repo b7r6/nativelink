@@ -202,6 +202,10 @@ fn next_command(rng: &mut Rng, world: &mut World, state: &AppliedState) -> Comma
                 now_unix_nanos,
             }
         }
+        8 if rng.chance(10) => Command::ReplicaRestarted {
+            node_id: 1,
+            now_unix_nanos,
+        },
         8 => Command::Expire {
             now_unix_nanos,
             lease_timeout_nanos: u128::from(rng.next() % 4_000_000_000),

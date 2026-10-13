@@ -888,6 +888,32 @@ impl AppliedState {
                     changed,
                 )
             }
+            Command::ReplicaRestarted {
+                node_id: _,
+                now_unix_nanos,
+            } => {
+                // In sorted order, so every replica requeues identically.
+                let executing: Vec<OperationId> = self
+                    .sorted
+                    .executing
+                    .iter()
+                    .map(|sorted| sorted.operation_id.clone())
+                    .collect();
+                let mut requeued = Vec::new();
+                for op in executing {
+                    if self.requeue_operation(&op, now_unix_nanos) {
+                        requeued.push(op);
+                    }
+                }
+                // Every session belonged to the dead process.
+                self.sessions.clear();
+                (
+                    CommandResponse::Expired {
+                        requeued: requeued.clone(),
+                    },
+                    requeued,
+                )
+            }
             Command::DropClients {
                 client_operation_ids,
                 now_unix_nanos: _,

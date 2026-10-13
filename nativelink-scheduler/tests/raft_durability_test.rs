@@ -70,9 +70,14 @@ async fn open(dir: &Path) -> Result<Db, Error> {
     Db::open(config(dir), Arc::new(Notify::new()), now_fn).await
 }
 
-/// Add `n` actions and move the first one to Executing, so the state has more
-/// than one stage and a bumped revision in it.
-async fn populate(db: &Db, first: u8, n: u8) -> Result<Vec<OperationId>, Error> {
+/// Add `n` actions and move the first one to `first_stage`, so the state has
+/// more than one stage and a bumped revision in it.
+async fn populate_with(
+    db: &Db,
+    first: u8,
+    n: u8,
+    first_stage: &ActionStage,
+) -> Result<Vec<OperationId>, Error> {
     let mut clients = Vec::new();
     for i in first..first + n {
         let client = OperationId::default();
@@ -82,13 +87,25 @@ async fn populate(db: &Db, first: u8, n: u8) -> Result<Vec<OperationId>, Error> 
         if i == first {
             let mut action = sub.borrow().await?;
             let mut state = action.state().as_ref().clone();
-            state.stage = ActionStage::Executing;
+            state.stage = first_stage.clone();
             action.worker_set_state(Arc::new(state), SystemTime::now());
             db.update_awaited_action(action).await?;
         }
         clients.push(client);
     }
     Ok(clients)
+}
+
+/// [`populate_with`], the first action completed: a restart must give back
+/// exactly this state (nothing in it is executing, which a restart requeues).
+async fn populate(db: &Db, first: u8, n: u8) -> Result<Vec<OperationId>, Error> {
+    populate_with(
+        db,
+        first,
+        n,
+        &ActionStage::Completed(nativelink_util::action_messages::ActionResult::default()),
+    )
+    .await
 }
 
 async fn state_of(db: &Db) -> AppliedState {
@@ -203,6 +220,47 @@ async fn restart_gives_restored_clients_a_fresh_keepalive() -> Result<(), Error>
     assert!(
         after >= reopened_at && after > before,
         "restored client keepalive {after:?} must be from after the restart ({reopened_at:?})",
+    );
+    Ok(())
+}
+
+/// Worker streams die with the scheduler process, so a restart requeues what
+/// was executing at once instead of waiting out the executing timeout (found
+/// by rechaos restart-chaos: 48 actions each sat 60s after restarts).
+#[nativelink_test]
+async fn restart_requeues_what_was_executing() -> Result<(), Error> {
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    let clients = {
+        let db = open(dir.path()).await?;
+        let clients = populate_with(&db, 1, 2, &ActionStage::Executing).await?;
+        assert_eq!(
+            state_of(&db).await.sorted.executing.len(),
+            1,
+            "one action executing before the restart"
+        );
+        db.shutdown().await?;
+        clients
+    };
+    let db = open(dir.path()).await?;
+    let state = state_of(&db).await;
+    assert!(state.sorted.executing.is_empty(), "nothing left executing");
+    assert_eq!(state.sorted.queued.len(), 2, "the executing action is queued again");
+    let executing_client = &clients[0];
+    let action = db
+        .get_awaited_action_by_id(executing_client)
+        .await?
+        .ok_or_else(|| nativelink_error::make_err!(nativelink_error::Code::NotFound, "lost"))?
+        .borrow()
+        .await?;
+    assert!(matches!(action.state().stage, ActionStage::Queued));
+    assert!(
+        action.worker_id_public().is_none(),
+        "no worker left assigned"
+    );
+    assert_eq!(
+        action.attempts, 0,
+        "a scheduler restart is not the action's failure"
     );
     Ok(())
 }

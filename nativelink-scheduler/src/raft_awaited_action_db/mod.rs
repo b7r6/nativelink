@@ -534,6 +534,21 @@ where
         let db = Self::new(config, tasks_change_notify, now_fn)?;
         db.raft().await?;
         let now = (db.now_fn)().now();
+        // The worker streams of the previous process died with it: requeue
+        // what it had handed out instead of waiting out its executing
+        // timeout. Only needed when there is state to recover.
+        let has_executing = db
+            .shared
+            .sm
+            .with_state(|s| !s.sorted.executing.is_empty())
+            .await;
+        if has_executing {
+            db.propose(Command::ReplicaRestarted {
+                node_id: db.config.node_id,
+                now_unix_nanos: unix_nanos(now),
+            })
+            .await?;
+        }
         // What this replica knew about its clients died with the process.
         // Give every restored client a full retention and keepalive window
         // from now to come back, rather than judging it by timestamps from

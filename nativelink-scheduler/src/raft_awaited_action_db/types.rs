@@ -159,6 +159,17 @@ pub enum Command {
         client_operation_ids: Vec<OperationId>,
         now_unix_nanos: u128,
     },
+    /// A replica came back after its process died. Its worker streams died
+    /// with it, so every assignment it handed out is void: the operations
+    /// are requeued, uncharged (the scheduler failed, not the action). With
+    /// a single voter every worker stream belonged to this replica, so that
+    /// is every executing operation; with several voters it becomes the
+    /// operations whose worker session this replica owned (DESIGN.md §3,
+    /// `ReplicaLost`).
+    ReplicaRestarted {
+        node_id: NodeId,
+        now_unix_nanos: u128,
+    },
     /// Commands proposed concurrently, committed as one log entry and
     /// applied in order, each exactly as if it were its own entry. One entry
     /// costs one log sync however many commands it carries.
@@ -178,7 +189,8 @@ impl Command {
             | Self::Expire { now_unix_nanos, .. }
             | Self::WorkerJoin { now_unix_nanos, .. }
             | Self::WorkerLeave { now_unix_nanos, .. }
-            | Self::DropClients { now_unix_nanos, .. } => now_unix_nanos,
+            | Self::DropClients { now_unix_nanos, .. }
+            | Self::ReplicaRestarted { now_unix_nanos, .. } => now_unix_nanos,
             Self::Batch(_) => return None,
         })
     }
