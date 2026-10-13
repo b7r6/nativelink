@@ -54,7 +54,7 @@ use openraft::raft::{
     VoteRequest, VoteResponse,
 };
 use openraft::{BasicNode, Config, Raft, SnapshotPolicy};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, oneshot, watch};
 
 use self::state::AppliedState;
 use self::store::{LogStore, OnApply, StateMachineStore};
@@ -411,8 +411,16 @@ pub struct RaftAwaitedActionDb<I: InstantWrapper, NowFn: Fn() -> I> {
     shared: Arc<Shared>,
     config: RaftDbConfig,
     now_fn: NowFn,
+    proposer_tx: mpsc::UnboundedSender<Proposal>,
+    _proposer: JoinHandleDropGuard<()>,
     _init: JoinHandleDropGuard<()>,
 }
+
+/// A command waiting to be committed, and where its response goes.
+type Proposal = (Command, oneshot::Sender<Result<CommandResponse, Error>>);
+
+/// Most proposals committed as one log entry.
+const MAX_PROPOSAL_GROUP: usize = 256;
 
 impl<I: InstantWrapper, NowFn: Fn() -> I> MetricsComponent for RaftAwaitedActionDb<I, NowFn> {
     fn publish(
@@ -503,11 +511,15 @@ where
             watchers,
             clients: Arc::new(SyncMutex::new(ClientTracker::default())),
         });
+        let (proposer_tx, proposals) = mpsc::unbounded_channel();
+        let proposer = Self::spawn_proposer(raft_rx.clone(), proposals);
         Ok(Self {
             raft_rx,
             shared,
             config,
             now_fn,
+            proposer_tx,
+            _proposer: proposer,
             _init: init,
         })
     }
@@ -624,13 +636,72 @@ where
 
     /// Propose a command through the log and wait for it to be applied.
     async fn propose(&self, cmd: Command) -> Result<CommandResponse, Error> {
-        let resp = self
-            .raft()
-            .await?
-            .client_write(cmd)
-            .await
-            .map_err(|e| make_err!(Code::Unavailable, "raft client_write failed: {e}"))?;
-        Ok(resp.data)
+        let (tx, rx) = oneshot::channel();
+        self.proposer_tx
+            .send((cmd, tx))
+            .map_err(|_| make_err!(Code::Unavailable, "raft proposer stopped"))?;
+        rx.await
+            .map_err(|_| make_err!(Code::Unavailable, "raft proposer stopped"))?
+    }
+
+    /// Commits proposals in groups: while one entry is being made durable,
+    /// new proposals queue up, and the next entry carries all of them as a
+    /// `Command::Batch`. Throughput then scales with concurrency instead of
+    /// being one log sync per command.
+    fn spawn_proposer(
+        mut raft_rx: watch::Receiver<Option<Result<Raft<TypeConfig>, String>>>,
+        mut proposals: mpsc::UnboundedReceiver<Proposal>,
+    ) -> JoinHandleDropGuard<()> {
+        spawn!("raft_awaited_action_db_proposer", async move {
+            let raft = match raft_rx.wait_for(Option::is_some).await.as_deref() {
+                Ok(Some(Ok(raft))) => Ok(raft.clone()),
+                Ok(Some(Err(e))) => Err(e.clone()),
+                _ => Err("raft init task ended".to_string()),
+            };
+            let mut group: Vec<Proposal> = Vec::new();
+            while proposals.recv_many(&mut group, MAX_PROPOSAL_GROUP).await > 0 {
+                let raft = match &raft {
+                    Ok(raft) => raft,
+                    Err(e) => {
+                        for (_, tx) in group.drain(..) {
+                            drop(tx.send(Err(make_err!(Code::Unavailable, "{e}"))));
+                        }
+                        continue;
+                    }
+                };
+                let (cmds, txs): (Vec<Command>, Vec<_>) = group.drain(..).unzip();
+                let single = cmds.len() == 1;
+                let cmd = if single {
+                    cmds.into_iter()
+                        .next()
+                        .unwrap_or(Command::Batch(Vec::new()))
+                } else {
+                    Command::Batch(cmds)
+                };
+                match raft.client_write(cmd).await {
+                    Ok(resp) => match resp.data {
+                        CommandResponse::Batch(responses) if !single => {
+                            for (tx, resp) in txs.into_iter().zip(responses) {
+                                drop(tx.send(Ok(resp)));
+                            }
+                        }
+                        resp => {
+                            for tx in txs {
+                                drop(tx.send(Ok(resp.clone())));
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        for tx in txs {
+                            drop(tx.send(Err(make_err!(
+                                Code::Unavailable,
+                                "raft client_write failed: {e}"
+                            ))));
+                        }
+                    }
+                }
+            }
+        })
     }
 
     /// Ensure a watch channel exists for `op_id`, seeded with the current state,

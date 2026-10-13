@@ -319,7 +319,19 @@ fn run_seed(seed: u64, steps: usize) {
     let mut follower = AppliedState::default();
     let mut log_now = 0;
     for step in 0..steps {
-        let cmd = next_command(&mut rng, &mut world, &leader);
+        let mut cmd = next_command(&mut rng, &mut world, &leader);
+        if rng.chance(15) {
+            // Proposals committed together, sometimes nested, as the
+            // proposer groups them.
+            let mut cmds = vec![cmd];
+            for _ in 0..rng.below(4) {
+                cmds.push(next_command(&mut rng, &mut world, &leader));
+            }
+            if rng.chance(20) {
+                cmds = vec![Command::Batch(cmds)];
+            }
+            cmd = Command::Batch(cmds);
+        }
         let context = format!("seed {seed} step {step} after {cmd:?}");
         let (leader_resp, _) = leader.apply(cmd.clone());
         let (follower_resp, _) = follower.apply(cmd);

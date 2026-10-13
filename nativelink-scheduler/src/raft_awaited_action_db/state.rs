@@ -702,12 +702,28 @@ impl AppliedState {
 
     /// Apply one log command. Returns the response and the set of operation ids
     /// whose `AwaitedAction` changed (so the db layer can wake their watchers).
-    pub fn apply(&mut self, mut cmd: Command) -> (CommandResponse, Vec<OperationId>) {
+    pub fn apply(&mut self, cmd: Command) -> (CommandResponse, Vec<OperationId>) {
         self.transitions.clear();
-        let now = cmd.now_mut();
-        self.log_now = self.log_now.max(*now);
-        *now = self.log_now;
+        self.apply_one(cmd)
+    }
+
+    fn apply_one(&mut self, mut cmd: Command) -> (CommandResponse, Vec<OperationId>) {
+        if let Some(now) = cmd.now_mut() {
+            self.log_now = self.log_now.max(*now);
+            *now = self.log_now;
+        }
         match cmd {
+            // A batch inside a batch is applied the same way, in order.
+            Command::Batch(cmds) => {
+                let mut responses = Vec::with_capacity(cmds.len());
+                let mut changed = Vec::new();
+                for cmd in cmds {
+                    let (resp, ops) = self.apply_one(cmd);
+                    responses.push(resp);
+                    changed.extend(ops);
+                }
+                (CommandResponse::Batch(responses), changed)
+            }
             Command::AddAction {
                 client_operation_id,
                 operation_id,

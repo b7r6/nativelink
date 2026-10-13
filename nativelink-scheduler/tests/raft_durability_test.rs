@@ -237,3 +237,100 @@ fn log_time_never_moves_backwards() {
     });
     assert_eq!(state.log_now, 2_000);
 }
+
+/// Not a pass/fail test: prints add+update throughput for the raft backend
+/// durable, the raft backend in memory, and the memory backend, so the cost
+/// of durability is measured rather than guessed.
+/// `cargo test --release -p nativelink-scheduler --test raft_durability_test -- --ignored --nocapture`
+#[nativelink_test]
+#[ignore = "benchmark"]
+async fn throughput_by_backend() -> Result<(), Error> {
+    use nativelink_scheduler::default_scheduler_factory::memory_awaited_action_db_factory;
+    const N: u32 = 2000;
+    async fn one(db: &impl AwaitedActionDb, i: u32) -> Result<(), Error> {
+        let mut info = action_info(0).as_ref().clone();
+        info.unique_qualifier = ActionUniqueQualifier::Uncacheable(ActionUniqueKey {
+            execution_scope: None,
+            instance_name: "bench".to_string(),
+            digest_function: DigestHasherFunc::Sha256,
+            digest: DigestInfo::new([1; 32], u64::from(i)),
+        });
+        let sub = db
+            .add_action(
+                OperationId::default(),
+                Arc::new(info),
+                Duration::from_secs(60),
+            )
+            .await?;
+        let mut action = sub.borrow().await?;
+        let mut state = action.state().as_ref().clone();
+        state.stage = ActionStage::Executing;
+        action.worker_set_state(Arc::new(state), SystemTime::now());
+        db.update_awaited_action(action).await
+    }
+    async fn drive_concurrent(db: &impl AwaitedActionDb, label: &str) -> Result<(), Error> {
+        const WRITERS: u32 = 64;
+        let start = std::time::Instant::now();
+        let writers = (0..WRITERS).map(|w| async move {
+            for i in 0..N / WRITERS {
+                one(db, 1_000_000 + w * N + i).await?;
+            }
+            Ok::<(), Error>(())
+        });
+        for result in futures::future::join_all(writers).await {
+            result?;
+        }
+        let secs = start.elapsed().as_secs_f64();
+        eprintln!(
+            "{label:>14}: {N} add+update by {WRITERS} writers in {secs:.2}s = {:.0} ops/s",
+            f64::from(2 * N) / secs
+        );
+        Ok(())
+    }
+    async fn drive(db: &impl AwaitedActionDb, label: &str) -> Result<(), Error> {
+        drive_concurrent(db, label).await?;
+        let start = std::time::Instant::now();
+        for i in 0..N {
+            let mut info = action_info(0).as_ref().clone();
+            info.unique_qualifier = ActionUniqueQualifier::Uncacheable(ActionUniqueKey {
+                execution_scope: None,
+                instance_name: "bench".to_string(),
+                digest_function: DigestHasherFunc::Sha256,
+                digest: DigestInfo::new([0; 32], u64::from(i)),
+            });
+            let sub = db
+                .add_action(
+                    OperationId::default(),
+                    Arc::new(info),
+                    Duration::from_secs(60),
+                )
+                .await?;
+            let mut action = sub.borrow().await?;
+            let mut state = action.state().as_ref().clone();
+            state.stage = ActionStage::Executing;
+            action.worker_set_state(Arc::new(state), SystemTime::now());
+            db.update_awaited_action(action).await?;
+        }
+        let secs = start.elapsed().as_secs_f64();
+        eprintln!(
+            "{label:>14}: {N} add+update in {secs:.2}s = {:.0} ops/s",
+            f64::from(2 * N) / secs
+        );
+        Ok(())
+    }
+    let now_fn: fn() -> SystemTime = SystemTime::now;
+    let dir = tempfile::tempdir()
+        .map_err(|e| Error::from_std_err(nativelink_error::Code::Internal, &e))?;
+    drive(&open(dir.path()).await?, "raft durable").await?;
+    drive(
+        &Db::open(RaftDbConfig::default(), Arc::new(Notify::new()), now_fn).await?,
+        "raft in-memory",
+    )
+    .await?;
+    drive(
+        &memory_awaited_action_db_factory(3600, &Arc::new(Notify::new()), now_fn),
+        "memory",
+    )
+    .await?;
+    Ok(())
+}

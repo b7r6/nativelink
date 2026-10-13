@@ -29,12 +29,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use nativelink_util::action_messages::OperationId;
+use nativelink_util::task::JoinHandleDropGuard;
 use openraft::storage::{LogFlushed, LogState, RaftLogStorage, RaftStateMachine, Snapshot};
 use openraft::{
     EntryPayload, ErrorSubject, ErrorVerb, LogId, OptionalSend, RaftLogId, RaftLogReader,
     RaftSnapshotBuilder, SnapshotMeta, StorageError, StoredMembership, Vote,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc, oneshot};
 
 use nativelink_util::action_messages::ActionStage;
 use nativelink_util::spawn_blocking;
@@ -159,12 +160,144 @@ impl LogInner {
     }
 }
 
+/// How a queued log write reports that it is on disk.
+enum Done {
+    /// An append: tell openraft through its callback.
+    Flushed(LogFlushed<TypeConfig>),
+    /// Anything else: wake the caller waiting for it.
+    Reply(oneshot::Sender<std::io::Result<()>>),
+}
+
+impl Done {
+    fn complete(self, result: &std::io::Result<()>) {
+        let result = match result {
+            Ok(()) => Ok(()),
+            Err(e) => Err(std::io::Error::new(e.kind(), e.to_string())),
+        };
+        match self {
+            Self::Flushed(callback) => callback.log_io_completed(result),
+            Self::Reply(tx) => drop(tx.send(result)),
+        }
+    }
+}
+
+enum WalOp {
+    Write(Vec<WalRecord>, Done),
+    Rewrite(Vec<WalRecord>, Done),
+}
+
+/// Owns the log file on a blocking thread and commits in groups: it takes
+/// every write queued since the last sync, writes them in order, syncs once,
+/// then reports all of them durable. Appends therefore do not wait for each
+/// other's sync, which is what openraft's `LogFlushed` callback is for.
+struct WalWriter {
+    tx: mpsc::UnboundedSender<WalOp>,
+    _thread: JoinHandleDropGuard<()>,
+}
+
+/// Most writes taken into one sync.
+const MAX_GROUP: usize = 1024;
+
+fn failed_err(kind: std::io::ErrorKind) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        kind,
+        "an earlier raft log write failed",
+    ))
+}
+
+impl WalWriter {
+    fn start(mut wal: Wal) -> Self {
+        let (tx, mut rx) = mpsc::unbounded_channel::<WalOp>();
+        let thread = spawn_blocking!("raft_log_writer", move || {
+            // After a failed write the file's tail is unknown: refuse every
+            // later write rather than append after a gap.
+            let mut failed: Option<std::io::ErrorKind> = None;
+            while let Some(first) = rx.blocking_recv() {
+                let mut group = vec![first];
+                while group.len() < MAX_GROUP {
+                    match rx.try_recv() {
+                        Ok(op) => group.push(op),
+                        Err(_) => break,
+                    }
+                }
+                let mut pending: Vec<Done> = Vec::new();
+                for op in group {
+                    match op {
+                        WalOp::Write(records, done) => {
+                            if let Some(kind) = failed {
+                                done.complete(&failed_err(kind));
+                                continue;
+                            }
+                            if let Err(e) = wal.write(&records) {
+                                failed = Some(e.kind());
+                                done.complete(&Err(e));
+                                continue;
+                            }
+                            pending.push(done);
+                        }
+                        WalOp::Rewrite(records, done) => {
+                            // Everything written before the rewrite is synced
+                            // and reported first, to keep the order.
+                            Self::sync_and_complete(&wal, &mut failed, &mut pending);
+                            let result = match failed {
+                                Some(kind) => failed_err(kind),
+                                None => wal.rewrite(&records),
+                            };
+                            done.complete(&result);
+                        }
+                    }
+                }
+                Self::sync_and_complete(&wal, &mut failed, &mut pending);
+            }
+        });
+        Self {
+            tx,
+            _thread: thread,
+        }
+    }
+
+    fn sync_and_complete(
+        wal: &Wal,
+        failed: &mut Option<std::io::ErrorKind>,
+        pending: &mut Vec<Done>,
+    ) {
+        if pending.is_empty() {
+            return;
+        }
+        let result = match *failed {
+            Some(kind) => failed_err(kind),
+            None => wal.sync(),
+        };
+        if let Err(e) = &result {
+            *failed = Some(e.kind());
+        }
+        for done in pending.drain(..) {
+            done.complete(&result);
+        }
+    }
+
+    fn send(&self, op: WalOp) {
+        if let Err(mpsc::error::SendError(op)) = self.tx.send(op) {
+            let closed = Err(std::io::Error::other("raft log writer stopped"));
+            match op {
+                WalOp::Write(_, done) | WalOp::Rewrite(_, done) => done.complete(&closed),
+            }
+        }
+    }
+}
+
+impl Debug for WalWriter {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("WalWriter").finish_non_exhaustive()
+    }
+}
+
 /// The log store half. Cloneable: the `LogReader` shares the same inner.
 #[derive(Debug, Clone)]
 pub struct LogStore {
     inner: Arc<RwLock<LogInner>>,
     /// `None` keeps the log in memory only (tests, and the spike's behavior).
-    wal: Option<Arc<std::sync::Mutex<Wal>>>,
+    wal: Option<Arc<WalWriter>>,
 }
 
 impl Default for LogStore {
@@ -186,43 +319,30 @@ impl LogStore {
         }
         Ok(Self {
             inner: Arc::new(RwLock::new(inner)),
-            wal: Some(Arc::new(std::sync::Mutex::new(wal))),
+            wal: Some(Arc::new(WalWriter::start(wal))),
         })
     }
 
-    /// Make `records` durable. Runs the blocking write and `fdatasync` off the
-    /// async executor.
+    /// Make `records` durable, in order after every earlier write, and wait
+    /// for it.
     async fn persist(&self, records: Vec<WalRecord>) -> std::io::Result<()> {
-        let Some(wal) = self.wal.clone() else {
+        let Some(wal) = &self.wal else {
             return Ok(());
         };
-        spawn_blocking!("raft_log_append", move || {
-            wal.lock()
-                .map_err(|_| std::io::Error::other("raft log mutex poisoned"))?
-                .append(&records)
-        })
-        .await
-        .map_err(std::io::Error::other)?
+        let (tx, rx) = oneshot::channel();
+        wal.send(WalOp::Write(records, Done::Reply(tx)));
+        rx.await
+            .map_err(|_| std::io::Error::other("raft log writer stopped"))?
     }
 
     async fn rewrite(&self, records: Vec<WalRecord>) -> std::io::Result<()> {
-        let Some(wal) = self.wal.clone() else {
+        let Some(wal) = &self.wal else {
             return Ok(());
         };
-        spawn_blocking!("raft_log_rewrite", move || {
-            wal.lock()
-                .map_err(|_| std::io::Error::other("raft log mutex poisoned"))?
-                .rewrite(&records)
-        })
-        .await
-        .map_err(std::io::Error::other)?
-    }
-
-    /// Size of the log file on disk, for tests and metrics.
-    pub fn file_len(&self) -> Option<u64> {
-        self.wal
-            .as_ref()
-            .and_then(|wal| wal.lock().ok().and_then(|wal| wal.len().ok()))
+        let (tx, rx) = oneshot::channel();
+        wal.send(WalOp::Rewrite(records, Done::Reply(tx)));
+        rx.await
+            .map_err(|_| std::io::Error::other("raft log writer stopped"))?
     }
 }
 
@@ -267,9 +387,16 @@ impl RaftLogStorage<TypeConfig> for LogStore {
     }
 
     async fn save_committed(&mut self, committed: Option<LogId<NodeId>>) -> StorageResult<()> {
-        self.persist(vec![WalRecord::Committed(committed)])
-            .await
-            .map_err(|e| io_err(ErrorSubject::Store, ErrorVerb::Write, e))?;
+        // The committed id only lets a restart skip re-committing; nothing
+        // depends on it being durable, so it is queued behind the entries it
+        // names and not waited for. Waiting here costs a sync per commit.
+        if let Some(wal) = &self.wal {
+            let (tx, _rx) = oneshot::channel();
+            wal.send(WalOp::Write(
+                vec![WalRecord::Committed(committed)],
+                Done::Reply(tx),
+            ));
+        }
         self.inner.write().await.committed = committed;
         Ok(())
     }
@@ -289,21 +416,19 @@ impl RaftLogStorage<TypeConfig> for LogStore {
             .cloned()
             .map(|e| WalRecord::Entry(Box::new(e)))
             .collect();
-        // Durable first, then visible, then acknowledged: openraft may count
-        // this node toward a quorum as soon as the callback fires.
-        let result = self.persist(records).await;
-        if let Err(e) = result {
-            let err = io_err(ErrorSubject::Logs, ErrorVerb::Write, e);
-            callback.log_io_completed(Err(std::io::Error::other(err.to_string())));
-            return Err(err);
-        }
         {
             let mut inner = self.inner.write().await;
             for entry in entries {
                 inner.log.insert(entry.get_log_id().index, entry);
             }
         }
-        callback.log_io_completed(Ok(()));
+        // Readable at once, durable when the writer's next group commit says
+        // so: openraft counts this node toward a quorum only after the
+        // callback fires, which is after the sync.
+        match &self.wal {
+            Some(wal) => wal.send(WalOp::Write(records, Done::Flushed(callback))),
+            None => callback.log_io_completed(Ok(())),
+        }
         Ok(())
     }
 

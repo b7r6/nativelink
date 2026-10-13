@@ -159,13 +159,18 @@ pub enum Command {
         client_operation_ids: Vec<OperationId>,
         now_unix_nanos: u128,
     },
+    /// Commands proposed concurrently, committed as one log entry and
+    /// applied in order, each exactly as if it were its own entry. One entry
+    /// costs one log sync however many commands it carries.
+    Batch(Vec<Self>),
 }
 
 impl Command {
-    /// The leader-stamped time this command carries. Apply clamps it so log
-    /// time never moves backwards, whichever leader stamped it.
-    pub const fn now_mut(&mut self) -> &mut u128 {
-        match self {
+    /// The leader-stamped time this command carries, `None` for a batch
+    /// (each command in it carries its own). Apply clamps it so log time
+    /// never moves backwards, whichever leader stamped it.
+    pub const fn now_mut(&mut self) -> Option<&mut u128> {
+        Some(match self {
             Self::AddAction { now_unix_nanos, .. }
             | Self::AssignToWorker { now_unix_nanos, .. }
             | Self::UpdateAwaitedAction { now_unix_nanos, .. }
@@ -174,7 +179,8 @@ impl Command {
             | Self::WorkerJoin { now_unix_nanos, .. }
             | Self::WorkerLeave { now_unix_nanos, .. }
             | Self::DropClients { now_unix_nanos, .. } => now_unix_nanos,
-        }
+            Self::Batch(_) => return None,
+        })
     }
 }
 
@@ -203,6 +209,8 @@ pub enum CommandResponse {
     },
     /// The operations a `DropClients` removed because no client remained.
     Dropped { removed: Vec<OperationId> },
+    /// One response per command of a `Batch`, in order.
+    Batch(Vec<Self>),
 }
 
 declare_raft_types!(

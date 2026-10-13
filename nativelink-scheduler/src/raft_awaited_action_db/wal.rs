@@ -169,12 +169,23 @@ impl Wal {
     }
 
     /// Append `records` and return once they are on disk.
+    #[cfg(test)]
     pub(crate) fn append(&mut self, records: &[WalRecord]) -> io::Result<()> {
+        self.write(records)?;
+        self.sync()
+    }
+
+    /// Write `records` after the last ones, without waiting for the disk.
+    pub(crate) fn write(&mut self, records: &[WalRecord]) -> io::Result<()> {
         if records.is_empty() {
             return Ok(());
         }
         let bytes = encode(records)?;
-        self.file.write_all(&bytes)?;
+        self.file.write_all(&bytes)
+    }
+
+    /// Wait until everything written is on disk.
+    pub(crate) fn sync(&self) -> io::Result<()> {
         self.file.sync_data()
     }
 
@@ -189,10 +200,6 @@ impl Wal {
         file.seek(SeekFrom::End(0))?;
         self.file = file;
         Ok(())
-    }
-
-    pub(crate) fn len(&self) -> io::Result<u64> {
-        Ok(self.file.metadata()?.len())
     }
 }
 
