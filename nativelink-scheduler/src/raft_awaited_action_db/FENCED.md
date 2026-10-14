@@ -114,16 +114,24 @@ experimental_backend: {
 membership with every peer as a voter when its log is empty; the others wait to
 be contacted. Initializing an already-initialized cluster is not an error.
 
-**Serving**, *contract*: on a node that is not the leader, `Execute`,
+**Serving**, *contract (amended)*: on a node that is not the leader, `Execute`,
 `WaitExecution`, `GetOperation`/listing and the worker API's `ConnectWorker`
-fail with `UNAVAILABLE` and the message
-`not the raft leader; leader is node <id> at <address>` (or
-`not the raft leader; leader unknown`).
+fail with `UNAVAILABLE` and the message `not the raft leader; leader is node
+<id>` (or `not the raft leader; leader unknown`). No address: the only address
+a node knows for a peer is its raft peer address, which clients cannot use.
+CAS, AC, ByteStream and Capabilities are served on every node (they are
+storage, not scheduler state).
 
-**Readiness**, *contract*: the health server's readiness route (`/ready` by
-default) answers ready on a node only when it is the leader *and* has applied
-its term's blank entry. The liveness route (`/status`) is unchanged. A load
-balancer, or the test rig's leader proxy, routes to the ready node.
+**Readiness**, *contract (amended)*: the health server's readiness route
+(`/ready` by default) answers ready on a node only when all of these hold: it
+is the leader; it has applied its term's blank entry; and a quorum has
+acknowledged it within the last `election_timeout_min_ms` (so a deposed leader
+that has not yet heard of the new term stops reporting ready on its own,
+before any new leader can be elected). The ready answer's body is
+`{"node_id":<id>,"term":<term>}`; a router that sees two ready nodes takes the
+higher term. A single node (no `cluster` block) is ready only after its log
+and snapshot are replayed and its open-time proposals are applied. The
+liveness route (`/status`) is unchanged.
 
 **Peer transport**, *contract*: a gRPC service on `cluster.listen`, one RPC per
 openraft network call, each carrying the openraft request and response
@@ -135,6 +143,53 @@ both ends.
 barrier, proposes `LeaderChanged { node_id, term, now }`, which for now has
 `ReplicaRestarted`'s semantics (requeue what was executing, clear sessions).
 Session resume replaces it in wave 2.
+
+**Deleted knobs stay parseable**, *contract*: a timeout this track deletes
+(`max_action_executing_timeout_s`, `client_action_timeout_s`, ...) stays in the
+config schema, is accepted and ignored with a one-time warning, so existing
+configs (and `deny_unknown_fields`) keep working.
+
+**The absurd-timeouts set**, *contract*: the knobs set to a day for the pass
+condition are [`TIMEOUTS.md`](../../spec/TIMEOUTS.md) K1–K8 and K21
+(`retain_completed_for_s`, `client_action_timeout_s`, `worker_timeout_s`,
+`max_action_executing_timeout_s`, `unacknowledged_kill_timeout_s`,
+`dispatch_ack_timeout_s`, `unsatisfiable_action_timeout_s`,
+`no_worker_action_timeout_s`, `kill_revoked_operations_interval_s`). Worker-side
+bounds (K26–K37) are a separate, later pass condition: today several of them
+still decide outcomes with no fault injected (see TIMEOUTS.md "FENCED.md gets
+wrong or misses" item 16).
+
+## Amendments after wave-1 review
+
+Findings from the inventory (stream B) and the rig (stream D) that change this
+page; the spec (stream A) has them as inputs.
+
+- The revoke barrier needs a defined ack: "the worker has stopped the attempt
+  and will not publish anything for it", which today's kill path does not give
+  (kills are visible only as `ABORTED` after upload and cleanup; persistent
+  kills reach only the pid; `setsid` children survive).
+- The Action Cache is outside the fence: workers write it before reporting, so
+  a superseded attempt can publish. AC publication must be fenced (attempt and
+  epoch) or move to the leader on commit.
+- Retention collects finished operations only; an unwatched live operation is
+  cancelled through the revoke barrier first. Watcher counts are leader-local,
+  so retention restarts for every operation at leader-ready.
+- Dispatch-ack and kill-ack deadlines are detector inputs (proposals measured
+  from the send), like worker silence.
+- `unsatisfiable_action_timeout_s` and `no_worker_action_timeout_s` are leader
+  policy timers that propose a logged `FailQueued`; client-visible, never
+  safety-relevant.
+- Time inside replicated records is leader-stamped and clamped to log time; no
+  safety property may depend on it.
+- Reads are side-effect free (today `WaitExecution`, `GetOperation` and
+  listing cancel stale operations).
+- Ownership (holder, ack, kill, capacity) moves from the in-memory worker
+  scheduler into the log, so a new leader can rebuild obligations.
+- Worker-local state (action directories, persistent processes) is keyed by
+  attempt, not operation.
+- Workers' reconnect backoff (doubling to 30 s, reset only on success) bounds
+  how fast a fleet returns after a leader change; wave 2 caps it and resets it
+  on a readiness change.
 
 ## Test rig contract (rechaos fleet rig)
 
