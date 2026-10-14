@@ -161,4 +161,14 @@ pub trait WorkerScheduler: Sync + Send + Unpin + RootMetricsComponent + 'static 
     /// scheduler has finished, requeued or dropped without them (client
     /// timeouts and cancellations, execution deadlines, retries elsewhere).
     async fn kill_revoked_operations(&self) -> Result<(), Error>;
+
+    /// Tells `worker_id` to kill `attempt` of `operation_id`, now, if it still
+    /// holds exactly that attempt. Called when the state manager revokes it;
+    /// `kill_revoked_operations` is the backstop for anything this misses.
+    async fn kill_revoked_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: OperationId,
+        attempt: u64,
+    ) -> Result<(), Error>;
 }

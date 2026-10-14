@@ -42,8 +42,8 @@ use nativelink_util::operation_state_manager::{
 use nativelink_util::origin_event::{OriginMetadata, get_node_id};
 use nativelink_util::platform_properties::PlatformProperties;
 use nativelink_util::shutdown_guard::ShutdownGuard;
-use nativelink_util::spawn;
 use nativelink_util::task::JoinHandleDropGuard;
+use nativelink_util::{background_spawn, spawn};
 use opentelemetry::KeyValue;
 use opentelemetry::baggage::BaggageExt;
 use opentelemetry::context::{Context, FutureExt as OtelFutureExt};
@@ -1224,6 +1224,26 @@ impl SimpleScheduler {
             record_ttl,
         );
 
+        // A revoked attempt is killed at once, off the updating task so no
+        // scheduler lock is taken inside a state manager update.
+        {
+            let weak_worker_scheduler = Arc::downgrade(&worker_scheduler);
+            state_manager.set_revoke_hook(Arc::new(move |worker_id, operation_id, attempt| {
+                let weak_worker_scheduler = weak_worker_scheduler.clone();
+                background_spawn!("simple_scheduler_kill_revoked_attempt", async move {
+                    let Some(worker_scheduler) = weak_worker_scheduler.upgrade() else {
+                        return;
+                    };
+                    if let Err(err) = worker_scheduler
+                        .kill_revoked_attempt(&worker_id, operation_id, attempt)
+                        .await
+                    {
+                        warn!(?worker_id, ?err, "Killing a revoked attempt failed");
+                    }
+                });
+            }));
+        }
+
         let worker_scheduler_clone = worker_scheduler.clone();
 
         let fallback_match_interval = match spec.fallback_match_interval_s {
@@ -1635,6 +1655,17 @@ impl WorkerScheduler for SimpleScheduler {
 
     async fn kill_revoked_operations(&self) -> Result<(), Error> {
         self.worker_scheduler.kill_revoked_operations().await
+    }
+
+    async fn kill_revoked_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: OperationId,
+        attempt: u64,
+    ) -> Result<(), Error> {
+        self.worker_scheduler
+            .kill_revoked_attempt(worker_id, operation_id, attempt)
+            .await
     }
 }
 

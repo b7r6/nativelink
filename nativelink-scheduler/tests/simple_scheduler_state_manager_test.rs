@@ -869,6 +869,161 @@ impl<T: AwaitedActionDb> AwaitedActionDb for FaultyDb<T> {
     }
 }
 
+/// The memory database whose next `conflicts` writes fail as if another
+/// writer got there first (`Aborted`, a version conflict).
+struct ConflictingDb<T: AwaitedActionDb> {
+    inner: T,
+    conflicts: Arc<std::sync::atomic::AtomicUsize>,
+    writes: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl<T: AwaitedActionDb> MetricsComponent for ConflictingDb<T> {
+    fn publish(
+        &self,
+        kind: MetricKind,
+        field_metadata: MetricFieldData,
+    ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+        self.inner.publish(kind, field_metadata)
+    }
+}
+
+impl<T: AwaitedActionDb> AwaitedActionDb for ConflictingDb<T> {
+    type Subscriber = T::Subscriber;
+
+    async fn get_awaited_action_by_id(
+        &self,
+        client_operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        self.inner
+            .get_awaited_action_by_id(client_operation_id)
+            .await
+    }
+
+    async fn get_all_awaited_actions(
+        &self,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.inner.get_all_awaited_actions().await
+    }
+
+    async fn get_by_operation_id(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        self.inner.get_by_operation_id(operation_id).await
+    }
+
+    async fn get_range_of_actions(
+        &self,
+        state: SortedAwaitedActionState,
+        start: Bound<SortedAwaitedAction>,
+        end: Bound<SortedAwaitedAction>,
+        desc: bool,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.inner
+            .get_range_of_actions(state, start, end, desc)
+            .await
+    }
+
+    async fn update_awaited_action(&self, new_awaited_action: AwaitedAction) -> Result<(), Error> {
+        use std::sync::atomic::Ordering;
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        if self
+            .conflicts
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok()
+        {
+            return Err(make_err!(Code::Aborted, "version conflict"));
+        }
+        self.inner.update_awaited_action(new_awaited_action).await
+    }
+
+    async fn add_action(
+        &self,
+        client_operation_id: OperationId,
+        action_info: Arc<ActionInfo>,
+        no_event_action_timeout: Duration,
+    ) -> Result<Self::Subscriber, Error> {
+        self.inner
+            .add_action(client_operation_id, action_info, no_event_action_timeout)
+            .await
+    }
+}
+
+/// The matcher chose the worker for the record as it was; after a version
+/// conflict that choice may be stale (the action requeued in between, the
+/// worker gone silent). Retrying it after a backoff once assigned an action to
+/// a worker two requeues later. An assignment that loses a conflict is
+/// reported, not retried, so the matcher chooses again; other updates still
+/// retry.
+#[nativelink_test]
+async fn an_assignment_that_loses_a_conflict_is_not_retried() -> Result<(), Error> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let task_change_notify = Arc::new(Notify::new());
+    let conflicts = Arc::new(AtomicUsize::new(0));
+    let writes = Arc::new(AtomicUsize::new(0));
+    let now_fn: fn() -> MockInstantWrapped = MockInstantWrapped::default;
+    let state_mgr = SimpleSchedulerStateManager::new(
+        5,
+        WORKER_TIMEOUT,
+        Duration::from_mins(5),
+        MAX_EXECUTING,
+        ConflictingDb {
+            inner: memory_awaited_action_db_factory(0, &task_change_notify, now_fn),
+            conflicts: conflicts.clone(),
+            writes: writes.clone(),
+        },
+        now_fn,
+        Some(Arc::new(WorkerRegistry::new())),
+    );
+    let (operation_id, _matching) = queued_operation_id(state_mgr.as_ref()).await?;
+    let worker_id = WorkerId("worker".to_string());
+
+    conflicts.store(1, Ordering::SeqCst);
+    writes.store(0, Ordering::SeqCst);
+    let err = state_mgr
+        .assign_operation_to_worker(&operation_id, &worker_id)
+        .await
+        .expect_err("the assignment lost the conflict");
+    assert_eq!(err.code, Code::Aborted);
+    assert_eq!(
+        writes.load(Ordering::SeqCst),
+        1,
+        "written once, not retried"
+    );
+    assert_eq!(queued_count(state_mgr.as_ref()).await?, 1, "still queued");
+
+    // Through the trait's other entry point too.
+    conflicts.store(1, Ordering::SeqCst);
+    writes.store(0, Ordering::SeqCst);
+    let err = state_mgr
+        .assign_operation(&operation_id, Ok(&worker_id))
+        .await
+        .expect_err("the assignment lost the conflict");
+    assert_eq!(err.code, Code::Aborted);
+    assert_eq!(
+        writes.load(Ordering::SeqCst),
+        1,
+        "written once, not retried"
+    );
+
+    // A failure report, by contrast, is retried through the conflict.
+    conflicts.store(1, Ordering::SeqCst);
+    writes.store(0, Ordering::SeqCst);
+    state_mgr
+        .assign_operation(
+            &operation_id,
+            Err(make_err!(Code::Internal, "the action failed")),
+        )
+        .await?;
+    assert_eq!(
+        writes.load(Ordering::SeqCst),
+        2,
+        "retried after the conflict"
+    );
+    Ok(())
+}
+
 fn faulty_state_manager(
     fault: Fault,
 ) -> Arc<

@@ -511,7 +511,13 @@ async fn a_silent_worker_costs_a_worker_loss_not_a_retry() -> Result<(), Error> 
             "round {round}: a lost worker must not use up the action's retries",
         );
     }
-    // Each lost worker was sent the action once, and nothing after.
+    // Let the revoke hooks' kill tasks run; the periodic sweep never does
+    // in this test.
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+    }
+    // Each lost worker was sent the action once, and then, the moment it was
+    // taken back, a kill for exactly that attempt.
     for (round, rx) in workers.iter_mut().enumerate() {
         assert!(
             matches!(
@@ -522,14 +528,22 @@ async fn a_silent_worker_costs_a_worker_loss_not_a_retry() -> Result<(), Error> 
             ),
             "worker {round} was dispatched the action",
         );
+        let attempt = u64::try_from(round).unwrap_or(0) + 1;
         assert!(
-            !matches!(
+            matches!(
                 rx.try_recv(),
                 Ok(UpdateForWorker {
-                    update: Some(update_for_worker::Update::StartAction(_))
-                })
+                    update: Some(update_for_worker::Update::KillOperationRequest(
+                        KillOperationRequest { attempt: a, .. }
+                    ))
+                }) if a == attempt
             ),
-            "worker {round} was dispatched it again after going silent",
+            "worker {round} was told at once to kill attempt {attempt}",
+        );
+        let extra = rx.try_recv();
+        assert!(
+            extra.is_err(),
+            "worker {round}: nothing else, got {extra:?}"
         );
     }
     Ok(())
@@ -3533,31 +3547,39 @@ async fn failed_final_update_does_not_leak_worker_capacity() -> Result<(), Error
     )
     .await?;
 
-    // The worker now reports action 1 finished. The state-manager update
-    // fails ("already completed"), but the worker's slot must still be freed.
+    // The worker now reports action 1 finished. Either the state-manager
+    // update fails ("already completed"), or, the attempt having been killed
+    // the moment its client went away, the late result is dropped as a
+    // killed attempt's. Either way the worker's slot must be freed.
     let update_result = scheduler
         .update_action(
             &worker_id,
-            &OperationId::from(operation_id),
+            &OperationId::from(operation_id.clone()),
             UpdateOperationType::UpdateWithActionStage(ActionStage::Completed(
                 ActionResult::default(),
             )),
         )
         .await;
-    assert_eq!(
-        update_result
-            .expect_err("state-manager update should fail")
-            .code,
-        Code::Internal
-    );
+    if let Err(err) = update_result {
+        assert_eq!(err.code, Code::Internal);
+    }
 
-    // With the slot restored, action 2 must get matched to the worker.
+    // With the slot restored, action 2 must get matched to the worker. The
+    // worker was told to kill action 1 when its client went away; that kill
+    // comes first.
     scheduler.do_try_match_for_test().await?;
-    match rx_from_worker
+    let mut next = rx_from_worker
         .try_recv()
         .expect("worker should have been sent action 2")
-        .update
-    {
+        .update;
+    if let Some(update_for_worker::Update::KillOperationRequest(kill)) = &next {
+        assert_eq!(kill.operation_id, operation_id, "only action 1 is killed");
+        next = rx_from_worker
+            .try_recv()
+            .expect("worker should have been sent action 2")
+            .update;
+    }
+    match next {
         Some(update_for_worker::Update::StartAction(_)) => {}
         v => panic!("Expected StartAction for the second action, got : {v:?}"),
     }

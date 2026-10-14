@@ -490,6 +490,35 @@ where
 
     /// Worker registry for checking worker liveness.
     worker_registry: Option<SharedWorkerRegistry>,
+
+    /// Told the moment an update takes an executing action away from the
+    /// worker that holds it, so the worker can be told to stop at once
+    /// instead of on the next `kill_revoked_operations` sweep (which stays
+    /// as the backstop).
+    revoke_hook: RevokeHookCell,
+}
+
+/// Holds the [`RevokeHook`], set once after construction.
+#[derive(Default)]
+struct RevokeHookCell(std::sync::OnceLock<RevokeHook>);
+
+impl core::fmt::Debug for RevokeHookCell {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("RevokeHookCell")
+            .field(&self.0.get().is_some())
+            .finish()
+    }
+}
+
+/// Called with `(worker, operation, attempt)` when that attempt is revoked.
+pub type RevokeHook = Arc<dyn Fn(WorkerId, OperationId, u64) + Send + Sync>;
+
+/// The worker and attempt holding an executing action, if any.
+fn holder_of(awaited_action: &AwaitedAction) -> Option<(WorkerId, u64)> {
+    matches!(awaited_action.state().stage, ActionStage::Executing)
+        .then(|| awaited_action.worker_id().cloned())
+        .flatten()
+        .map(|worker_id| (worker_id, awaited_action.dispatch_attempt))
 }
 
 impl<T, I, NowFn> SimpleSchedulerStateManager<T, I, NowFn>
@@ -524,7 +553,33 @@ where
             weak_self: weak_self.clone(),
             now_fn,
             worker_registry,
+            revoke_hook: RevokeHookCell::default(),
         })
+    }
+
+    /// Install the hook told about revoked attempts. Only the first call
+    /// takes effect.
+    pub fn set_revoke_hook(&self, hook: RevokeHook) {
+        drop(self.revoke_hook.0.set(hook));
+    }
+
+    /// If `before` was held by a worker and `after` no longer is, tell the
+    /// hook, unless the change came from that worker itself.
+    fn notify_revoked(
+        &self,
+        before: Option<(WorkerId, u64)>,
+        after: &AwaitedAction,
+        changed_by: Option<&WorkerId>,
+    ) {
+        let Some((holder, attempt)) = before else {
+            return;
+        };
+        if changed_by == Some(&holder) || holder_of(after) == Some((holder.clone(), attempt)) {
+            return;
+        }
+        if let Some(hook) = self.revoke_hook.0.get() {
+            hook(holder, after.operation_id().clone(), attempt);
+        }
     }
 
     /// Retires queued actions whose client has stopped listening.
@@ -835,13 +890,18 @@ where
                         None => awaited_action.clone(),
                         Some(reloaded_awaited_action) => reloaded_awaited_action.clone(),
                     };
+                    let held_before = holder_of(&new_awaited_action);
                     new_awaited_action.worker_set_state(state.clone(), (self.now_fn)().now());
                     let err = match self
                         .action_db
-                        .update_awaited_action(new_awaited_action)
+                        .update_awaited_action(new_awaited_action.clone())
                         .await
                     {
-                        Ok(()) => break,
+                        Ok(()) => {
+                            // The client is gone: so is the point of running it.
+                            self.notify_revoked(held_before, &new_awaited_action, None);
+                            break;
+                        }
                         Err(err) => err,
                     };
                     // Reload from the database if the action was outdated.
@@ -1031,6 +1091,22 @@ where
         maybe_worker_id: Option<&WorkerId>,
         update: UpdateOperationType,
     ) -> Result<u64, Error> {
+        self.inner_update_operation_attempt_retrying(operation_id, maybe_worker_id, update, true)
+            .await
+    }
+
+    /// `retry_on_conflict: false` is for assignments: the matcher chose the
+    /// worker for the record as it was, so a conflict means that choice may
+    /// no longer hold (the action may have been requeued since, the worker
+    /// gone silent). Re-applying it after a backoff assigned stale choices;
+    /// the caller gets `Aborted` instead and the matcher decides again.
+    async fn inner_update_operation_attempt_retrying(
+        &self,
+        operation_id: &OperationId,
+        maybe_worker_id: Option<&WorkerId>,
+        update: UpdateOperationType,
+        retry_on_conflict: bool,
+    ) -> Result<u64, Error> {
         let update_type_str = match &update {
             UpdateOperationType::KeepAlive => "KeepAlive",
             UpdateOperationType::UpdateWithActionStage(stage) => match stage {
@@ -1054,6 +1130,15 @@ where
             update_type = %update_type_str,
             "inner_update_operation START"
         );
+
+        // Who the change comes from, for the revoke hook. A disconnect names
+        // the holder only to pass the worker check below; losing a worker is
+        // never that worker's own doing, so its attempt is revoked.
+        let changed_by = if matches!(update, UpdateOperationType::UpdateWithDisconnect) {
+            None
+        } else {
+            maybe_worker_id
+        };
 
         let mut last_err = None;
         let mut retry_count = 0;
@@ -1093,6 +1178,7 @@ where
                 .borrow()
                 .await
                 .err_tip(|| "In SimpleSchedulerStateManager::update_operation")?;
+            let held_before = holder_of(&awaited_action);
 
             // Make sure the worker id matches the awaited action worker id.
             // This might happen if the worker sending the update is not the
@@ -1326,6 +1412,14 @@ where
                 // We use Aborted to signal that the action was not
                 // updated due to the data being set was not the latest
                 // but can be retried.
+                if err.code == Code::Aborted && !retry_on_conflict {
+                    debug!(
+                        %operation_id,
+                        update_type = %update_type_str,
+                        "Version conflict (Aborted), not retried"
+                    );
+                    return Err(err);
+                }
                 if err.code == Code::Aborted {
                     debug!(
                         %operation_id,
@@ -1346,6 +1440,7 @@ where
             }
 
             record_execution_metrics(&awaited_action, is_retry);
+            self.notify_revoked(held_before, &awaited_action, changed_by);
 
             debug!(
                 %operation_id,
@@ -1685,15 +1780,21 @@ where
         operation_id: &OperationId,
         worker_id_or_reason_for_unassign: Result<&WorkerId, Error>,
     ) -> Result<(), Error> {
-        let (maybe_worker_id, update) = match worker_id_or_reason_for_unassign {
-            Ok(worker_id) => (
-                Some(worker_id),
-                UpdateOperationType::UpdateWithActionStage(ActionStage::Executing),
-            ),
-            Err(err) => (None, UpdateOperationType::UpdateWithError(err)),
-        };
-        self.inner_update_operation(operation_id, maybe_worker_id, update)
-            .await
+        match worker_id_or_reason_for_unassign {
+            // An assignment, which is not retried on a conflict.
+            Ok(worker_id) => self
+                .assign_operation_to_worker(operation_id, worker_id)
+                .await
+                .map(|_| ()),
+            Err(err) => {
+                self.inner_update_operation(
+                    operation_id,
+                    None,
+                    UpdateOperationType::UpdateWithError(err),
+                )
+                .await
+            }
+        }
     }
 
     async fn assign_operation_to_worker(
@@ -1701,10 +1802,11 @@ where
         operation_id: &OperationId,
         worker_id: &WorkerId,
     ) -> Result<u64, Error> {
-        self.inner_update_operation_attempt(
+        self.inner_update_operation_attempt_retrying(
             operation_id,
             Some(worker_id),
             UpdateOperationType::UpdateWithActionStage(ActionStage::Executing),
+            false,
         )
         .await
     }

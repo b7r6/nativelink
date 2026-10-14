@@ -2282,6 +2282,21 @@ impl WorkerScheduler for ApiWorkerScheduler {
         inner.set_drain_worker(worker_id, is_draining)
     }
 
+    async fn kill_revoked_attempt(
+        &self,
+        worker_id: &WorkerId,
+        operation_id: OperationId,
+        attempt: u64,
+    ) -> Result<(), Error> {
+        // Guarded under the lock: nothing is sent unless the worker still
+        // holds exactly this attempt and has not been told already.
+        self.inner
+            .lock()
+            .await
+            .worker_notify_kill_operation(worker_id, operation_id, attempt)
+            .await
+    }
+
     async fn kill_revoked_operations(&self) -> Result<(), Error> {
         let (worker_state_manager, running) = {
             let inner = self.inner.lock().await;
