@@ -14,6 +14,17 @@ and the wire half of P2 (`attempt` on every worker message, worker dedup,
 kill tombstones). Not built yet: the `Offered`/`Cancelling` stages and the
 effect dispatcher (rest of P2), multiple voters (P3).
 
+**P2, scheduler side (all backends):** done: a silent worker is not offered
+work; losing a silent worker costs `worker_losses`, not the action's
+retries; a revoked attempt is killed at once (the sweep stays as backstop);
+an assignment that loses a version conflict is not retried (a retried stale
+choice dispatched attempt 3 to a worker lost two requeues earlier). Not
+done: the client-visible `Offered` stage (§4.1), which changes what clients
+see and adds a write per dispatch; held for a decision. Scheduler suite
+after P2 steps: 255/255 on memory and on raft, 0 of 10 flaky full runs;
+`restart-chaos.sh raft`: 0 findings, 66/66 oracle comparisons equivalent,
+1307 operations completed.
+
 **Where this differs from the plan below, and why:**
 
 - *Log encoding is JSON, not bincode* (no new dependency for P1). Framed
@@ -41,8 +52,8 @@ effect dispatcher (rest of P2), multiple voters (P3).
 
 | Check | Result |
 |---|---|
-| Scheduler suite, memory backend | 252/252 |
-| Scheduler suite, raft backend (`NATIVELINK_TEST_SCHEDULER_BACKEND=raft`) | 251/252; `client_does_not_receive_update_timeout` depends on the memory backend applying a requeue inside the client's own poll (see below) |
+| Scheduler suite, memory backend | 255/255 |
+| Scheduler suite, raft backend (`NATIVELINK_TEST_SCHEDULER_BACKEND=raft`) | 255/255 after the P2 matcher fix (was 251/252) |
 | Worker / service / config / util suites | 582/582 |
 | Restart durability: log only, snapshot + tail, torn final write | pass; each fails with log replay disabled |
 | Randomized model test, 200 seeds × 300 commands, nested batches | invariants I1–I9 hold; found and fixed an orphaned operation (I3) and replica-dependent output order (I9) |
