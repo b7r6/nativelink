@@ -1,0 +1,58 @@
+#:schema ../tools/cargo-with-detailed-deps.json
+lints.workspace = true
+
+[package]
+edition = "2024"
+name = "nativelink-sim"
+publish = false
+version = "1.7.5"
+
+# Deterministic simulation of the scheduler, its workers and its clients on
+# turmoil's simulated network. Not part of the server binary; nothing depends
+# on this crate.
+
+[[bin]]
+name = "nativelink-sim"
+path = "src/main.rs"
+
+[dependencies]
+nativelink-config = { path = "../nativelink-config" }
+nativelink-error = { path = "../nativelink-error" }
+nativelink-proto = { path = "../nativelink-proto" }
+nativelink-scheduler = { path = "../nativelink-scheduler" }
+nativelink-service = { path = "../nativelink-service" }
+nativelink-store = { path = "../nativelink-store" }
+nativelink-util = { path = "../nativelink-util" }
+
+futures = { version = "0.3.31", default-features = false, features = [
+  "std",
+] }
+hyper-util = { version = "0.1.11", default-features = false, features = [
+  "tokio",
+] }
+libc = { version = "0.2.172", default-features = false }
+prost = { version = "0.14.4", default-features = false }
+prost-types = { version = "0.14.4", default-features = false, features = [
+  "std",
+] }
+rand = { version = "0.9.0", default-features = false, features = [
+  "std",
+  "std_rng",
+] }
+tokio = { version = "1.52.2", features = [
+  "macros",
+  "rt",
+  "sync",
+  "time",
+], default-features = false }
+tonic = { version = "0.14.0", features = [
+  "router",
+  "transport",
+], default-features = false }
+tower = { version = "0.5.2", default-features = false, features = ["util"] }
+tracing = { version = "0.1.41", default-features = false }
+tracing-subscriber = { version = "0.3.19", default-features = false, features = [
+  "env-filter",
+  "fmt",
+] }
+turmoil = { version = "0.7.2", default-features = false }
