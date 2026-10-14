@@ -245,7 +245,11 @@ async fn restart_requeues_what_was_executing() -> Result<(), Error> {
     let db = open(dir.path()).await?;
     let state = state_of(&db).await;
     assert!(state.sorted.executing.is_empty(), "nothing left executing");
-    assert_eq!(state.sorted.queued.len(), 2, "the executing action is queued again");
+    assert_eq!(
+        state.sorted.queued.len(),
+        2,
+        "the executing action is queued again"
+    );
     let executing_client = &clients[0];
     let action = db
         .get_awaited_action_by_id(executing_client)

@@ -183,6 +183,10 @@ struct ApiWorkerSchedulerImpl {
     #[metric(group = "workers")]
     workers: Workers,
 
+    /// A worker not heard from for this long is not offered work, even
+    /// before `remove_timedout_workers` evicts it. 0 disables the check.
+    worker_timeout_s: u64,
+
     /// The worker state manager.
     #[metric(group = "worker_state_manager")]
     worker_state_manager: Arc<dyn WorkerStateManager>,
@@ -671,12 +675,31 @@ impl ApiWorkerSchedulerImpl {
         platform_properties: &PlatformProperties,
         candidates: &HashSet<WorkerId>,
         full_worker_logging: bool,
+        now: SystemTime,
     ) -> Option<WorkerId> {
+        // Same predicate as `remove_timedout_workers`, on this process's own
+        // clock: a worker that has gone silent must not be handed the action
+        // its silence just got requeued, in the window before it is evicted.
+        let silent_since = (self.worker_timeout_s > 0).then(|| {
+            now.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                .saturating_sub(self.worker_timeout_s)
+        });
         // Check function for availability AND dynamic Minimum property verification.
         // The index only does presence checks for Minimum properties since their
         // values change dynamically as jobs are assigned to workers.
         let needed_kb = self.live_memory_veto_kb(platform_properties);
         let worker_matches = |(worker_id, w): &(&WorkerId, &Worker)| -> bool {
+            if silent_since.is_some_and(|threshold| w.last_update_timestamp <= threshold) {
+                if full_worker_logging {
+                    info!(
+                        "Worker {worker_id} skipped: not heard from for {}s",
+                        self.worker_timeout_s
+                    );
+                }
+                return false;
+            }
             if !w.can_accept_work() {
                 if full_worker_logging {
                     info!(
@@ -798,9 +821,12 @@ impl ApiWorkerSchedulerImpl {
             let candidates = self
                 .capability_index
                 .find_matching_workers(platform_properties, full_worker_logging);
-            if let Some(worker_id) =
-                self.find_available_worker(platform_properties, &candidates, full_worker_logging)
-            {
+            if let Some(worker_id) = self.find_available_worker(
+                platform_properties,
+                &candidates,
+                full_worker_logging,
+                now,
+            ) {
                 return MatchOutcome::Matched(worker_id);
             }
             Some(candidates)
@@ -1559,6 +1585,7 @@ impl ApiWorkerScheduler {
         Arc::new(Self {
             inner: Mutex::new(ApiWorkerSchedulerImpl {
                 workers: Workers(LruCache::unbounded()),
+                worker_timeout_s,
                 worker_state_manager,
                 allocation_strategy,
                 live_memory_veto,

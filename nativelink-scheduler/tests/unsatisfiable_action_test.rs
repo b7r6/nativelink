@@ -72,6 +72,9 @@ fn make_spec(unsatisfiable_action_timeout_s: u64) -> SimpleSpec {
         // The mock clock moves past the default while nothing polls the
         // client, which would otherwise retire the action first.
         client_action_timeout_s: 1_000_000,
+        // Likewise for workers: they send no keepalives while the clock
+        // moves, and a worker silent past its timeout is not offered work.
+        worker_timeout_s: 1_000_000,
         unsatisfiable_action_timeout_s,
         ..Default::default()
     }

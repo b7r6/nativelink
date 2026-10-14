@@ -373,6 +373,69 @@ async fn bad_worker_match_logging_interval() -> Result<(), Error> {
     Ok(())
 }
 
+/// A worker this scheduler has not heard from for `worker_timeout_s` is not
+/// offered work, even before `remove_timedout_workers` evicts it. Without
+/// this, an action requeued because its worker went silent could be handed
+/// straight back to that worker in the window before eviction. Found by the
+/// raft backend, whose writes let the matcher run inside that window.
+#[nativelink_test]
+async fn a_silent_worker_is_not_offered_work() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let task_change_notify = Arc::new(Notify::new());
+    let (scheduler, _worker_scheduler) = SimpleScheduler::new_with_callback(
+        &SimpleSpec {
+            worker_timeout_s: WORKER_TIMEOUT_S,
+            ..Default::default()
+        },
+        memory_awaited_action_db_factory(
+            0,
+            &task_change_notify.clone(),
+            MockInstantWrapped::default,
+        ),
+        || async move {},
+        task_change_notify.clone(),
+        MockInstantWrapped::default,
+        None,
+    );
+    let mut rx_from_worker = setup_new_worker(
+        &scheduler,
+        WorkerId("silent_worker".to_string()),
+        PlatformProperties::default(),
+    )
+    .await?;
+
+    // Nothing from the worker for longer than its timeout.
+    MockClock::advance(Duration::from_secs(WORKER_TIMEOUT_S + 1));
+
+    let mut action_listener = setup_action(
+        &scheduler,
+        DigestInfo::new([98u8; 32], 512),
+        HashMap::new(),
+        make_system_time(WORKER_TIMEOUT_S + 1),
+    )
+    .await?;
+    for _ in 0..8 {
+        scheduler.do_try_match_for_test().await?;
+        tokio::task::yield_now().await;
+    }
+    let stage = action_listener.changed().await?.0.stage.clone();
+    assert_eq!(
+        stage,
+        ActionStage::Queued,
+        "the action waits for a live worker"
+    );
+    assert!(
+        !matches!(
+            rx_from_worker.try_recv(),
+            Ok(UpdateForWorker {
+                update: Some(update_for_worker::Update::StartAction(_))
+            })
+        ),
+        "the silent worker was offered work",
+    );
+    Ok(())
+}
+
 #[nativelink_test]
 async fn client_does_not_receive_update_timeout() -> Result<(), Error> {
     async fn advance_time<T>(duration: Duration, poll_fut: &mut Pin<&mut impl Future<Output = T>>) {
