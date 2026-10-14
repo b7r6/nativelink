@@ -107,6 +107,15 @@ pub struct AwaitedAction {
     #[metric(help = "How many times the AwaitedAction was escalated")]
     pub escalations: usize,
 
+    /// Whether the worker holding this action has accepted it. False only
+    /// between an assignment and the worker's acknowledgement, and only when
+    /// `report_executing_on_accept` is set; records written before this
+    /// field existed decode as accepted.
+    /// Not written when true, so stored records are unchanged unless the
+    /// feature is in use.
+    #[serde(default = "default_accepted", skip_serializing_if = "is_accepted")]
+    pub accepted: bool,
+
     /// Dispatch sequence number: incremented every time the action is
     /// assigned to a worker, never reset. Not a budget like the three
     /// above: it names the attempt on the wire (`StartExecute.attempt`) so
@@ -143,7 +152,34 @@ pub fn capture_origin_metadata() -> Option<OriginMetadata> {
     }
 }
 
+const fn default_accepted() -> bool {
+    true
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde's skip_serializing_if signature"
+)]
+const fn is_accepted(accepted: &bool) -> bool {
+    *accepted
+}
+
 impl AwaitedAction {
+    /// The state as a client should see it: an assigned action its worker
+    /// has not accepted yet is still queued as far as the client knows.
+    #[must_use]
+    pub fn client_state(&self, executing_on_accept: bool) -> Arc<ActionState> {
+        if executing_on_accept
+            && !self.accepted
+            && matches!(self.state.stage, ActionStage::Executing)
+        {
+            let mut state = self.state.as_ref().clone();
+            state.stage = ActionStage::Queued;
+            return Arc::new(state);
+        }
+        self.state.clone()
+    }
+
     pub fn new(operation_id: OperationId, action_info: Arc<ActionInfo>, now: SystemTime) -> Self {
         let sort_key = PersistedSortKey::from_action_info(&action_info);
         let action_state = Arc::new(ActionState {
@@ -168,6 +204,7 @@ impl AwaitedAction {
             attempts: 0,
             worker_losses: 0,
             escalations: 0,
+            accepted: true,
             dispatch_attempt: 0,
             last_worker_updated_timestamp: now,
             last_client_keepalive_timestamp: now,
@@ -208,6 +245,7 @@ impl AwaitedAction {
             attempts: 0,
             worker_losses: 0,
             escalations: 0,
+            accepted: true,
             dispatch_attempt: 0,
             last_worker_updated_timestamp: now,
             last_client_keepalive_timestamp: now,

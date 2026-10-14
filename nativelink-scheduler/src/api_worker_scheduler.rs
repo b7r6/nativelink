@@ -1099,7 +1099,7 @@ impl ApiWorkerSchedulerImpl {
             UpdateOperationType::UpdateWithActionStage(action_stage) => {
                 (action_stage.is_finished(), false)
             }
-            UpdateOperationType::KeepAlive => (false, false),
+            UpdateOperationType::KeepAlive | UpdateOperationType::Accepted => (false, false),
             UpdateOperationType::UpdateWithError(err) => {
                 (true, err.code == Code::ResourceExhausted)
             }
@@ -1294,18 +1294,20 @@ impl ApiWorkerSchedulerImpl {
     /// reached is evicted, the same as for a failed run request.
     /// The worker acknowledged a dispatch. A late acknowledgement for an
     /// operation no longer on the worker is nothing to act on.
+    /// Returns whether the acknowledgement was for the attempt the worker
+    /// holds.
     fn dispatch_accepted(
         &mut self,
         worker_id: &WorkerId,
         operation_id: &OperationId,
         attempt: u64,
-    ) {
+    ) -> bool {
         let Some(worker) = self.workers.get_mut(worker_id) else {
-            return;
+            return false;
         };
         let held_attempt = worker.held_attempt(operation_id);
         if worker.mark_accepted(operation_id, attempt) {
-            return;
+            return true;
         }
         // Messages from a worker arrive in order and the acknowledgement
         // comes before the run, so an acknowledgement for an attempt not on
@@ -1324,6 +1326,7 @@ impl ApiWorkerSchedulerImpl {
         if let Err(err) = worker.kill_unknown_operation(operation_id, attempt) {
             warn!(?worker_id, %operation_id, attempt, ?err, "Could not tell the worker to stop the operation");
         }
+        false
     }
 
     /// Whether a message naming `attempt` of the operation is from a
@@ -2048,9 +2051,20 @@ impl WorkerScheduler for ApiWorkerScheduler {
         operation_id: &OperationId,
         attempt: u64,
     ) -> Result<(), Error> {
-        let mut inner = self.inner.lock().await;
-        inner.dispatch_accepted(worker_id, operation_id, attempt);
-        Ok(())
+        let worker_state_manager = {
+            let mut inner = self.inner.lock().await;
+            if !inner.dispatch_accepted(worker_id, operation_id, attempt)
+                || !inner.worker_state_manager.records_acceptance()
+            {
+                return Ok(());
+            }
+            inner.worker_state_manager.clone()
+        };
+        // Recorded so clients can be shown it executing
+        // (`report_executing_on_accept`). Outside the lock: it writes.
+        worker_state_manager
+            .update_operation(operation_id, worker_id, UpdateOperationType::Accepted)
+            .await
     }
 
     async fn worker_dispatch_declined(

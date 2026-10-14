@@ -216,15 +216,16 @@ where
         simple_scheduler_state_manager: Weak<SimpleSchedulerStateManager<T, I, NowFn>>,
         no_event_action_timeout: Duration,
         now_fn: NowFn,
+        executing_on_accept: bool,
     ) -> Self {
-        Self {
-            inner: MatchingEngineActionStateResult::new(
-                sub,
-                simple_scheduler_state_manager,
-                no_event_action_timeout,
-                now_fn,
-            ),
-        }
+        let mut inner = MatchingEngineActionStateResult::new(
+            sub,
+            simple_scheduler_state_manager,
+            no_event_action_timeout,
+            now_fn,
+        );
+        inner.executing_on_accept = executing_on_accept;
+        Self { inner }
     }
 }
 
@@ -264,6 +265,9 @@ where
     simple_scheduler_state_manager: Weak<SimpleSchedulerStateManager<T, I, NowFn>>,
     no_event_action_timeout: Duration,
     now_fn: NowFn,
+    /// Present an assigned but not yet accepted action as queued. Only for
+    /// clients; the matching engine sees the real stage.
+    executing_on_accept: bool,
 }
 impl<U, T, I, NowFn> MatchingEngineActionStateResult<U, T, I, NowFn>
 where
@@ -283,6 +287,7 @@ where
             simple_scheduler_state_manager,
             no_event_action_timeout,
             now_fn,
+            executing_on_accept: false,
         }
     }
 }
@@ -302,7 +307,7 @@ where
             .await
             .err_tip(|| "In MatchingEngineActionStateResult::as_state")?;
         Ok((
-            awaited_action.state().clone(),
+            awaited_action.client_state(self.executing_on_accept),
             awaited_action.maybe_origin_metadata().cloned(),
         ))
     }
@@ -323,7 +328,12 @@ where
                 awaited_action_result = self.awaited_action_sub.changed() => {
                     return awaited_action_result
                         .err_tip(|| "In MatchingEngineActionStateResult::changed")
-                        .map(|v| (v.state().clone(), v.maybe_origin_metadata().cloned()));
+                        .map(|v| {
+                            (
+                                v.client_state(self.executing_on_accept),
+                                v.maybe_origin_metadata().cloned(),
+                            )
+                        });
                 }
                 () = (self.now_fn)().sleep(self.no_event_action_timeout) => {
                     // Timeout happened, do additional checks below.
@@ -496,6 +506,10 @@ where
     /// instead of on the next `kill_revoked_operations` sweep (which stays
     /// as the backstop).
     revoke_hook: RevokeHookCell,
+
+    /// `report_executing_on_accept`: clients see an assigned action as queued
+    /// until its worker accepts it.
+    executing_on_accept: core::sync::atomic::AtomicBool,
 }
 
 /// Holds the [`RevokeHook`], set once after construction.
@@ -554,7 +568,19 @@ where
             now_fn,
             worker_registry,
             revoke_hook: RevokeHookCell::default(),
+            executing_on_accept: core::sync::atomic::AtomicBool::new(false),
         })
+    }
+
+    /// Show clients an action as executing only once its worker accepts it.
+    pub fn set_report_executing_on_accept(&self, enabled: bool) {
+        self.executing_on_accept
+            .store(enabled, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn executing_on_accept(&self) -> bool {
+        self.executing_on_accept
+            .load(core::sync::atomic::Ordering::Relaxed)
     }
 
     /// Install the hook told about revoked attempts. Only the first call
@@ -1122,6 +1148,7 @@ where
             UpdateOperationType::ExecutionComplete => "ExecutionComplete",
             UpdateOperationType::UpdateWithDecline(_) => "Decline",
             UpdateOperationType::UpdateWithEscalation(_) => "Escalation",
+            UpdateOperationType::Accepted => "Accepted",
         };
 
         debug!(
@@ -1130,6 +1157,11 @@ where
             update_type = %update_type_str,
             "inner_update_operation START"
         );
+
+        // Nothing to record unless clients are shown acceptance.
+        if matches!(update, UpdateOperationType::Accepted) && !self.executing_on_accept() {
+            return Ok(0);
+        }
 
         // Who the change comes from, for the revoke hook. A disconnect names
         // the holder only to pass the worker check below; losing a worker is
@@ -1209,7 +1241,9 @@ where
             // Make sure we don't update an action that is already completed.
             if awaited_action.state().stage.is_finished() {
                 match &update {
-                    UpdateOperationType::UpdateWithDisconnect | UpdateOperationType::KeepAlive => {
+                    UpdateOperationType::UpdateWithDisconnect
+                    | UpdateOperationType::KeepAlive
+                    | UpdateOperationType::Accepted => {
                         // No need to error a keep-alive when it's completed, it's just
                         // unnecessary log noise.
                         return Ok(0);
@@ -1227,6 +1261,26 @@ where
 
             let mut is_retry = false;
             let stage = match &update {
+                UpdateOperationType::Accepted => {
+                    if awaited_action.accepted
+                        || !matches!(awaited_action.state().stage, ActionStage::Executing)
+                    {
+                        return Ok(awaited_action.dispatch_attempt);
+                    }
+                    awaited_action.accepted = true;
+                    let attempt = awaited_action.dispatch_attempt;
+                    match self
+                        .action_db
+                        .update_awaited_action(awaited_action)
+                        .await
+                        .err_tip(|| "Failed to record acceptance in SimpleSchedulerStateManager::update_operation") {
+                        Err(err) if err.code == Code::Aborted => {
+                            last_err = Some(err);
+                            continue;
+                        }
+                        result => return result.map(|()| attempt),
+                    }
+                }
                 UpdateOperationType::KeepAlive => {
                     awaited_action.worker_keep_alive((self.now_fn)().now());
                     match self
@@ -1382,6 +1436,17 @@ where
                     return Ok(0);
                 }
             };
+            // An assignment waits for its worker's acceptance before clients
+            // see it executing (when that is reported at all); anything the
+            // holding worker says afterwards implies it accepted.
+            let is_assignment = matches!(stage, ActionStage::Executing)
+                && maybe_worker_id.is_some()
+                && awaited_action.worker_id().is_none();
+            if is_assignment {
+                awaited_action.accepted = !self.executing_on_accept();
+            } else if maybe_worker_id.is_some() && maybe_worker_id == awaited_action.worker_id() {
+                awaited_action.accepted = true;
+            }
             let now = (self.now_fn)().now();
             if matches!(stage, ActionStage::Queued) {
                 // If the action is queued, we need to unset the worker id regardless of
@@ -1687,6 +1752,7 @@ where
             self.weak_self.clone(),
             self.no_event_action_timeout,
             self.now_fn.clone(),
+            self.executing_on_accept(),
         )))
     }
 
@@ -1700,6 +1766,7 @@ where
                 self.weak_self.clone(),
                 self.no_event_action_timeout,
                 self.now_fn.clone(),
+                self.executing_on_accept(),
             ))
         })
         .await
@@ -1713,6 +1780,10 @@ where
     I: InstantWrapper,
     NowFn: Fn() -> I + Clone + Send + Unpin + Sync + 'static,
 {
+    fn records_acceptance(&self) -> bool {
+        self.executing_on_accept()
+    }
+
     async fn update_operation(
         &self,
         operation_id: &OperationId,

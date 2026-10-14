@@ -18,10 +18,13 @@ effect dispatcher (rest of P2), multiple voters (P3).
 work; losing a silent worker costs `worker_losses`, not the action's
 retries; a revoked attempt is killed at once (the sweep stays as backstop);
 an assignment that loses a version conflict is not retried (a retried stale
-choice dispatched attempt 3 to a worker lost two requeues earlier). Not
-done: the client-visible `Offered` stage (§4.1), which changes what clients
-see and adds a write per dispatch; held for a decision. Scheduler suite
-after P2 steps: 255/255 on memory and on raft, 0 of 10 flaky full runs;
+choice dispatched attempt 3 to a worker lost two requeues earlier). The client-visible
+`Offered` stage (§4.1) is opt-in, `report_executing_on_accept` (default
+off: no extra write, no change in what clients see, stored records
+byte-identical): an assigned action shows as queued until its worker
+accepts it. Internally the stage stays `Executing`, so the matcher never
+offers it twice. Scheduler suite after P2: 257/257 on memory and on raft,
+0 of 10 flaky full runs;
 `restart-chaos.sh raft`: 0 findings, 66/66 oracle comparisons equivalent,
 1307 operations completed.
 

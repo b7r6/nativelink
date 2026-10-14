@@ -825,3 +825,80 @@ async fn attempt_zero_messages_apply_to_whatever_the_worker_holds() -> Result<()
     assert!(result.error.is_none(), "{:?}", result.error);
     Ok(())
 }
+
+fn make_scheduler_reporting_on_accept(
+    report_executing_on_accept: bool,
+) -> (Arc<SimpleScheduler>, Arc<dyn WorkerScheduler>) {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let task_change_notify = Arc::new(Notify::new());
+    let spec = SimpleSpec {
+        supported_platform_properties: Some(HashMap::from([(
+            "memory_kb".to_string(),
+            PropertyType::Minimum,
+        )])),
+        report_executing_on_accept,
+        ..SimpleSpec::default()
+    };
+    SimpleScheduler::new_with_callback(
+        &spec,
+        memory_awaited_action_db_factory(0, &task_change_notify, MockInstantWrapped::default),
+        || async move {},
+        task_change_notify,
+        MockInstantWrapped::default,
+        None,
+    )
+}
+
+/// With `report_executing_on_accept`, an action is shown to its client as
+/// queued from assignment until its worker accepts it, then as executing:
+/// before, clients saw executing before the dispatch had even been sent.
+#[nativelink_test]
+async fn with_report_executing_on_accept_clients_see_executing_only_after_accept()
+-> Result<(), Error> {
+    let (scheduler, worker_scheduler) = make_scheduler_reporting_on_accept(true);
+    let mut rx = add_worker(&scheduler).await?;
+    let listener = add_action(&scheduler, 41).await?;
+
+    let dispatched = next_dispatch(&mut rx).await;
+    assert_eq!(
+        listener.as_state().await?.0.stage,
+        ActionStage::Queued,
+        "assigned and sent, but not accepted yet"
+    );
+
+    worker_scheduler
+        .worker_dispatch_accepted(
+            &worker_id(),
+            &OperationId::from(dispatched.operation_id.as_str()),
+            dispatched.attempt,
+        )
+        .await?;
+    assert_eq!(
+        listener.as_state().await?.0.stage,
+        ActionStage::Executing,
+        "accepted"
+    );
+    Ok(())
+}
+
+/// The default is unchanged: executing from assignment, and an acceptance
+/// writes nothing.
+#[nativelink_test]
+async fn without_report_executing_on_accept_clients_see_executing_at_assignment()
+-> Result<(), Error> {
+    let (scheduler, worker_scheduler) = make_scheduler_reporting_on_accept(false);
+    let mut rx = add_worker(&scheduler).await?;
+    let listener = add_action(&scheduler, 42).await?;
+
+    let dispatched = next_dispatch(&mut rx).await;
+    assert_eq!(listener.as_state().await?.0.stage, ActionStage::Executing);
+    worker_scheduler
+        .worker_dispatch_accepted(
+            &worker_id(),
+            &OperationId::from(dispatched.operation_id.as_str()),
+            dispatched.attempt,
+        )
+        .await?;
+    assert_eq!(listener.as_state().await?.0.stage, ActionStage::Executing);
+    Ok(())
+}

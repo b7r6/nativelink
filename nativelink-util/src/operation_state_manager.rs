@@ -148,6 +148,10 @@ pub enum UpdateOperationType {
     /// The worker killed the action for a resource it had declared too
     /// little of; requeue it with a larger reservation, within the retry cap.
     UpdateWithEscalation(Escalation),
+
+    /// The worker acknowledged the dispatch it holds: from here clients may
+    /// be shown the action as executing (`report_executing_on_accept`).
+    Accepted,
 }
 
 /// Why a dispatched action is going back to the queue untried.
@@ -183,6 +187,12 @@ pub trait WorkerStateManager: Sync + Send + MetricsComponent {
         worker_id: &WorkerId,
         update: UpdateOperationType,
     ) -> Result<(), Error>;
+
+    /// Whether this state manager records a worker's acceptance of a
+    /// dispatch (`UpdateOperationType::Accepted`). When false, none is sent.
+    fn records_acceptance(&self) -> bool {
+        false
+    }
 
     /// Whether the operation is still executing on this worker. False once
     /// it has finished, been requeued or reassigned, or no longer exists.

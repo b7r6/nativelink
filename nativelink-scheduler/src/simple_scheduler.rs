@@ -1224,6 +1224,8 @@ impl SimpleScheduler {
             record_ttl,
         );
 
+        state_manager.set_report_executing_on_accept(spec.report_executing_on_accept);
+
         // A revoked attempt is killed at once, off the updating task so no
         // scheduler lock is taken inside a state manager update.
         {

@@ -324,6 +324,15 @@ pub struct SimpleSpec {
     #[serde(default)]
     pub memory_escalation: Option<MemoryEscalationSpec>,
 
+    /// Show clients an action as executing only once a worker has accepted
+    /// it, rather than from the moment it is assigned (before it has even
+    /// been sent). Until then clients see it queued. Costs one more state
+    /// write per dispatch. Workers that do not acknowledge dispatches show
+    /// their actions as queued until they report a result.
+    /// Default: false
+    #[serde(default)]
+    pub report_executing_on_accept: bool,
+
     /// The storage backend to use for the scheduler.
     /// Default: memory
     pub experimental_backend: Option<ExperimentalSimpleSchedulerBackend>,
