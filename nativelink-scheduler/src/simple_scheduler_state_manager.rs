@@ -54,6 +54,9 @@ pub enum TimeoutCause {
     ActionTimeout { timeout: Duration, grace: Duration },
     /// The worker sent no update on the action for this long.
     NoWorkerUpdate(Duration),
+    /// The worker itself went silent for this long: it is lost, which is not
+    /// the action's failure (charged to `worker_losses`, not `attempts`).
+    WorkerSilent(Duration),
 }
 
 impl core::fmt::Display for TimeoutCause {
@@ -68,6 +71,11 @@ impl core::fmt::Display for TimeoutCause {
             Self::NoWorkerUpdate(ceiling) => write!(
                 f,
                 "timed out after {} seconds with no update from its worker",
+                ceiling.as_secs_f32(),
+            ),
+            Self::WorkerSilent(ceiling) => write!(
+                f,
+                "lost its worker, which sent nothing for {} seconds",
                 ceiling.as_secs_f32(),
             ),
         }
@@ -787,7 +795,8 @@ where
             }
 
             // Registered here and gone quiet: ours, and it looks dead.
-            WorkerLiveness::Stale => silent_for(self.no_event_action_timeout),
+            WorkerLiveness::Stale => silent_for(self.no_event_action_timeout)
+                .map(|_| TimeoutCause::WorkerSilent(self.no_event_action_timeout)),
         }
     }
 
@@ -983,6 +992,17 @@ where
             "Timing out operation"
         );
 
+        if matches!(cause, TimeoutCause::WorkerSilent(_)) {
+            // A lost worker, as a disconnect is: its own budget, so a dying
+            // worker does not spend the retries of whatever ran on it.
+            return self
+                .inner_update_operation(
+                    operation_id,
+                    awaited_action.worker_id(),
+                    UpdateOperationType::UpdateWithDisconnect,
+                )
+                .await;
+        }
         self.assign_operation(
             operation_id,
             Err(make_err!(Code::DeadlineExceeded, "Operation {cause}")),

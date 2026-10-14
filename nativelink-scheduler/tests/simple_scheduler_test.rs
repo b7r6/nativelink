@@ -436,6 +436,105 @@ async fn a_silent_worker_is_not_offered_work() -> Result<(), Error> {
     Ok(())
 }
 
+/// A worker that goes silent is lost, which is not the action's failure: the
+/// action is requeued on the `worker_losses` budget, as on a disconnect, not
+/// charged an attempt. With `max_job_retries: 1`, two silent workers in a row
+/// used to fail the action; now it is still queued for a third.
+#[nativelink_test]
+async fn a_silent_worker_costs_a_worker_loss_not_a_retry() -> Result<(), Error> {
+    async fn advance_time<T>(duration: Duration, poll_fut: &mut Pin<&mut impl Future<Output = T>>) {
+        const STEP_AMOUNT: Duration = Duration::from_millis(100);
+        for _ in 0..(duration.as_millis() / STEP_AMOUNT.as_millis()) {
+            MockClock::advance(STEP_AMOUNT);
+            tokio::task::yield_now().await;
+            assert!(poll!(&mut *poll_fut).is_pending());
+        }
+    }
+
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let task_change_notify = Arc::new(Notify::new());
+    let (scheduler, _worker_scheduler) = SimpleScheduler::new_with_callback(
+        &SimpleSpec {
+            worker_timeout_s: WORKER_TIMEOUT_S,
+            max_job_retries: 1,
+            ..Default::default()
+        },
+        memory_awaited_action_db_factory(
+            0,
+            &task_change_notify.clone(),
+            MockInstantWrapped::default,
+        ),
+        || async move {},
+        task_change_notify.clone(),
+        MockInstantWrapped::default,
+        None,
+    );
+    let mut action_listener = setup_action(
+        &scheduler,
+        DigestInfo::new([97u8; 32], 512),
+        HashMap::new(),
+        make_system_time(1),
+    )
+    .await?;
+    let mut workers = Vec::new();
+    for round in 0..2 {
+        // A fresh worker, connecting now (not at `NOW_TIME`, which is what
+        // `setup_new_worker` stamps), takes the action...
+        let worker_id = WorkerId(format!("worker_{round}"));
+        let (tx, mut rx) = mpsc::channel(64);
+        scheduler
+            .add_worker(Worker::new(
+                worker_id.clone(),
+                PlatformProperties::default(),
+                tx,
+                MockClock::time().as_secs(),
+                0,
+            ))
+            .await?;
+        verify_initial_connection_message(worker_id, &mut rx).await;
+        workers.push(rx);
+        scheduler.do_try_match_for_test().await?;
+        let mut stage = action_listener.changed().await?.0.stage.clone();
+        if stage == ActionStage::Queued {
+            stage = action_listener.changed().await?.0.stage.clone();
+        }
+        assert_eq!(stage, ActionStage::Executing, "round {round}: dispatched");
+
+        // ...and goes silent past its timeout.
+        let changed_fut = action_listener.changed();
+        tokio::pin!(changed_fut);
+        advance_time(Duration::from_secs(WORKER_TIMEOUT_S - 1), &mut changed_fut).await;
+        MockClock::advance(Duration::from_secs(2));
+        assert_eq!(
+            changed_fut.await?.0.stage,
+            ActionStage::Queued,
+            "round {round}: a lost worker must not use up the action's retries",
+        );
+    }
+    // Each lost worker was sent the action once, and nothing after.
+    for (round, rx) in workers.iter_mut().enumerate() {
+        assert!(
+            matches!(
+                rx.try_recv(),
+                Ok(UpdateForWorker {
+                    update: Some(update_for_worker::Update::StartAction(_))
+                })
+            ),
+            "worker {round} was dispatched the action",
+        );
+        assert!(
+            !matches!(
+                rx.try_recv(),
+                Ok(UpdateForWorker {
+                    update: Some(update_for_worker::Update::StartAction(_))
+                })
+            ),
+            "worker {round} was dispatched it again after going silent",
+        );
+    }
+    Ok(())
+}
+
 #[nativelink_test]
 async fn client_does_not_receive_update_timeout() -> Result<(), Error> {
     async fn advance_time<T>(duration: Duration, poll_fut: &mut Pin<&mut impl Future<Output = T>>) {
