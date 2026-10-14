@@ -6,6 +6,64 @@
 > log contains, who proposes each entry, and how committed state turns into
 > effects on workers*. Paths are relative to the repo root.
 
+## Status (2026-10-13)
+
+**Built:** P1 (durable single voter, selectable as
+`experimental_backend: { raft: { node_id, data_dir, snapshot_every } }`)
+and the wire half of P2 (`attempt` on every worker message, worker dedup,
+kill tombstones). Not built yet: the `Offered`/`Cancelling` stages and the
+effect dispatcher (rest of P2), multiple voters (P3).
+
+**Where this differs from the plan below, and why:**
+
+- *Log encoding is JSON, not bincode* (no new dependency for P1). Framed
+  with a CRC, fsynced in groups (§7).
+- *Group commit happens above openraft.* Openraft hands storage one entry
+  per client write, so proposals are batched into `Command::Batch` by a
+  proposer task; the log writer additionally groups whatever is queued.
+  Durable add+update: 914 ops/s from one sequential writer (one ~1ms sync
+  each), 28,320 ops/s from 64 concurrent writers.
+- *`UpdateAwaitedAction` carries the caller's whole record*, validated in
+  apply, so counters added on main (`worker_losses`, `escalations`,
+  `dispatch_attempt`) and escalated `action_info` survive.
+- *Client facts stay local, as §3 says, and that needed two rules the plan
+  did not spell out:* a client with a live subscriber is attached and never
+  evicted (retention counts from when it stops waiting); and a restarted
+  replica gives every restored client a fresh keepalive, because the
+  keepalives it held died with the process.
+- *`ReplicaRestarted`* (P1 form of `ReplicaLost`): on startup the replica
+  requeues everything executing, uncharged, since its worker streams died
+  with the old process.
+- *The per-operation `Heartbeat` command is still present* (from the
+  spike); nothing in the scheduler proposes it. It goes in P2.
+
+**Evidence:**
+
+| Check | Result |
+|---|---|
+| Scheduler suite, memory backend | 252/252 |
+| Scheduler suite, raft backend (`NATIVELINK_TEST_SCHEDULER_BACKEND=raft`) | 251/252; `client_does_not_receive_update_timeout` depends on the memory backend applying a requeue inside the client's own poll (see below) |
+| Worker / service / config / util suites | 582/582 |
+| Restart durability: log only, snapshot + tail, torn final write | pass; each fails with log replay disabled |
+| Randomized model test, 200 seeds × 300 commands, nested batches | invariants I1–I9 hold; found and fixed an orphaned operation (I3) and replica-dependent output order (I9) |
+| rechaos `restart-chaos.sh raft` (10 × `kill -9` in 120s, seeded) | 0 findings, 0 lost operations, 61/61 oracle comparisons equivalent, 1263 stress operations completed; the memory backend under the same run completes 1281 and loses 110 acknowledged operations |
+| rechaos `run.sh raft` (chaos monkey + stress) | no scheduler findings; CAS short-write findings identical to the memory backend |
+
+**Found along the way, not raft-specific:**
+
+- *Both backends evicted an operation while its client was still waiting*
+  once the action outlived `retain_completed_for_s`
+  (`client_retention_test`); fixed for both.
+- *`client_action_timeout_s` must exceed twice the 10s keepalive*: a
+  waiting client's keepalive goes out after more than 10s on a 10s sleep,
+  so every 10–20s. The server only warns below 10.
+- *After a worker-silence timeout the matcher can hand the action straight
+  back to the silent worker* (both backends); the raft backend exposes it
+  as the one failing scheduler test. The single-owner `WorkerLeave` of §3
+  is the fix.
+- *CAS: a short ByteStream write is stored under the full digest* (rechaos
+  monkey, both backends); see the store-side fix PR #35.
+
 ## 0. Thesis, corrected once more
 
 The premortem said: **the log is necessary, not sufficient**, apply must
