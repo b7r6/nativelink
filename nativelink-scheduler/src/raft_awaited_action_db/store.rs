@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nativelink_util::action_messages::OperationId;
 use nativelink_util::task::JoinHandleDropGuard;
@@ -38,7 +39,7 @@ use openraft::{
 use tokio::sync::{RwLock, mpsc, oneshot};
 
 use nativelink_util::action_messages::ActionStage;
-use nativelink_util::spawn_blocking;
+use nativelink_util::{spawn, spawn_blocking};
 
 use crate::awaited_action_db::AwaitedAction;
 use nativelink_util::metrics::{
@@ -186,6 +187,28 @@ enum WalOp {
     Rewrite(Vec<WalRecord>, Done),
 }
 
+/// See [`set_inline_io_for_simulation`].
+static INLINE_IO_FOR_SIMULATION: AtomicBool = AtomicBool::new(false);
+
+/// Simulation only (`nativelink-sim`): write the log and snapshots on the
+/// async task that asks for the write instead of on tokio's blocking pool.
+///
+/// A deterministic simulator runs each host on a single-threaded runtime
+/// with a paused clock, and tokio does not advance a paused clock while any
+/// blocking task is alive. The log writer is a blocking task for the life of
+/// the process, so under simulation time would never move; and a write that
+/// finished on another thread would land at a point in the schedule that
+/// depends on real time. Inline, every write finishes before anything else
+/// runs. Production never sets this: an inline sync would block a runtime
+/// worker. Takes effect for logs opened after the call.
+pub fn set_inline_io_for_simulation(inline: bool) {
+    INLINE_IO_FOR_SIMULATION.store(inline, Ordering::Relaxed);
+}
+
+fn inline_io_for_simulation() -> bool {
+    INLINE_IO_FOR_SIMULATION.load(Ordering::Relaxed)
+}
+
 /// Owns the log file on a blocking thread and commits in groups: it takes
 /// every write queued since the last sync, writes them in order, syncs once,
 /// then reports all of them durable. Appends therefore do not wait for each
@@ -206,54 +229,80 @@ fn failed_err(kind: std::io::ErrorKind) -> std::io::Result<()> {
 }
 
 impl WalWriter {
-    fn start(mut wal: Wal) -> Self {
-        let (tx, mut rx) = mpsc::unbounded_channel::<WalOp>();
-        let thread = spawn_blocking!("raft_log_writer", move || {
-            // After a failed write the file's tail is unknown: refuse every
-            // later write rather than append after a gap.
-            let mut failed: Option<std::io::ErrorKind> = None;
-            while let Some(first) = rx.blocking_recv() {
-                let mut group = vec![first];
-                while group.len() < MAX_GROUP {
-                    match rx.try_recv() {
-                        Ok(op) => group.push(op),
-                        Err(_) => break,
-                    }
-                }
-                let mut pending: Vec<Done> = Vec::new();
-                for op in group {
-                    match op {
-                        WalOp::Write(records, done) => {
-                            if let Some(kind) = failed {
-                                done.complete(&failed_err(kind));
-                                continue;
-                            }
-                            if let Err(e) = wal.write(&records) {
-                                failed = Some(e.kind());
-                                done.complete(&Err(e));
-                                continue;
-                            }
-                            pending.push(done);
-                        }
-                        WalOp::Rewrite(records, done) => {
-                            // Everything written before the rewrite is synced
-                            // and reported first, to keep the order.
-                            Self::sync_and_complete(&wal, &mut failed, &mut pending);
-                            let result = match failed {
-                                Some(kind) => failed_err(kind),
-                                None => wal.rewrite(&records),
-                            };
-                            done.complete(&result);
-                        }
-                    }
-                }
-                Self::sync_and_complete(&wal, &mut failed, &mut pending);
-            }
-        });
+    fn start(wal: Wal) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<WalOp>();
+        let thread = if inline_io_for_simulation() {
+            spawn!("raft_log_writer", Self::run_inline(wal, rx))
+        } else {
+            spawn_blocking!("raft_log_writer", move || Self::run_blocking(wal, rx))
+        };
         Self {
             tx,
             _thread: thread,
         }
+    }
+
+    fn run_blocking(mut wal: Wal, mut rx: mpsc::UnboundedReceiver<WalOp>) {
+        // After a failed write the file's tail is unknown: refuse every
+        // later write rather than append after a gap.
+        let mut failed: Option<std::io::ErrorKind> = None;
+        while let Some(first) = rx.blocking_recv() {
+            let group = Self::take_group(first, &mut rx);
+            Self::write_group(&mut wal, &mut failed, group);
+        }
+    }
+
+    /// [`Self::run_blocking`] on an async task, for
+    /// [`set_inline_io_for_simulation`].
+    async fn run_inline(mut wal: Wal, mut rx: mpsc::UnboundedReceiver<WalOp>) {
+        let mut failed: Option<std::io::ErrorKind> = None;
+        while let Some(first) = rx.recv().await {
+            let group = Self::take_group(first, &mut rx);
+            Self::write_group(&mut wal, &mut failed, group);
+        }
+    }
+
+    /// `first` and whatever else is already queued, up to `MAX_GROUP`.
+    fn take_group(first: WalOp, rx: &mut mpsc::UnboundedReceiver<WalOp>) -> Vec<WalOp> {
+        let mut group = vec![first];
+        while group.len() < MAX_GROUP {
+            match rx.try_recv() {
+                Ok(op) => group.push(op),
+                Err(_) => break,
+            }
+        }
+        group
+    }
+
+    fn write_group(wal: &mut Wal, failed: &mut Option<std::io::ErrorKind>, group: Vec<WalOp>) {
+        let mut pending: Vec<Done> = Vec::new();
+        for op in group {
+            match op {
+                WalOp::Write(records, done) => {
+                    if let Some(kind) = *failed {
+                        done.complete(&failed_err(kind));
+                        continue;
+                    }
+                    if let Err(e) = wal.write(&records) {
+                        *failed = Some(e.kind());
+                        done.complete(&Err(e));
+                        continue;
+                    }
+                    pending.push(done);
+                }
+                WalOp::Rewrite(records, done) => {
+                    // Everything written before the rewrite is synced
+                    // and reported first, to keep the order.
+                    Self::sync_and_complete(wal, failed, &mut pending);
+                    let result = match *failed {
+                        Some(kind) => failed_err(kind),
+                        None => wal.rewrite(&records),
+                    };
+                    done.complete(&result);
+                }
+            }
+        }
+        Self::sync_and_complete(wal, failed, &mut pending);
     }
 
     fn sync_and_complete(
@@ -577,6 +626,9 @@ impl StateMachineStore {
             data: snapshot.data.clone(),
         })
         .map_err(std::io::Error::other)?;
+        if inline_io_for_simulation() {
+            return write_atomic(&dir, SNAPSHOT_FILE, &bytes);
+        }
         spawn_blocking!("raft_snapshot_write", move || write_atomic(
             &dir,
             SNAPSHOT_FILE,
