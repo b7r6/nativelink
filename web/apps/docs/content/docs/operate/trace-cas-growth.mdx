@@ -77,7 +77,7 @@ format the events are written but the tool cannot parse them.
 | Process | Events it emits | Reports that need them |
 | --- | --- | --- |
 | Worker | `attempt_started`, `output_observed`, `output_upload`, `attempt_finished` | 1 to 4, 6, 7 |
-| CAS server (ByteStream, `BatchUpdateBlobs`, `FindMissingBlobs`) | `cas_write`, `find_missing` | 5, and the FindMissingBlobs line of 6 |
+| CAS server (ByteStream, `BatchUpdateBlobs`, `FindMissingBlobs`) | `cas_write`, `find_missing` | 1b, 5, and the FindMissingBlobs line of 6 |
 | Any process whose store graph holds the Azure Blob store | `backend_write` | 5 |
 
 Every field of every event is in the
@@ -198,13 +198,34 @@ digests across its attempts, and `uploads` is the spread of upload dispositions
 for its digests.
 
 stdout and stderr appear as the paths `<stdout>` and `<stderr>`. An output
-directory's index object appears under the directory's own path.
+directory's index object appears under the directory's own path. Actions the
+client runs itself never reach a worker, so their outputs are missing here;
+report 1b covers them.
+
+### 1b. Client uploads by target [#client-uploads-by-target]
+
+Successful `cas_write` events grouped by the target and mnemonic in their
+request metadata. Bazel attaches its `RequestMetadata` to its own uploads, so
+the outputs of actions it ran locally, such as a link tagged `no-remote-exec`,
+are attributed here although no worker saw them. Each row has the writes,
+bytes and distinct digests, the bytes split into first-write, rewrite and
+pre-window the same way as [report 5](#rewrite-amplification), and the number
+of invocations.
+
+When worker logs are in the input, the `worker` column says whether any worker
+attempt in the input ran that target and mnemonic. `no` marks bytes the build
+produced outside remote execution, which report 1 cannot show; the line above
+the table totals them. Uploads with no target, such as a worker's own uploads
+through a GrpcStore, are one row, `(no metadata)`.
 
 ### 2. Exact identity [#exact-identity]
 
 Action digests that produced more than one
 [manifest fingerprint](/reference/provenance-events#manifest-fingerprint)
-among complete attempts. The action was identical, so its command, inputs and
+among complete attempts: outcome `completed` and every output uploaded. A
+worker can report every output uploaded for an attempt it killed or timed out,
+and such a manifest is not the action's output, so those attempts are left out
+here and in report 3. The action was identical, so its command, inputs and
 platform were identical, and the outputs still differed. `differing paths`
 names the outputs to compare. A row here means the tool is nondeterministic, or
 the worker materialized the inputs differently. The fingerprint leaves out
@@ -226,8 +247,8 @@ weighted by the size of the later output:
 
 `declared changes by what moved` says which part of a changed action moved:
 `command` (arguments or environment), `input_root` (input files), both, or
-`other`, meaning the platform, timeout or salt. Attempts that did not finish,
-or whose outputs were incomplete, are not compared.
+`other`, meaning the platform, timeout or salt. Only complete attempts, as
+defined in report 2, are compared.
 
 ### 4. Novelty per invocation [#novelty-per-invocation]
 
@@ -251,7 +272,15 @@ Successful writes from `cas_write` (by digest, split by `source`) and from
   already existed.
 
 Failed writes are counted separately. Rewrite and pre-window bytes are writes
-of content the backend already had. The `backend bytes / CAS bytes` line
+of content the backend already had.
+
+The backend table has two more columns. `versioned` counts writes whose
+`backend_write` carried a non-empty `version_id`, the version Azure created,
+which means the account keeps blob versions. `retained` is the rewrite and
+pre-window bytes of those writes: each one replaced a copy that the account
+still holds. It takes the replaced copy to be the size of the new one, which
+is exact for a CAS key. Logs from builds that predate `version_id` show `-`
+in both columns and say that versioning is unknown. The `backend bytes / CAS bytes` line
 compares what reached Azure with what the CAS service accepted; with
 `fast_slow` over Azure it sits close to 1, meaning every accepted write,
 re-uploads included, became an Azure write. Key prefixes separate the CAS from
@@ -285,6 +314,7 @@ How far to trust the other six.
 | `attempt_started` with no `attempt_finished` | Attempts cut by the end of the window, or workers that died mid-action. A handful is normal. |
 | `attempt_finished` with no `attempt_started` | Attempts cut by the start of the window. Their outputs have no target or invocation. |
 | `outputs_complete=false` | Attempts that failed or did not upload everything. Reports 2 and 3 leave them out. |
+| `outputs_complete=true` but outcome not completed | Attempts killed or timed out after their outputs were uploaded. Their outputs still count in reports 1 and 4; reports 2 and 3 leave them out. |
 | observed manifest entries `!= output_count` | Lines lost between the process and your files. Treat every total as a lower bound, and collect closer to stdout. |
 | `output_observed` with no target/mnemonic/invocation | Outputs that cannot be attributed, usually because their `attempt_started` is missing. |
 | events with an unknown schema | The emitters are newer than the analyzer. Those events are skipped; update `tools/provenance`. |
@@ -299,12 +329,14 @@ find each large producer in the others.
 | Declared change and output change | Report 3 `declared_change_output_change`; in report 1, distinct action digests close to the attempt count | Stamping (the build time or `volatile-status.txt` reaching the action), an environment variable whose value changes per run, or a configuration flag that differs between runs | `input_root` moving points at stamped inputs, `command` moving at arguments or environment. Fetch two `Command` protos from the CAS and diff them. |
 | Declared change, same output | Report 3 `declared_change_output_same` | Avoidable invalidation: the action key changes and the output does not. It costs execution time and cache misses, not storage | The same `command` or `input_root` split; usually an environment variable or an input the action does not need |
 | Same action, output changes | Report 3 `same_action_output_change`; report 2 | Nondeterminism: timestamps, file order or random IDs embedded in the output. Less often, inputs materialized differently on two workers | Diff two outputs from report 2's `differing paths`. Archives are the usual suspect |
-| Same output, uploaded again | Report 5 rewrite and pre-window bytes; report 6 uploads after `error` or a false `absent`; report 1 producers whose observed bytes are far above their first-observed bytes | Amplification: `has()` errors or false negatives, `consider_expired_after_s`, clients uploading again, or `fast_slow` writing the slow tier on each accepted upload | The has() error strings and latency in report 6; the top rewritten digests in report 5 and the invocation count beside each |
+| Same output, uploaded again | Report 5 rewrite and pre-window bytes; report 1b rewrite bytes per target; report 6 uploads after `error` or a false `absent`; report 1 producers whose observed bytes are far above their first-observed bytes | Amplification: `has()` errors or false negatives, `consider_expired_after_s`, clients uploading again, or `fast_slow` writing the slow tier on each accepted upload | The has() error strings and latency in report 6; the top rewritten digests in report 5 and the invocation count beside each |
 
 ### Check the Azure side [#check-the-azure-side]
 
-Compare report 5's backend first-write rate with the storage account's measured
-growth per day, from the `UsedCapacity` metric in Azure Monitor or from two blob
+If your build's `backend_write` events carry `version_id`, report 5 answers this
+directly: a non-zero `versioned` column means the account keeps versions, and
+`retained` is what the window added to them. Otherwise, compare report 5's
+backend first-write rate with the storage account's measured growth per day, from the `UsedCapacity` metric in Azure Monitor or from two blob
 inventories a day apart:
 
 - **Growth close to the first-write bytes:** the backend stores new content
@@ -364,7 +396,8 @@ build logs, and review them before they leave your organization.
 | --- | --- | --- |
 | `warning: no provenance events found` | `RUST_LOG` lacks `nativelink_provenance=debug`, `NL_LOG` is not `json`, or the binary predates the events | Check the running process's environment, not only the manifest, and restart after changing it |
 | Every producer's target is `-` | Worker logs without their `attempt_started` events, or a client that sends no `RequestMetadata` | Collect from the start of the window; check that the client sends the `requestmetadata-bin` header, as Bazel does |
-| Report 5's `cas_write` rows show 0 invocations | The writes came from workers, which send no request metadata with their uploads | Expected. Match the digests against report 1 instead |
+| Report 5's `cas_write` rows show 0 invocations, or report 1b has a large `(no metadata)` row | The writes came from workers, which send no request metadata with their uploads | Expected. Match the digests against report 1 instead |
+| Report 1b lists a target with many bytes and `worker` `no` | The client ran that action itself and uploaded the outputs | Expected for locally executed actions; report 1 cannot see them |
 | Report 5 is empty | No logs from a CAS server or from the process holding the Azure store | Add those logs, or turn the variables on in those processes |
 | Warnings about an unknown schema | The emitters are newer than the analyzer | Use the `tools/provenance` from the same source as the binary |
 | The analyzer runs out of memory | About 0.7 GB per million events | Analyze a shorter window, or one pool at a time |

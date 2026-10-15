@@ -8,12 +8,19 @@ events from log files and answers, weighted by bytes:
 
   1. Which producers (target, mnemonic, output path) account for the output
      bytes first observed in the window.
+ 1b. Which targets the client's own uploads came from, by the request
+     metadata on `cas_write`. This covers actions the client ran locally,
+     which no worker saw.
   2. Which action digests produced more than one output manifest.
   3. For each logical producer, whether consecutive complete attempts changed
-     their declared identity, their output, both, or neither.
+     their declared identity, their output, both, or neither. Reports 2 and 3
+     only use attempts whose outcome is `completed` and whose outputs were all
+     uploaded.
   4. How many output bytes each invocation added that no earlier one had.
   5. How many CAS and backend write bytes were first writes, and how many
-     re-wrote a digest or key already written.
+     re-wrote a digest or key already written; for the backend, how many of
+     those rewrites returned an Azure version ID, so the account kept the
+     copy they replaced.
   6. The distribution of the worker's `has()` results, and what was uploaded
      after each.
   7. How complete the log is: attempts that never finished, incomplete
@@ -356,6 +363,9 @@ class Write(NamedTuple):
     error_code: str
     invocation: str
     seed_hash: str
+    target: str
+    mnemonic: str
+    versioned: bool
 
 
 class Attempt:
@@ -528,6 +538,9 @@ class Collector:
         self.cas_writes: list[Write] = []
         self.backend_writes: list[Write] = []
         self.find_missing = FindMissingStats()
+        # backend_write events that carry a version_id key at all, empty or
+        # not. Zero means the logs predate the field, not that nothing is kept.
+        self.version_id_reported = 0
         self.first_ts: int | None = None
         self.last_ts: int | None = None
         self._seq = 0
@@ -677,10 +690,15 @@ class Collector:
                 error_code=self._intern(record.get("error_code")),
                 invocation=self._intern(record.get("tool_invocation_id")),
                 seed_hash=hashed,
+                target=self._intern(record.get("target_id")),
+                mnemonic=self._intern(record.get("action_mnemonic")),
+                versioned=False,
             )
         )
 
     def _on_backend_write(self, record: dict[str, Any], order: tuple[int, int]) -> None:
+        if "version_id" in record:
+            self.version_id_reported += 1
         key = self._intern(record.get("key"))
         prefix, hashed = split_backend_key(key)
         self.backend_writes.append(
@@ -694,6 +712,11 @@ class Collector:
                 error_code=self._intern(record.get("error_code")),
                 invocation=self._intern(record.get("tool_invocation_id")),
                 seed_hash=hashed,
+                target=self._intern(record.get("target_id")),
+                mnemonic=self._intern(record.get("action_mnemonic")),
+                # Azure's x-ms-version-id. Logs from before the field existed
+                # have no key at all, which reads the same as "".
+                versioned=bool(as_str(record.get("version_id"))),
             )
         )
 
@@ -710,6 +733,39 @@ class Collector:
 
 # --------------------------------------------------------------------------
 # Analyses. Each returns a JSON-serialisable dict or list.
+
+
+FIRST_WRITE = "first_write"
+REWRITE = "rewrite"
+PREWINDOW_REWRITE = "prewindow_rewrite"
+FAILED_WRITE = "failed"
+
+
+def classify_writes(writes: list[Write], seed: set[str]) -> list[tuple[Write, str]]:
+    """Labels each write, in time order, as one of the classes above.
+
+    A successful write is a rewrite if the same digest or key was written
+    successfully earlier in the window, a pre-window rewrite if it is the first
+    in the window but the seed says the digest already existed, and a first
+    write otherwise.
+    """
+    written: set[str] = set()
+    labelled = []
+    for write in sorted(writes, key=lambda w: w.order):
+        if not write.ok:
+            labelled.append((write, FAILED_WRITE))
+        elif write.ident in written:
+            labelled.append((write, REWRITE))
+        else:
+            written.add(write.ident)
+            if write.seed_hash and write.seed_hash in seed:
+                labelled.append((write, PREWINDOW_REWRITE))
+            else:
+                labelled.append((write, FIRST_WRITE))
+    return labelled
+
+
+NO_METADATA = "(no metadata)"
 
 
 def limit(rows: list[Any], top: int) -> list[Any]:
@@ -744,10 +800,14 @@ class Analysis:
         return EMPTY_META
 
     def complete_attempts(self) -> list[Attempt]:
+        """Attempts whose manifest can be trusted: the command ran to the end
+        and every output was uploaded. A worker can report outputs_complete
+        for an attempt it killed or timed out, if it uploaded what was there,
+        so the outcome has to be `completed` too."""
         return [
             attempt
             for attempt in self.c.attempts.values()
-            if attempt.finished and attempt.outputs_complete
+            if attempt.finished and attempt.outputs_complete and attempt.outcome == "completed"
         ]
 
     @staticmethod
@@ -857,6 +917,84 @@ class Analysis:
             "observations": len(self.outputs),
             "uploads_without_output_observed": unmatched_uploads,
             "rows": limit(rows, self.top),
+        }
+
+    # 1b -----------------------------------------------------------------
+
+    def client_uploads(self) -> dict[str, Any]:
+        """Successful cas_write events grouped by the target in their metadata.
+
+        Bazel attaches RequestMetadata to its own uploads, so outputs of
+        actions it ran locally are attributable here although no worker saw
+        them. Uploads without metadata, such as a worker's own uploads through
+        a GrpcStore, form one row.
+        """
+        worker_events = any(attempt.started for attempt in self.c.attempts.values())
+        executed = {
+            (attempt.meta.target, attempt.meta.mnemonic)
+            for attempt in self.c.attempts.values()
+            if attempt.meta is not None
+        }
+        rows: dict[tuple[str, str], dict[str, Any]] = {}
+        for write, label in classify_writes(self.c.cas_writes, self.seed):
+            if label == FAILED_WRITE:
+                continue
+            key = (write.target, write.mnemonic) if write.target else (NO_METADATA, "")
+            row = rows.get(key)
+            if row is None:
+                row = {
+                    "writes": 0,
+                    "bytes": 0,
+                    "digests": set(),
+                    "invocations": set(),
+                    FIRST_WRITE: 0,
+                    REWRITE: 0,
+                    PREWINDOW_REWRITE: 0,
+                }
+                rows[key] = row
+            row["writes"] += 1
+            row["bytes"] += write.size
+            row[label] += write.size
+            row["digests"].add(write.ident)
+            if write.invocation:
+                row["invocations"].add(write.invocation)
+
+        out = []
+        for (target, mnemonic), row in rows.items():
+            seen = None
+            if worker_events and target != NO_METADATA:
+                seen = (target, mnemonic) in executed
+            out.append(
+                {
+                    "target_id": target,
+                    "action_mnemonic": mnemonic,
+                    "seen_by_worker": seen,
+                    "writes": row["writes"],
+                    "bytes": row["bytes"],
+                    "distinct_digests": len(row["digests"]),
+                    "first_write_bytes": row[FIRST_WRITE],
+                    "rewrite_bytes": row[REWRITE],
+                    "prewindow_rewrite_bytes": row[PREWINDOW_REWRITE],
+                    "invocations": len(row["invocations"]),
+                }
+            )
+        out.sort(
+            key=lambda r: (
+                -r["first_write_bytes"],
+                -r["bytes"],
+                r["target_id"],
+                r["action_mnemonic"],
+            )
+        )
+        return {
+            "target_count": sum(1 for r in out if r["target_id"] != NO_METADATA),
+            "bytes": sum(r["bytes"] for r in out),
+            "bytes_without_metadata": sum(r["bytes"] for r in out if r["target_id"] == NO_METADATA),
+            "worker_events_present": worker_events,
+            "bytes_from_targets_no_worker_ran": sum(
+                r["bytes"] for r in out if r["seen_by_worker"] is False
+            ),
+            "rows": limit(out, self.top),
         }
 
     # 2 ------------------------------------------------------------------
@@ -1048,20 +1186,26 @@ class Analysis:
     # 5 ------------------------------------------------------------------
 
     def rewrites(self) -> dict[str, Any]:
+        backend = self._rewrite_section(
+            self.c.backend_writes, ("store", "prefix"), "key", versioning=True
+        )
+        backend["version_id_reported"] = self.c.version_id_reported
         return {
             "cas_write": self._rewrite_section(self.c.cas_writes, ("source",), "digest"),
-            "backend_write": self._rewrite_section(
-                self.c.backend_writes, ("store", "prefix"), "key"
-            ),
+            "backend_write": backend,
         }
 
     def _rewrite_section(
-        self, writes: list[Write], group_names: tuple[str, ...], ident_name: str
+        self,
+        writes: list[Write],
+        group_names: tuple[str, ...],
+        ident_name: str,
+        versioning: bool = False,
     ) -> dict[str, Any]:
-        written: set[str] = set()
+        distinct_written = 0
         groups: dict[tuple[str, ...], dict[str, Any]] = {}
         idents: dict[str, dict[str, Any]] = {}
-        for write in sorted(writes, key=lambda w: w.order):
+        for write, label in classify_writes(writes, self.seed):
             group = groups.get(write.group)
             if group is None:
                 group = {
@@ -1077,8 +1221,11 @@ class Analysis:
                     "error_bytes": 0,
                     "error_codes": Counter(),
                 }
+                if versioning:
+                    group["versioned_writes"] = 0
+                    group["retained_by_versioning_bytes"] = 0
                 groups[write.group] = group
-            if not write.ok:
+            if label == FAILED_WRITE:
                 group["errors"] += 1
                 group["error_bytes"] += write.size
                 group["error_codes"][write.error_code or "(empty)"] += 1
@@ -1101,19 +1248,26 @@ class Analysis:
             ident["groups"].add("/".join(part for part in write.group if part))
             if write.invocation:
                 ident["invocations"].add(write.invocation)
-            if write.ident in written:
+            if label == REWRITE:
                 group["rewrites"] += 1
                 group["rewrite_bytes"] += write.size
                 ident["rewrite_bytes"] += write.size
+            elif label == PREWINDOW_REWRITE:
+                distinct_written += 1
+                group["prewindow_rewrites"] += 1
+                group["prewindow_rewrite_bytes"] += write.size
+                ident["prewindow_rewrite_bytes"] += write.size
             else:
-                written.add(write.ident)
-                if write.seed_hash and write.seed_hash in self.seed:
-                    group["prewindow_rewrites"] += 1
-                    group["prewindow_rewrite_bytes"] += write.size
-                    ident["prewindow_rewrite_bytes"] += write.size
-                else:
-                    group["first_writes"] += 1
-                    group["first_write_bytes"] += write.size
+                distinct_written += 1
+                group["first_writes"] += 1
+                group["first_write_bytes"] += write.size
+            if versioning and write.versioned:
+                # A version ID on an overwrite means the account kept the
+                # copy it replaced. Its size is taken to be this write's,
+                # which holds for a CAS key.
+                group["versioned_writes"] += 1
+                if label != FIRST_WRITE:
+                    group["retained_by_versioning_bytes"] += write.size
 
         totals = Counter()
         group_rows = []
@@ -1161,9 +1315,11 @@ class Analysis:
             "errors",
             "error_bytes",
         )
+        if versioning:
+            total_keys += ("versioned_writes", "retained_by_versioning_bytes")
         return {
             "totals": {name: totals.get(name, 0) for name in total_keys},
-            "distinct_written": len(written),
+            "distinct_written": distinct_written,
             "by_group": group_rows,
             "top_rewritten": limit(top_rows, self.top),
         }
@@ -1246,6 +1402,7 @@ class Analysis:
         unfinished = []
         unstarted = 0
         incomplete: Counter = Counter()
+        not_completed: Counter = Counter()
         count_mismatch = []
         for attempt in self.c.attempts.values():
             if attempt.started and not attempt.finished:
@@ -1254,6 +1411,8 @@ class Analysis:
                 unstarted += 1
             if attempt.finished and not attempt.outputs_complete:
                 incomplete[attempt.outcome] += 1
+            if attempt.finished and attempt.outputs_complete and attempt.outcome != "completed":
+                not_completed[attempt.outcome] += 1
             if attempt.finished and attempt.outputs_complete:
                 observed = sum(
                     1
@@ -1285,6 +1444,8 @@ class Analysis:
             "finished_without_started": unstarted,
             "outputs_incomplete": sum(incomplete.values()),
             "outputs_incomplete_by_outcome": dict(sorted(incomplete.items())),
+            "complete_but_not_completed": sum(not_completed.values()),
+            "complete_but_not_completed_by_outcome": dict(sorted(not_completed.items())),
             "manifest_count_mismatches": len(count_mismatch),
             "manifest_count_mismatch_examples": sorted(limit(count_mismatch, self.top)),
             "outputs_without_attempt_started": orphan_outputs,
@@ -1323,6 +1484,7 @@ class Analysis:
                 "seeded_digests": len(self.seed),
             },
             "producers": self.producers(),
+            "client_uploads": self.client_uploads(),
             "exact_identity": self.exact_identity(),
             "churn": self.churn(),
             "novelty": self.novelty(),
@@ -1507,6 +1669,52 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
         )
     )
 
+    # 1b
+    uploads = report["client_uploads"]
+    out.append("")
+    out.append(
+        "1b. Client uploads by target: cas_write (result=ok) grouped by request metadata "
+        f"({sum(1 for r in uploads['rows'] if r['target_id'] != NO_METADATA)} of "
+        f"{uploads['target_count']} targets shown)"
+    )
+    summary = (
+        f"   {human_bytes(uploads['bytes'])} uploaded; "
+        f"{human_bytes(uploads['bytes_without_metadata'])} without metadata"
+    )
+    if uploads["worker_events_present"]:
+        summary += (
+            f"; {human_bytes(uploads['bytes_from_targets_no_worker_ran'])} from targets "
+            "no worker attempt in this input produced (worker = no)"
+        )
+    out.append(summary)
+    show_worker = uploads["worker_events_present"]
+    out.append(
+        table(
+            ["target", "mnemonic"]
+            + (["worker"] if show_worker else [])
+            + ["writes", "bytes", "digests", "first-write", "rewrite", "pre-window", "invocations"],
+            [
+                [short.text(row["target_id"], 40), row["action_mnemonic"] or "-"]
+                + (
+                    [{True: "yes", False: "no", None: "-"}[row["seen_by_worker"]]]
+                    if show_worker
+                    else []
+                )
+                + [
+                    row["writes"],
+                    human_bytes(row["bytes"]),
+                    row["distinct_digests"],
+                    human_bytes(row["first_write_bytes"]),
+                    human_bytes(row["rewrite_bytes"]),
+                    human_bytes(row["prewindow_rewrite_bytes"]),
+                    row["invocations"],
+                ]
+                for row in uploads["rows"]
+            ],
+            right=set(range(3 if show_worker else 2, 10 if show_worker else 9)),
+        )
+    )
+
     # 2
     exact = report["exact_identity"]
     out.append("")
@@ -1653,6 +1861,10 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
     ):
         data = rewrites[section]
         totals = data["totals"]
+        versioning = "versioned_writes" in totals
+        # Without the field anywhere, "0 versioned" would read as "the account
+        # keeps nothing", which these logs cannot say.
+        version_known = data.get("version_id_reported", 0) > 0
         out.append(f"   {title}:")
         if totals["writes"] or totals["errors"]:
             out.append(
@@ -1660,6 +1872,17 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
                 f"first writes {human_bytes(totals['first_write_bytes'])}, "
                 f"rewrites {human_bytes(totals['rewrite_bytes'])}, "
                 f"pre-window {human_bytes(totals['prewindow_rewrite_bytes'])}"
+                + (
+                    f", retained by versioning "
+                    f"{human_bytes(totals['retained_by_versioning_bytes'])}"
+                    if versioning and version_known
+                    else ""
+                )
+                + (
+                    "; versioning unknown (no backend_write carries version_id)"
+                    if versioning and not version_known
+                    else ""
+                )
             )
         out.append(
             table(
@@ -1673,7 +1896,8 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
                     "rewrite %",
                     "errors",
                     "error bytes",
-                ],
+                ]
+                + (["versioned", "retained"] if versioning else []),
                 [
                     [row[col] or "-" for col in group_cols]
                     + [
@@ -1693,9 +1917,16 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
                         row["errors"],
                         human_bytes(row["error_bytes"]),
                     ]
+                    + (
+                        [row["versioned_writes"], human_bytes(row["retained_by_versioning_bytes"])]
+                        if versioning and version_known
+                        else ["-", "-"]
+                        if versioning
+                        else []
+                    )
                     for row in data["by_group"]
                 ],
-                right=set(range(len(group_cols), len(group_cols) + 8)),
+                right=set(range(len(group_cols), len(group_cols) + (10 if versioning else 8))),
             )
         )
         out.append(f"   Top rewritten {ident}s ({top_note}):")
@@ -1804,6 +2035,15 @@ def render_text(report: dict[str, Any], top: int, wide: bool) -> str:
         + (
             f" ({fmt_counter(cov['outputs_incomplete_by_outcome'])})"
             if cov["outputs_incomplete"]
+            else ""
+        )
+    )
+    out.append(
+        "   outputs_complete=true but outcome not completed (left out of 2 and 3): "
+        f"{cov['complete_but_not_completed']}"
+        + (
+            f" ({fmt_counter(cov['complete_but_not_completed_by_outcome'])})"
+            if cov["complete_but_not_completed"]
             else ""
         )
     )

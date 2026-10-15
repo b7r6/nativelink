@@ -98,7 +98,9 @@ client request, which includes every write made by a worker process.
   error.
 - **Durations** are fields ending in `_ms`: whole milliseconds.
 - **Every field of a kind is always present.** An unknown value is `""`, `0` or
-  `false`, never a missing key.
+  `false`, never a missing key. The exception is a field added to schema 1
+  later, such as `version_id` on `backend_write`: logs from builds that predate
+  it do not have the key.
 
 ## `attempt_started` [#attempt_started]
 
@@ -174,7 +176,7 @@ fingerprint, use only attempts with `outcome` `completed` and
 | `exit_code` | integer | The command's exit code, or `-1` if there is none. |
 | `outcome` | string | `completed` (the command ran to the end and its outputs were uploaded, whatever the exit code), `upload_failed`, `killed` (the worker ended the command on a scheduler kill or past a memory or disk reservation, or the operation was killed during another phase), `timed_out` (the worker ended the command at the action's timeout), or `failed` (any other error before upload). |
 | `error_code`, `error` | string | |
-| `outputs_complete` | boolean | `true` only if every output was observed and uploaded without error. Can be `true` with `outcome` `killed` or `timed_out`, when the outputs of a stopped command were uploaded. |
+| `outputs_complete` | boolean | `true` only if every output was observed and uploaded without error. It can be `true` with `outcome` `killed` or `timed_out`, when the worker uploaded what was there after stopping the command, so check both. |
 | `output_count` | integer | Number of [manifest entries](#manifest-fingerprint). |
 | `output_bytes` | integer | Sum of `size_bytes` over manifest entries, per path. |
 | `unique_output_bytes` | integer | Sum of `size_bytes` over distinct digests in the manifest. |
@@ -228,6 +230,7 @@ served, if there is one.
 | `block_count` | integer | `0` for `single`. |
 | `result`, `error_code`, `error` | string | |
 | `elapsed_ms` | integer | |
+| `version_id` | string | Azure's `x-ms-version-id` for the version the write created. Non-empty means the account keeps blob versions, so an overwrite left the previous copy in place. `""` when the account has versioning off or the write failed. Absent from logs of builds that predate the field. |
 
 ## Manifest fingerprint [#manifest-fingerprint]
 
