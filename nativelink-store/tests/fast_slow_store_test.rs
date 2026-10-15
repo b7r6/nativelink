@@ -2425,3 +2425,105 @@ async fn populate_from_compression_slow_store_into_filesystem_fast_store() -> Re
     }
     Ok(())
 }
+
+/// A slow store whose `has()` reports `reported_size` for whatever it holds,
+/// the way a tier that reports a physical size does.
+#[derive(MetricsComponent)]
+struct MisreportingSlowStore {
+    inner: Arc<MemoryStore>,
+    reported_size: u64,
+}
+
+#[async_trait]
+impl StoreDriver for MisreportingSlowStore {
+    async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn has_with_results(
+        self: Pin<&Self>,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        Pin::new(self.inner.as_ref())
+            .has_with_results(keys, results)
+            .await?;
+        for result in results.iter_mut().filter(|result| result.is_some()) {
+            *result = Some(self.reported_size);
+        }
+        Ok(())
+    }
+
+    async fn update(
+        self: Pin<&Self>,
+        key: StoreKey<'_>,
+        reader: DropCloserReadHalf,
+        size_info: UploadSizeInfo,
+    ) -> Result<u64, Error> {
+        Pin::new(self.inner.as_ref())
+            .update(key, reader, size_info)
+            .await
+    }
+
+    async fn get_part(
+        self: Pin<&Self>,
+        key: StoreKey<'_>,
+        writer: &mut DropCloserWriteHalf,
+        offset: u64,
+        length: Option<u64>,
+    ) -> Result<(), Error> {
+        Pin::new(self.inner.as_ref())
+            .get_part(key, writer, offset, length)
+            .await
+    }
+
+    fn inner_store(&self, _digest: Option<StoreKey>) -> &'_ dyn StoreDriver {
+        self
+    }
+
+    fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
+        self
+    }
+
+    fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
+        self
+    }
+
+    fn register_remove_callback(self: Arc<Self>, _callback: RemoveCallback) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+default_health_status_indicator!(MisreportingSlowStore);
+
+// The populate cannot take a digest's size from the slow tier's `has()` on
+// trust: a tier that reports less (a compressed stream) or more (a
+// block-rounded footprint) than the blob must still fill the fast tier with
+// the blob as it is.
+#[nativelink_test]
+async fn populate_does_not_trust_slow_store_has_size_for_digest() -> Result<(), Error> {
+    let data = Bytes::from(make_random_data(3000));
+    let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
+    for reported_size in [1, 4096] {
+        let slow = Store::new(Arc::new(MisreportingSlowStore {
+            inner: MemoryStore::new(&MemorySpec::default()),
+            reported_size,
+        }));
+        let (fast, fast_spec) = make_filesystem_fast_store().await?;
+        check_populates_filesystem_fast_store(fast, fast_spec, slow, digest.into(), &data).await?;
+    }
+    Ok(())
+}
+
+// An action cache entry is keyed by the action's digest and a dedup index entry
+// by its blob's, so a digest's size is not always the size of what it names.
+// The slow tier's `has()` is right here and the digest is not, so the populate
+// must not declare the digest's size as exact either.
+#[nativelink_test]
+async fn populate_keeps_entry_whose_size_is_not_its_digests() -> Result<(), Error> {
+    let data = Bytes::from(make_random_data(3000));
+    let digest = DigestInfo::try_new(VALID_HASH, 100)?;
+    let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let (fast, fast_spec) = make_filesystem_fast_store().await?;
+    check_populates_filesystem_fast_store(fast, fast_spec, slow, digest.into(), &data).await
+}
