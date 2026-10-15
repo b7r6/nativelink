@@ -121,6 +121,36 @@ rust_test(
     ],
 )
 
+rust_binary(
+    name = "provenance_report",
+    srcs = [
+        "src/bin/provenance_report/analysis.rs",
+        "src/bin/provenance_report/collect.rs",
+        "src/bin/provenance_report/main.rs",
+        "src/bin/provenance_report/parse.rs",
+        "src/bin/provenance_report/render.rs",
+        "src/bin/provenance_report/tests.rs",
+    ],
+    crate_root = "src/bin/provenance_report/main.rs",
+    deps = [
+        "@crates//:clap",
+        "@crates//:flate2",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "provenance_report_test",
+    timeout = "short",
+    compile_data = glob(["src/bin/provenance_report/testdata/*.txt"]),
+    crate = ":provenance_report",
+    deps = [
+        "@crates//:hex",
+        "@crates//:sha2",
+    ],
+)
+
 filegroup(
     name = "docs",
     srcs = [
