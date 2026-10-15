@@ -123,6 +123,44 @@ Emitted by the worker once per execution attempt, when it accepts
 | `command_digest` | digest | The `Command` the action names. |
 | `input_root_digest` | digest | The input root the action names. |
 
+## `inputs_materialized` [#inputs_materialized]
+
+Emitted by the worker once per attempt, when it has finished materializing the
+action's inputs into the working directory, whether that succeeded or failed.
+Also emitted when a kill or `max_download_timeout` ends materialization partway.
+It says how much of the input tree the worker found in its local fast tier and
+how much it had to fetch from the slow tier.
+
+Each input file is counted when the worker resolves it against its local fast
+tier: as local when the tier already held the blob, as fetched when the worker
+had to ask the slow tier for it. A digest is fetched once per attempt. A second
+path with the same content counts as local, because it is linked from the copy
+the first fetch brought in. When the input tree is fetched in one pass and
+nothing is evicted in between, `fetched_bytes + local_bytes` equals
+`total_input_bytes`.
+
+Attempts running at the same time on one worker that need the same missing blob
+share a single download in the store, and each counts it as fetched. Summed over
+attempts, `fetched_bytes` can therefore exceed what the worker read from the
+slow tier. With the directory cache enabled, the counts cover only the files
+the worker resolves itself: a cache hit links a cached tree and counts no
+files, and the fetches a cache miss makes to build its entry are not counted.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id`, `operation_id`, `action_digest` | | Join keys, as on `attempt_started`. |
+| `result` | string | `ok` or `error`. |
+| `error_code`, `error` | string | Why materialization failed, or `""`. |
+| `files` | integer | Files in the input tree, per path. |
+| `directories` | integer | Directories in the input tree, not counting the root. |
+| `total_input_bytes` | integer | Sum of the sizes of the input files, per path. |
+| `fetched_files`, `fetched_bytes` | integer | Distinct blobs the worker asked the slow tier for because its local tier did not hold them, and their sizes. |
+| `local_files`, `local_bytes` | integer | Files, per path, whose blob the local tier already held, or that were linked from a blob this attempt had already fetched. |
+| `duplicate_fetches`, `duplicate_fetch_bytes` | integer | Blobs this attempt fetched a second time, and their sizes: the local tier evicted the blob between the fetch and the hardlink, or an input fetch that failed for a transient reason was retried and a blob from the earlier pass was gone. |
+| `passes` | integer | How many times the worker fetched the input tree. More than `1` when a transient failure had the whole tree fetched again. `files`, `directories` and `total_input_bytes` count the tree once. The fetched, local and duplicate counts add up over every pass. |
+| `directory_cache` | string | `disabled`, `hit`, `miss`, or `error` (the cache failed and the worker fell back to resolving every file itself). |
+| `elapsed_ms` | integer | From the start of the first pass to the end of materialization. |
+
 ## `input_audit` [#input_audit]
 
 Emitted by the worker twice per audited attempt: with `phase`

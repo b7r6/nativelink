@@ -820,6 +820,129 @@ async fn release_filesystem_stores(
     .await;
 }
 
+/// What materializing one attempt's inputs took from the local tier and the
+/// slow tier, for `inputs_materialized`. Exists only when provenance events
+/// are enabled; the materialization passes `None` otherwise and counts
+/// nothing.
+#[derive(Debug, Default)]
+struct InputStats {
+    counts: Mutex<InputCounts>,
+    /// Set by the one `inputs_materialized`.
+    reported: AtomicBool,
+}
+
+#[derive(Debug, Default)]
+struct InputCounts {
+    /// When the first pass started; `None` until materialization starts.
+    started: Option<std::time::Instant>,
+    /// Passes over the input tree: more than one when a transient failure
+    /// had the whole tree fetched again.
+    passes: u32,
+    files: u64,
+    directories: u64,
+    total_input_bytes: u64,
+    fetched_files: u64,
+    fetched_bytes: u64,
+    local_files: u64,
+    local_bytes: u64,
+    duplicate_fetches: u64,
+    duplicate_fetch_bytes: u64,
+    /// The pass in which each digest was fetched from the slow tier.
+    fetched: HashMap<DigestInfo, u32>,
+    directory_cache: &'static str,
+}
+
+impl InputStats {
+    /// Starts a pass over the input tree. The tree is counted in the first
+    /// pass only; what was fetched and found locally adds up over all.
+    fn pass_started(&self) {
+        let mut counts = self.counts.lock();
+        counts.started.get_or_insert_with(std::time::Instant::now);
+        counts.passes += 1;
+    }
+
+    /// Counts a file of the input tree.
+    fn file(&self, digest: DigestInfo) {
+        let mut counts = self.counts.lock();
+        if counts.passes <= 1 {
+            counts.files += 1;
+            counts.total_input_bytes += digest.size_bytes();
+        }
+    }
+
+    /// Counts a directory of the input tree, the root aside.
+    fn directory(&self) {
+        let mut counts = self.counts.lock();
+        if counts.passes <= 1 {
+            counts.directories += 1;
+        }
+    }
+
+    fn directory_cache(&self, outcome: &'static str) {
+        self.counts.lock().directory_cache = outcome;
+    }
+
+    /// Counts a file whose blob the local tier had.
+    fn local(&self, digest: DigestInfo) {
+        let mut counts = self.counts.lock();
+        counts.local_files += 1;
+        counts.local_bytes += digest.size_bytes();
+    }
+
+    /// Counts a file whose blob the local tier did not have, so the worker
+    /// asks the slow tier for it. A digest this pass already asked for, for
+    /// another path, is not fetched again: that path is linked from the
+    /// copy the first fetch brought in. One an earlier pass fetched had
+    /// been lost again, and is fetched a second time.
+    fn missing(&self, digest: DigestInfo) {
+        let mut counts = self.counts.lock();
+        let pass = counts.passes;
+        match counts.fetched.insert(digest, pass) {
+            None => {
+                counts.fetched_files += 1;
+                counts.fetched_bytes += digest.size_bytes();
+            }
+            Some(earlier) if earlier == pass => {
+                counts.local_files += 1;
+                counts.local_bytes += digest.size_bytes();
+            }
+            Some(_) => {
+                counts.duplicate_fetches += 1;
+                counts.duplicate_fetch_bytes += digest.size_bytes();
+            }
+        }
+    }
+
+    /// Counts a blob fetched again after the local tier lost it between
+    /// the fetch and the link.
+    fn refetched(&self, digest: DigestInfo) {
+        let mut counts = self.counts.lock();
+        counts.duplicate_fetches += 1;
+        counts.duplicate_fetch_bytes += digest.size_bytes();
+    }
+}
+
+/// Counts a file that is about to be resolved, by whether the local tier
+/// holds its blob. A lookup in the store's entry map, made only with
+/// provenance events on.
+async fn count_input(
+    stats: Option<&InputStats>,
+    filesystem_store: Pin<&FilesystemStore>,
+    digest: DigestInfo,
+) {
+    if let Some(stats) = stats {
+        if filesystem_store
+            .get_file_entry_for_digest(&digest)
+            .await
+            .is_ok()
+        {
+            stats.local(digest);
+        } else {
+            stats.missing(digest);
+        }
+    }
+}
+
 /// Aggressively download the digests of files and make a local folder from it. This function
 /// gates each directory level to at most `DOWNLOAD_TO_DIRECTORY_CONCURRENCY`
 /// concurrent in-flight materialization futures.
@@ -836,7 +959,14 @@ pub fn download_to_directory<'a>(
     digest: &'a DigestInfo,
     current_directory: &'a str,
 ) -> BoxFuture<'a, Result<(), Error>> {
-    download_to_directory_with_lease(cas_store, filesystem_store, digest, current_directory, None)
+    download_to_directory_with_lease(
+        cas_store,
+        filesystem_store,
+        digest,
+        current_directory,
+        None,
+        None,
+    )
 }
 
 fn download_to_directory_with_lease<'a>(
@@ -845,21 +975,24 @@ fn download_to_directory_with_lease<'a>(
     digest: &'a DigestInfo,
     current_directory: &'a str,
     input_lease: Option<Arc<ActionInputLease>>,
+    stats: Option<&'a InputStats>,
 ) -> BoxFuture<'a, Result<(), Error>> {
     async move {
         let (dirs, files, inline_nodes) =
-            collect_download_links(cas_store, digest, current_directory, input_lease).await?;
+            collect_download_links(cas_store, digest, current_directory, input_lease, stats)
+                .await?;
 
         let (exec_files, plain_files): (Vec<_>, Vec<_>) =
             files.into_iter().partition(|file| file.executable);
-        let mut links = resolve_plain_files(cas_store, filesystem_store, plain_files).await?;
-        links.extend(resolve_exec_files(cas_store, filesystem_store, exec_files).await?);
+        let mut links =
+            resolve_plain_files(cas_store, filesystem_store, plain_files, stats).await?;
+        links.extend(resolve_exec_files(cas_store, filesystem_store, exec_files, stats).await?);
 
         // Every directory exists before anything is written into one, so no
         // later pass has to create a parent it happens to need.
         fs::create_dir_many(dirs).await?;
-        materialize_inline_nodes(cas_store, filesystem_store, inline_nodes).await?;
-        materialize_links(cas_store, filesystem_store, links).await
+        materialize_inline_nodes(cas_store, filesystem_store, inline_nodes, stats).await?;
+        materialize_links(cas_store, filesystem_store, links, stats).await
     }
     .boxed()
 }
@@ -1016,9 +1149,11 @@ fn record_prepare_outcome(outcome: &'static str) {
 }
 
 /// Fetches a blob into the fast store with `populate` and resolves it there
-/// with `resolve`, again when the store has taken it away in between.
+/// with `resolve`, again when the store has taken it away in between; each
+/// fetch after the first is counted in `stats`.
 async fn fetch_and_resolve<T, P, PFut, R, RFut>(
     digest: DigestInfo,
+    stats: Option<&InputStats>,
     populate: P,
     resolve: R,
 ) -> Result<T, Error>
@@ -1041,6 +1176,9 @@ where
                 }
                 tokio::time::sleep(input_fetch_pause(attempt, &digest)).await;
                 attempt += 1;
+                if let Some(stats) = stats {
+                    stats.refetched(digest);
+                }
             }
             result => return result,
         }
@@ -1055,6 +1193,7 @@ async fn materialize_links(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     links: Vec<PendingLink>,
+    stats: Option<&InputStats>,
 ) -> Result<(), Error> {
     let pairs = links
         .iter()
@@ -1082,7 +1221,7 @@ async fn materialize_links(
     // once, so they are fetched back together, not one round trip each.
     let repairs: Vec<BoxFuture<'_, Result<(), Error>>> = evicted
         .into_iter()
-        .map(|link| relink_and_report(cas_store, filesystem_store, link).boxed())
+        .map(|link| relink_and_report(cas_store, filesystem_store, link, stats).boxed())
         .collect();
     futures::stream::iter(repairs)
         .buffer_unordered(INPUT_RELINK_CONCURRENCY)
@@ -1094,13 +1233,14 @@ async fn relink_and_report(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     link: &PendingLink,
+    stats: Option<&InputStats>,
 ) -> Result<(), Error> {
     info!(
         digest = %link.digest,
         src_path = ?link.src,
         "Hardlink source was evicted while the input tree was staged, fetching it again"
     );
-    relink_evicted_input(cas_store, filesystem_store, link)
+    relink_evicted_input(cas_store, filesystem_store, link, stats)
         .await
         .map_err(|err| hardlink_error(filesystem_store, link, err))
 }
@@ -1154,10 +1294,17 @@ async fn relink_evicted_input(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     link: &PendingLink,
+    stats: Option<&InputStats>,
 ) -> Result<(), Error> {
+    // The blob was resolved once already: bringing it back is a fetch the
+    // tree should not have needed.
+    if let Some(stats) = stats {
+        stats.refetched(link.digest);
+    }
     if link.executable {
         fetch_and_resolve(
             link.digest,
+            stats,
             || cas_store.populate_fast_store(link.digest.into()),
             || async {
                 let src = filesystem_store
@@ -1175,6 +1322,7 @@ async fn relink_evicted_input(
     }
     fetch_and_resolve(
         link.digest,
+        stats,
         || cas_store.populate_fast_store(link.digest.into()),
         || async {
             let file_entry = filesystem_store
@@ -1202,6 +1350,7 @@ async fn resolve_plain_files(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     files: Vec<PendingFile>,
+    stats: Option<&InputStats>,
 ) -> Result<Vec<PendingLink>, Error> {
     let mut tasks = Vec::with_capacity(files.len());
     for file in files {
@@ -1210,10 +1359,17 @@ async fn resolve_plain_files(
                 .get_file_entry_for_digest(&file.digest)
                 .await
             {
+                if let Some(stats) = stats {
+                    stats.local(file.digest);
+                }
                 entry
             } else {
+                if let Some(stats) = stats {
+                    stats.missing(file.digest);
+                }
                 fetch_and_resolve(
                     file.digest,
+                    stats,
                     || cas_store.populate_fast_store(file.digest.into()),
                     || filesystem_store.get_file_entry_for_digest(&file.digest),
                 )
@@ -1260,6 +1416,7 @@ async fn resolve_exec_files(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     files: Vec<PendingFile>,
+    stats: Option<&InputStats>,
 ) -> Result<Vec<PendingLink>, Error> {
     let digests: Vec<DigestInfo> = files.iter().map(|file| file.digest).collect();
     let sources = filesystem_store
@@ -1270,10 +1427,17 @@ async fn resolve_exec_files(
     for (file, source) in files.into_iter().zip(sources) {
         tasks.push(async move {
             let src_path = if let Ok(src_path) = source {
+                if let Some(stats) = stats {
+                    stats.local(file.digest);
+                }
                 src_path
             } else {
+                // No variant yet; whether that takes the slow tier depends
+                // on the plain blob, which the variant is copied from.
+                count_input(stats, filesystem_store, file.digest).await;
                 fetch_and_resolve(
                     file.digest,
+                    stats,
                     || cas_store.populate_fast_store(file.digest.into()),
                     || filesystem_store.get_executable_hardlink_source(&file.digest),
                 )
@@ -1303,6 +1467,7 @@ fn collect_download_links<'a>(
     digest: &'a DigestInfo,
     current_directory: &'a str,
     input_lease: Option<Arc<ActionInputLease>>,
+    stats: Option<&'a InputStats>,
 ) -> BoxFuture<'a, Result<CollectedTree, Error>> {
     async move {
         if let Some(input_lease) = &input_lease {
@@ -1321,6 +1486,9 @@ fn collect_download_links<'a>(
                 .err_tip(|| "Expected Digest to exist in Directory::file::digest")?
                 .try_into()
                 .err_tip(|| "In Directory::file::digest")?;
+            if let Some(stats) = stats {
+                stats.file(digest);
+            }
             let dest = format!("{}/{}", current_directory, file.name);
             let is_executable = file.is_executable;
             let (mtime, custom_unix_mode) = match file.node_properties {
@@ -1358,6 +1526,9 @@ fn collect_download_links<'a>(
                 .try_into()
                 .err_tip(|| "In Directory::file::digest")?;
             let new_directory_path = format!("{}/{}", current_directory, sub_directory.name);
+            if let Some(stats) = stats {
+                stats.directory();
+            }
             if let Some(input_lease) = &input_lease {
                 // Reserve queued child directories before their futures are
                 // polled. Without this, a large parent can leave later
@@ -1373,6 +1544,7 @@ fn collect_download_links<'a>(
                         &digest,
                         &new_directory_path,
                         input_lease,
+                        stats,
                     )
                     .await
                     .err_tip(|| format!("in download_to_directory : {new_directory_path}"))?;
@@ -1467,6 +1639,7 @@ async fn materialize_inline_nodes(
     cas_store: &FastSlowStore,
     filesystem_store: Pin<&FilesystemStore>,
     nodes: Vec<InlineNode>,
+    stats: Option<&InputStats>,
 ) -> Result<(), Error> {
     let mut futures = Vec::with_capacity(nodes.len());
     for node in nodes {
@@ -1483,6 +1656,14 @@ async fn materialize_inline_nodes(
                     mtime,
                     custom_unix_mode,
                 } => {
+                    // A zero-digest file is written here, and fetches nothing.
+                    if is_zero_digest(digest) {
+                        if let Some(stats) = stats {
+                            stats.local(digest);
+                        }
+                    } else {
+                        count_input(stats, filesystem_store, digest).await;
+                    }
                     cas_store.populate_fast_store(digest.into()).await?;
                     async move {
                         if is_zero_digest(digest) {
@@ -1581,6 +1762,7 @@ pub async fn prepare_action_inputs(
         digest,
         work_directory,
         None,
+        None,
     )
     .await
 }
@@ -1592,7 +1774,14 @@ async fn prepare_action_inputs_with_lease(
     digest: &DigestInfo,
     work_directory: &str,
     input_lease: Option<Arc<ActionInputLease>>,
+    stats: Option<&InputStats>,
 ) -> Result<(), Error> {
+    if let Some(stats) = stats {
+        stats.pass_started();
+        if directory_cache.is_none() {
+            stats.directory_cache("disabled");
+        }
+    }
     // Try cache first if available. Cache hits are safe while an action lease
     // is active because the directory cache pins its own materialized tree
     // across the hardlink operation. On a miss, pass the action lease into
@@ -1621,6 +1810,9 @@ async fn prepare_action_inputs_with_lease(
         };
         match cache_result {
             Ok(cache_hit) => {
+                if let Some(stats) = stats {
+                    stats.directory_cache(if cache_hit { "hit" } else { "miss" });
+                }
                 // The materialized tree is already usable. The directory
                 // cache locks each entry down with `set_readonly_recursive`,
                 // which leaves directories writable (0o755) and only makes
@@ -1639,6 +1831,9 @@ async fn prepare_action_inputs_with_lease(
                 return Ok(());
             }
             Err(e) => {
+                if let Some(stats) = stats {
+                    stats.directory_cache("error");
+                }
                 warn!(
                     ?digest,
                     ?e,
@@ -1663,6 +1858,7 @@ async fn prepare_action_inputs_with_lease(
         digest,
         work_directory,
         input_lease,
+        stats,
     )
     .await
 }
@@ -1937,6 +2133,8 @@ struct OutputProvenance {
     /// Whether the attempt's inputs are audited, decided as it starts so its
     /// two audits come as a pair.
     audit_inputs: bool,
+    /// What materializing the inputs took, for `inputs_materialized`.
+    inputs: InputStats,
     record: Mutex<AttemptRecord>,
     /// Set by the one `attempt_finished`.
     finished: AtomicBool,
@@ -1977,6 +2175,7 @@ impl OutputProvenance {
                 .map(ProvenanceMetadata::from)
                 .unwrap_or_default(),
             audit_inputs: tracing::enabled!(target: INPUT_AUDIT_TARGET, tracing::Level::DEBUG),
+            inputs: InputStats::default(),
             record: Mutex::default(),
             finished: AtomicBool::new(false),
         };
@@ -2049,6 +2248,38 @@ impl OutputProvenance {
             error = %error.map(Error::message_string).unwrap_or_default(),
             has_elapsed_ms = u64::try_from(has_elapsed.as_millis()).unwrap_or(u64::MAX),
             upload_elapsed_ms = u64::try_from(upload_elapsed.as_millis()).unwrap_or(u64::MAX),
+        );
+    }
+
+    /// Emits `inputs_materialized`, once, when materializing the inputs ended
+    /// with `error` or without one; nothing if it never started.
+    fn inputs_materialized(&self, error: Option<&Error>) {
+        let counts = self.inputs.counts.lock();
+        let Some(started) = counts.started else {
+            return;
+        };
+        if self.inputs.reported.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        provenance_event!("inputs_materialized";
+            attempt_id = %self.attempt_id,
+            operation_id = %self.operation_id,
+            action_digest = %self.action_digest,
+            result = if error.is_some() { "error" } else { "ok" },
+            error_code = %ErrorCodeField(error.map(|err| err.code)),
+            error = %error.map(Error::message_string).unwrap_or_default(),
+            files = counts.files,
+            directories = counts.directories,
+            total_input_bytes = counts.total_input_bytes,
+            fetched_files = counts.fetched_files,
+            fetched_bytes = counts.fetched_bytes,
+            local_files = counts.local_files,
+            local_bytes = counts.local_bytes,
+            duplicate_fetches = counts.duplicate_fetches,
+            duplicate_fetch_bytes = counts.duplicate_fetch_bytes,
+            passes = counts.passes,
+            directory_cache = counts.directory_cache,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         );
     }
 
@@ -3512,6 +3743,9 @@ impl RunningActionImpl {
                         &self.action_info.input_root_digest,
                         &self.work_directory,
                         self.input_lease.clone(),
+                        self.provenance
+                            .as_deref()
+                            .map(|provenance| &provenance.inputs),
                     ));
             let err = match try_join(command_fut, inputs_fut).await {
                 Ok((command, ())) => {
@@ -3633,9 +3867,14 @@ impl RunningActionImpl {
             self.did_cleanup.store(false, Ordering::Release);
             // Fetch and decode the Command and download the input tree into
             // the work directory, retried together after a store failure.
-            self.fetch_with_retry(filesystem_store_pin, download_deadline)
+            let fetched = self
+                .fetch_with_retry(filesystem_store_pin, download_deadline)
                 .await
-                .map_err(tag_missing_input)?
+                .map_err(tag_missing_input);
+            if let Some(provenance) = &self.provenance {
+                provenance.inputs_materialized(fetched.as_ref().err());
+            }
+            fetched?
         };
         {
             // Create all directories needed for our output paths. This is required by the bazel spec.
@@ -5193,6 +5432,9 @@ impl RunningAction for RunningActionImpl {
         if let Err(ref e) = res {
             warn!(?e, "Error during prepare_action");
             if let Some(provenance) = &provenance {
+                // A kill or the download timeout drops the fetch midway; what
+                // it had brought in by then is still worth reporting.
+                provenance.inputs_materialized(Some(e));
                 provenance.phase_failed(AttemptOutcome::Failed, e);
             }
         }
@@ -6564,6 +6806,7 @@ mod tests {
         let resolves = AtomicU32::new(0);
         let result = fetch_and_resolve(
             test_digest(0),
+            None,
             || async {
                 populates.fetch_add(1, Ordering::Relaxed);
                 Ok(())
@@ -6613,6 +6856,7 @@ mod tests {
         let resolves = AtomicU32::new(0);
         let result: Result<(), Error> = fetch_and_resolve(
             test_digest(0),
+            None,
             || async { Err(make_err!(Code::Unavailable, "slow store is down")) },
             || async {
                 resolves.fetch_add(1, Ordering::Relaxed);
