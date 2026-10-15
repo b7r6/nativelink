@@ -5,6 +5,7 @@
     "deploy-docker-compose",
     "deploy-bare-metal",
     "observability",
+    "trace-cas-growth",
     "security-hardening",
     "scaling-workers",
     "scaling-cas",

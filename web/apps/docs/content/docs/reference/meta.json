@@ -3,6 +3,7 @@
     "nativelink-config",
     "protocol-api",
     "metrics",
+    "provenance-events",
     "cli-and-env",
     "oss-and-enterprise",
     "glossary",

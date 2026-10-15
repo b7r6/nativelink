@@ -100,6 +100,12 @@ The complete list, including the variables the config file expands and the ones
 a worker forwards to actions, is in
 [CLI and environment](/reference/cli-and-env).
 
+`RUST_LOG` takes per-target directives as well as a level.
+`RUST_LOG=info,nativelink_provenance=debug` turns on the output provenance
+events, which trace each stored blob to the action and output path that
+produced it; [Trace CAS growth to its producers](/operate/trace-cas-growth)
+explains when to use them and how to read them.
+
 <Callout type="warn" title="OTEL_SERVICE_NAME does nothing">
 
   `Resource::builder().with_service_name("nativelink")` is called
@@ -535,4 +541,9 @@ These names use OTLP notation; see [Prometheus naming conventions](/reference/me
 
 <NextStep href="/operate/runbooks" title="What to do when a signal fires" kind="aside">
   The incidents that page you, and the sequence that resolves each.
+</NextStep>
+
+<NextStep href="/operate/trace-cas-growth" title="Trace CAS growth to its producers" kind="aside">
+  When the backend grows faster than the build explains: which outputs the
+  new bytes come from, and how many are rewrites.
 </NextStep>
