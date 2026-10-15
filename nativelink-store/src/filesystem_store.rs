@@ -1828,11 +1828,28 @@ impl<Fe: FileEntry> FilesystemStore<Fe> {
             if data_len == 0 {
                 break; // EOF.
             }
-            temp_file
-                .write_all_buf(&mut data)
-                .await
-                .err_tip(|| "Failed to write data into filesystem store")?;
+            let write_res = temp_file.write_all_buf(&mut data).await;
+            if let Err(err) = &write_res {
+                nativelink_util::fill_diag::add(&nativelink_util::fill_diag::FS_WRITE_FAILURES, 1);
+                let on_disk = temp_file.as_ref().metadata().await.map_or(0, |m| m.len());
+                tracing::event!(
+                    target: "fill",
+                    tracing::Level::INFO,
+                    ev = "fs_write_error",
+                    accepted_before = data_size,
+                    chunk_len = data_len,
+                    temp_file_len = on_disk,
+                    raw_os_error = err.raw_os_error().unwrap_or(0),
+                    error = %err,
+                    t_ms = nativelink_util::fill_diag::now_ms(),
+                );
+            }
+            write_res.err_tip(|| "Failed to write data into filesystem store")?;
             data_size += data_len as u64;
+            nativelink_util::fill_diag::add(
+                &nativelink_util::fill_diag::FS_BYTES_ACCEPTED,
+                data_len as u64,
+            );
         }
 
         let permit = if let Some(sem) = &self.write_semaphore {
@@ -1846,13 +1863,30 @@ impl<Fe: FileEntry> FilesystemStore<Fe> {
         // tokio defers write errors to the next write or flush call, so without an explicit flush
         // the final write's failure is silently swallowed by `sync_all`, and a truncated file would
         // be renamed into the content path.
-        temp_file
-            .flush()
-            .await
-            .err_tip(|| "Failed to flush in filesystem store")?;
+        let flush_res = temp_file.flush().await;
+        if let Err(err) = &flush_res {
+            nativelink_util::fill_diag::add(&nativelink_util::fill_diag::FS_WRITE_FAILURES, 1);
+            tracing::event!(
+                target: "fill",
+                tracing::Level::INFO,
+                ev = "fs_flush_error",
+                accepted = data_size,
+                raw_os_error = err.raw_os_error().unwrap_or(0),
+                error = %err,
+                t_ms = nativelink_util::fill_diag::now_ms(),
+            );
+        }
+        flush_res.err_tip(|| "Failed to flush in filesystem store")?;
         self.flush_durably(&temp_file)
             .await
             .err_tip(|| "Failed to sync in filesystem store")?;
+        tracing::event!(
+            target: "fill",
+            tracing::Level::INFO,
+            ev = "fs_write_done",
+            bytes = data_size,
+            t_ms = nativelink_util::fill_diag::now_ms(),
+        );
 
         drop(permit);
 
