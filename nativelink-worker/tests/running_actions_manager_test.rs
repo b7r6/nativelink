@@ -11434,4 +11434,183 @@ done
         assert!(!log.contains("Input audit"), "{log}");
         Ok(())
     }
+
+    /// Puts `files` (name, content, executable) in the slow tier only, as a
+    /// worker that has never seen them finds them, and returns the working
+    /// directory that holds them.
+    #[cfg(target_family = "unix")]
+    async fn slow_tier_inputs(
+        cas_store: &Arc<FastSlowStore>,
+        files: &[(&str, &[u8], bool)],
+    ) -> Result<Directory, Box<dyn core::error::Error>> {
+        let mut directory = Directory::default();
+        for (name, content, executable) in files {
+            let digest = sha256_of(content);
+            cas_store
+                .slow_store()
+                .update_oneshot(digest, Bytes::copy_from_slice(content))
+                .await?;
+            directory.files.push(FileNode {
+                name: (*name).to_string(),
+                digest: Some(digest.into()),
+                is_executable: *executable,
+                ..Default::default()
+            });
+        }
+        Ok(directory)
+    }
+
+    /// A worker that has none of an action's inputs fetches all of them from
+    /// the slow tier; the same action again on that worker finds all of them
+    /// in the local tier.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn inputs_materialized_counts_slow_tier_fetches_then_local_hits()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let large = [7u8; 3000];
+        let files: [(&str, &[u8], bool); 3] = [
+            ("a.txt", b"alpha input\n", false),
+            ("b.bin", &large, false),
+            ("tool.sh", b"#!/bin/sh\necho tool\n", true),
+        ];
+        let total: usize = files.iter().map(|(_, content, _)| content.len()).sum();
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = slow_tier_inputs(&cas_store, &files).await?;
+        for _ in 0..2 {
+            let (_, _, result) = run_script_with_inputs(
+                &running_actions_manager,
+                &cas_store,
+                "cat a.txt b.bin > /dev/null && test -x tool.sh",
+                &inputs,
+                &[],
+            )
+            .await?;
+            assert_eq!(result?.exit_code, 0);
+        }
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let started = events_of(&events, "attempt_started");
+        let materialized = events_of(&events, "inputs_materialized");
+        assert_eq!(materialized.len(), 2, "{events:#?}");
+        for (attempt, inputs) in started.iter().zip(&materialized) {
+            assert_eq!(inputs["attempt_id"], attempt["attempt_id"]);
+            assert_eq!(inputs["result"], "ok", "{inputs:#?}");
+            assert_eq!(inputs["error_code"], "");
+            assert_eq!(inputs["files"], "3");
+            assert_eq!(inputs["directories"], "1");
+            assert_eq!(inputs["total_input_bytes"], total.to_string());
+            assert_eq!(inputs["duplicate_fetches"], "0");
+            assert_eq!(inputs["passes"], "1");
+            assert_eq!(inputs["directory_cache"], "disabled");
+        }
+        let (cold, warm) = (materialized[0], materialized[1]);
+        assert_eq!(cold["fetched_files"], "3", "{cold:#?}");
+        assert_eq!(cold["fetched_bytes"], total.to_string());
+        assert_eq!(cold["local_files"], "0");
+        assert_eq!(cold["local_bytes"], "0");
+        assert_eq!(warm["fetched_files"], "0", "{warm:#?}");
+        assert_eq!(warm["fetched_bytes"], "0");
+        assert_eq!(warm["local_files"], "3");
+        assert_eq!(warm["local_bytes"], total.to_string());
+        Ok(())
+    }
+
+    /// The same content at two paths of one input tree is fetched once: the
+    /// second path is linked from the copy the first brought in.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn inputs_materialized_counts_content_at_two_paths_as_one_fetch()
+    -> Result<(), Box<dyn core::error::Error>> {
+        const SAME: &[u8] = b"shared content\n";
+        const OTHER: &[u8] = b"other\n";
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = slow_tier_inputs(
+            &cas_store,
+            &[
+                ("one.txt", SAME, false),
+                ("other.txt", OTHER, false),
+                ("two.txt", SAME, false),
+            ],
+        )
+        .await?;
+        let (_, _, result) = run_script_with_inputs(
+            &running_actions_manager,
+            &cas_store,
+            "cat one.txt two.txt other.txt > /dev/null",
+            &inputs,
+            &[],
+        )
+        .await?;
+        assert_eq!(result?.exit_code, 0);
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let materialized = events_of(&events, "inputs_materialized");
+        assert_eq!(materialized.len(), 1, "{events:#?}");
+        let inputs = materialized[0];
+        assert_eq!(inputs["files"], "3", "{inputs:#?}");
+        assert_eq!(
+            inputs["total_input_bytes"],
+            (2 * SAME.len() + OTHER.len()).to_string()
+        );
+        assert_eq!(inputs["fetched_files"], "2");
+        assert_eq!(
+            inputs["fetched_bytes"],
+            (SAME.len() + OTHER.len()).to_string()
+        );
+        assert_eq!(inputs["local_files"], "1");
+        assert_eq!(inputs["local_bytes"], SAME.len().to_string());
+        assert_eq!(inputs["duplicate_fetches"], "0");
+        Ok(())
+    }
+
+    /// An input that neither tier has fails the materialization, and the
+    /// event says so.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn inputs_materialized_reports_a_failed_materialization()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = Directory {
+            files: vec![FileNode {
+                name: "gone.txt".to_string(),
+                digest: Some(sha256_of(b"never uploaded").into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (_, _, result) =
+            run_script_with_inputs(&running_actions_manager, &cas_store, "true", &inputs, &[])
+                .await?;
+        assert!(result.is_err(), "{result:?}");
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let materialized = events_of(&events, "inputs_materialized");
+        assert_eq!(materialized.len(), 1, "{events:#?}");
+        assert_eq!(materialized[0]["result"], "error");
+        assert_eq!(materialized[0]["error_code"], "NotFound");
+        assert_eq!(materialized[0]["files"], "1");
+        assert_eq!(materialized[0]["fetched_files"], "1");
+        Ok(())
+    }
 }
