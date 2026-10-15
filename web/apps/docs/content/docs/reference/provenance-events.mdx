@@ -16,8 +16,9 @@ every event in schema 1.
 
 The events are `DEBUG` events on the `nativelink_provenance` tracing target.
 Entries are in the order an output meets them: the worker events in the order
-an attempt emits them, then the server, then the Azure Blob store. To turn them
-on, collect them and read them, see
+an attempt emits them, then the server, then the Azure Blob store. The
+`provenance_report` binary in the NativeLink repository reads them; to turn
+them on, collect them and read the report, see
 [Trace CAS growth to its producers](/operate/trace-cas-growth).
 
 <Callout type="warn" title="Not in a release">

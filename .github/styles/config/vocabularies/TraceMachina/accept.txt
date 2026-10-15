@@ -176,6 +176,7 @@ impl
 [Rr]egexes
 [Rr]epo
 [Rr]epos
+[Rr]unfiles
 rules_cc
 rules_go
 TLS
