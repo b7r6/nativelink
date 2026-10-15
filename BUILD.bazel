@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 exports_files(
@@ -75,6 +75,49 @@ rust_binary(
         "@crates//:tokio",
         "@crates//:tonic",
         "@crates//:tracing",
+    ],
+)
+
+_NATIVELINK_REPLAY_SRCS = [
+    "src/bin/nativelink_replay/execute.rs",
+    "src/bin/nativelink_replay/local.rs",
+    "src/bin/nativelink_replay/main.rs",
+    "src/bin/nativelink_replay/manifest.rs",
+    "src/bin/nativelink_replay/remote.rs",
+    "src/bin/nativelink_replay/report.rs",
+]
+
+_NATIVELINK_REPLAY_DEPS = [
+    "//nativelink-error",
+    "//nativelink-proto",
+    "//nativelink-util",
+    "@crates//:bytes",
+    "@crates//:clap",
+    "@crates//:futures",
+    "@crates//:prost",
+    "@crates//:serde_json",
+    "@crates//:tokio",
+    "@crates//:tonic",
+]
+
+rust_binary(
+    name = "nativelink_replay",
+    srcs = _NATIVELINK_REPLAY_SRCS,
+    crate_root = "src/bin/nativelink_replay/main.rs",
+    deps = _NATIVELINK_REPLAY_DEPS,
+)
+
+rust_test(
+    name = "nativelink_replay_test",
+    timeout = "short",
+    srcs = _NATIVELINK_REPLAY_SRCS + [
+        "src/bin/nativelink_replay/tests.rs",
+    ],
+    crate_root = "src/bin/nativelink_replay/main.rs",
+    deps = _NATIVELINK_REPLAY_DEPS + [
+        "//nativelink-config",
+        "//nativelink-service",
+        "//nativelink-store",
     ],
 )
 
