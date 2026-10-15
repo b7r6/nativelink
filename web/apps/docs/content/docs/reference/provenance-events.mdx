@@ -69,8 +69,9 @@ as log records whose attributes are these fields.
 
 ## Request metadata fields [#request-metadata-fields]
 
-`attempt_started`, `attempt_finished`, `cas_write`, `find_missing` and
-`backend_write` also carry the client's `RequestMetadata`, flattened. Bazel
+`attempt_started`, `attempt_finished`, `cas_write`, `find_missing`,
+`backend_write`, `backend_read` and `backend_has` also carry the client's
+`RequestMetadata`, flattened. Bazel
 sends it in the `requestmetadata-bin` header. A field the client did not send
 is `""`.
 
@@ -85,8 +86,8 @@ is `""`.
 | `target_id` | The label of the target that owns the action. |
 | `configuration_id` | The client's ID for the build configuration. |
 
-On `backend_write` these fields are empty when the write happens outside a
-client request, which includes every write made by a worker process.
+On the `backend_*` events these fields are empty when the store is used
+outside a client request, which includes everything a worker process does.
 
 ## Conventions [#conventions]
 
@@ -101,7 +102,8 @@ client request, which includes every write made by a worker process.
 - **Every field of a kind is always present.** An unknown value is `""`, `0` or
   `false`, never a missing key. The exception is a field added to schema 1
   later, such as `version_id` on `backend_write`: logs from builds that predate
-  it do not have the key.
+  it do not have the key. The same goes for an event kind added later, such as
+  `backend_read` and `backend_has`.
 
 ## `attempt_started` [#attempt_started]
 
@@ -285,6 +287,55 @@ served, if there is one.
 | `result`, `error_code`, `error` | string | |
 | `elapsed_ms` | integer | |
 | `version_id` | string | Azure's `x-ms-version-id` for the version the write created. Non-empty means the account keeps blob versions, so an overwrite left the previous copy in place. `""` when the account has versioning off or the write failed. Absent from logs of builds that predate the field. |
+
+## `backend_read` [#backend_read]
+
+Emitted by the Azure Blob store once per read, on success or failure, from
+whichever process holds the store: a worker fetching an input into its fast
+tier, or a CAS server serving a read. A read of the empty blob makes no request
+and is not reported. Carries the
+[request metadata fields](#request-metadata-fields) of the request being served,
+if there is one.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `store` | string | `azure_blob`. |
+| `key` | string | The blob path read, including `key_prefix`. |
+| `offset` | integer | The first byte asked for. |
+| `length_requested` | integer | The bytes asked for; `0` means to the end of the blob. |
+| `bytes_returned` | integer | The bytes handed to the caller. A retry never hands a byte over twice. |
+| `attempts` | integer | Downloads the store started, retries included. |
+| `resumed_bytes` | integer | Summed over the retries: the bytes earlier attempts had already handed over when the retry started. A retry asks only for the rest, so these were not downloaded again. |
+| `throttled` | boolean | `true` if Azure throttled any attempt with a 429, a 503, or `ServerBusy`. |
+| `result`, `error_code`, `error` | string | A blob that is not there is `error` with `error_code` `NotFound`. |
+| `elapsed_ms` | integer | |
+
+`attempts` counts downloads, not requests. The Azure SDK splits every download
+into 4 MiB ranges and fetches several at once, one per CPU but at least 8 and
+at most 96, so Azure counts about `ceil(bytes_returned / 4 MiB) + attempts - 1`
+Get Blob requests for one event. It counts more when a download fails with
+ranges in flight: those ranges finish downloading, and the retry fetches again
+whatever they held beyond what was handed over.
+
+## `backend_has` [#backend_has]
+
+Emitted by the Azure Blob store once per existence check, which is one Get Blob
+Properties request per attempt. A check for the empty blob makes no request and
+is not reported. Carries the
+[request metadata fields](#request-metadata-fields) of the request being served,
+if there is one.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `store` | string | `azure_blob`. |
+| `key` | string | The blob path checked, including `key_prefix`. |
+| `result` | string | `present`, `absent` or `error`. |
+| `size_bytes` | integer | The blob's size when `present`, otherwise `0`. |
+| `expired` | boolean | `true` when Azure has the blob but it is older than `consider_expired_after_s`, so the store reported it `absent`. A client that sees `absent` uploads the blob again. |
+| `attempts` | integer | Get Blob Properties requests, retries included. |
+| `throttled` | boolean | `true` if Azure throttled any attempt with a 429, a 503, or `ServerBusy`. |
+| `error_code`, `error` | string | |
+| `elapsed_ms` | integer | |
 
 ## Manifest fingerprint [#manifest-fingerprint]
 

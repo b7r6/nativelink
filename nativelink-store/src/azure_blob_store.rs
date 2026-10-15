@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use core::time::Duration;
 use core::{cmp, mem};
 use std::borrow::Cow;
@@ -93,6 +94,43 @@ struct BlobWrite {
     /// only when the account keeps blob versions. A rewrite of an existing
     /// blob on such an account leaves the previous version in place.
     version_id: Option<String>,
+}
+
+/// What one `get_part` cost, for the `backend_read` provenance event. The
+/// retry closure bumps these once per attempt, so they are atomics: an
+/// uncontended add each, whether or not the event is on.
+#[derive(Debug, Default)]
+struct BlobRead {
+    /// Downloads started, retries included. The SDK splits each one into
+    /// ranged Get Blob requests of its partition size.
+    attempts: AtomicU32,
+    /// Summed over the retries: the bytes earlier attempts had delivered when
+    /// the retry started, which the retry did not request again.
+    resumed_bytes: AtomicU64,
+    /// Whether any attempt was throttled (429, 503 or `ServerBusy`).
+    throttled: AtomicBool,
+}
+
+/// What one `has` cost, for the `backend_has` provenance event.
+#[derive(Debug, Default)]
+struct BlobHas {
+    /// Get Blob Properties requests issued, retries included.
+    attempts: AtomicU32,
+    /// The blob exists but is older than `consider_expired_after_s`, so it
+    /// was reported absent.
+    expired: AtomicBool,
+    /// Whether any attempt was throttled (429, 503 or `ServerBusy`).
+    throttled: AtomicBool,
+}
+
+/// An error as provenance events carry it: the message, cut to its first
+/// [`MAX_PROVENANCE_ERROR_CHARS`] characters.
+fn provenance_error(err: &Error) -> String {
+    let mut error = err.message_string();
+    if let Some((end, _)) = error.char_indices().nth(MAX_PROVENANCE_ERROR_CHARS) {
+        error.truncate(end);
+    }
+    error
 }
 
 /// The version Azure kept for a committed block list. Read only when
@@ -520,8 +558,11 @@ where
             StoreKey::Digest(digest) => Some(digest.size_bytes()),
             StoreKey::Str(_) => None,
         };
+        let probe = &BlobHas::default();
+        let started = provenance_enabled().then(Instant::now);
 
-        self.retrier
+        let result = self
+            .retrier
             .retry(unfold((), move |state| {
                 let blob_path = blob_path.clone();
                 let client = Arc::clone(&self.client);
@@ -539,6 +580,7 @@ where
                         }
                     };
 
+                    probe.attempts.fetch_add(1, Ordering::Relaxed);
                     let result = client.blob_client(&blob_path).get_properties(None).await;
 
                     match result {
@@ -553,6 +595,7 @@ where
                                 if last_modified.unix_timestamp() + self.consider_expired_after_s
                                     <= now
                                 {
+                                    probe.expired.store(true, Ordering::Relaxed);
                                     return Some((RetryResult::Ok(None), state));
                                 }
                             }
@@ -592,23 +635,28 @@ where
                                 }
                                 Some((RetryResult::Ok(None), state))
                             } else {
-                                Some((
-                                    self.retry_later(
-                                        &err,
-                                        "has",
-                                        make_err!(
-                                            Code::Unavailable,
-                                            "Failed to get blob properties: {err:?}"
-                                        ),
+                                let retry = self.retry_later(
+                                    &err,
+                                    "has",
+                                    make_err!(
+                                        Code::Unavailable,
+                                        "Failed to get blob properties: {err:?}"
                                     ),
-                                    state,
-                                ))
+                                );
+                                if matches!(retry, RetryResult::RetryAfter(..)) {
+                                    probe.throttled.store(true, Ordering::Relaxed);
+                                }
+                                Some((retry, state))
                             }
                         }
                     }
                 }
             }))
-            .await
+            .await;
+        if let Some(started) = started {
+            self.emit_backend_has(digest, &result, probe, started.elapsed());
+        }
+        result
     }
 
     async fn upload_staged_blocks(
@@ -975,11 +1023,12 @@ where
             Err(err) => {
                 let (UploadSizeInfo::ExactSize(expected) | UploadSizeInfo::MaxSize(expected)) =
                     upload_size;
-                let mut error = err.message_string();
-                if let Some((end, _)) = error.char_indices().nth(MAX_PROVENANCE_ERROR_CHARS) {
-                    error.truncate(end);
-                }
-                (expected, "error", format!("{:?}", err.code), error)
+                (
+                    expected,
+                    "error",
+                    format!("{:?}", err.code),
+                    provenance_error(err),
+                )
             }
         };
         provenance_event!("backend_write", &metadata;
@@ -990,6 +1039,70 @@ where
             block_count = write.block_count,
             version_id = %write.version_id.as_deref().unwrap_or_default(),
             result = outcome,
+            error_code = %error_code,
+            error = %error,
+            elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        );
+    }
+
+    /// Emits the `backend_read` provenance event for one `get_part`.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one argument per thing the event reports"
+    )]
+    fn emit_backend_read(
+        &self,
+        key: &StoreKey<'_>,
+        offset: u64,
+        length: Option<u64>,
+        bytes_returned: u64,
+        read: &BlobRead,
+        result: &Result<(), Error>,
+        elapsed: Duration,
+    ) {
+        let metadata = ProvenanceMetadata::from_current_context();
+        let (outcome, error_code, error) = match result {
+            Ok(()) => ("ok", String::new(), String::new()),
+            Err(err) => ("error", format!("{:?}", err.code), provenance_error(err)),
+        };
+        provenance_event!("backend_read", &metadata;
+            store = "azure_blob",
+            key = %self.make_blob_path(key),
+            offset,
+            length_requested = length.unwrap_or(0),
+            bytes_returned,
+            attempts = read.attempts.load(Ordering::Relaxed),
+            resumed_bytes = read.resumed_bytes.load(Ordering::Relaxed),
+            throttled = read.throttled.load(Ordering::Relaxed),
+            result = outcome,
+            error_code = %error_code,
+            error = %error,
+            elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        );
+    }
+
+    /// Emits the `backend_has` provenance event for one `has`.
+    fn emit_backend_has(
+        &self,
+        key: &StoreKey<'_>,
+        result: &Result<Option<u64>, Error>,
+        probe: &BlobHas,
+        elapsed: Duration,
+    ) {
+        let metadata = ProvenanceMetadata::from_current_context();
+        let (outcome, size_bytes, error_code, error) = match result {
+            Ok(Some(size)) => ("present", *size, String::new(), String::new()),
+            Ok(None) => ("absent", 0, String::new(), String::new()),
+            Err(err) => ("error", 0, format!("{:?}", err.code), provenance_error(err)),
+        };
+        provenance_event!("backend_has", &metadata;
+            store = "azure_blob",
+            key = %self.make_blob_path(key),
+            result = outcome,
+            size_bytes,
+            expired = probe.expired.load(Ordering::Relaxed),
+            attempts = probe.attempts.load(Ordering::Relaxed),
+            throttled = probe.throttled.load(Ordering::Relaxed),
             error_code = %error_code,
             error = %error,
             elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
@@ -1090,8 +1203,12 @@ where
         };
         let max_bytes = length;
 
-        self.retrier
-            .retry(unfold(writer, move |writer| {
+        let read = &BlobRead::default();
+        let started = provenance_enabled().then(Instant::now);
+        let bytes_before = writer.get_bytes_written();
+        let result = self
+            .retrier
+            .retry(unfold(&mut *writer, move |writer| {
                 // Resumes where the writer stopped, so a retry continues the
                 // read instead of starting it again and appending a second
                 // copy of what the consumer already has. The S3 store does
@@ -1123,6 +1240,11 @@ where
                             ));
                         }
                     };
+
+                    if read.attempts.fetch_add(1, Ordering::Relaxed) > 0 {
+                        read.resumed_bytes
+                            .fetch_add(sent.saturating_sub(bytes_before), Ordering::Relaxed);
+                    }
 
                     // The error carries the wait a throttled response asked for.
                     let result: Result<(), (Error, Option<Duration>)> = async {
@@ -1232,13 +1354,26 @@ where
                         }
                         Err((e, Some(wait))) => {
                             self.note_read_throttled();
+                            read.throttled.store(true, Ordering::Relaxed);
                             Some((RetryResult::RetryAfter(e, wait), writer))
                         }
                         Err((e, None)) => Some((RetryResult::Retry(e), writer)),
                     }
                 }
             }))
-            .await
+            .await;
+        if let Some(started) = started {
+            self.emit_backend_read(
+                &key,
+                offset,
+                length,
+                writer.get_bytes_written().saturating_sub(bytes_before),
+                read,
+                &result,
+                started.elapsed(),
+            );
+        }
+        result
     }
 
     fn inner_store(&self, _digest: Option<StoreKey>) -> &'_ dyn StoreDriver {

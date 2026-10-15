@@ -117,6 +117,9 @@ struct MockTransport {
     /// The `Range` header of every download, in order, so a test can assert
     /// that a retry resumed rather than started again.
     download_ranges: Mutex<Vec<Option<String>>>,
+    /// How many of the next downloads drop their connection after the body,
+    /// so the SDK reads the bytes and then an error instead of EOF.
+    cut_short_downloads: AtomicUsize,
     count: AtomicUsize,
     uploaded_bodies: Mutex<Vec<Bytes>>,
 }
@@ -132,6 +135,10 @@ impl MockTransport {
 
     fn push_download(&self, response: CannedResponse) {
         self.download.lock().unwrap().push_back(response);
+    }
+
+    fn cut_next_download_short(&self) {
+        self.cut_short_downloads.fetch_add(1, Ordering::SeqCst);
     }
 
     fn push_upload(&self, response: CannedResponse) {
@@ -195,12 +202,22 @@ fn block_list_ok(committed: &[&str], uncommitted: &[&str]) -> CannedResponse {
     }
 }
 
-fn build_response(canned: CannedResponse) -> AsyncRawResponse {
+fn build_response(canned: CannedResponse, cut_short: bool) -> AsyncRawResponse {
     let mut headers = Headers::new();
     for (key, value) in canned.headers {
         headers.insert(key, value);
     }
-    AsyncRawResponse::from_bytes(canned.status, headers, canned.body)
+    if !cut_short {
+        return AsyncRawResponse::from_bytes(canned.status, headers, canned.body);
+    }
+    let body = futures::stream::iter([
+        Ok(Bytes::from(canned.body)),
+        Err(azure_core::Error::with_message(
+            ErrorKind::Io,
+            "connection reset mid-transfer",
+        )),
+    ]);
+    AsyncRawResponse::new(canned.status, headers, Box::pin(body))
 }
 
 #[async_trait::async_trait]
@@ -209,6 +226,7 @@ impl HttpClient for MockTransport {
         self.count.fetch_add(1, Ordering::SeqCst);
 
         let query = request.url().query().unwrap_or_default().to_owned();
+        let mut cut_short = false;
         let canned = match request.method() {
             Method::Head => Self::pop(&self.properties).unwrap_or_else(|| properties_ok(0)),
             Method::Get if query.contains("comp=blocklist") => {
@@ -233,6 +251,10 @@ impl HttpClient for MockTransport {
                         .find(|(name, _)| name.as_str().eq_ignore_ascii_case("range"))
                         .map(|(_, value)| value.as_str().to_owned()),
                 );
+                cut_short = self
+                    .cut_short_downloads
+                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+                    .is_ok();
                 Self::pop(&self.download).unwrap_or_else(|| download_ok(StatusCode::Ok, Vec::new()))
             }
             Method::Put if query.contains("comp=blocklist") => {
@@ -257,7 +279,7 @@ impl HttpClient for MockTransport {
             }
         };
 
-        Ok(build_response(canned))
+        Ok(build_response(canned, cut_short))
     }
 }
 
@@ -1519,12 +1541,19 @@ fn created_with_version() -> CannedResponse {
 /// A store whose blobs live under [`TEST_KEY_PREFIX`], so the provenance
 /// tests can see that `key` names the blob path actually written.
 fn create_prefixed_test_store(mock: Arc<MockTransport>) -> Result<TestStore, Error> {
+    create_prefixed_test_store_with_retries(mock, 0)
+}
+
+fn create_prefixed_test_store_with_retries(
+    mock: Arc<MockTransport>,
+    max_retries: usize,
+) -> Result<TestStore, Error> {
     create_test_store_with_common(
         mock,
         CommonObjectSpec {
             key_prefix: Some(TEST_KEY_PREFIX.to_string()),
             retry: Retry {
-                max_retries: 0,
+                max_retries,
                 delay: 0.0,
                 jitter: 0.0,
                 ..Default::default()
@@ -1538,23 +1567,20 @@ fn test_payload(len: usize) -> Bytes {
     (0..len).map(|i| u8::try_from(i % 251).unwrap()).collect()
 }
 
-/// Checks that exactly one `backend_write` provenance event was logged and
-/// that its line carries every `expected` field, as the text formatter
-/// prints it.
-fn check_one_backend_write(lines: &[&str], expected: &[String]) -> Result<(), String> {
-    let events: Vec<&&str> = lines
-        .iter()
-        .filter(|line| line.contains("event=\"backend_write\""))
-        .collect();
+/// Checks that exactly one `kind` provenance event was logged and that its
+/// line carries every `expected` field, as the text formatter prints it.
+fn check_one_event(lines: &[&str], kind: &str, expected: &[String]) -> Result<(), String> {
+    let marker = format!("event=\"{kind}\"");
+    let events: Vec<&&str> = lines.iter().filter(|line| line.contains(&marker)).collect();
     let [event] = events.as_slice() else {
         return Err(format!(
-            "expected one backend_write event, found {}: {events:#?}",
+            "expected one {kind} event, found {}: {events:#?}",
             events.len()
         ));
     };
     for field in expected {
         if !event.contains(field.as_str()) {
-            return Err(format!("backend_write is missing `{field}`: {event}"));
+            return Err(format!("{kind} is missing `{field}`: {event}"));
         }
     }
     Ok(())
@@ -1588,7 +1614,7 @@ async fn a_single_request_upload_emits_one_backend_write() -> Result<(), Error> 
         "error_code= ".to_string(),
         "elapsed_ms=".to_string(),
     ];
-    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    logs_assert(|lines| check_one_event(lines, "backend_write", &expected));
     Ok(())
 }
 
@@ -1617,7 +1643,7 @@ async fn a_block_upload_emits_one_backend_write_with_its_block_count() -> Result
         format!("version_id={TEST_VERSION_ID} "),
         "result=\"ok\"".to_string(),
     ];
-    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    logs_assert(|lines| check_one_event(lines, "backend_write", &expected));
     Ok(())
 }
 
@@ -1647,7 +1673,7 @@ async fn a_failed_single_request_upload_emits_an_error_backend_write() -> Result
         "error=Error {".to_string(),
         "in AzureStore::update".to_string(),
     ];
-    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    logs_assert(|lines| check_one_event(lines, "backend_write", &expected));
     Ok(())
 }
 
@@ -1675,7 +1701,7 @@ async fn a_failed_block_list_commit_emits_an_error_backend_write() -> Result<(),
         "result=\"error\"".to_string(),
         "error_code=Aborted ".to_string(),
     ];
-    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    logs_assert(|lines| check_one_event(lines, "backend_write", &expected));
     Ok(())
 }
 
@@ -1698,7 +1724,7 @@ async fn a_versioned_single_request_upload_reports_its_version_id() -> Result<()
         format!("version_id={TEST_VERSION_ID} "),
         "result=\"ok\"".to_string(),
     ];
-    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    logs_assert(|lines| check_one_event(lines, "backend_write", &expected));
     Ok(())
 }
 
@@ -1726,7 +1752,7 @@ async fn a_long_error_is_truncated_in_backend_write() -> Result<(), Error> {
         .expect_err("the upload must fail with no retries left");
 
     logs_assert(|lines| {
-        check_one_backend_write(lines, &["result=\"error\"".to_string()])?;
+        check_one_event(lines, "backend_write", &["result=\"error\"".to_string()])?;
         let event = lines
             .iter()
             .find(|line| line.contains("event=\"backend_write\""))
@@ -1762,5 +1788,193 @@ async fn a_zero_size_update_emits_no_backend_write() -> Result<(), Error> {
         }
         Ok(())
     });
+    Ok(())
+}
+
+/// One read that goes through on the first try: one download, every byte
+/// returned once.
+#[nativelink_test]
+async fn a_read_emits_one_backend_read() -> Result<(), Error> {
+    const CONTENT: usize = 100;
+    let content = test_payload(CONTENT);
+
+    let mock = MockTransport::new();
+    mock.push_download(download_ok(StatusCode::Ok, content.to_vec()));
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT)?;
+    let result = store.get_part_unchunked(digest, 0, None).await?;
+    assert_eq!(result, content);
+
+    let expected = [
+        "store=\"azure_blob\"".to_string(),
+        format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{CONTENT} "),
+        "offset=0 ".to_string(),
+        "length_requested=0 ".to_string(),
+        format!("bytes_returned={CONTENT} "),
+        "attempts=1 ".to_string(),
+        "resumed_bytes=0 ".to_string(),
+        "throttled=false ".to_string(),
+        "result=\"ok\"".to_string(),
+        "error_code= ".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_read", &expected));
+    Ok(())
+}
+
+/// A download whose connection drops part way is retried from the byte
+/// after the last one delivered: two downloads, each byte returned once, and
+/// what the first delivered counted as resumed rather than fetched again.
+#[nativelink_test]
+async fn a_read_cut_short_resumes_and_counts_each_byte_once() -> Result<(), Error> {
+    const CONTENT: usize = 100;
+    const FIRST: usize = 40;
+    let content = test_payload(CONTENT);
+
+    let mock = MockTransport::new();
+    mock.cut_next_download_short();
+    mock.push_download(download_ok(StatusCode::Ok, content[..FIRST].to_vec()));
+    mock.push_download(download_ok(
+        StatusCode::PartialContent,
+        content[FIRST..].to_vec(),
+    ));
+    let store = create_prefixed_test_store_with_retries(Arc::clone(&mock), 1)?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT)?;
+    let result = store.get_part_unchunked(digest, 0, None).await?;
+    assert_eq!(result, content);
+
+    let ranges = mock.download_ranges();
+    assert_eq!(ranges.len(), 2, "expected the cut download and its retry");
+    assert!(
+        ranges[1]
+            .as_deref()
+            .is_some_and(|range| range.contains(&format!("bytes={FIRST}-"))),
+        "the retry asked for {:?}, expected it to start at byte {FIRST}",
+        ranges[1]
+    );
+
+    let expected = [
+        format!("bytes_returned={CONTENT} "),
+        "attempts=2 ".to_string(),
+        format!("resumed_bytes={FIRST} "),
+        "throttled=false ".to_string(),
+        "result=\"ok\"".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_read", &expected));
+    Ok(())
+}
+
+/// A throttled download is waited out and retried, and the event says it
+/// was throttled.
+#[nativelink_test(start_paused = true)]
+async fn a_throttled_read_is_reported_as_throttled() -> Result<(), Error> {
+    const CONTENT: usize = 100;
+    let content = test_payload(CONTENT);
+
+    let mock = MockTransport::new();
+    mock.push_download(error_response(StatusCode::ServiceUnavailable));
+    mock.push_download(download_ok(StatusCode::Ok, content.to_vec()));
+    let store = create_prefixed_test_store_with_retries(Arc::clone(&mock), 1)?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT)?;
+    let result = store.get_part_unchunked(digest, 0, None).await?;
+    assert_eq!(result, content);
+
+    let expected = [
+        format!("bytes_returned={CONTENT} "),
+        "attempts=2 ".to_string(),
+        "resumed_bytes=0 ".to_string(),
+        "throttled=true ".to_string(),
+        "result=\"ok\"".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_read", &expected));
+    Ok(())
+}
+
+/// A read of a blob that is not there is one event, an error with its code.
+#[nativelink_test]
+async fn a_missing_blob_read_emits_an_error_backend_read() -> Result<(), Error> {
+    let mock = MockTransport::new();
+    mock.push_download(not_found());
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let err = store
+        .get_part_unchunked(create_test_digest()?, 10, Some(20))
+        .await
+        .expect_err("expected a NotFound error");
+    assert_eq!(err.code, Code::NotFound);
+
+    let expected = [
+        "offset=10 ".to_string(),
+        "length_requested=20 ".to_string(),
+        "bytes_returned=0 ".to_string(),
+        "attempts=1 ".to_string(),
+        "result=\"error\"".to_string(),
+        "error_code=NotFound ".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_read", &expected));
+    Ok(())
+}
+
+/// An existence check retried once reports both requests and the size.
+#[nativelink_test]
+async fn a_has_emits_one_backend_has_with_its_attempts() -> Result<(), Error> {
+    let mock = MockTransport::new();
+    mock.push_properties(error_response(StatusCode::InternalServerError));
+    mock.push_properties(properties_ok(512));
+    let store = create_prefixed_test_store_with_retries(Arc::clone(&mock), 1)?;
+    let digest = create_test_digest()?;
+    assert_eq!(store.has(digest).await?, Some(512));
+
+    let expected = [
+        "store=\"azure_blob\"".to_string(),
+        format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{TEST_SIZE} "),
+        "result=\"present\"".to_string(),
+        "size_bytes=512 ".to_string(),
+        "expired=false ".to_string(),
+        "attempts=2 ".to_string(),
+        "throttled=false ".to_string(),
+        "error_code= ".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_has", &expected));
+    Ok(())
+}
+
+/// A blob Azure does not have is absent, and not expired.
+#[nativelink_test]
+async fn a_missing_blob_has_emits_an_absent_backend_has() -> Result<(), Error> {
+    let mock = MockTransport::new();
+    mock.push_properties(not_found());
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    assert_eq!(store.has(create_test_digest()?).await?, None);
+
+    let expected = [
+        "result=\"absent\"".to_string(),
+        "size_bytes=0 ".to_string(),
+        "expired=false ".to_string(),
+        "attempts=1 ".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_has", &expected));
+    Ok(())
+}
+
+/// A blob older than `consider_expired_after_s` is reported absent although
+/// Azure has it, and the event tells the two apart.
+#[nativelink_test]
+async fn an_expired_blob_has_is_absent_and_expired() -> Result<(), Error> {
+    use mock_instant::thread_local::MockClock;
+
+    let mock = MockTransport::new();
+    mock.push_properties(properties_ok(512));
+    // The blob was last modified at the epoch; two days later it is older
+    // than the one-day threshold.
+    let store = create_test_store(Arc::clone(&mock), None, Some(24 * 60 * 60))?;
+    MockClock::advance(Duration::from_hours(48));
+    assert_eq!(store.has(create_test_digest()?).await?, None);
+
+    let expected = [
+        format!("key={TEST_HASH}-{TEST_SIZE} "),
+        "result=\"absent\"".to_string(),
+        "expired=true ".to_string(),
+        "attempts=1 ".to_string(),
+    ];
+    logs_assert(|lines| check_one_event(lines, "backend_has", &expected));
     Ok(())
 }
