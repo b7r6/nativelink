@@ -362,6 +362,79 @@ key is the hash of its content, so in a CAS container those copies are
 identical to the current version. A blob inventory that includes versions and
 deleted blobs shows how much of the account they take up.
 
+## Tell a nondeterministic action from a NativeLink fault [#nondeterministic-action-or-nativelink-fault]
+
+A row in report 2, or a large `same_action_output_change` producer in report 3,
+names an action digest whose outputs differ between executions. The logs alone
+can't say why. Either the action is nondeterministic, which is the build's
+problem, or NativeLink ran it differently: it materialized other inputs, the CAS
+served corrupted bytes, or one worker's environment differs from another's.
+
+`nativelink_replay compare` settles it for one action digest. It needs only the
+digest and access to the CAS and execution endpoints, not the build that
+produced the action. It runs the action K times as an independent oracle: a
+fresh directory for each run, every input fetched from the CAS and checked
+against its digest, plain file writes with no hardlinks or caches, and exactly
+the environment the `Command` names. It then executes the action K times on
+NativeLink with `skip_cache_lookup` and compares the outputs of both sides.
+
+Build it from the repository with `cargo build --release --bin nativelink_replay`
+or `bazel build //:nativelink_replay`, then run it on a host built from the
+workers' image:
+
+```sh
+nativelink_replay compare \
+  --cas grpcs://cas.example.com:443 \
+  --execution grpcs://scheduler.example.com:443 \
+  --header x-nativelink-api-key="$NATIVELINK_API_KEY" \
+  --action <hash>-<size> \
+  --runs 5
+```
+
+The oracle runs the command on the host you start it from, so that host needs
+the same image and toolchain as the workers. On any other host, a different
+compiler or system library changes the outputs, and the comparison measures that
+difference instead of NativeLink.
+
+The report prints a table of the runs on each side, the paths whose digests
+varied, and one of these verdicts:
+
+| Verdict | What it means | Next step |
+| --- | --- | --- |
+| `action_nondeterministic` | The oracle's own runs differ, from the same verified inputs and environment. The action is nondeterministic, and NativeLink is not the cause. | Diff two outputs of a varying path (`nativelink_replay fetch` writes a blob to a file). If `nativelink_replay local --same-path` is stable, the action records its absolute working directory, which differs for each run on a worker too. |
+| `nativelink_varies` | The oracle is stable and NativeLink's runs differ. The difference comes from NativeLink: the inputs it materialized, the worker environment, or output handling. | Check whether the manifests follow the worker column, then read the provenance events of those attempts. |
+| `cas_served_wrong_bytes` | A blob failed digest verification: the CAS served bytes that don't match their digest. | Treat every other result for this action as suspect, and find the store layer that holds the bad copy. `fetch` keeps the served bytes in `<out>.mismatch`. |
+
+Three more can appear. `stable_but_different` means both sides are stable but
+NativeLink produced outputs or exit codes the oracle never did, usually because
+the oracle host doesn't match the workers. `agree` means neither side varied,
+and variation rarer than K runs can't be ruled out. `inconclusive` means too few
+runs completed to compare.
+
+Each run's manifest fingerprint uses the same definition as
+[`manifest_fingerprint`](/reference/provenance-events#manifest-fingerprint) on
+`attempt_finished`, so a fingerprint in the report can be looked up in the
+logs. `--json` prints the whole report as one document, and the exit status is
+2 whenever a blob fails verification.
+
+<Callout type="warn" title="compare is not read-only">
+  `show`, `fetch` and `local` only read from the CAS. `execute` and `compare`
+  run the action on your workers: every run uploads its outputs, and unless the
+  action sets `do_not_cache` it replaces the action's entry in the Action Cache.
+  `local` and `compare` also run the action's command outside any sandbox, as the
+  current user, on the host where you start them. Use a disposable container
+  built from the workers' image.
+</Callout>
+
+The oracle follows the Remote Execution API, not any one worker
+configuration. It doesn't apply a worker's `additional_environment` (pass
+`--extra-env KEY=VALUE` to add those variables), an `entrypoint` wrapper,
+namespaces, or read-only input permissions; inputs are written mode `0644`, or
+`0755` when executable. When one of these is what changes the outputs, the
+difference shows on the NativeLink side: `stable_but_different`, or
+`nativelink_varies` when the setting differs from run to run, as an
+`action_directory` variable does.
+
 <VerifyBlock>
 
   During a build, `kubectl logs <worker-pod> | grep -c '"target":"nativelink_provenance"'`
