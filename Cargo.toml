@@ -52,6 +52,7 @@ clap = { version = "4.5.35", features = [
   "suggestions",
   "usage",
 ], default-features = false }
+flate2 = { version = "1.1.9", default-features = false, features = ["zlib-rs"] }
 futures = { version = "0.3.31", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
@@ -66,6 +67,7 @@ rand = { version = "0.9.0", default-features = false, features = [
 rustls-pki-types = { version = "1.13.1", features = [
   "std",
 ], default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.140", default-features = false, features = [
   "std",
 ] }
