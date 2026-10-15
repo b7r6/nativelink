@@ -1,0 +1,234 @@
+---
+title: Provenance events
+description: "Every output provenance event NativeLink emits on the nativelink_provenance tracing target, schema 1: when each one fires, which process emits it, and every field."
+---
+
+{/* archetype: reference, see /web/apps/docs/templates/reference.mdx */}
+
+{/* No <SourceLink> on this page yet: SOURCE_REF predates
+    nativelink-util/src/provenance.rs, so a permalink would 404. Add them when
+    SOURCE_REF moves to a release that contains the events. Until then this
+    page restates the schema; change it in the same commit as the emitters. */}
+
+**Who this is for:** you are reading provenance events by hand, or writing a
+tool that reads them. **What you'll have at the end:** the exact layout of
+every event in schema 1.
+
+The events are `DEBUG` events on the `nativelink_provenance` tracing target.
+Entries are in the order an output meets them: the worker events in the order
+an attempt emits them, then the server, then the Azure Blob store. To turn them
+on, collect them and read them, see
+[Trace CAS growth to its producers](/operate/trace-cas-growth).
+
+<Callout type="warn" title="Not in a release">
+  Release builds up to and including v1.7.7 do not emit these events. They
+  exist only in builds that contain `nativelink-util/src/provenance.rs`.
+</Callout>
+
+## Line format [#line-format]
+
+With `NL_LOG=json`, each event is one JSON object on one line. The event's
+fields are nested under `fields`, `target` is `nativelink_provenance`, and
+`timestamp` is RFC 3339 in UTC. `span` and `spans` describe the tracing spans
+the event fired in, when there are any.
+
+{/* lint-snippets: ignore */}
+```json
+{
+  "timestamp": "2026-10-15T10:00:04.000000Z",
+  "level": "DEBUG",
+  "fields": {
+    "event": "output_observed",
+    "schema": 1,
+    "attempt_id": "6f1c2a4e-8d0b-4c1e-9a57-3b2f0e6d9c11",
+    "operation_id": "op-1",
+    "action_digest": "1c83e1705e05a4bdab2510424911dfea7656ce241140c66b7352cd2c1fe12056-140",
+    "kind": "file",
+    "path": "bazel-out/k8-opt/bin/tools/sdk.tar",
+    "digest": "510e3dbd33aab02ab2401102b6e8f1bdf37b2c9c3bc8b3d54b3b8a5d7f0f4e21-10000",
+    "size_bytes": 10000,
+    "executable": false,
+    "symlink_target": "",
+    "first_in_attempt": true
+  },
+  "target": "nativelink_provenance"
+}
+```
+
+Shown wrapped here; in the log it is a single line. `RUST_LOG` also feeds the
+OTLP log exporter, so with a collector configured the same events arrive there
+as log records whose attributes are these fields.
+
+## Fields on every event [#fields-on-every-event]
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `event` | string | The event kind: one of the entries below. |
+| `schema` | integer | `1`. It changes when a field changes meaning or is removed. Adding a field does not change it. |
+
+## Request metadata fields [#request-metadata-fields]
+
+`attempt_started`, `cas_write`, `find_missing` and `backend_write` also carry
+the client's `RequestMetadata`, flattened. Bazel sends it in the
+`requestmetadata-bin` header. A field the client did not send is `""`.
+
+| Field | Meaning |
+| --- | --- |
+| `tool_name` | `ToolDetails.tool_name`, for example `bazel`. |
+| `tool_version` | `ToolDetails.tool_version`. |
+| `tool_invocation_id` | One ID per client command, such as one `bazel build`. |
+| `correlated_invocations_id` | Groups several invocations the client considers one build. |
+| `action_id` | The client's ID for the action. |
+| `action_mnemonic` | The action's mnemonic, for example `CppCompile` or `Genrule`. |
+| `target_id` | The label of the target that owns the action. |
+| `configuration_id` | The client's ID for the build configuration. |
+
+On `backend_write` these fields are empty when the write happens outside a
+client request, which includes every write made by a worker process.
+
+## Conventions [#conventions]
+
+- **Digests** are `<hash>-<size>`, the way NativeLink prints a digest
+  everywhere. Each digest field has a `size_bytes` number next to it.
+- **Enumerations** are lowercase `snake_case` strings, exactly as listed on
+  this page.
+- **Errors** are two strings: `error_code` is the gRPC code name, such as
+  `Unavailable`, and `error` is a short message. Both are `""` when there is no
+  error.
+- **Durations** are fields ending in `_ms`: whole milliseconds.
+- **Every field of a kind is always present.** An unknown value is `""`, `0` or
+  `false`, never a missing key.
+
+## `attempt_started` [#attempt_started]
+
+Emitted by the worker once per execution attempt, when it accepts
+`StartExecute` and starts running the action. Carries the
+[request metadata fields](#request-metadata-fields) from
+`StartExecute.request_metadata`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id` | string | A fresh UUID v4. Different for every retry of an operation and every time the scheduler dispatches it again, even to the same worker. Every other worker event joins on it. |
+| `operation_id` | string | From `StartExecute`. |
+| `worker_id` | string | The worker's ID, or `""`. |
+| `instance_name` | string | The REAPI instance name. |
+| `digest_function` | string | For example `sha256` or `blake3`. |
+| `action_digest` | digest | The `Action`. |
+| `command_digest` | digest | The `Command` the action names. |
+| `input_root_digest` | digest | The input root the action names. |
+
+## `output_observed` [#output_observed]
+
+Emitted by the worker for every output right after hashing it, whether or not
+it is uploaded afterward. Also emitted for symlinks, stdout, stderr, and the
+`Tree` or `Directory` object uploaded for each output directory.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id`, `operation_id`, `action_digest` | | Join keys, as on `attempt_started`. |
+| `kind` | string | `file` (a declared output file), `directory_file` (a file inside a declared output directory), `symlink`, `stdout`, `stderr`, or `directory_index` (the `Tree` or `Directory` for an output directory). |
+| `path` | string | Relative to the working directory, as the `ActionResult` names it. For `directory_file`, `<output_dir>/<path inside it>`. For `directory_index`, the output directory. `""` for stdout and stderr. |
+| `digest` | digest | `""` for a symlink. |
+| `size_bytes` | integer | |
+| `executable` | boolean | |
+| `symlink_target` | string | For a symlink; otherwise `""`. |
+| `first_in_attempt` | boolean | `false` if the same digest already appeared at another path earlier in this attempt. |
+
+## `output_upload` [#output_upload]
+
+Emitted by the worker once per distinct digest per attempt, when the upload
+decision resolves. If the upload is retried after an error, it is emitted again
+for each try.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id`, `operation_id` | string | Join keys. |
+| `digest`, `size_bytes` | digest, integer | The blob. |
+| `has_result` | string | What the CAS `has()` check returned: `present`, `absent` or `error`. The worker uploads on `absent` and on `error`. |
+| `has_error` | string | The error when `has_result` is `error`, otherwise `""`. |
+| `disposition` | string | `skipped_present`, `uploaded`, `upload_failed`, or `uploaded_concurrently` (the update failed with `NotFound` but a second check found the blob present). |
+| `error_code`, `error` | string | For `upload_failed`; otherwise `""`. |
+| `has_elapsed_ms` | integer | How long the `has()` check took. |
+| `upload_elapsed_ms` | integer | How long the upload took; `0` when there was no upload. |
+
+## `attempt_finished` [#attempt_finished]
+
+Emitted by the worker once per attempt, when output upload completes or fails.
+Also emitted, where the worker can do so cleanly, when an attempt ends without
+uploading because it was killed, timed out or failed earlier.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id`, `operation_id`, `action_digest` | | Join keys. |
+| `exit_code` | integer | The command's exit code, or `-1` if there is none. |
+| `outcome` | string | `completed` (the command ran and its outputs were uploaded, whatever the exit code), `upload_failed`, `killed`, `timed_out`, or `failed` (any other error before upload). |
+| `error_code`, `error` | string | |
+| `outputs_complete` | boolean | `true` only if every output was observed and uploaded without error. |
+| `output_count` | integer | Number of [manifest entries](#manifest-fingerprint). |
+| `output_bytes` | integer | Sum of `size_bytes` over manifest entries, per path. |
+| `unique_output_bytes` | integer | Sum of `size_bytes` over distinct digests in the manifest. |
+| `manifest_fingerprint` | string | Lowercase hex SHA-256 of the canonical manifest, or `""` when `outputs_complete` is `false`. |
+| `stdout_digest`, `stderr_digest` | digest | `""` when absent. |
+
+## `cas_write` [#cas_write]
+
+Emitted by the server once per blob write that completes or fails: when a
+ByteStream `Write` commits or errors, and once per blob in a
+`BatchUpdateBlobs` request. Carries the
+[request metadata fields](#request-metadata-fields).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `source` | string | `bytestream` or `batch_update`. |
+| `instance_name`, `digest_function` | string | |
+| `digest`, `size_bytes` | digest, integer | The blob. |
+| `result` | string | `ok` or `error`. |
+| `error_code`, `error` | string | |
+| `elapsed_ms` | integer | From the first message to completion for ByteStream; the request's duration for a batch. |
+| `peer` | string | The client's address, or `""`. |
+
+## `find_missing` [#find_missing]
+
+Emitted by the server once per `FindMissingBlobs` request. Carries the
+[request metadata fields](#request-metadata-fields).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `instance_name`, `digest_function` | string | |
+| `requested_count`, `requested_bytes` | integer | Digests asked about, and the sum of their sizes. |
+| `missing_count`, `missing_bytes` | integer | Digests reported missing, and the sum of their sizes. |
+| `result`, `error_code`, `error` | string | |
+| `elapsed_ms` | integer | |
+
+## `backend_write` [#backend_write]
+
+Emitted by the Azure Blob store at the end of every write, on success or
+failure, from whichever process holds the store: a CAS server, or a worker whose
+store graph writes to Azure directly. Zero-byte writes are not reported. Carries
+the [request metadata fields](#request-metadata-fields) of the request being
+served, if there is one.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `store` | string | `azure_blob`. |
+| `key` | string | The blob path written, including `key_prefix`. For a CAS this ends in the digest. |
+| `size_bytes` | integer | Bytes committed on success; bytes expected on failure. |
+| `mode` | string | `single` (one Put Blob) or `blocks` (staged blocks, then Put Block List). |
+| `block_count` | integer | `0` for `single`. |
+| `result`, `error_code`, `error` | string | |
+| `elapsed_ms` | integer | |
+
+## Manifest fingerprint [#manifest-fingerprint]
+
+`manifest_fingerprint` hashes the attempt's manifest: one line per `file`,
+`directory_file` and `symlink` output. stdout, stderr and `directory_index`
+objects are left out. Lines are sorted by path, then by kind, and each one is:
+
+```text
+{kind}\t{path}\t{digest, or the symlink target}\t{x if executable, else -}\n
+```
+
+The fingerprint is the lowercase hex SHA-256 of the concatenated lines. It
+covers the member files of an output directory rather than its `Tree` digest,
+so node properties such as modification times cannot make identical content
+look different.
