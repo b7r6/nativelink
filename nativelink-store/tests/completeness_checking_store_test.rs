@@ -43,6 +43,21 @@ const STDOUT: DigestInfo = DigestInfo::new([5u8; 32], 0);
 const STDERR: DigestInfo = DigestInfo::new([6u8; 32], 0);
 
 async fn setup() -> Result<(Arc<CompletenessCheckingStore>, Arc<MemoryStore>, DigestInfo), Error> {
+    let (ac_store, cas_store, action_result_digest, _tree_digest) = setup_with_tree().await?;
+    Ok((ac_store, cas_store, action_result_digest))
+}
+
+/// Like `setup`, but also returns the digest of the `Tree` the action result's
+/// output directory points at.
+async fn setup_with_tree() -> Result<
+    (
+        Arc<CompletenessCheckingStore>,
+        Arc<MemoryStore>,
+        DigestInfo,
+        DigestInfo,
+    ),
+    Error,
+> {
     let backend_store = Store::new(MemoryStore::new(&MemorySpec::default()));
     let cas_store = MemoryStore::new(&MemorySpec::default());
     let ac_store =
@@ -114,7 +129,7 @@ async fn setup() -> Result<(Arc<CompletenessCheckingStore>, Arc<MemoryStore>, Di
     )
     .await?;
 
-    Ok((ac_store, cas_store, action_result_digest))
+    Ok((ac_store, cas_store, action_result_digest, tree_digest))
 }
 
 #[nativelink_test]
@@ -241,12 +256,14 @@ async fn verify_completeness_get() -> Result<(), Error> {
 
         cas_store.remove_entry(OUTPUT_FILE.into()).await;
 
-        assert!(
-            ac_store
-                .get_part_unchunked(action_result_digest, 0, None)
-                .await
-                .is_err(),
-            ".get() should fail with item missing in CAS",
+        let err = ac_store
+            .get_part_unchunked(action_result_digest, 0, None)
+            .await
+            .expect_err(".get() should fail with item missing in CAS");
+        assert_eq!(
+            err.code,
+            Code::NotFound,
+            "a missing referent must stay a NotFound miss: {err:?}"
         );
     }
 
@@ -320,14 +337,14 @@ impl StoreDriver for AlwaysErrStore {
 
 default_health_status_indicator!(AlwaysErrStore);
 
-/// Regression: a real backend read/decode failure on the action-result record
-/// must propagate with its underlying, non-`NotFound` code — it must NOT be
-/// collapsed into `Code::NotFound`. A `NotFound` miss tells the client the
-/// result does not exist and to re-execute; a backend fault (unavailable
-/// Redis, decode failure) is transient and retryable, and serving it as a
-/// clean miss silently discards a valid cached result. The genuine
-/// eviction-miss path (referent absent) is covered by
-/// `verify_has_function_call_checks_cas` and stays `NotFound`.
+/// Regression: a backend failure reading the action-result record must
+/// propagate with its own code, not be turned into `Code::NotFound`. A
+/// `NotFound` miss tells the client the result does not exist and to
+/// re-execute; a backend fault (an unavailable Redis, a timeout) is transient
+/// and retryable, and serving it as a miss throws away a valid cached result.
+/// The misses that must stay `NotFound` are covered by
+/// `verify_has_function_call_checks_cas`, `absent_record_is_a_miss` and
+/// `absent_tree_is_a_miss`.
 #[nativelink_test]
 async fn backend_error_on_record_propagates_as_non_not_found() -> Result<(), Error> {
     let make_store = || {
@@ -339,7 +356,7 @@ async fn backend_error_on_record_propagates_as_non_not_found() -> Result<(), Err
     };
     let some_digest = DigestInfo::new([9u8; 32], 123);
 
-    // get_part path (nix narinfo GET / Bazel AC get).
+    // get_part path (an AC GetActionResult).
     let get_err = make_store()
         .get_part_unchunked(some_digest, 0, None)
         .await
@@ -355,7 +372,7 @@ async fn backend_error_on_record_propagates_as_non_not_found() -> Result<(), Err
         "backend fault must propagate with its real code"
     );
 
-    // has path (nix narinfo HEAD / Bazel AC has).
+    // has path.
     let has_err = make_store()
         .has(some_digest)
         .await
@@ -371,5 +388,87 @@ async fn backend_error_on_record_propagates_as_non_not_found() -> Result<(), Err
         "backend fault on has must propagate with its real code"
     );
 
+    Ok(())
+}
+
+/// An action result that is not in the AC at all is a plain miss.
+#[nativelink_test]
+async fn absent_record_is_a_miss() -> Result<(), Error> {
+    let (ac_store, _cas_store, _action_result_digest) = setup().await?;
+    let absent = DigestInfo::new([8u8; 32], 64);
+
+    assert_eq!(ac_store.has(absent).await?, None);
+    let err = ac_store
+        .get_part_unchunked(absent, 0, None)
+        .await
+        .expect_err("an absent action result must not read back");
+    assert_eq!(err.code, Code::NotFound, "unexpected error: {err:?}");
+    Ok(())
+}
+
+/// An action result whose output directory's `Tree` blob has been evicted from
+/// the CAS is incomplete, so it is a miss, not an error.
+#[nativelink_test]
+async fn absent_tree_is_a_miss() -> Result<(), Error> {
+    let (ac_store, cas_store, action_result_digest, tree_digest) = setup_with_tree().await?;
+    cas_store.remove_entry(tree_digest.into()).await;
+
+    assert_eq!(ac_store.has(action_result_digest).await?, None);
+    let err = ac_store
+        .get_part_unchunked(action_result_digest, 0, None)
+        .await
+        .expect_err("an action result with an evicted Tree must not read back");
+    assert_eq!(err.code, Code::NotFound, "unexpected error: {err:?}");
+    Ok(())
+}
+
+/// A failure checking the referenced outputs in the CAS keeps its own code. It
+/// used to reach the client as `Internal`, which retry policies treat as
+/// permanent.
+#[nativelink_test]
+async fn cas_backend_error_propagates_with_its_code() -> Result<(), Error> {
+    let backend_store = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let cas_store = Store::new(Arc::new(AlwaysErrStore {
+        code: Code::Unavailable,
+    }));
+    let ac_store = CompletenessCheckingStore::new(backend_store, cas_store);
+
+    // No output directories, so the only CAS call is the existence check of
+    // the output file, stdout and stderr.
+    let action_result = ProtoActionResult {
+        output_files: vec![OutputFile {
+            digest: Some(OUTPUT_FILE.into()),
+            ..Default::default()
+        }],
+        stdout_digest: Some(STDOUT.into()),
+        stderr_digest: Some(STDERR.into()),
+        ..Default::default()
+    };
+    let action_result_digest = serialize_and_upload_message(
+        &action_result,
+        ac_store.as_pin(),
+        &mut DigestHasherFunc::Blake3.hasher(),
+    )
+    .await?;
+
+    let has_err = ac_store
+        .has(action_result_digest)
+        .await
+        .expect_err("a CAS failure must not be swallowed");
+    assert_eq!(
+        has_err.code,
+        Code::Unavailable,
+        "unexpected error: {has_err:?}"
+    );
+
+    let get_err = ac_store
+        .get_part_unchunked(action_result_digest, 0, None)
+        .await
+        .expect_err("a CAS failure must not be swallowed");
+    assert_eq!(
+        get_err.code,
+        Code::Unavailable,
+        "unexpected error: {get_err:?}"
+    );
     Ok(())
 }
