@@ -1504,6 +1504,17 @@ async fn dropped_staged_upload_discards_its_blocks() -> Result<(), Error> {
 }
 
 const TEST_KEY_PREFIX: &str = "cas/";
+const TEST_VERSION_ID: &str = "2026-10-15T12:00:00.1234567Z";
+
+/// A successful write from an account that keeps blob versions: Azure names
+/// the version it created.
+fn created_with_version() -> CannedResponse {
+    CannedResponse {
+        status: StatusCode::Created,
+        headers: vec![("x-ms-version-id", TEST_VERSION_ID.to_string())],
+        body: Vec::new(),
+    }
+}
 
 /// A store whose blobs live under [`TEST_KEY_PREFIX`], so the provenance
 /// tests can see that `key` names the blob path actually written.
@@ -1572,6 +1583,7 @@ async fn a_single_request_upload_emits_one_backend_write() -> Result<(), Error> 
         format!("size_bytes={CONTENT_LENGTH} "),
         "mode=\"single\"".to_string(),
         "block_count=0 ".to_string(),
+        "version_id= ".to_string(),
         "result=\"ok\"".to_string(),
         "error_code= ".to_string(),
         "elapsed_ms=".to_string(),
@@ -1588,6 +1600,7 @@ async fn a_block_upload_emits_one_backend_write_with_its_block_count() -> Result
     const TOTAL_SIZE: usize = BLOCK_SIZE * 2 + 50;
 
     let mock = MockTransport::new();
+    mock.push_commit(created_with_version());
     let store = create_prefixed_test_store(Arc::clone(&mock))?;
     let digest = DigestInfo::try_new(TEST_HASH, TOTAL_SIZE)?;
     store
@@ -1601,6 +1614,7 @@ async fn a_block_upload_emits_one_backend_write_with_its_block_count() -> Result
         format!("size_bytes={TOTAL_SIZE} "),
         "mode=\"blocks\"".to_string(),
         "block_count=3 ".to_string(),
+        format!("version_id={TEST_VERSION_ID} "),
         "result=\"ok\"".to_string(),
     ];
     logs_assert(|lines| check_one_backend_write(lines, &expected));
@@ -1627,6 +1641,7 @@ async fn a_failed_single_request_upload_emits_an_error_backend_write() -> Result
         format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{CONTENT_LENGTH} "),
         format!("size_bytes={CONTENT_LENGTH} "),
         "mode=\"single\"".to_string(),
+        "version_id= ".to_string(),
         "result=\"error\"".to_string(),
         "error_code=Aborted ".to_string(),
         "error=Error {".to_string(),
@@ -1661,6 +1676,74 @@ async fn a_failed_block_list_commit_emits_an_error_backend_write() -> Result<(),
         "error_code=Aborted ".to_string(),
     ];
     logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// On an account that keeps blob versions, Put Blob answers with the version
+/// it created, and the event carries it.
+#[nativelink_test]
+async fn a_versioned_single_request_upload_reports_its_version_id() -> Result<(), Error> {
+    const CONTENT_LENGTH: usize = 1024;
+
+    let mock = MockTransport::new();
+    mock.push_upload(created_with_version());
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT_LENGTH)?;
+    store
+        .update_oneshot(digest, test_payload(CONTENT_LENGTH))
+        .await?;
+
+    let expected = [
+        "mode=\"single\"".to_string(),
+        format!("version_id={TEST_VERSION_ID} "),
+        "result=\"ok\"".to_string(),
+    ];
+    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// The SDK's error dump can run to any length; the event keeps the first
+/// 300 characters of the message.
+#[nativelink_test]
+async fn a_long_error_is_truncated_in_backend_write() -> Result<(), Error> {
+    const CONTENT_LENGTH: usize = 512;
+    const MAX_ERROR_CHARS: usize = 300;
+
+    let mock = MockTransport::new();
+    // The error code is echoed into the SDK's error, which makes the message
+    // far longer than the cap. Multi-byte characters check that the cut
+    // lands on a character boundary.
+    mock.push_upload(CannedResponse {
+        status: StatusCode::InternalServerError,
+        headers: vec![("x-ms-error-code", "\u{e9}".repeat(400))],
+        body: Vec::new(),
+    });
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT_LENGTH)?;
+    store
+        .update_oneshot(digest, test_payload(CONTENT_LENGTH))
+        .await
+        .expect_err("the upload must fail with no retries left");
+
+    logs_assert(|lines| {
+        check_one_backend_write(lines, &["result=\"error\"".to_string()])?;
+        let event = lines
+            .iter()
+            .find(|line| line.contains("event=\"backend_write\""))
+            .expect("checked above");
+        let error = event
+            .split_once(" error=")
+            .and_then(|(_, rest)| rest.rsplit_once(" elapsed_ms="))
+            .map(|(error, _)| error)
+            .ok_or_else(|| format!("no error field in {event}"))?;
+        let chars = error.chars().count();
+        if chars != MAX_ERROR_CHARS {
+            return Err(format!(
+                "expected a {MAX_ERROR_CHARS}-character error, got {chars}: {error}"
+            ));
+        }
+        Ok(())
+    });
     Ok(())
 }
 

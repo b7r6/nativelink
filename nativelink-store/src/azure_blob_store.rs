@@ -27,8 +27,9 @@ use azure_core::http::{RequestContent, RetryOptions, StatusCode, Transport, Url}
 use azure_identity::WorkloadIdentityCredential;
 use azure_storage_blob::clients::{BlobContainerClient, BlobContainerClientOptions};
 use azure_storage_blob::models::{
-    BlobClientDownloadOptions, BlobClientGetPropertiesResultHeaders, BlockListType,
-    BlockLookupList, HttpRange, StorageErrorCode,
+    BlobClientDownloadOptions, BlobClientGetPropertiesResultHeaders,
+    BlockBlobClientCommitBlockListResultHeaders, BlockListType, BlockLookupList, HttpRange,
+    StorageErrorCode,
 };
 use futures::future::FusedFuture;
 use futures::stream::{FuturesUnordered, unfold};
@@ -75,8 +76,12 @@ const DEFAULT_MAX_CONCURRENT_UPLOADS: usize = 10;
 // Default public Azure Blob Storage endpoint suffix.
 const DEFAULT_BLOB_ENDPOINT_SUFFIX: &str = "blob.core.windows.net";
 
+// The longest `error` a `backend_write` provenance event carries, in
+// characters. The SDK's error dump alone runs to several hundred.
+const MAX_PROVENANCE_ERROR_CHARS: usize = 300;
+
 /// How one `update` wrote its blob, for the `backend_write` provenance event.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct BlobWrite {
     /// `single` for one Put Blob, `blocks` for staged blocks committed with
     /// Put Block List.
@@ -84,6 +89,23 @@ struct BlobWrite {
     /// Blocks staged: all of them once committed, or those that landed
     /// before a failure. Zero for a single request.
     block_count: usize,
+    /// The `x-ms-version-id` Azure answered the write with, which it sends
+    /// only when the account keeps blob versions. A rewrite of an existing
+    /// blob on such an account leaves the previous version in place.
+    version_id: Option<String>,
+}
+
+/// The version Azure kept for a committed block list. Read only when
+/// provenance is enabled, since nothing else wants it and it costs a header
+/// parse and an allocation.
+fn committed_version_id(
+    response: &impl BlockBlobClientCommitBlockListResultHeaders,
+) -> Option<String> {
+    if provenance_enabled() {
+        response.version_id().ok().flatten()
+    } else {
+        None
+    }
 }
 
 /// Successful reads in a row before the adaptive read limit grows by one.
@@ -594,7 +616,7 @@ where
         blob_path: &str,
         mut reader: DropCloserReadHalf,
         upload_size: UploadSizeInfo,
-        block_count: &mut usize,
+        write: &mut BlobWrite,
     ) -> Result<u64, Error> {
         let blob_path = blob_path.to_owned();
         let max_size = match upload_size {
@@ -714,7 +736,7 @@ where
                 Some(block_id) = upload_futures.next() => match block_id {
                     Ok(block_id) => {
                         block_ids.push(block_id);
-                        *block_count = block_ids.len();
+                        write.block_count = block_ids.len();
                     }
                     Err(err) => {
                         failure = Some(err);
@@ -746,7 +768,7 @@ where
             ..Default::default()
         };
 
-        retrier
+        let (size, version_id) = retrier
             .retry(unfold(block_list, move |block_list| {
                 let client = Arc::clone(&self.client);
                 let blob_path = blob_path.clone();
@@ -792,12 +814,16 @@ where
                                         .append("Failed to commit block list in Azure store:"),
                                 )
                             },
-                            |_| RetryResult::Ok(total_uploaded),
+                            |response| {
+                                RetryResult::Ok((total_uploaded, committed_version_id(&response)))
+                            },
                         );
                     Some((retry_result, block_list))
                 }
             }))
-            .await
+            .await?;
+        write.version_id = version_id;
+        Ok(size)
     }
 
     /// Writes the blob for `digest`, recording in `write` how it was written.
@@ -826,7 +852,7 @@ where
                     .err_tip(|| "Could not convert max_retry_buffer_per_request to u64")?,
             );
 
-            return self
+            let (size, version_id) = self
                 .retrier
                 .retry(unfold(reader, move |mut reader| {
                     let client = Arc::clone(&self.client);
@@ -862,16 +888,17 @@ where
                             .block_blob_client()
                             .upload(RequestContent::from(content.to_vec()), None)
                             .await
-                            .map(|_| ())
+                            .map(|response| response.version_id)
                             .map_err(|e| (
                                 make_err!(Code::Aborted, "{e:?}"),
                                 self.throttle_wait(&e, "put"),
                             ));
 
                         match result {
-                            Ok(()) => {
-                                Some((RetryResult::Ok(reader.get_bytes_received()), reader))
-                            }
+                            Ok(version_id) => Some((
+                                RetryResult::Ok((reader.get_bytes_received(), version_id)),
+                                reader,
+                            )),
                             Err((mut err, throttle_wait)) => {
                                 err.code = Code::Aborted;
                                 let bytes_received = reader.get_bytes_received();
@@ -909,7 +936,9 @@ where
                         }
                     }
                 }))
-                .await;
+                .await?;
+            write.version_id = version_id;
+            return Ok(size);
         }
 
         // For larger files we stream the content as staged blocks and commit a block list.
@@ -922,7 +951,7 @@ where
             armed: true,
         };
         let result = self
-            .upload_staged_blocks(&blob_path, reader, upload_size, &mut write.block_count)
+            .upload_staged_blocks(&blob_path, reader, upload_size, write)
             .await;
         guard.disarm();
         if result.is_err() {
@@ -936,7 +965,7 @@ where
         &self,
         digest: &StoreKey<'_>,
         upload_size: UploadSizeInfo,
-        write: BlobWrite,
+        write: &BlobWrite,
         result: &Result<u64, Error>,
         elapsed: Duration,
     ) {
@@ -946,12 +975,11 @@ where
             Err(err) => {
                 let (UploadSizeInfo::ExactSize(expected) | UploadSizeInfo::MaxSize(expected)) =
                     upload_size;
-                (
-                    expected,
-                    "error",
-                    format!("{:?}", err.code),
-                    err.message_string(),
-                )
+                let mut error = err.message_string();
+                if let Some((end, _)) = error.char_indices().nth(MAX_PROVENANCE_ERROR_CHARS) {
+                    error.truncate(end);
+                }
+                (expected, "error", format!("{:?}", err.code), error)
             }
         };
         provenance_event!("backend_write", &metadata;
@@ -960,6 +988,7 @@ where
             size_bytes,
             mode = write.mode,
             block_count = write.block_count,
+            version_id = %write.version_id.as_deref().unwrap_or_default(),
             result = outcome,
             error_code = %error_code,
             error = %error,
@@ -1026,7 +1055,7 @@ where
             .write_blob(&digest, reader, upload_size, &mut write)
             .await;
         if let Some(started) = started {
-            self.emit_backend_write(&digest, upload_size, write, &result, started.elapsed());
+            self.emit_backend_write(&digest, upload_size, &write, &result, started.elapsed());
         }
         result
     }
