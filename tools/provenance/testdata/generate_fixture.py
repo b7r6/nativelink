@@ -22,8 +22,13 @@ its docstring walks through where each one comes from.
   //docs:site      an output directory and a symlink
   //app:slow       run 2, upload fails: outputs_complete=false
   //app:hung       run 4, attempt_started with no attempt_finished
-  //lib:shared     uploaded by Bazel itself (server events only) in runs 1-3:
+  //lib:shared     uploaded by Bazel itself (server events only) in runs 1-3,
+                   so no worker saw it: client uploads by target, and
                    rewrite amplification
+
+Most backend writes carry a `version_id`, as from a versioned account. The
+run-2 write of //lib:shared returns an empty one, and the two AC writes have
+no `version_id` key at all, as in logs from before the field existed.
 
 worker-events.txt is NativeLink `NL_LOG=json` output, deliberately out of order in
 places, with one non-JSON line, one non-provenance line, one event with an
@@ -471,25 +476,25 @@ def server_log() -> list[str]:
             **kw,
         )
 
-    def backend(seconds, key, size, meta, result="ok", error_code="", **kw):
-        return flat(
-            seconds,
-            {
-                "event": "backend_write",
-                "schema": 1,
-                **meta,
-                "store": "azure_blob",
-                "key": key,
-                "size_bytes": size,
-                "mode": "single",
-                "block_count": 0,
-                "result": result,
-                "error_code": error_code,
-                "error": "backend unavailable" if error_code else "",
-                "elapsed_ms": 25,
-            },
-            **kw,
-        )
+    def backend(seconds, key, size, meta, result="ok", error_code="", version="", **kw):
+        fields = {
+            "event": "backend_write",
+            "schema": 1,
+            **meta,
+            "store": "azure_blob",
+            "key": key,
+            "size_bytes": size,
+            "mode": "single",
+            "block_count": 0,
+            "result": result,
+            "error_code": error_code,
+            "error": "backend unavailable" if error_code else "",
+            "elapsed_ms": 25,
+        }
+        if version is not None:
+            # Azure's x-ms-version-id: the creation time of the new version.
+            fields["version_id"] = iso(seconds)[:-1] + "0Z" if version == "auto" else version
+        return flat(seconds, fields, **kw)
 
     def bazel(run):
         return metadata(f"inv-{run}", "//lib:shared", "CppLink", f"bazel-action-shared-{run}")
@@ -515,10 +520,12 @@ def server_log() -> list[str]:
         ),
         cas(BASE + 30, "batch_update", stamp, 1000, empty),
         cas(BASE + 40, "bytestream", gen, 2000, empty),
-        backend(BASE + 41, "cas/" + gen, 2000, empty),
+        backend(BASE + 41, "cas/" + gen, 2000, empty, version="auto"),
         cas(BASE + 60, "bytestream", shared, 50000, bazel(1)),
-        backend(BASE + 61, "cas/" + shared, 50000, bazel(1)),
-        backend(BASE + 300, "ac/" + site_result, 300, empty, nanos=True, target=False),
+        backend(BASE + 61, "cas/" + shared, 50000, bazel(1), version="auto"),
+        backend(
+            BASE + 300, "ac/" + site_result, 300, empty, version=None, nanos=True, target=False
+        ),
         json.dumps(
             {
                 "timestamp": iso(BASE + 301),
@@ -552,10 +559,10 @@ def server_log() -> list[str]:
         cas(BASE + 690, "bytestream", slow, 4000, empty, result="error", error_code="Unavailable"),
         backend(BASE + 691, "cas/" + slow, 4000, empty, result="error", error_code="Unavailable"),
         cas(BASE + 1240, "bytestream", gen, 2000, empty),
-        backend(BASE + 1241, "cas/" + gen, 2000, empty),
+        backend(BASE + 1241, "cas/" + gen, 2000, empty, version="auto"),
         cas(BASE + 1260, "bytestream", shared, 50000, bazel(3), target=False),
-        backend(BASE + 1261, "cas/" + shared, 50000, bazel(3)),
-        backend(BASE + 1500, "ac/" + site_result, 300, empty),
+        backend(BASE + 1261, "cas/" + shared, 50000, bazel(3), version="auto"),
+        backend(BASE + 1500, "ac/" + site_result, 300, empty, version=None),
     ]
     return lines
 

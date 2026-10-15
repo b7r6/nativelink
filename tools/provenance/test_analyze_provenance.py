@@ -27,7 +27,11 @@ from (sizes in bytes):
                shared (inv-2, rewrite); gen-h (rewrite); shared (inv-3,
                rewrite); plus slow-jar 4000 failed.
     backend_write: the same CAS keys under `cas/`, and one AC key under
-               `ac/` written twice (300 each).
+               `ac/` written twice (300 each). Every successful `cas/` write
+               but shared's run-2 one returns a version ID, so the rewrites
+               retained by versioning are gen-h 2000 + shared (inv-3) 50000.
+  Client uploads by target: //lib:shared's three writes carry Bazel's
+  metadata and no worker ran it; stamp-1 and gen-h (twice) carry none.
 """
 
 from __future__ import annotations
@@ -361,6 +365,14 @@ class FixtureReportTest(unittest.TestCase):
         self.assertEqual(groups[("azure_blob", "cas/")]["rewrite_bytes"], 102000)
         self.assertEqual(groups[("azure_blob", "ac/")]["first_write_bytes"], 300)
         self.assertEqual(groups[("azure_blob", "ac/")]["rewrite_bytes"], 300)
+        self.assertEqual(backend["totals"]["versioned_writes"], 4)
+        self.assertEqual(backend["totals"]["retained_by_versioning_bytes"], 52000)
+        # The AC lines carry no version_id key at all, as older logs do.
+        self.assertEqual(groups[("azure_blob", "ac/")]["versioned_writes"], 0)
+        self.assertEqual(groups[("azure_blob", "ac/")]["retained_by_versioning_bytes"], 0)
+        self.assertNotIn("versioned_writes", self.report["rewrites"]["cas_write"]["totals"])
+        # Six backend lines carry the key (two of them empty); the AC lines lack it.
+        self.assertEqual(backend["version_id_reported"], 6)
         top = backend["top_rewritten"]
         self.assertEqual(top[0]["key"], "cas/" + fixture.digest("shared-lib", 50000))
         self.assertEqual(top[0]["rewrite_bytes"], 100000)
@@ -375,6 +387,58 @@ class FixtureReportTest(unittest.TestCase):
         backend = self.seeded["rewrites"]["backend_write"]["totals"]
         self.assertEqual(backend["first_write_bytes"], 2300)
         self.assertEqual(backend["prewindow_rewrite_bytes"], 50000)
+        # shared's first in-window write overwrote a pre-window blob and
+        # returned a version ID, so that copy is retained too.
+        self.assertEqual(backend["retained_by_versioning_bytes"], 102000)
+
+    def test_client_uploads(self) -> None:
+        uploads = self.report["client_uploads"]
+        self.assertEqual(uploads["target_count"], 1)
+        self.assertEqual(uploads["bytes"], 155000)
+        self.assertEqual(uploads["bytes_without_metadata"], 5000)
+        self.assertTrue(uploads["worker_events_present"])
+        self.assertEqual(uploads["bytes_from_targets_no_worker_ran"], 150000)
+        self.assertEqual(
+            uploads["rows"],
+            [
+                {
+                    "target_id": "//lib:shared",
+                    "action_mnemonic": "CppLink",
+                    "seen_by_worker": False,
+                    "writes": 3,
+                    "bytes": 150000,
+                    "distinct_digests": 1,
+                    "first_write_bytes": 50000,
+                    "rewrite_bytes": 100000,
+                    "prewindow_rewrite_bytes": 0,
+                    "invocations": 3,
+                },
+                {
+                    "target_id": "(no metadata)",
+                    "action_mnemonic": "",
+                    "seen_by_worker": None,
+                    "writes": 3,
+                    "bytes": 5000,
+                    "distinct_digests": 2,
+                    "first_write_bytes": 3000,
+                    "rewrite_bytes": 2000,
+                    "prewindow_rewrite_bytes": 0,
+                    "invocations": 0,
+                },
+            ],
+        )
+
+    def test_client_uploads_with_seed(self) -> None:
+        rows = self.seeded["client_uploads"]["rows"]
+        self.assertEqual([r["target_id"] for r in rows], ["(no metadata)", "//lib:shared"])
+        self.assertEqual(
+            (
+                rows[1]["first_write_bytes"],
+                rows[1]["rewrite_bytes"],
+                rows[1]["prewindow_rewrite_bytes"],
+            ),
+            (0, 100000, 50000),
+        )
 
     def test_has_health(self) -> None:
         health = self.report["has_health"]
@@ -434,6 +498,7 @@ class FixtureReportTest(unittest.TestCase):
         self.assertEqual(coverage["finished_without_started"], 0)
         self.assertEqual(coverage["outputs_incomplete"], 1)
         self.assertEqual(coverage["outputs_incomplete_by_outcome"], {"upload_failed": 1})
+        self.assertEqual(coverage["complete_but_not_completed"], 0)
         self.assertEqual(coverage["manifest_count_mismatches"], 0)
         self.assertEqual(coverage["outputs_without_attempt_started"], 0)
         self.assertEqual(coverage["outputs_without_metadata"], 0)
@@ -495,6 +560,7 @@ class CommandLineTest(unittest.TestCase):
         for heading in (
             "Window: 2026-10-15T10:00:00.500Z .. 2026-10-15T10:30:07.000Z (30m 06s)",
             "1. Producers by first-observed output bytes (14 of 14 shown)",
+            "1b. Client uploads by target",
             "2. Exact identity",
             "3. Logical producer churn",
             "4. Novelty per invocation, in order of first event, seeded with 3 digests",
@@ -505,6 +571,14 @@ class CommandLineTest(unittest.TestCase):
             self.assertIn(heading, text)
         self.assertIn("39.1 KiB", text)
         self.assertIn("e2ee005cedae..-50000", text)
+        self.assertIn(
+            "1b. Client uploads by target: cas_write (result=ok) grouped by request "
+            "metadata (1 of 1 targets shown)",
+            text,
+        )
+        # Seeded: shared's pre-window overwrite is retained as well (102000 B).
+        self.assertIn("retained by versioning 99.6 KiB", text)
+        self.assertIn("(no metadata)", text)
         wide = self.run_cli("--wide", WORKER, SERVER).stdout.decode()
         self.assertIn(fixture.digest("shared-lib", 50000), wide)
 
@@ -605,6 +679,7 @@ class DefensiveTest(unittest.TestCase):
                     ts,
                     event="attempt_finished",
                     attempt_id=attempt,
+                    outcome="completed",
                     outputs_complete=True,
                     manifest_fingerprint=side,
                 )
@@ -614,6 +689,124 @@ class DefensiveTest(unittest.TestCase):
             [run["new_bytes"] for run in report["novelty"]["runs"]], [3000, 3000, 0, 0]
         )
         self.assertEqual(report["churn"]["summary"][DC_OC]["pairs"], 3)
+
+    def test_killed_attempt_with_complete_outputs_is_not_compared(self) -> None:
+        # The worker reports outputs_complete=true for an attempt it killed if
+        # it uploaded what was there. Its manifest is not the action's output.
+        action = f"{'d' * 64}-140"
+        lines = []
+        for run, (outcome, side) in enumerate(
+            (("completed", "a"), ("killed", "b"), ("timed_out", "c")), start=1
+        ):
+            attempt = f"attempt-{run}"
+            ts = f"2026-10-15T1{run}:00:00Z"
+            lines += [
+                tracing(
+                    ts,
+                    event="attempt_started",
+                    attempt_id=attempt,
+                    action_digest=action,
+                    tool_invocation_id=f"run-{run}",
+                    target_id="//app:slow",
+                ),
+                tracing(
+                    ts,
+                    event="output_observed",
+                    attempt_id=attempt,
+                    action_digest=action,
+                    kind="file",
+                    path="out.bin",
+                    digest=f"{side * 64}-10",
+                    size_bytes=10,
+                ),
+                tracing(
+                    ts,
+                    event="attempt_finished",
+                    attempt_id=attempt,
+                    action_digest=action,
+                    outcome=outcome,
+                    outputs_complete=True,
+                    output_count=1,
+                    manifest_fingerprint=side,
+                ),
+            ]
+        report = self.collect(lines)
+        self.assertEqual(report["exact_identity"]["actions_checked"], 1)
+        self.assertEqual(report["exact_identity"]["actions_with_multiple_manifests"], 0)
+        self.assertEqual(report["churn"]["producers_compared"], 0)
+        self.assertEqual(sum(data["pairs"] for data in report["churn"]["summary"].values()), 0)
+        self.assertEqual(report["coverage"]["complete_but_not_completed"], 2)
+        self.assertEqual(
+            report["coverage"]["complete_but_not_completed_by_outcome"],
+            {"killed": 1, "timed_out": 1},
+        )
+        # Their outputs were still produced and uploaded, so they still count.
+        self.assertEqual(report["producers"]["first_observed_bytes"], 30)
+        text = ap.render_text(report, 0, False)
+        self.assertIn("outcome not completed (left out of 2 and 3): 2", text)
+
+    def test_client_uploads_attribute_locally_executed_actions(self) -> None:
+        def cas_write(digest: str, size: int, target: str = "", mnemonic: str = "") -> str:
+            return tracing(
+                "2026-10-15T10:00:01Z",
+                event="cas_write",
+                source="bytestream",
+                digest=f"{digest * 64}-{size}",
+                size_bytes=size,
+                result="ok",
+                target_id=target,
+                action_mnemonic=mnemonic,
+                tool_invocation_id="inv-1" if target else "",
+            )
+
+        uploads = [
+            cas_write("1", 100, "//app:remote", "Genrule"),
+            cas_write("2", 5000, "//app:local", "CppLink"),
+            cas_write("2", 5000, "//app:local", "CppLink"),
+            cas_write("3", 7, "", "Genrule"),
+        ]
+        started = tracing(
+            "2026-10-15T10:00:00Z",
+            event="attempt_started",
+            attempt_id="x",
+            target_id="//app:remote",
+            action_mnemonic="Genrule",
+        )
+        rows = {
+            r["target_id"]: r for r in self.collect([started, *uploads])["client_uploads"]["rows"]
+        }
+        self.assertEqual(rows["//app:remote"]["seen_by_worker"], True)
+        self.assertEqual(rows["//app:local"]["seen_by_worker"], False)
+        self.assertEqual(
+            (rows["//app:local"]["first_write_bytes"], rows["//app:local"]["rewrite_bytes"]),
+            (5000, 5000),
+        )
+        # An empty target is one row whatever the mnemonic says.
+        self.assertEqual(rows["(no metadata)"]["seen_by_worker"], None)
+        self.assertEqual(rows["(no metadata)"]["action_mnemonic"], "")
+        # Without worker events, nothing can be called unseen.
+        alone = self.collect(uploads)["client_uploads"]
+        self.assertFalse(alone["worker_events_present"])
+        self.assertEqual({r["seen_by_worker"] for r in alone["rows"]}, {None})
+        self.assertNotIn(" worker ", ap.render_text(self.collect(uploads), 0, False))
+
+    def test_backend_logs_without_version_id(self) -> None:
+        line = tracing(
+            "2026-10-15T10:00:00Z",
+            event="backend_write",
+            store="azure_blob",
+            key=f"cas/{'e' * 64}-9",
+            size_bytes=9,
+            result="ok",
+        )
+        report = self.collect([line, line])
+        backend = report["rewrites"]["backend_write"]
+        self.assertEqual(backend["version_id_reported"], 0)
+        self.assertEqual(backend["totals"]["rewrite_bytes"], 9)
+        self.assertEqual(backend["totals"]["retained_by_versioning_bytes"], 0)
+        text = ap.render_text(report, 0, False)
+        self.assertIn("versioning unknown (no backend_write carries version_id)", text)
+        self.assertNotIn("retained by versioning", text)
 
     def test_unfinished_attempt_is_not_compared(self) -> None:
         lines = [
