@@ -17,6 +17,7 @@ use core::time::Duration;
 use core::{cmp, mem};
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
@@ -40,11 +41,12 @@ use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::health_utils::{HealthRegistryBuilder, HealthStatus, HealthStatusIndicator};
 use nativelink_util::instant_wrapper::InstantWrapper;
 use nativelink_util::metrics::record_object_store_throttle;
+use nativelink_util::provenance::{ProvenanceMetadata, provenance_enabled};
 use nativelink_util::retry::{Retrier, RetryResult};
 use nativelink_util::store_trait::{
     RemoveCallback, StoreDriver, StoreKey, StoreOptimizations, UploadSizeInfo,
 };
-use nativelink_util::{background_spawn, fs};
+use nativelink_util::{background_spawn, fs, provenance_event};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{Level, event};
@@ -72,6 +74,17 @@ const DEFAULT_MAX_CONCURRENT_UPLOADS: usize = 10;
 
 // Default public Azure Blob Storage endpoint suffix.
 const DEFAULT_BLOB_ENDPOINT_SUFFIX: &str = "blob.core.windows.net";
+
+/// How one `update` wrote its blob, for the `backend_write` provenance event.
+#[derive(Clone, Copy, Debug, Default)]
+struct BlobWrite {
+    /// `single` for one Put Blob, `blocks` for staged blocks committed with
+    /// Put Block List.
+    mode: &'static str,
+    /// Blocks staged: all of them once committed, or those that landed
+    /// before a failure. Zero for a single request.
+    block_count: usize,
+}
 
 /// Successful reads in a row before the adaptive read limit grows by one.
 const READ_LIMIT_GROW_AFTER: usize = 16;
@@ -581,6 +594,7 @@ where
         blob_path: &str,
         mut reader: DropCloserReadHalf,
         upload_size: UploadSizeInfo,
+        block_count: &mut usize,
     ) -> Result<u64, Error> {
         let blob_path = blob_path.to_owned();
         let max_size = match upload_size {
@@ -698,7 +712,10 @@ where
                     }
                 },
                 Some(block_id) = upload_futures.next() => match block_id {
-                    Ok(block_id) => block_ids.push(block_id),
+                    Ok(block_id) => {
+                        block_ids.push(block_id);
+                        *block_count = block_ids.len();
+                    }
                     Err(err) => {
                         failure = Some(err);
                         break;
@@ -782,58 +799,16 @@ where
             }))
             .await
     }
-}
 
-#[async_trait]
-impl<I, NowFn> StoreDriver for AzureBlobStore<NowFn>
-where
-    I: InstantWrapper,
-    NowFn: Fn() -> I + Send + Sync + Unpin + 'static,
-{
-    async fn post_init(self: Arc<Self>) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn has_with_results(
+    /// Writes the blob for `digest`, recording in `write` how it was written.
+    async fn write_blob(
         self: Pin<&Self>,
-        keys: &[StoreKey<'_>],
-        results: &mut [Option<u64>],
-    ) -> Result<(), Error> {
-        keys.iter()
-            .zip(results.iter_mut())
-            .map(|(key, result)| async move {
-                if is_zero_digest(key.borrow()) {
-                    *result = Some(0);
-                    return Ok::<_, Error>(());
-                }
-                *result = self.has(key).await?;
-                Ok::<_, Error>(())
-            })
-            .collect::<FuturesUnordered<_>>()
-            .try_collect()
-            .await
-    }
-
-    fn optimized_for(&self, optimization: StoreOptimizations) -> bool {
-        matches!(optimization, StoreOptimizations::LazyExistenceOnSync)
-    }
-
-    async fn update(
-        self: Pin<&Self>,
-        digest: StoreKey<'_>,
+        digest: &StoreKey<'_>,
         mut reader: DropCloserReadHalf,
         upload_size: UploadSizeInfo,
+        write: &mut BlobWrite,
     ) -> Result<u64, Error> {
-        let blob_path = self.make_blob_path(&digest);
-        // Handling zero-sized content check
-        if is_zero_digest(digest.borrow()) {
-            let size = reader.drain().await?;
-            // The empty digest constrains the content; the caller's transfer
-            // declaration must independently agree with the received size.
-            UploadSizeInfo::ExactSize(0).validate_size(size)?;
-            upload_size.validate_size(size)?;
-            return Ok(0);
-        }
+        let blob_path = self.make_blob_path(digest);
 
         let max_size = match upload_size {
             UploadSizeInfo::ExactSize(sz) | UploadSizeInfo::MaxSize(sz) => sz,
@@ -841,6 +816,7 @@ where
 
         // For small files of a known size we buffer to `Bytes` and upload in a single request.
         if max_size < DEFAULT_BLOCK_SIZE && matches!(upload_size, UploadSizeInfo::ExactSize(_)) {
+            write.mode = "single";
             let UploadSizeInfo::ExactSize(sz) = upload_size else {
                 unreachable!("upload_size must be UploadSizeInfo::ExactSize here");
             };
@@ -937,6 +913,7 @@ where
         }
 
         // For larger files we stream the content as staged blocks and commit a block list.
+        write.mode = "blocks";
         // A block that is staged but never committed is billed until Azure collects it a
         // week later, so a failure anywhere past this point discards what was staged.
         let mut guard = StagedBlocksGuard {
@@ -945,11 +922,111 @@ where
             armed: true,
         };
         let result = self
-            .upload_staged_blocks(&blob_path, reader, upload_size)
+            .upload_staged_blocks(&blob_path, reader, upload_size, &mut write.block_count)
             .await;
         guard.disarm();
         if result.is_err() {
             discard_staged_blocks(&self.client, &blob_path).await;
+        }
+        result
+    }
+
+    /// Emits the `backend_write` provenance event for one `update`.
+    fn emit_backend_write(
+        &self,
+        digest: &StoreKey<'_>,
+        upload_size: UploadSizeInfo,
+        write: BlobWrite,
+        result: &Result<u64, Error>,
+        elapsed: Duration,
+    ) {
+        let metadata = ProvenanceMetadata::from_current_context();
+        let (size_bytes, outcome, error_code, error) = match result {
+            Ok(size) => (*size, "ok", String::new(), String::new()),
+            Err(err) => {
+                let (UploadSizeInfo::ExactSize(expected) | UploadSizeInfo::MaxSize(expected)) =
+                    upload_size;
+                (
+                    expected,
+                    "error",
+                    format!("{:?}", err.code),
+                    err.message_string(),
+                )
+            }
+        };
+        provenance_event!("backend_write", &metadata;
+            store = "azure_blob",
+            key = %self.make_blob_path(digest),
+            size_bytes,
+            mode = write.mode,
+            block_count = write.block_count,
+            result = outcome,
+            error_code = %error_code,
+            error = %error,
+            elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        );
+    }
+}
+
+#[async_trait]
+impl<I, NowFn> StoreDriver for AzureBlobStore<NowFn>
+where
+    I: InstantWrapper,
+    NowFn: Fn() -> I + Send + Sync + Unpin + 'static,
+{
+    async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn has_with_results(
+        self: Pin<&Self>,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        keys.iter()
+            .zip(results.iter_mut())
+            .map(|(key, result)| async move {
+                if is_zero_digest(key.borrow()) {
+                    *result = Some(0);
+                    return Ok::<_, Error>(());
+                }
+                *result = self.has(key).await?;
+                Ok::<_, Error>(())
+            })
+            .collect::<FuturesUnordered<_>>()
+            .try_collect()
+            .await
+    }
+
+    fn optimized_for(&self, optimization: StoreOptimizations) -> bool {
+        matches!(optimization, StoreOptimizations::LazyExistenceOnSync)
+    }
+
+    async fn update(
+        self: Pin<&Self>,
+        digest: StoreKey<'_>,
+        mut reader: DropCloserReadHalf,
+        upload_size: UploadSizeInfo,
+    ) -> Result<u64, Error> {
+        // Handling zero-sized content check
+        if is_zero_digest(digest.borrow()) {
+            let size = reader.drain().await?;
+            // The empty digest constrains the content; the caller's transfer
+            // declaration must independently agree with the received size.
+            UploadSizeInfo::ExactSize(0).validate_size(size)?;
+            upload_size.validate_size(size)?;
+            return Ok(0);
+        }
+
+        // Every return path of `write_blob` comes back through here, so the
+        // provenance event is emitted exactly once per write.
+        let started = provenance_enabled().then(Instant::now);
+        let mut write = BlobWrite::default();
+        let result = self
+            .write_blob(&digest, reader, upload_size, &mut write)
+            .await;
+        if let Some(started) = started {
+            self.emit_backend_write(&digest, upload_size, write, &result, started.elapsed());
         }
         result
     }
