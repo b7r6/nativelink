@@ -152,6 +152,14 @@ impl Drop for LoaderGuard<'_> {
             if Arc::strong_count(occupied_entry.get()) == 1 {
                 // This is the last loader, so remove it.
                 occupied_entry.remove();
+                nativelink_util::fill_diag::POPULATING_LOADERS
+                    .fetch_sub(1, Ordering::Relaxed);
+                tracing::event!(
+                    target: "fill",
+                    tracing::Level::INFO,
+                    ev = "fastslow_loader_released",
+                    t_ms = nativelink_util::fill_diag::now_ms(),
+                );
             }
         }
     }
@@ -258,6 +266,8 @@ impl FastSlowStore {
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                 is_leader = true;
+                nativelink_util::fill_diag::POPULATING_LOADERS
+                    .fetch_add(1, Ordering::Relaxed);
                 vacant_entry.insert(Arc::new(OnceCell::new())).clone()
             }
         };

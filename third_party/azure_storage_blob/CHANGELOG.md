@@ -1,0 +1,256 @@
+# Release History
+
+## 1.0.0 (2026-05-13)
+
+### Breaking Changes
+
+- Consolidated client constructors: the existing `from_url()` constructors have been renamed to `new()`, replacing the previous endpoint-plus-name string overloads. Each client now has a single `new()` that takes a fully-formed `Url`:
+  - `BlobClient::new(blob_url: Url, ...)`
+  - `BlockBlobClient::new(blob_url: Url, ...)`
+  - `AppendBlobClient::new(blob_url: Url, ...)`
+  - `PageBlobClient::new(blob_url: Url, ...)`
+  - `BlobContainerClient::new(container_url: Url, ...)`
+  - `BlobServiceClient::new(service_url: Url, ...)`
+- `BlobServiceClient::find_blobs_by_tags()` is now pageable and returns `Result<Pager<FilteredBlobResponse, XmlFormat>>` instead of `Result<Response<FilterBlobSegment, XmlFormat>>`.
+- `BlobContainerClient::find_blobs_by_tags()` is now pageable and returns `Result<Pager<FilteredBlobResponse, XmlFormat>>` instead of `Result<Response<FilteredBlobResponse, XmlFormat>>`.
+- Renamed `FilterBlobSegment` to `FilteredBlobResponse`.
+- Renamed `FilteredBlobResponse.blobs` to `FilteredBlobResponse.blob_items`.
+- Changed `FilteredBlobResponse.blob_items` from `Option<Vec<FilterBlobItem>>` to `Vec<FilterBlobItem>`.
+- Renamed `ListContainersSegmentResponse` to `ListContainersResponse`.
+- Removed `BlobFlatListSegment` wrapper; `ListBlobsResponse.blob_items` is now `Vec<BlobItem>` directly (previously accessed via `.segment.blob_items`).
+- Renamed `BlobProperties.customer_provided_key_sha256` to `encryption_key_sha256`.
+- Renamed `BlobMetadata.additional_properties` to `values`.
+- Renamed `PageBlobClientCreateOptions::with_if_not_exists()` to `if_not_exists()`.
+- Renamed `AppendBlobClientCreateOptions::with_if_not_exists()` to `if_not_exists()`.
+- Renamed `BlockBlobClientUploadBlobFromUrlOptions::with_if_not_exists()` to `if_not_exists()`.
+- Renamed `BlockBlobClientUploadOptions::with_if_not_exists()` to `if_not_exists()`.
+- Removed the `endpoint()` method from all clients. Use `url()` instead.
+- Removed `PageBlobClient::get_page_ranges()` along with the `PageList`, `PageRange`, `ClearRange`, `PageBlobClientGetPageRangesOptions`, and `PageListHeaders` types.
+- Removed the `azure_storage_blob::error` and `azure_storage_blob::models::error` module paths. Use the re-exported `azure_storage_blob::{Result, StorageError}` instead.
+
+### Features Added
+
+- Added `with_tags()` helpers to set blob tags on create/upload options by accepting `BlobTags` or `HashMap<String, String>` and encoding them into the `x-ms-tags` header format:
+  - `PageBlobClientCreateOptions::with_tags()`
+  - `AppendBlobClientCreateOptions::with_tags()`
+  - `BlockBlobClientUploadOptions::with_tags()`
+  - `BlockBlobClientUploadBlobFromUrlOptions::with_tags()`
+  - `BlockBlobClientCommitBlockListOptions::with_tags()`
+
+### Bugs Fixed
+
+- All client constructors (`BlobClient::new()`, `BlobContainerClient::new()`, `BlobServiceClient::new()`, `AppendBlobClient::new()`, `BlockBlobClient::new()`, `PageBlobClient::new()`) now reject non-base URLs (e.g. `data:`, `mailto:`).
+
+## 0.12.0 (2026-04-22)
+
+### Features Added
+
+- Added the `reqwest_rustls` feature to use `aws-lc-rs` as the default TLS provider.
+- Added `From` implementations on `HttpRange` for standard Rust range types: `Range<u64>`, `RangeFrom<u64>`, `RangeInclusive<u64>`, `RangeTo<u64>`, `RangeToInclusive<u64>`, and their `usize` equivalents. This allows `(0..100u64).into()`, `(100u64..).into()`, etc.
+
+### Breaking Changes
+
+- Added default connection timeout of 20s and read timeout of 60s.
+- Removed the `reqwest_native_tls` feature in favor of `reqwest_rustls`.
+- Responses are no longer automatically decompressed.
+- Removed `download_into()` from existing clients. Callers can still use `download()` and collect the streamed `Bytes` into memory.
+- Changed `BlobClientDownloadOptions.range` from `Option<Range<usize>>` to `Option<HttpRange>`.
+- Changed `BlobClientDownloadOptions.if_match` and `if_none_match` from `Option<String>` to `Option<Etag>`.
+- Changed `PageBlobClient::upload_pages()` and `clear_pages()` `range` parameter from `String` to `HttpRange`.
+- Changed `PageBlobClient::upload_pages_from_url()` `range` and `source_range` parameters from `String` to `HttpRange`.
+- Changed `PageBlobClientGetPageRangesOptions.range` from `Option<String>` to `Option<HttpRange>`.
+- Changed `AppendBlobClientAppendBlockFromUrlOptions.source_range` from `Option<String>` to `Option<HttpRange>`.
+- Changed `BlockBlobClientUploadBlobFromUrlOptions.source_range` from `Option<String>` to `Option<HttpRange>`.
+
+### Other Changes
+
+- Updated dependencies.
+
+## 0.11.0 (2026-04-14)
+
+### Features Added
+
+- Added `stream::tokio` module (gated on the `tokio` feature) with `FileStream` and `FileStreamBuilder` for streaming file uploads.
+- Added `models::HttpRange` for specifying byte ranges in blob operations, replacing the removed `format_page_range()` helper.
+
+### Breaking Changes
+
+- Removed `format_page_range()`. Use `HttpRange::new(offset, length)` or `HttpRange::from_offset(offset)` instead.
+- Revised `download()` on `BlobClient` with the following breaking changes:
+  - Now uses managed (multi-part) download logic for optimal performance on single-shot and parallel range transfers.
+  - Returns `Result<BlobClientDownloadResult>` instead of `Result<AsyncResponse<BlobClientDownloadResult>>`.
+  - The previous `BlobClientDownloadResultHeaders` trait was removed.
+- Revised `upload()` on `BlobClient` `BlockBlobClient` with the following breaking changes:
+  - `partition_size` option changed from `Option<NonZero<usize>>` to `Option<NonZero<u64>>`
+
+## 0.10.1 (2026-03-18)
+
+### Bugs Fixed
+
+- `BlobClient::managed_download()` and `BlobClientManagedDownloadOptions` were unintentionally exported in 0.10.0. The method now panics unconditionally; this API will be removed in a future release.
+- Updated minimum dependency versions to incorporate a fix for TLS 1.3 data corruption on Windows when uploading large payloads ([schannel-rs#121](https://github.com/steffengy/schannel-rs/pull/121)).
+
+## 0.10.0 (2026-03-11)
+
+### Breaking Changes
+
+- Revised `upload()` on `BlockBlobClient` and `BlobClient` with the following breaking changes:
+  - Now uses our managed upload logic for optimal performance in single-shot and multi-part transfers.
+  - Removed the `content_length` parameter.
+  - `BlobClient::upload()` removed the `overwrite` parameter; it now **overwrites by default**. Use `BlobClientUploadOptions::with_if_not_exists()` to prevent overwriting an existing blob.
+  - `BlockBlobClient::upload()` accepts `BlockBlobClientUploadOptions`; `BlobClient::upload()` accepts `BlobClientUploadOptions` (a re-export of the same type).
+  - Returns `Result<BlockBlobClientUploadResult>` (or `Result<BlobClientUploadResult>` via `BlobClient`) instead of `Result<Response<BlockBlobClientUploadInternalResult, NoFormat>>`.
+  - Changed `BlockBlobClientUploadOptions.if_match` and `if_none_match` from `Option<String>` to `Option<Etag>`.
+- Changed `if_match`, `if_none_match`, `source_if_match`, and `source_if_none_match` fields in all method option structs from `Option<String>` to `Option<Etag>`.
+- Changed `BlobProperties::etag` and `ContainerProperties::etag` from `Option<String>` to `Option<Etag>`.
+- Renamed `ContainerItem.delete` to `ContainerItem.deleted`.
+- Renamed `ListBlobsFlatSegmentResponse` to `ListBlobsResponse`.
+- Changed `BlobItem.name` from `Option<BlobName>` to `Option<String>`. Encoded blob names are now automatically percent-decoded during deserialization.
+- Support for `wasm32-unknown-unknown` has been removed ([#3377](https://github.com/Azure/azure-sdk-for-rust/issues/3377))
+
+### Bugs Fixed
+
+- Fixed an issue where user-provided `per_try_policies` in `ClientOptions` were ignored when constructing any Blob Storage client.
+
+## 0.9.0 (2026-02-11)
+
+### Features Added
+
+- Added support for `stage_block_from_url` to `BlockBlobClient`.
+- Added navigation method `BlobServiceClient::blob_client()`.
+
+### Breaking Changes
+
+- Changed our minimum supported Rust version (MSRV) from 1.85 to 1.88.
+- Renamed `BlobItemInternal` to `BlobItem`.
+- Renamed `BlobPropertiesInternal` to `BlobProperties`.
+- Renamed `BlobContainerClient::create_container()` to `create()`.
+- Renamed `BlobContainerClient::delete_container()` to `delete()`.
+- Renamed `PageBlobClient::upload_page()` to `upload_pages()`.
+- Renamed `PageBlobClient::clear_page()` to `clear_pages()`.
+- Renamed `BlobContainerClientListBlobFlatSegmentOptions` to `BlobContainerClientListBlobsOptions`.
+- Renamed `BlobServiceClientListContainersSegmentOptions` to `BlobServiceClientListContainersOptions`.
+- Renamed `BlobContainerClientCreateContainerOptions` to `BlobContainerClientCreateOptions`.
+- Renamed `BlobContainerClientDeleteContainerOptions` to `BlobContainerClientDeleteOptions`.
+- Removed `BlobServiceClient::from_url()`.
+- Changed `BlobClient`'s `set_metadata` parameter `metadata` type from `HashMap<String, String>` to `&HashMap<String, String>`.
+- Changed `BlobContainerClient`'s `set_metadata` parameter `metadata` type from `HashMap<String, String>` to `&HashMap<String, String>`.
+
+## 0.8.0 (2026-01-21)
+
+### Features Added
+
+- Added support for `set_access_policy` to `BlobContainerClient`.
+- Added support for `get_access_policy` to `BlobContainerClient`.
+- Added support for `set_legal_hold` to `BlobClient`.
+- Added support for `set_immutability_policy` to `BlobClient`.
+- Added support for `delete_immutability_policy` to `BlobClient`.
+- Added support for `undelete` to `BlobClient`.
+- Added snapshot and versioning support for blobs with convenience methods `with_snapshot` and `with_version` to `BlobClient`.
+
+### Breaking Changes
+
+- Changed conversion implementation from `BlobTags` to `HashMap<String, String>` from `TryFrom` to `From`.
+- Added `continuation_token` to `PagerOptions` for methods that return a `Pager`.
+- Renamed `content_length` to `size` for `PageBlobClient`'s `create()` method.
+- Removed `Pager::with_continuation_token()` for methods that return a `Pager`.
+- Changed `BlobClient`'s `set_tags` parameter `tags` type from `HashMap<String, String>` to `RequestContent<BlobTags, XmlFormat>`.
+
+## 0.7.0 (2025-11-11)
+
+### Features Added
+
+- Added support for client construction directly from URLs:
+  - `AppendBlobClient::from_url()`
+  - `BlobClient::from_url()`
+  - `BlobContainerClient::from_url()`
+  - `BlockBlobClient::from_url()`
+  - `PageBlobClient::from_url()`
+- Added support for SAS (shared access signature) URLs via the new `from_url()` methods.
+
+### Breaking Changes
+
+- Changed the following options structs' `method_options` from `ClientMethodOptions` to `PagerOptions`:
+  - `BlobContainerClientListBlobFlatSegmentOptions`
+  - `BlobContainerClientListBlobHierarchySegmentOptions`
+  - `BlobServiceClientListContainersSegmentOptions`
+
+- Removed the `container_name()` and `blob_name()` accessors on relevant clients.
+- Removed the `endpoint` struct field on all clients, as this value is now returned directly from the underlying generated client.
+- Changed the `container_name` and `blob_name` parameters from owned `String` to `&str` reference on relevant client constructor methods (`new()`).
+- The `credential` parameter is now `Optional` on `new()` client constructors, allowing for construction of public access clients.
+- Renamed `Response<T, F>::into_body(self) -> Result<Response<T>>` to `into_model(self) -> Result<Response<T>>`. `into_body(self)` now returns a `ResponseBody`.
+
+## 0.6.0 (2025-10-06)
+
+### Features Added
+
+- Added support for `exists` to `BlobClient` and `BlobContainerClient`.
+
+### Breaking Changes
+
+- Changed `BlobClient::download()` to return an `AsyncResponse` instead of a `Response`. This allows for streaming large payloads outside the internal HTTP pipeline.
+- Client methods that return a `Response<T>>` asynchronously buffer the entire model within the internal pipeline, so `into_body()` and other methods on the response are no longer async.
+
+## 0.5.0 (2025-09-15)
+
+### Features Added
+
+- Added support for `set_properties` to `BlobServiceClient`.
+- Added support for `filter_blobs` to `BlobContainerClient` and `BlobServiceClient`.
+- Added support for `set_tags` and `get_tags` to `BlobClient`.
+- Added support for `get_account_info` to `BlobClient`, `BlobContainerClient`, and `BlobServiceClient`.
+- Added support for `upload_blob_from_url` to `BlockBlobClient`.
+- Added support for `get_page_ranges`, `update_sequence_number`, and `upload_pages_from_url` to `PageBlobClient`.
+- Added support for `find_blobs_by_tags` to `BlobContainerClient` and `BlobServiceClient`.
+
+### Breaking Changes
+
+- Made `metadata` a required parameter for `set_metadata` for `BlobContainerClient` and `BlobClient`.
+
+## 0.4.0 (2025-08-05)
+
+### Bugs Fixed
+
+- Fixed an issue where the `Etag` field in `BlobPropertiesInternal` was not deserialized properly.
+- Re-exported previously inaccessible models referenced in options bags and response models for currently implemented features.
+
+### Breaking Changes
+
+- Changed `RequestContent<Bytes>` request methods to `RequestContent<T, NoFormat>` to provide parity with `Response<T, NoFormat>`.
+- Changed `RequestContent<T>` XML models in client methods to `RequestContent<T, XmlFormat>` to provide parity with `Response<T, XmlFormat>`.
+
+## 0.3.0 (2025-07-15)
+
+### Features Added
+
+- Added lease support (`acquire_lease`, `break_lease`, `change_lease`, `release_lease`, and `renew_lease`) to `BlobContainerClient` and `BlobClient`.
+- Added two new blob client types, `AppendBlobClient` and `PageBlobClient`.
+- Added support for `list_containers` to `BlobServiceClient`.
+
+## 0.2.0 (2025-06-10)
+
+### Features Added
+
+- Added a new blob client type, `BlockBlobClient`.
+- Added navigation methods to access sub-clients from existing clients:
+  - `BlobServiceClient::blob_container_client()`
+  - `BlobContainerClient::blob_client()`
+  - `BlobClient::block_blob_client()`
+
+- Added support for `list_blobs`, `set_metadata` to `BlobContainerClient`.
+- Added support for `set_metadata`, `set_properties`, and `set_tier` to `BlobClient`.
+
+### Breaking Changes
+
+- Moved `commit_block_list`, `get_block_list`, and `stage_block` from `BlobClient` to `BlockBlobClient`.
+
+### Bugs Fixed
+
+- Fixed an issue where the blob type string would appear as a query parameter in the request URL for certain APIs extraneously.
+
+## 0.1.0 (2025-04-08)
+
+### Features Added
+
+- Initial supported release.

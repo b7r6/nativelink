@@ -61,14 +61,69 @@ struct Args {
     #[arg(long, default_value_t = 900)]
     max_linger_secs: u64,
     /// Counter sampling interval.
-    #[arg(long, default_value_t = 250)]
+    #[arg(long, default_value_t = 100)]
     sample_ms: u64,
+    /// Ablation 4: once the consumer has received this many bytes, drop the
+    /// whole read future (caller cancellation, no disk error).
+    #[arg(long)]
+    cancel_after_bytes: Option<u64>,
+}
+
+/// Pod network counters for eth0 (rx, tx bytes).
+fn net_dev() -> (u64, u64) {
+    std::fs::read_to_string("/proc/net/dev")
+        .ok()
+        .and_then(|s| {
+            s.lines().find_map(|l| {
+                let l = l.trim_start();
+                let rest = l.strip_prefix("eth0:")?;
+                let f: Vec<u64> = rest.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                Some((*f.first()?, *f.get(8)?))
+            })
+        })
+        .unwrap_or((0, 0))
+}
+
+/// Open file descriptors of this process.
+fn fd_count() -> u64 {
+    std::fs::read_dir("/proc/self/fd").map_or(0, |d| d.count() as u64)
+}
+
+/// Resident set size in bytes.
+fn rss_bytes() -> u64 {
+    std::fs::read_to_string("/proc/self/statm")
+        .ok()
+        .and_then(|s| s.split_whitespace().nth(1)?.parse::<u64>().ok())
+        .map_or(0, |pages| pages * 4096)
 }
 
 /// Bytes the driver's consumer received.
 static DELIVERED: AtomicU64 = AtomicU64::new(0);
 
 fn sample(phase: &'static str) {
+    let (rx, tx) = net_dev();
+    let (sdk_spawned, sdk_alive, sdk_cancelled, sdk_aborts, sdk_last_end_ms, _) =
+        nativelink_store::azure_blob_store::fill_sdk_task_counters();
+    let tokio_alive = tokio::runtime::Handle::try_current()
+        .map_or(0, |h| h.metrics().num_alive_tasks());
+    info!(
+        target: "fill",
+        ev = "res",
+        t_ms = now_ms(),
+        rx,
+        tx,
+        fds = fd_count(),
+        rss = rss_bytes(),
+        tokio_alive,
+        sdk_spawned,
+        sdk_alive,
+        sdk_cancelled,
+        sdk_aborts,
+        sdk_last_end_ms,
+        loaders = get(&fill_diag::POPULATING_LOADERS),
+        open_file_permits_used = nativelink_util::fs::get_open_files_for_test(),
+        last_http_byte_ms = get(&fill_diag::LAST_HTTP_BYTE_MS),
+    );
     info!(
         target: "fill",
         ev = "sample",
@@ -97,6 +152,9 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
         t_ms = now_ms(),
         available_parallelism = available,
         sdk_default_parallel = available.clamp(8, 96),
+        terminal_downstream = nativelink_store::azure_blob_store::fill_terminal_downstream_enabled(),
+        abort_on_drop = nativelink_store::azure_blob_store::fill_sdk_task_counters().5,
+        cancel_after_bytes = args.cancel_after_bytes.unwrap_or(0),
         hash = %args.hash,
         size = args.size,
     );
@@ -138,7 +196,42 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
 
     let read_started = Instant::now();
     info!(target: "fill", ev = "read_start", t_ms = now_ms(), key = %digest);
-    let (get_res, consumer_res) = tokio::join!(store.get_part(digest, tx, 0, None), consumer);
+    let mut read = Box::pin(async move {
+        tokio::join!(store.get_part(digest, tx, 0, None), consumer)
+    });
+    let cancel_after = args.cancel_after_bytes;
+    let cancel = async move {
+        match cancel_after {
+            Some(n) => {
+                while DELIVERED.load(Ordering::Relaxed) < n {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            }
+            None => core::future::pending::<()>().await,
+        }
+    };
+    let outcome = tokio::select! {
+        out = &mut read => Some(out),
+        () = cancel => None,
+    };
+    let Some((get_res, consumer_res)) = outcome else {
+        info!(
+            target: "fill",
+            ev = "caller_cancel",
+            t_ms = now_ms(),
+            delivered = DELIVERED.load(Ordering::Relaxed),
+        );
+        sample("caller_cancel");
+        drop(read);
+        info!(
+            target: "fill",
+            ev = "caller_dropped",
+            t_ms = now_ms(),
+            delivered = DELIVERED.load(Ordering::Relaxed),
+        );
+        sample("caller_dropped");
+        return linger(&args, Instant::now(), sampler).await;
+    };
     info!(
         target: "fill",
         ev = "read_end",
@@ -151,12 +244,22 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
         delivered = DELIVERED.load(Ordering::Relaxed),
     );
     sample("read_end");
+    linger(&args, Instant::now(), sampler).await
+}
 
-    let read_ended = Instant::now();
+/// Keeps the runtime alive until no HTTP request and no SDK range task has
+/// been alive for `--quiet-secs`, so detached work is measured to its end.
+async fn linger(
+    args: &Args,
+    read_ended: Instant,
+    sampler: tokio::task::JoinHandle<()>,
+) -> Result<(), Error> {
     let mut quiet_since: Option<Instant> = None;
     let reason = loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        if get(&fill_diag::HTTP_INFLIGHT) == 0 {
+        if get(&fill_diag::HTTP_INFLIGHT) == 0
+            && nativelink_store::azure_blob_store::fill_sdk_task_counters().1 == 0
+        {
             quiet_since.get_or_insert_with(Instant::now);
         } else {
             quiet_since = None;

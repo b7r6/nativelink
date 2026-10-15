@@ -1,0 +1,304 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+pub use crate::generated::clients::{BlobClient, BlobClientOptions};
+
+use crate::{
+    generated::clients::BlobClient as GeneratedBlobClient,
+    generated::models::BlobClientDownloadInternalOptions,
+    models::{
+        BlobClientDownloadOptions, BlobClientDownloadResult, BlobClientUploadOptions,
+        BlobClientUploadResult, HttpRange, StorageErrorCode,
+    },
+    partitioned_transfer::{self, PartitionedDownloadBehavior},
+    AppendBlobClient, BlockBlobClient, PageBlobClient,
+};
+use async_trait::async_trait;
+use azure_core::{
+    credentials::TokenCredential,
+    error::ErrorKind,
+    http::{
+        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
+        AsyncRawResponse, ClientMethodOptions, Etag, NoFormat, Pipeline, RequestContent,
+        StatusCode, Url, UrlExt,
+    },
+    tracing, Bytes, Result,
+};
+use std::{ops::Range, sync::Arc};
+
+impl BlobClient {
+    /// Creates a new BlobClient from a blob URL.
+    ///
+    /// # Arguments
+    ///
+    /// * `blob_url` - The full URL of the blob, for example `https://myaccount.blob.core.windows.net/mycontainer/myblob`.
+    ///   The caller is responsible for percent-encoding the URL correctly; it will be used as-is.
+    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `options` - Optional configuration for the client.
+    #[tracing::new("Storage.Blob.Blob")]
+    pub fn new(
+        blob_url: Url,
+        credential: Option<Arc<dyn TokenCredential>>,
+        options: Option<BlobClientOptions>,
+    ) -> Result<Self> {
+        // Storage endpoints must be base URLs.
+        if blob_url.cannot_be_a_base() {
+            return Err(azure_core::Error::with_message(
+                azure_core::error::ErrorKind::Other,
+                format!("{blob_url} is not a valid base URL"),
+            ));
+        }
+
+        let mut options = options.unwrap_or_default();
+        super::apply_client_defaults(&mut options.client_options);
+
+        let mut per_retry_policies: Vec<Arc<dyn Policy>> = Vec::default();
+        if let Some(token_credential) = credential {
+            if !blob_url.scheme().starts_with("https") {
+                return Err(azure_core::Error::with_message(
+                    azure_core::error::ErrorKind::Other,
+                    format!("{blob_url} must use https"),
+                ));
+            }
+            per_retry_policies.push(Arc::new(BearerTokenAuthorizationPolicy::new(
+                token_credential,
+                vec!["https://storage.azure.com/.default"],
+            )));
+        }
+
+        let pipeline = Pipeline::new(
+            option_env!("CARGO_PKG_NAME"),
+            option_env!("CARGO_PKG_VERSION"),
+            options.client_options.clone(),
+            Vec::default(),
+            per_retry_policies,
+            None,
+        );
+
+        Ok(Self {
+            endpoint: blob_url,
+            version: options.version,
+            pipeline,
+        })
+    }
+
+    /// Returns a new instance of AppendBlobClient.
+    pub fn append_blob_client(&self) -> AppendBlobClient {
+        AppendBlobClient {
+            endpoint: self.endpoint.clone(),
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        }
+    }
+
+    /// Returns a new instance of BlockBlobClient.
+    pub fn block_blob_client(&self) -> BlockBlobClient {
+        BlockBlobClient {
+            endpoint: self.endpoint.clone(),
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        }
+    }
+
+    /// Returns a new instance of PageBlobClient.
+    pub fn page_blob_client(&self) -> PageBlobClient {
+        PageBlobClient {
+            endpoint: self.endpoint.clone(),
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        }
+    }
+
+    /// Gets the URL of the resource this client is configured for.
+    pub fn url(&self) -> &Url {
+        &self.endpoint
+    }
+
+    /// Creates a new BlobClient targeting a specific blob version.
+    ///
+    /// # Arguments
+    ///
+    /// * `version_id` - The version ID of the blob to target.
+    pub fn with_version(&self, version_id: &str) -> Result<Self> {
+        let mut versioned_endpoint = self.endpoint.clone();
+        {
+            let mut query_builder = versioned_endpoint.query_builder();
+            query_builder.set_pair("versionid", version_id);
+            query_builder.build();
+        }
+
+        Ok(Self {
+            endpoint: versioned_endpoint,
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        })
+    }
+
+    /// Creates a new BlobClient targeting a specific blob snapshot.
+    ///
+    /// # Arguments
+    ///
+    /// * `snapshot` - The snapshot ID of the blob to target.
+    pub fn with_snapshot(&self, snapshot: &str) -> Result<Self> {
+        let mut snapshot_endpoint = self.endpoint.clone();
+        {
+            let mut query_builder = snapshot_endpoint.query_builder();
+            query_builder.set_pair("snapshot", snapshot);
+            query_builder.build();
+        }
+
+        Ok(Self {
+            endpoint: snapshot_endpoint,
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        })
+    }
+
+    /// Downloads a blob and its contents from the service.
+    ///
+    /// This operation performs a managed (multi-part) download, splitting the blob into
+    /// parallel range requests for better performance on large blobs. The returned
+    /// [`BlobClientDownloadResult::body`] contains the complete blob data, while
+    /// [`BlobClientDownloadResult::properties`] and [`BlobClientDownloadResult::headers`]
+    /// reflect only the initial response's metadata and properties.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Optional configuration for the request.
+    ///
+    /// # Notes
+    ///
+    /// By default, storage clients create their HTTP transport via
+    /// [`azure_core::http::new_http_client()`] with automatic decompression disabled.
+    /// If you set a custom transport in [`BlobClientOptions`] without also disabling
+    /// automatic decompression, partitioned downloads may not succeed.
+    #[tracing::function("Storage.Blob.Blob.download")]
+    pub async fn download(
+        &self,
+        options: Option<BlobClientDownloadOptions<'_>>,
+    ) -> Result<BlobClientDownloadResult> {
+        let options = options.unwrap_or_default();
+        let parallel = options
+            .parallel
+            .unwrap_or_else(crate::partitioned_transfer::defaults::default_concurrency);
+        let partition_size = options
+            .partition_size
+            .unwrap_or(crate::partitioned_transfer::defaults::DEFAULT_DOWNLOAD_PARTITION_SIZE);
+        // Construct exhaustively to catch new options.
+        let get_range_options = BlobClientDownloadInternalOptions {
+            encryption_algorithm: options.encryption_algorithm,
+            encryption_key: options.encryption_key,
+            encryption_key_sha256: options.encryption_key_sha256,
+            if_match: options.if_match,
+            if_modified_since: options.if_modified_since,
+            if_none_match: options.if_none_match,
+            if_tags: options.if_tags,
+            if_unmodified_since: options.if_unmodified_since,
+            lease_id: options.lease_id,
+            // requires into_owned due to BlobClientDownloadBehavior w/ 'static Behavior
+            method_options: ClientMethodOptions {
+                context: options.method_options.context.into_owned(),
+            },
+            range: None,
+            range_get_content_crc64: options.range_get_content_crc64,
+            range_get_content_md5: options.range_get_content_md5,
+            snapshot: options.snapshot,
+            structured_body_type: None,
+            timeout: options.timeout,
+            version_id: options.version_id,
+        };
+        let inner_client = GeneratedBlobClient {
+            endpoint: self.endpoint.clone(),
+            pipeline: self.pipeline.clone(),
+            version: self.version.clone(),
+            tracer: self.tracer.clone(),
+        };
+        let behavior = BlobClientDownloadBehavior::new(inner_client, get_range_options);
+        let response = partitioned_transfer::download(
+            options.range,
+            parallel,
+            partition_size,
+            Arc::new(behavior),
+        )
+        .await?;
+        BlobClientDownloadResult::from_headers(response)
+    }
+
+    /// Uploads content to a block blob, overwriting any existing blob by default.
+    ///
+    /// Updating an existing block blob overwrites any existing metadata on the blob. Use [`BlobClientUploadOptions::if_not_exists()`] to fail instead of overwriting.
+    /// To perform a partial update of the content of a block blob, use [`BlockBlobClient::stage_block()`] and [`BlockBlobClient::commit_block_list()`] directly.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The content to upload.
+    /// * `options` - Optional parameters for the request.
+    pub async fn upload(
+        &self,
+        content: RequestContent<Bytes, NoFormat>,
+        options: Option<BlobClientUploadOptions<'_>>,
+    ) -> Result<BlobClientUploadResult> {
+        self.block_blob_client().upload(content, options).await
+    }
+
+    /// Checks if the blob exists.
+    ///
+    /// Returns `true` if the blob exists, `false` if the blob does not exist, and propagates all other errors.
+    pub async fn exists(&self) -> Result<bool> {
+        match self.get_properties(None).await {
+            Ok(_) => Ok(true),
+            Err(e) if e.http_status() == Some(StatusCode::NotFound) => match e.kind() {
+                ErrorKind::HttpResponse {
+                    error_code: Some(error_code),
+                    ..
+                } if error_code == StorageErrorCode::BlobNotFound.as_ref()
+                    || error_code == StorageErrorCode::ContainerNotFound.as_ref() =>
+                {
+                    Ok(false)
+                }
+                // Propagate all other error types.
+                _ => Err(e),
+            },
+            Err(e) => Err(e),
+        }
+    }
+}
+
+struct BlobClientDownloadBehavior<'a> {
+    client: GeneratedBlobClient,
+    options: BlobClientDownloadInternalOptions<'a>,
+}
+
+impl<'a> BlobClientDownloadBehavior<'a> {
+    fn new(client: GeneratedBlobClient, options: BlobClientDownloadInternalOptions<'a>) -> Self {
+        Self { client, options }
+    }
+}
+
+#[async_trait]
+impl PartitionedDownloadBehavior for BlobClientDownloadBehavior<'_> {
+    async fn transfer_range(
+        &self,
+        range: Option<Range<usize>>,
+        etag_lock: Option<Etag>,
+    ) -> Result<AsyncRawResponse> {
+        let mut opt = self.options.clone();
+        opt.range = range.map(HttpRange::from);
+        if let Some(etag) = etag_lock {
+            opt.if_match = Some(etag);
+            opt.if_none_match = None;
+            opt.if_modified_since = None;
+            opt.if_unmodified_since = None;
+            opt.if_tags = None;
+        }
+        self.client
+            .download_internal(Some(opt))
+            .await
+            .map(AsyncRawResponse::from)
+    }
+}

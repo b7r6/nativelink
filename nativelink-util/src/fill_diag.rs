@@ -44,6 +44,11 @@ pub static FASTSLOW_SLOW_BYTES: AtomicU64 = AtomicU64::new(0);
 pub static FS_BYTES_ACCEPTED: AtomicU64 = AtomicU64::new(0);
 /// Filesystem store write or flush failures.
 pub static FS_WRITE_FAILURES: AtomicU64 = AtomicU64::new(0);
+/// Wall clock (ms) of the last response body chunk the transport handed up.
+pub static LAST_HTTP_BYTE_MS: AtomicU64 = AtomicU64::new(0);
+/// `FastSlowStore` dedup loaders (populating-digest entries) alive: while
+/// one is, every other reader of that digest waits on it as a follower.
+pub static POPULATING_LOADERS: AtomicU64 = AtomicU64::new(0);
 
 /// Wall clock in milliseconds since the Unix epoch.
 #[must_use]

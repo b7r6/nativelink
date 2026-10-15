@@ -87,6 +87,35 @@ const DEFAULT_BLOB_ENDPOINT_SUFFIX: &str = "blob.core.windows.net";
 // characters. The SDK's error dump alone runs to several hundred.
 const MAX_PROVENANCE_ERROR_CHARS: usize = 300;
 
+/// Fill experiment: `FILL_TERMINAL_DOWNSTREAM=1` treats a closed downstream
+/// writer in `get_part` as terminal instead of retrying it as `Aborted`.
+fn fill_terminal_downstream() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("FILL_TERMINAL_DOWNSTREAM").is_ok_and(|v| v == "1"))
+}
+
+/// Fill experiment: the vendored SDK's range-task counters, as
+/// (spawned, alive, cancelled, aborts issued, last task end ms), and whether
+/// abort-on-drop is on.
+#[must_use]
+pub fn fill_sdk_task_counters() -> (u64, u64, u64, u64, u64, bool) {
+    use azure_storage_blob::fill_diag as f;
+    (
+        f::TASKS_SPAWNED.load(Ordering::Relaxed),
+        f::TASKS_ALIVE.load(Ordering::Relaxed),
+        f::TASKS_CANCELLED.load(Ordering::Relaxed),
+        f::ABORTS_ISSUED.load(Ordering::Relaxed),
+        f::LAST_TASK_END_MS.load(Ordering::Relaxed),
+        f::abort_on_drop(),
+    )
+}
+
+/// Whether the closed-downstream switch is on, for the driver's log.
+#[must_use]
+pub fn fill_terminal_downstream_enabled() -> bool {
+    fill_terminal_downstream()
+}
+
 /// Fill experiment: a header's value, matched case-insensitively.
 fn fill_header(headers: &Headers, name: &str) -> String {
     headers
@@ -120,6 +149,7 @@ impl HttpClient for FillCountingClient {
         let path = request.url().path().to_string();
         let started = Instant::now();
         let inflight = fill_diag::inflight_inc();
+        let mut pending = FillPendingRequest { id, armed: true, started };
         event!(
             target: "fill",
             Level::INFO,
@@ -131,7 +161,9 @@ impl HttpClient for FillCountingClient {
             inflight,
             t_ms = now_ms(),
         );
-        match self.inner.execute_request(request).await {
+        let executed = self.inner.execute_request(request).await;
+        pending.armed = false;
+        match executed {
             Err(err) => {
                 let inflight = fill_diag::inflight_dec();
                 event!(
@@ -170,11 +202,42 @@ impl HttpClient for FillCountingClient {
                         range,
                         bytes: 0,
                         started,
+                        last_chunk_ms: 0,
                         done: false,
                     }),
                 ))
             }
         }
+    }
+}
+
+/// Fill experiment: a request whose response headers have not arrived. If
+/// the future awaiting them is dropped (its task aborted), this reports it
+/// and takes the request out of the in-flight count.
+struct FillPendingRequest {
+    id: u64,
+    armed: bool,
+    started: Instant,
+}
+
+impl Drop for FillPendingRequest {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let inflight = fill_diag::inflight_dec();
+        fill_diag::add(&fill_diag::HTTP_BODIES_DROPPED, 1);
+        event!(
+            target: "fill",
+            Level::INFO,
+            ev = "http_end",
+            id = self.id,
+            how = "cancelled_before_headers",
+            bytes = 0u64,
+            inflight,
+            elapsed_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            t_ms = now_ms(),
+        );
     }
 }
 
@@ -185,6 +248,7 @@ struct FillCountingBody {
     range: String,
     bytes: u64,
     started: Instant,
+    last_chunk_ms: u64,
     done: bool,
 }
 
@@ -208,6 +272,7 @@ impl FillCountingBody {
             how,
             range = %self.range,
             bytes = self.bytes,
+            last_chunk_ms = self.last_chunk_ms,
             error = %error,
             inflight,
             elapsed_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX),
@@ -227,6 +292,8 @@ impl Stream for FillCountingBody {
                 let len = chunk.len() as u64;
                 this.bytes += len;
                 fill_diag::add(&fill_diag::HTTP_RESPONSE_BYTES, len);
+                this.last_chunk_ms = now_ms();
+                fill_diag::LAST_HTTP_BYTE_MS.fetch_max(this.last_chunk_ms, Ordering::Relaxed);
             }
             Poll::Ready(Some(Err(err))) => {
                 let err = err.to_string();
@@ -269,10 +336,15 @@ struct BlobRead {
     /// ranged Get Blob requests of its partition size.
     attempts: AtomicU32,
     /// Summed over the retries: the bytes earlier attempts had delivered when
-    /// the retry started, which the retry did not request again.
+    /// the retry started, which the retry did not request again. (Upstream
+    /// semantics: N retries resuming at the same point count it N times.)
     resumed_bytes: AtomicU64,
     /// Whether any attempt was throttled (429, 503 or `ServerBusy`).
     throttled: AtomicBool,
+    /// Fill experiment: per attempt, (requested offset, bytes delivered).
+    per_attempt: parking_lot::Mutex<Vec<(u64, u64)>>,
+    /// Fill experiment: an attempt found the downstream writer closed.
+    downstream_closed: AtomicBool,
 }
 
 /// What one `has` cost, for the `backend_has` provenance event.
@@ -1008,6 +1080,21 @@ where
             Ok(()) => ("ok", String::new(), String::new()),
             Err(err) => ("error", format!("{:?}", err.code), provenance_error(err)),
         };
+        // One lock, released before the event: the macro keeps temporaries
+        // alive for the whole statement.
+        let (resumed_max, attempt_offsets, attempt_delivered) = {
+            let per_attempt = read.per_attempt.lock();
+            (
+                per_attempt
+                    .iter()
+                    .skip(1)
+                    .map(|(o, _)| o.saturating_sub(offset))
+                    .max()
+                    .unwrap_or(0),
+                per_attempt.iter().map(|(o, _)| o.to_string()).collect::<Vec<_>>().join(","),
+                per_attempt.iter().map(|(_, d)| d.to_string()).collect::<Vec<_>>().join(","),
+            )
+        };
         provenance_event!("backend_read", &metadata;
             store = "azure_blob",
             key = %self.make_blob_path(key),
@@ -1015,7 +1102,13 @@ where
             length_requested = length.unwrap_or(0),
             bytes_returned,
             attempts = read.attempts.load(Ordering::Relaxed),
-            resumed_bytes = read.resumed_bytes.load(Ordering::Relaxed),
+            // Fill ablation: bytes not re-requested by the last retry (the
+            // furthest resume point), not the sum over retries.
+            resumed_bytes = resumed_max,
+            resumed_bytes_summed = read.resumed_bytes.load(Ordering::Relaxed),
+            attempt_offsets = %attempt_offsets,
+            attempt_delivered = %attempt_delivered,
+            downstream_closed = read.downstream_closed.load(Ordering::Relaxed),
             throttled = read.throttled.load(Ordering::Relaxed),
             result = outcome,
             error_code = %error_code,
@@ -1256,6 +1349,16 @@ where
                             };
                             let chunk_len = chunk.len() as u64;
                             writer.send(chunk).await.map_err(|e| {
+                                read.downstream_closed.store(true, Ordering::Relaxed);
+                                event!(
+                                    target: "fill",
+                                    Level::INFO,
+                                    ev = "az_downstream_closed",
+                                    attempt,
+                                    at = "send",
+                                    delivered_total = writer.get_bytes_written().saturating_sub(bytes_before),
+                                    t_ms = now_ms(),
+                                );
                                 (
                                     make_err!(
                                         Code::Aborted,
@@ -1271,6 +1374,7 @@ where
                         }
 
                         writer.send_eof().map_err(|e| {
+                            read.downstream_closed.store(true, Ordering::Relaxed);
                             (
                                 make_err!(Code::Aborted, "Failed to send EOF to writer: {e:?}"),
                                 None,
@@ -1292,11 +1396,15 @@ where
                                 m
                             }
                         };
+                        read.per_attempt
+                            .lock()
+                            .push((offset + sent, now_written.saturating_sub(sent)));
                         event!(
                             target: "fill",
                             Level::INFO,
                             ev = "az_attempt_end",
                             attempt,
+                            downstream_closed = read.downstream_closed.load(Ordering::Relaxed),
                             ok = result.is_ok(),
                             delivered_this_attempt = now_written.saturating_sub(sent),
                             delivered_total = now_written.saturating_sub(bytes_before),
@@ -1309,6 +1417,21 @@ where
                     match result {
                         Ok(()) => Some((RetryResult::Ok(()), writer)),
                         Err((e, _)) if e.code == Code::NotFound => {
+                            Some((RetryResult::Err(e), writer))
+                        }
+                        // Ablation 1: a closed downstream cannot be fixed by
+                        // downloading again, so stop instead of retrying.
+                        Err((e, _))
+                            if fill_terminal_downstream()
+                                && read.downstream_closed.load(Ordering::Relaxed) =>
+                        {
+                            event!(
+                                target: "fill",
+                                Level::INFO,
+                                ev = "az_terminal_downstream",
+                                attempt,
+                                t_ms = now_ms(),
+                            );
                             Some((RetryResult::Err(e), writer))
                         }
                         Err((e, Some(wait))) => {

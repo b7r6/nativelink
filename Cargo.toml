@@ -4,6 +4,7 @@ exclude = [
   "nativelink-config/generate-stores-config",
   "nativelink-test/fuzz",
   "tools/generate-bazel-rc",
+  "third_party/azure_storage_blob",
 ]
 resolver = "2"
 
@@ -26,6 +27,11 @@ strip = true
 
 [[bin]]
 name = "nativelink"
+
+# Fill experiment (test/fill-* only): the Azure blob SDK with a runtime switch
+# (FILL_ABORT_ON_DROP=1) that aborts outstanding range tasks on stream drop.
+[patch.crates-io]
+azure_storage_blob = { path = "third_party/azure_storage_blob" }
 
 [features]
 nix = ["nativelink-worker/nix"]
