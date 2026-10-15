@@ -27,6 +27,7 @@ use nativelink_config::cas_server::{ByteStreamConfig, HttpListener, WithInstance
 use nativelink_config::stores::{MemorySpec, StoreSpec, VerifySpec};
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_macro::nativelink_test;
+use nativelink_proto::build::bazel::remote::execution::v2::{RequestMetadata, ToolDetails};
 use nativelink_proto::google::bytestream::byte_stream_client::ByteStreamClient;
 use nativelink_proto::google::bytestream::byte_stream_server::ByteStream;
 use nativelink_proto::google::bytestream::{
@@ -39,9 +40,14 @@ use nativelink_store::store_manager::StoreManager;
 use nativelink_util::channel_body_for_tests::ChannelBody;
 use nativelink_util::common::{DigestInfo, encode_stream_proto};
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
+use nativelink_util::origin_event::{BAZEL_METADATA_KEY, request_metadata_to_baggage};
+use nativelink_util::provenance::provenance_enabled;
 use nativelink_util::store_trait::StoreLike;
 use nativelink_util::task::JoinHandleDropGuard;
 use nativelink_util::{background_spawn, spawn};
+use opentelemetry::KeyValue;
+use opentelemetry::baggage::BaggageExt;
+use opentelemetry::context::FutureExt;
 use pretty_assertions::assert_eq;
 use sha2::{Digest as ShaDigest, Sha256};
 use tokio::io::DuplexStream;
@@ -2148,5 +2154,215 @@ async fn uuid_collision_does_not_deadlock() -> Result<(), Box<dyn core::error::E
 
     join2.await.expect("task panicked")?;
     drop(tx1);
+    Ok(())
+}
+
+/// The provenance events of `kind` among a test's log lines.
+fn provenance_events<'a>(lines: &[&'a str], kind: &str) -> Vec<&'a str> {
+    let event = format!("event=\"{kind}\"");
+    lines
+        .iter()
+        .copied()
+        .filter(|line| line.contains("nativelink_provenance") && line.contains(&event))
+        .collect()
+}
+
+/// Checks that a test logged exactly one provenance event of `kind`, and that
+/// it carries every one of `fields`.
+fn expect_one_event(lines: &[&str], kind: &str, fields: &[&str]) -> Result<(), String> {
+    let events = provenance_events(lines, kind);
+    let [event] = events.as_slice() else {
+        return Err(format!(
+            "expected one {kind} event, got {}:\n{}",
+            events.len(),
+            events.join("\n")
+        ));
+    };
+    match fields.iter().find(|field| !event.contains(*field)) {
+        Some(field) => Err(format!("{kind} event lacks `{field}`: {event}")),
+        None => Ok(()),
+    }
+}
+
+/// A context carrying Bazel's `RequestMetadata` the way the gRPC middleware
+/// leaves it for a request that sent the `requestmetadata-bin` header.
+fn request_metadata_context() -> opentelemetry::Context {
+    let metadata = RequestMetadata {
+        tool_details: Some(ToolDetails {
+            tool_name: "bazel".to_string(),
+            tool_version: "8.4.2".to_string(),
+        }),
+        tool_invocation_id: "invocation-1234".to_string(),
+        target_id: "//app:bin".to_string(),
+        action_mnemonic: "CppLink".to_string(),
+        ..Default::default()
+    };
+    opentelemetry::Context::current().with_baggage(vec![KeyValue::new(
+        BAZEL_METADATA_KEY,
+        request_metadata_to_baggage(&metadata),
+    )])
+}
+
+#[nativelink_test]
+async fn write_emits_cas_write_provenance_event() -> Result<(), Box<dyn core::error::Error>> {
+    const WRITE_DATA: &[u8] = b"12456789abcdefghijk";
+    const BYTE_SPLIT_OFFSET: usize = 8;
+
+    // The events below rely on the test subscriber enabling every target.
+    assert!(provenance_enabled());
+
+    let store_manager = make_store_manager().await?;
+    let bs_server = Arc::new(make_bytestream_server(&store_manager, None)?);
+
+    // Two messages, so the write takes the streaming path.
+    let (tx, join_handle) = make_stream_and_writer_spawn(bs_server, None);
+    let mut write_request = WriteRequest {
+        resource_name: make_resource_name(WRITE_DATA.len()),
+        write_offset: 0,
+        finish_write: false,
+        data: WRITE_DATA[..BYTE_SPLIT_OFFSET].to_vec().into(),
+    };
+    tx.send(Frame::data(encode_stream_proto(&write_request)?))
+        .await?;
+    write_request.write_offset = BYTE_SPLIT_OFFSET.try_into()?;
+    write_request.finish_write = true;
+    write_request.data = WRITE_DATA[BYTE_SPLIT_OFFSET..].to_vec().into();
+    tx.send(Frame::data(encode_stream_proto(&write_request)?))
+        .await?;
+    join_handle.await??;
+
+    let digest = format!("digest={HASH1}-{} ", WRITE_DATA.len());
+    let size_bytes = format!(" size_bytes={} ", WRITE_DATA.len());
+    logs_assert(|lines| {
+        expect_one_event(
+            lines,
+            "cas_write",
+            &[
+                "source=\"bytestream\"",
+                "instance_name=foo_instance_name ",
+                "digest_function=\"sha256\"",
+                &digest,
+                &size_bytes,
+                "result=\"ok\"",
+                "error_code=\"\"",
+            ],
+        )
+    });
+    Ok(())
+}
+
+#[nativelink_test]
+async fn failed_write_emits_cas_write_provenance_event() -> Result<(), Box<dyn core::error::Error>>
+{
+    const WRITE_DATA: &[u8] = b"12456789abcdefghijk";
+
+    let store_manager = make_store_manager().await?;
+    let bs_server = Arc::new(make_bytestream_server(&store_manager, None)?);
+
+    // The client ends the stream before sending the whole blob.
+    let (tx, join_handle) = make_stream_and_writer_spawn(bs_server, None);
+    tx.send(Frame::data(encode_stream_proto(&WriteRequest {
+        resource_name: make_resource_name(WRITE_DATA.len()),
+        write_offset: 0,
+        finish_write: false,
+        data: WRITE_DATA[..5].to_vec().into(),
+    })?))
+    .await?;
+    drop(tx);
+    assert!(join_handle.await?.is_err());
+
+    let digest = format!("digest={HASH1}-{} ", WRITE_DATA.len());
+    logs_assert(|lines| {
+        expect_one_event(
+            lines,
+            "cas_write",
+            &[
+                "source=\"bytestream\"",
+                &digest,
+                "result=\"error\"",
+                "error_code=\"InvalidArgument\"",
+                "error=Expected WriteRequest struct in stream",
+            ],
+        )
+    });
+    Ok(())
+}
+
+#[nativelink_test]
+async fn dropped_write_emits_cancelled_cas_write_provenance_event()
+-> Result<(), Box<dyn core::error::Error>> {
+    const WRITE_DATA: &[u8] = b"12456789abcdefghijk";
+
+    let store_manager = make_store_manager().await?;
+    let bs_server = make_bytestream_server(&store_manager, None)?;
+
+    let (tx, stream) = make_stream(None);
+    let mut write_fut = bs_server.write(Request::new(stream));
+    tx.send(Frame::data(encode_stream_proto(&WriteRequest {
+        resource_name: make_resource_name(WRITE_DATA.len()),
+        write_offset: 0,
+        finish_write: false,
+        data: WRITE_DATA[..5].to_vec().into(),
+    })?))
+    .await?;
+    // Run the write until it waits for the rest of the blob, then drop it,
+    // as the server does when the client goes away mid-stream.
+    for _ in 0..10 {
+        assert!(poll!(&mut write_fut).is_pending());
+    }
+    drop(write_fut);
+
+    let digest = format!("digest={HASH1}-{} ", WRITE_DATA.len());
+    logs_assert(|lines| {
+        expect_one_event(
+            lines,
+            "cas_write",
+            &[
+                "source=\"bytestream\"",
+                &digest,
+                "result=\"error\"",
+                "error_code=\"Cancelled\"",
+            ],
+        )
+    });
+    Ok(())
+}
+
+#[nativelink_test]
+async fn write_provenance_event_carries_request_metadata() -> Result<(), Box<dyn core::error::Error>>
+{
+    const WRITE_DATA: &[u8] = b"12456789abcdefghijk";
+
+    let store_manager = make_store_manager().await?;
+    let bs_server = make_bytestream_server(&store_manager, None)?;
+
+    // One message, so the write takes the oneshot path.
+    let (tx, stream) = make_stream(None);
+    tx.send(Frame::data(encode_stream_proto(&WriteRequest {
+        resource_name: make_resource_name(WRITE_DATA.len()),
+        write_offset: 0,
+        finish_write: true,
+        data: WRITE_DATA.to_vec().into(),
+    })?))
+    .await?;
+    drop(tx);
+    bs_server
+        .write(Request::new(stream))
+        .with_context(request_metadata_context())
+        .await?;
+
+    logs_assert(|lines| {
+        expect_one_event(
+            lines,
+            "cas_write",
+            &[
+                "result=\"ok\"",
+                "tool_name=bazel ",
+                "tool_invocation_id=invocation-1234 ",
+                "action_mnemonic=CppLink ",
+                "target_id=//app:bin ",
+            ],
+        )
+    });
     Ok(())
 }

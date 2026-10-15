@@ -44,6 +44,7 @@ use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, make_ctx_for_hash_func};
+use nativelink_util::provenance::provenance_enabled;
 use nativelink_util::spawn_blocking;
 use nativelink_util::store_trait::{Store, StoreLike, UploadSizeInfo};
 use opentelemetry::context::FutureExt;
@@ -52,6 +53,7 @@ use tokio_util::io::StreamReader;
 use tonic::{Request, Response, Status};
 use tracing::{Instrument, Level, debug, error_span, instrument, warn};
 
+use crate::provenance::{CasWriteEvents, FindMissingEvent};
 use crate::wire_compression::RemoteCacheCompressionInstances;
 
 /// Metrics for the experimental `SplitBlob`/`SpliceBlob` chunking RPCs.
@@ -1134,15 +1136,23 @@ impl ContentAddressableStorage for CasServer {
     ) -> Result<Response<FindMissingBlobsResponse>, Status> {
         let request = grpc_request.into_inner();
         let digest_function = request.digest_function;
-        self.inner_find_missing_blobs(request)
-            .instrument(error_span!("cas_server_find_missing_blobs"))
-            .with_context(
-                make_ctx_for_hash_func(digest_function)
-                    .err_tip(|| "In CasServer::find_missing_blobs")?,
-            )
-            .await
-            .err_tip(|| "Failed on find_missing_blobs() command")
-            .map_err(Into::into)
+        let provenance = provenance_enabled().then(|| FindMissingEvent::start(&request));
+        let result: Result<_, Status> = async {
+            self.inner_find_missing_blobs(request)
+                .instrument(error_span!("cas_server_find_missing_blobs"))
+                .with_context(
+                    make_ctx_for_hash_func(digest_function)
+                        .err_tip(|| "In CasServer::find_missing_blobs")?,
+                )
+                .await
+                .err_tip(|| "Failed on find_missing_blobs() command")
+                .map_err(Into::into)
+        }
+        .await;
+        if let Some(provenance) = provenance {
+            provenance.finish(&result);
+        }
+        result
     }
 
     #[instrument(
@@ -1156,18 +1166,29 @@ impl ContentAddressableStorage for CasServer {
         &self,
         grpc_request: Request<BatchUpdateBlobsRequest>,
     ) -> Result<Response<BatchUpdateBlobsResponse>, Status> {
+        // Held across the update so that a request dropped part way, when the
+        // client goes away, still gets an event per blob.
+        let provenance =
+            provenance_enabled().then(|| CasWriteEvents::for_batch_update(&grpc_request));
         let request = grpc_request.into_inner();
         let digest_function = request.digest_function;
 
-        self.inner_batch_update_blobs(request)
-            .instrument(error_span!("cas_server_batch_update_blobs"))
-            .with_context(
-                make_ctx_for_hash_func(digest_function)
-                    .err_tip(|| "In CasServer::batch_update_blobs")?,
-            )
-            .await
-            .err_tip(|| "Failed on batch_update_blobs() command")
-            .map_err(Into::into)
+        let result: Result<_, Status> = async {
+            self.inner_batch_update_blobs(request)
+                .instrument(error_span!("cas_server_batch_update_blobs"))
+                .with_context(
+                    make_ctx_for_hash_func(digest_function)
+                        .err_tip(|| "In CasServer::batch_update_blobs")?,
+                )
+                .await
+                .err_tip(|| "Failed on batch_update_blobs() command")
+                .map_err(Into::into)
+        }
+        .await;
+        if let Some(provenance) = provenance {
+            provenance.finish_batch_update(&result);
+        }
+        result
     }
 
     #[instrument(

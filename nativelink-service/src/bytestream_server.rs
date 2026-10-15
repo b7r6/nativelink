@@ -49,6 +49,7 @@ use nativelink_util::digest_hasher::{
     DigestHasherFunc, default_digest_hasher_func, make_ctx_for_hash_func,
 };
 use nativelink_util::proto_stream_utils::WriteRequestStreamWrapper;
+use nativelink_util::provenance::provenance_enabled;
 use nativelink_util::resource_info::ResourceInfo;
 use nativelink_util::spawn;
 use nativelink_util::store_trait::{Store, StoreLike, StoreOptimizations, UploadSizeInfo};
@@ -59,6 +60,7 @@ use tokio::time::sleep;
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{Instrument, Level, debug, error, error_span, info, instrument, trace, warn};
 
+use crate::provenance::CasWriteEvents;
 use crate::wire_compression::RemoteCacheCompressionInstances;
 
 /// If this value changes update the documentation in the config definition.
@@ -1405,145 +1407,14 @@ impl ByteStreamServer {
             complete,
         }))
     }
-}
 
-#[tonic::async_trait]
-impl ByteStream for ByteStreamServer {
-    type ReadStream = ReadStream;
-
-    #[instrument(
-        err,
-        level = Level::ERROR,
-        skip_all,
-        fields(request = ?grpc_request.get_ref())
-    )]
-    async fn read(
+    /// Everything `write` does once the first message has arrived: picks the
+    /// instance and the write path, and records the write metrics.
+    async fn dispatch_write(
         &self,
-        grpc_request: Request<ReadRequest>,
-    ) -> Result<Response<Self::ReadStream>, Status> {
-        let start_time = Instant::now();
-
-        let read_request = grpc_request.into_inner();
-        let resource_name = read_request.resource_name.clone();
-        let resource_info = ResourceInfo::new(&resource_name, false)?;
-        let instance_name = resource_info.instance_name.as_ref();
-        let expected_size = resource_info.expected_size as u64;
-        let instance = self
-            .instance_infos
-            .get(instance_name)
-            .err_tip(|| format!("'instance_name' not configured for '{instance_name}'"))?;
-
-        trace!(
-            resource_name,
-            instance_name, expected_size, "Starting bytestream request"
-        );
-
-        // Track read request
-        instance
-            .metrics
-            .read_requests_total
-            .fetch_add(1, Ordering::Relaxed);
-
-        let store = instance.store.clone();
-
-        let digest = DigestInfo::try_new(resource_info.hash.as_ref(), resource_info.expected_size)?;
-
-        // If we are a GrpcStore we shortcut here, as this is a special store.
-        if let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into())) {
-            let stream = Box::pin(grpc_store.read(Request::new(read_request)).await?);
-            return Ok(Response::new(stream));
-        }
-
-        let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(default_digest_hasher_func()),
-            DigestHasherFunc::try_from,
-        )?;
-
-        // Determine if the client requested wire-compressed data via compressed-blobs URI.
-        let wire_compressor = crate::wire_compression::resolve_wire_compressor(
-            resource_info.compressor.as_deref(),
-            instance.remote_cache_compression_enabled,
-        )?;
-
-        let resp = if wire_compressor == compressor::Value::Identity {
-            // Uncompressed path — use the existing streaming read.
-            self.inner_read(instance, digest, read_request)
-                .instrument(error_span!("bytestream_read"))
-                .with_context(
-                    make_ctx_for_hash_func(digest_function)
-                        .err_tip(|| "In BytestreamServer::read")?,
-                )
-                .await
-                .err_tip(|| "In ByteStreamServer::read")
-                .map(|stream| -> Response<Self::ReadStream> { Response::new(Box::pin(stream)) })
-        } else {
-            // Compressed path — stream the requested raw range through zstd.
-            self.inner_read_compressed(instance, digest, wire_compressor, read_request)
-                .instrument(error_span!("bytestream_read_compressed"))
-                .with_context(
-                    make_ctx_for_hash_func(digest_function)
-                        .err_tip(|| "In BytestreamServer::read_compressed")?,
-                )
-                .await
-                .err_tip(|| "In ByteStreamServer::read_compressed")
-                .map(|stream| -> Response<Self::ReadStream> { Response::new(Box::pin(stream)) })
-        };
-
-        // Track metrics based on result
-        let elapsed = start_time.elapsed();
-        #[allow(clippy::cast_possible_truncation)]
-        let elapsed_ns = elapsed.as_nanos() as u64;
-        instance
-            .metrics
-            .read_duration_ns
-            .fetch_add(elapsed_ns, Ordering::Relaxed);
-
-        trace!(
-            ?elapsed,
-            resource_name, instance_name, expected_size, "Completed bytestream request"
-        );
-
-        match &resp {
-            Ok(_) => {
-                instance
-                    .metrics
-                    .read_requests_success
-                    .fetch_add(1, Ordering::Relaxed);
-                instance
-                    .metrics
-                    .bytes_read_total
-                    .fetch_add(expected_size, Ordering::Relaxed);
-                debug!(return = "Ok(<stream>)");
-            }
-            Err(_) => {
-                instance
-                    .metrics
-                    .read_requests_failure
-                    .fetch_add(1, Ordering::Relaxed);
-            }
-        }
-
-        resp.map_err(Into::into)
-    }
-
-    #[instrument(
-        err,
-        level = Level::ERROR,
-        skip_all,
-        fields(request = ?grpc_request.get_ref())
-    )]
-    async fn write(
-        &self,
-        grpc_request: Request<Streaming<WriteRequest>>,
+        stream: WriteRequestStreamWrapper<Streaming<WriteRequest>>,
+        start_time: Instant,
     ) -> Result<Response<WriteResponse>, Status> {
-        let start_time = Instant::now();
-
-        let request = grpc_request.into_inner();
-        let stream = WriteRequestStreamWrapper::from(request)
-            .await
-            .err_tip(|| "Could not unwrap first stream message")
-            .map_err(Into::<Status>::into)?;
-
         let instance_name = stream.resource_info.instance_name.as_ref();
         let expected_size = stream.resource_info.expected_size as u64;
         let instance = self
@@ -1706,6 +1577,161 @@ impl ByteStream for ByteStreamServer {
         }
 
         result.map_err(Into::into)
+    }
+}
+
+#[tonic::async_trait]
+impl ByteStream for ByteStreamServer {
+    type ReadStream = ReadStream;
+
+    #[instrument(
+        err,
+        level = Level::ERROR,
+        skip_all,
+        fields(request = ?grpc_request.get_ref())
+    )]
+    async fn read(
+        &self,
+        grpc_request: Request<ReadRequest>,
+    ) -> Result<Response<Self::ReadStream>, Status> {
+        let start_time = Instant::now();
+
+        let read_request = grpc_request.into_inner();
+        let resource_name = read_request.resource_name.clone();
+        let resource_info = ResourceInfo::new(&resource_name, false)?;
+        let instance_name = resource_info.instance_name.as_ref();
+        let expected_size = resource_info.expected_size as u64;
+        let instance = self
+            .instance_infos
+            .get(instance_name)
+            .err_tip(|| format!("'instance_name' not configured for '{instance_name}'"))?;
+
+        trace!(
+            resource_name,
+            instance_name, expected_size, "Starting bytestream request"
+        );
+
+        // Track read request
+        instance
+            .metrics
+            .read_requests_total
+            .fetch_add(1, Ordering::Relaxed);
+
+        let store = instance.store.clone();
+
+        let digest = DigestInfo::try_new(resource_info.hash.as_ref(), resource_info.expected_size)?;
+
+        // If we are a GrpcStore we shortcut here, as this is a special store.
+        if let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into())) {
+            let stream = Box::pin(grpc_store.read(Request::new(read_request)).await?);
+            return Ok(Response::new(stream));
+        }
+
+        let digest_function = resource_info.digest_function.as_deref().map_or_else(
+            || Ok(default_digest_hasher_func()),
+            DigestHasherFunc::try_from,
+        )?;
+
+        // Determine if the client requested wire-compressed data via compressed-blobs URI.
+        let wire_compressor = crate::wire_compression::resolve_wire_compressor(
+            resource_info.compressor.as_deref(),
+            instance.remote_cache_compression_enabled,
+        )?;
+
+        let resp = if wire_compressor == compressor::Value::Identity {
+            // Uncompressed path — use the existing streaming read.
+            self.inner_read(instance, digest, read_request)
+                .instrument(error_span!("bytestream_read"))
+                .with_context(
+                    make_ctx_for_hash_func(digest_function)
+                        .err_tip(|| "In BytestreamServer::read")?,
+                )
+                .await
+                .err_tip(|| "In ByteStreamServer::read")
+                .map(|stream| -> Response<Self::ReadStream> { Response::new(Box::pin(stream)) })
+        } else {
+            // Compressed path — stream the requested raw range through zstd.
+            self.inner_read_compressed(instance, digest, wire_compressor, read_request)
+                .instrument(error_span!("bytestream_read_compressed"))
+                .with_context(
+                    make_ctx_for_hash_func(digest_function)
+                        .err_tip(|| "In BytestreamServer::read_compressed")?,
+                )
+                .await
+                .err_tip(|| "In ByteStreamServer::read_compressed")
+                .map(|stream| -> Response<Self::ReadStream> { Response::new(Box::pin(stream)) })
+        };
+
+        // Track metrics based on result
+        let elapsed = start_time.elapsed();
+        #[allow(clippy::cast_possible_truncation)]
+        let elapsed_ns = elapsed.as_nanos() as u64;
+        instance
+            .metrics
+            .read_duration_ns
+            .fetch_add(elapsed_ns, Ordering::Relaxed);
+
+        trace!(
+            ?elapsed,
+            resource_name, instance_name, expected_size, "Completed bytestream request"
+        );
+
+        match &resp {
+            Ok(_) => {
+                instance
+                    .metrics
+                    .read_requests_success
+                    .fetch_add(1, Ordering::Relaxed);
+                instance
+                    .metrics
+                    .bytes_read_total
+                    .fetch_add(expected_size, Ordering::Relaxed);
+                debug!(return = "Ok(<stream>)");
+            }
+            Err(_) => {
+                instance
+                    .metrics
+                    .read_requests_failure
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        resp.map_err(Into::into)
+    }
+
+    #[instrument(
+        err,
+        level = Level::ERROR,
+        skip_all,
+        fields(request = ?grpc_request.get_ref())
+    )]
+    async fn write(
+        &self,
+        grpc_request: Request<Streaming<WriteRequest>>,
+    ) -> Result<Response<WriteResponse>, Status> {
+        let start_time = Instant::now();
+        // Read before `into_inner` consumes the request; only the provenance
+        // event uses it.
+        let peer = provenance_enabled()
+            .then(|| grpc_request.remote_addr())
+            .flatten();
+
+        let request = grpc_request.into_inner();
+        let stream = WriteRequestStreamWrapper::from(request)
+            .await
+            .err_tip(|| "Could not unwrap first stream message")
+            .map_err(Into::<Status>::into)?;
+
+        // Timed from the first message, and held across the write so that a
+        // client going away mid-stream, which drops this future, still gets
+        // its event.
+        let provenance =
+            provenance_enabled().then(|| CasWriteEvents::for_write(&stream.resource_info, peer));
+        let result = self.dispatch_write(stream, start_time).await;
+        if let Some(provenance) = provenance {
+            provenance.finish(&result);
+        }
+        result
     }
 
     #[instrument(
