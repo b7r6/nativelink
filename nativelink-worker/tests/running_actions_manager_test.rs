@@ -58,8 +58,8 @@ mod tests {
     #[cfg_attr(target_family = "windows", allow(unused_imports))]
     use nativelink_proto::build::bazel::remote::execution::v2::{
         Action, ActionResult as ProtoActionResult, Command, Directory, DirectoryNode,
-        ExecuteRequest, ExecuteResponse, FileNode, NodeProperties, Platform, SymlinkNode, Tree,
-        digest_function::Value as ProtoDigestFunction, platform::Property,
+        ExecuteRequest, ExecuteResponse, FileNode, NodeProperties, Platform, RequestMetadata,
+        SymlinkNode, Tree, digest_function::Value as ProtoDigestFunction, platform::Property,
     };
     use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
         HistoricalExecuteResponse, ResourceOutcome, StartExecute,
@@ -84,6 +84,8 @@ mod tests {
     use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
     #[cfg(target_family = "unix")]
     use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
+    #[cfg(target_family = "unix")]
+    use nativelink_util::provenance::provenance_enabled;
     #[cfg(target_family = "unix")]
     use nativelink_util::store_trait::{RemoveItemCallback, StoreDriver, UploadSizeInfo};
     use nativelink_util::store_trait::{Store, StoreKey, StoreLike};
@@ -9492,6 +9494,756 @@ done
             "expected one output directory"
         );
         assert_eq!(action_result.output_folders[0].path, "out");
+        Ok(())
+    }
+
+    /// A memory store that fails `has` for some digests and the writes of
+    /// others: a struggling slow tier, as the worker's output uploads see it.
+    #[cfg(target_family = "unix")]
+    #[derive(Debug)]
+    struct FaultyStore {
+        inner: Store,
+        fail_has: Vec<DigestInfo>,
+        fail_update: Vec<DigestInfo>,
+    }
+
+    #[cfg(target_family = "unix")]
+    impl FaultyStore {
+        fn new(
+            inner: Arc<MemoryStore>,
+            fail_has: Vec<DigestInfo>,
+            fail_update: Vec<DigestInfo>,
+        ) -> Arc<Self> {
+            Arc::new(Self {
+                inner: Store::new(inner),
+                fail_has,
+                fail_update,
+            })
+        }
+
+        fn names(digests: &[DigestInfo], key: &StoreKey<'_>) -> bool {
+            digests
+                .iter()
+                .any(|digest| *key == StoreKey::Digest(*digest))
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    impl MetricsComponent for FaultyStore {
+        fn publish(
+            &self,
+            _kind: MetricKind,
+            _field_metadata: MetricFieldData,
+        ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+            Ok(MetricPublishKnownKindData::Component)
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    #[async_trait]
+    impl StoreDriver for FaultyStore {
+        async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+            Ok(())
+        }
+        async fn has_with_results(
+            self: Pin<&Self>,
+            keys: &[StoreKey<'_>],
+            results: &mut [Option<u64>],
+        ) -> Result<(), Error> {
+            if keys.iter().any(|key| Self::names(&self.fail_has, key)) {
+                return Err(make_err!(Code::Unavailable, "injected has failure"));
+            }
+            self.inner
+                .as_store_driver_pin()
+                .has_with_results(keys, results)
+                .await
+        }
+        async fn update(
+            self: Pin<&Self>,
+            key: StoreKey<'_>,
+            reader: DropCloserReadHalf,
+            size_info: UploadSizeInfo,
+        ) -> Result<u64, Error> {
+            if Self::names(&self.fail_update, &key) {
+                return Err(make_err!(Code::Internal, "injected write failure"));
+            }
+            self.inner
+                .as_store_driver_pin()
+                .update(key, reader, size_info)
+                .await
+        }
+        async fn get_part(
+            self: Pin<&Self>,
+            key: StoreKey<'_>,
+            writer: &mut DropCloserWriteHalf,
+            offset: u64,
+            length: Option<u64>,
+        ) -> Result<(), Error> {
+            self.inner
+                .as_store_driver_pin()
+                .get_part(key, writer, offset, length)
+                .await
+        }
+        fn inner_store(&self, _key: Option<StoreKey>) -> &dyn StoreDriver {
+            self
+        }
+        fn as_any<'a>(&'a self) -> &'a (dyn core::any::Any + Sync + Send + 'static) {
+            self
+        }
+        fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
+            self
+        }
+        fn register_remove_callback(
+            self: Arc<Self>,
+            _callback: Arc<dyn RemoveItemCallback>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    default_health_status_indicator!(FaultyStore);
+
+    /// The worker id the provenance tests run their actions as.
+    #[cfg(target_family = "unix")]
+    const PROVENANCE_WORKER_ID: &str = "provenance_worker";
+
+    /// The directory the provenance tests run their commands in, so the
+    /// paths the events report are seen to be relative to it.
+    #[cfg(target_family = "unix")]
+    const PROVENANCE_CWD: &str = "cwd";
+
+    /// One provenance event from the test log, as its fields. A value is cut
+    /// at the first space and loses its quotes, which is enough for the
+    /// fields the tests read.
+    #[cfg(target_family = "unix")]
+    type ProvenanceEvent = HashMap<String, String>;
+
+    #[cfg(target_family = "unix")]
+    fn parse_provenance_events(lines: &[&str]) -> Vec<ProvenanceEvent> {
+        lines
+            .iter()
+            .filter_map(|line| {
+                let (_, fields) = line.split_once("nativelink_provenance: ")?;
+                let mut event = ProvenanceEvent::new();
+                for token in fields.split(' ') {
+                    if let Some((key, value)) = token.split_once('=') {
+                        event
+                            .entry(key.to_string())
+                            .or_insert_with(|| value.trim_matches('"').to_string());
+                    }
+                }
+                event.contains_key("event").then_some(event)
+            })
+            .collect()
+    }
+
+    #[cfg(target_family = "unix")]
+    fn events_of<'a>(events: &'a [ProvenanceEvent], kind: &str) -> Vec<&'a ProvenanceEvent> {
+        events
+            .iter()
+            .filter(|event| event["event"] == kind)
+            .collect()
+    }
+
+    /// The `output_observed` events of one output kind.
+    #[cfg(target_family = "unix")]
+    fn observed_of<'a>(events: &'a [ProvenanceEvent], kind: &str) -> Vec<&'a ProvenanceEvent> {
+        events_of(events, "output_observed")
+            .into_iter()
+            .filter(|event| event["kind"] == kind)
+            .collect()
+    }
+
+    /// A manager over a CAS whose slow tier is `slow_store`, under the
+    /// filesystem fast tier the manager requires.
+    #[cfg(target_family = "unix")]
+    async fn manager_over(
+        slow_store: Store,
+    ) -> Result<(Arc<RunningActionsManagerImpl>, Arc<FastSlowStore>), Box<dyn core::error::Error>>
+    {
+        let fast_config = FilesystemSpec {
+            content_path: make_temp_path("content_path"),
+            temp_path: make_temp_path("temp_path"),
+            eviction_policy: None,
+            ..Default::default()
+        };
+        let fast_store: Arc<FilesystemStore> = FilesystemStore::new(&fast_config).await?;
+        let cas_store = FastSlowStore::new(
+            &FastSlowSpec {
+                fast: StoreSpec::Filesystem(fast_config),
+                slow: StoreSpec::Memory(MemorySpec::default()),
+                fast_direction: StoreDirection::default(),
+                slow_direction: StoreDirection::default(),
+                bypass_dedup_threshold_bytes: 0,
+            },
+            Store::new(fast_store),
+            slow_store,
+        );
+        let root_action_directory = make_temp_path("root_action_directory");
+        fs::create_dir_all(&root_action_directory).await?;
+        let running_actions_manager =
+            Arc::new(RunningActionsManagerImpl::new(RunningActionsManagerArgs {
+                root_action_directory,
+                execution_configuration: ExecutionConfiguration::default(),
+                cas_store: cas_store.clone(),
+                ac_store: None,
+                historical_store: Store::new(cas_store.clone()),
+                upload_action_result_config: &UploadActionResultConfig {
+                    upload_ac_results_strategy: UploadCacheResultsStrategy::Never,
+                    ..Default::default()
+                },
+                max_action_timeout: Duration::MAX,
+                max_upload_timeout: Duration::from_secs(DEFAULT_MAX_UPLOAD_TIMEOUT),
+                max_download_timeout: Duration::from_secs(DEFAULT_MAX_DOWNLOAD_TIMEOUT),
+                max_cleanup_wait: Duration::from_secs(DEFAULT_MAX_CLEANUP_WAIT),
+                max_cleanup_backoff: Duration::from_millis(DEFAULT_MAX_CLEANUP_BACKOFF),
+                timeout_handled_externally: false,
+                active_input_leases: false,
+                directory_cache: None,
+                #[cfg(target_os = "linux")]
+                use_namespaces: use_namespaces(),
+            })?);
+        Ok((running_actions_manager, cas_store))
+    }
+
+    /// Runs `script` under `sh -c` in [`PROVENANCE_CWD`] with `output_paths`
+    /// declared, as a fresh operation with request metadata, and returns the
+    /// action digest, the operation and how the run went.
+    #[cfg(target_family = "unix")]
+    async fn run_script(
+        running_actions_manager: &Arc<RunningActionsManagerImpl>,
+        cas_store: &Arc<FastSlowStore>,
+        script: &str,
+        output_paths: &[&str],
+    ) -> Result<(DigestInfo, OperationId, Result<ActionResult, Error>), Box<dyn core::error::Error>>
+    {
+        let command = Command {
+            arguments: vec!["sh".to_string(), "-c".to_string(), script.to_string()],
+            output_paths: output_paths.iter().map(ToString::to_string).collect(),
+            working_directory: PROVENANCE_CWD.to_string(),
+            environment_variables: vec![EnvironmentVariable {
+                name: "PATH".to_string(),
+                value: env::var("PATH").unwrap(),
+            }],
+            ..Default::default()
+        };
+        let command_digest = serialize_and_upload_message(
+            &command,
+            cas_store.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let input_root_digest = serialize_and_upload_message(
+            &Directory {
+                directories: vec![DirectoryNode {
+                    name: PROVENANCE_CWD.to_string(),
+                    digest: Some(
+                        serialize_and_upload_message(
+                            &Directory::default(),
+                            cas_store.as_pin(),
+                            &mut DigestHasherFunc::Sha256.hasher(),
+                        )
+                        .await?
+                        .into(),
+                    ),
+                }],
+                ..Default::default()
+            },
+            cas_store.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let action_digest = serialize_and_upload_message(
+            &Action {
+                command_digest: Some(command_digest.into()),
+                input_root_digest: Some(input_root_digest.into()),
+                ..Default::default()
+            },
+            cas_store.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let operation_id = OperationId::default();
+        let running_action_impl = running_actions_manager
+            .create_and_add_action(
+                PROVENANCE_WORKER_ID.to_string(),
+                StartExecute {
+                    request_metadata: Some(RequestMetadata {
+                        target_id: "//provenance:target".to_string(),
+                        action_mnemonic: "Genrule".to_string(),
+                        ..Default::default()
+                    }),
+                    execute_request: Some(ExecuteRequest {
+                        action_digest: Some(action_digest.into()),
+                        digest_function: ProtoDigestFunction::Sha256.into(),
+                        ..Default::default()
+                    }),
+                    operation_id: operation_id.to_string(),
+                    queued_timestamp: None,
+                    platform: None,
+                    worker_id: PROVENANCE_WORKER_ID.to_string(),
+                },
+            )
+            .await?;
+        let result = run_action(running_action_impl).await;
+        Ok((action_digest, operation_id, result))
+    }
+
+    /// Every declared output file is reported as observed, with the path the
+    /// `ActionResult` names it by, its digest, size and mode. The same content
+    /// at two paths is observed twice, first in the attempt once, and
+    /// uploaded once.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_reports_each_output_file_and_one_upload_per_digest()
+    -> Result<(), Box<dyn core::error::Error>> {
+        assert!(
+            provenance_enabled(),
+            "the test subscriber must enable the provenance target"
+        );
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let (action_digest, operation_id, result) = run_script(
+            &running_actions_manager,
+            &cas_store,
+            "printf same > a.txt && printf same > b.txt && printf other > c.txt && chmod +x c.txt",
+            &["a.txt", "b.txt", "c.txt"],
+        )
+        .await?;
+        assert_eq!(result?.output_files.len(), 3);
+        let same = compute_buf_digest(b"same", &mut DigestHasherFunc::Sha256.hasher());
+        let other = compute_buf_digest(b"other", &mut DigestHasherFunc::Sha256.hasher());
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let started = events_of(&events, "attempt_started");
+        assert_eq!(started.len(), 1, "{events:#?}");
+        let attempt_id = &started[0]["attempt_id"];
+        assert_eq!(started[0]["operation_id"], operation_id.to_string());
+        assert_eq!(started[0]["action_digest"], action_digest.to_string());
+        assert_eq!(started[0]["worker_id"], PROVENANCE_WORKER_ID);
+        assert_eq!(started[0]["digest_function"], "sha256");
+        assert_eq!(started[0]["target_id"], "//provenance:target");
+        assert_eq!(started[0]["action_mnemonic"], "Genrule");
+
+        let files = observed_of(&events, "file");
+        let mut seen: Vec<(&str, &str, &str, &str)> = files
+            .iter()
+            .map(|event| {
+                (
+                    event["path"].as_str(),
+                    event["digest"].as_str(),
+                    event["size_bytes"].as_str(),
+                    event["executable"].as_str(),
+                )
+            })
+            .collect();
+        seen.sort_unstable();
+        let (same_str, other_str) = (same.to_string(), other.to_string());
+        assert_eq!(
+            seen,
+            vec![
+                ("a.txt", same_str.as_str(), "4", "false"),
+                ("b.txt", same_str.as_str(), "4", "false"),
+                ("c.txt", other_str.as_str(), "5", "true"),
+            ]
+        );
+        for event in &files {
+            assert_eq!(&event["attempt_id"], attempt_id);
+            assert_eq!(event["action_digest"], action_digest.to_string());
+        }
+        // Which of the two paths with the same content is hashed first is
+        // up to the scheduler; that exactly one of them is, is not.
+        let mut firsts: Vec<&str> = files
+            .iter()
+            .filter(|event| event["digest"] == same_str)
+            .map(|event| event["first_in_attempt"].as_str())
+            .collect();
+        firsts.sort_unstable();
+        assert_eq!(firsts, vec!["false", "true"]);
+
+        let uploads = events_of(&events, "output_upload");
+        let same_uploads: Vec<_> = uploads
+            .iter()
+            .filter(|event| event["digest"] == same_str)
+            .collect();
+        assert_eq!(same_uploads.len(), 1, "{uploads:#?}");
+        assert_eq!(same_uploads[0]["has_result"], "absent");
+        assert_eq!(same_uploads[0]["has_error"], "");
+        assert_eq!(same_uploads[0]["disposition"], "uploaded");
+        assert_eq!(same_uploads[0]["size_bytes"], "4");
+        assert_eq!(same_uploads[0]["error_code"], "");
+        assert_eq!(uploads.len(), 2, "one per distinct digest: {uploads:#?}");
+
+        // stdout and stderr are reported too, with no path.
+        for stream in ["stdout", "stderr"] {
+            let observed = observed_of(&events, stream);
+            assert_eq!(observed.len(), 1, "{stream}");
+            assert_eq!(observed[0]["path"], "");
+        }
+
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(&finished[0]["attempt_id"], attempt_id);
+        assert_eq!(finished[0]["outcome"], "completed");
+        assert_eq!(finished[0]["exit_code"], "0");
+        assert_eq!(finished[0]["outputs_complete"], "true");
+        assert_eq!(finished[0]["output_count"], "3");
+        assert_eq!(finished[0]["output_bytes"], "13");
+        assert_eq!(finished[0]["unique_output_bytes"], "9");
+        assert_eq!(finished[0]["manifest_fingerprint"].len(), 64);
+        assert_eq!(finished[0]["error_code"], "");
+        Ok(())
+    }
+
+    /// Files and symlinks inside a declared output directory are reported
+    /// by the path the `ActionResult` names them by, `<dir>/<inside>`, and the
+    /// Tree and Directory messages uploaded for it as directory indexes.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_reports_files_inside_output_directories()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let (_, _, result) = run_script(
+            &running_actions_manager,
+            &cas_store,
+            "mkdir -p out/sub && printf one > out/one.txt && printf two > out/sub/two.txt && ln -s one.txt out/link",
+            &["out"],
+        )
+        .await?;
+        let action_result = result?;
+        assert_eq!(action_result.output_folders.len(), 1);
+        let one = compute_buf_digest(b"one", &mut DigestHasherFunc::Sha256.hasher());
+        let two = compute_buf_digest(b"two", &mut DigestHasherFunc::Sha256.hasher());
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        assert!(observed_of(&events, "file").is_empty(), "{events:#?}");
+        let mut files: Vec<(String, String)> = observed_of(&events, "directory_file")
+            .iter()
+            .map(|event| (event["path"].clone(), event["digest"].clone()))
+            .collect();
+        files.sort_unstable();
+        assert_eq!(
+            files,
+            vec![
+                ("out/one.txt".to_string(), one.to_string()),
+                ("out/sub/two.txt".to_string(), two.to_string()),
+            ]
+        );
+
+        let symlinks = observed_of(&events, "symlink");
+        assert_eq!(symlinks.len(), 1, "{events:#?}");
+        assert_eq!(symlinks[0]["path"], "out/link");
+        assert_eq!(symlinks[0]["symlink_target"], "one.txt");
+        assert_eq!(symlinks[0]["digest"], "");
+
+        let indexes = observed_of(&events, "directory_index");
+        let mut index_paths: Vec<&str> =
+            indexes.iter().map(|event| event["path"].as_str()).collect();
+        index_paths.sort_unstable();
+        assert_eq!(index_paths, vec!["out", "out/sub"]);
+        let tree = indexes.iter().find(|event| event["path"] == "out").unwrap();
+        assert_eq!(
+            tree["digest"],
+            action_result.output_folders[0].tree_digest.to_string()
+        );
+
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(finished[0]["outputs_complete"], "true");
+        assert_eq!(finished[0]["output_count"], "3");
+        Ok(())
+    }
+
+    /// A `has()` that fails is reported as an error rather than as absent,
+    /// is logged, and the output is still uploaded: the policy is unchanged.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_reports_a_failed_cas_lookup_and_still_uploads()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let content = b"looked up";
+        let digest = compute_buf_digest(content, &mut DigestHasherFunc::Sha256.hasher());
+        let inner = MemoryStore::new(&MemorySpec::default());
+        let faulty = FaultyStore::new(inner.clone(), vec![digest], vec![]);
+        let (running_actions_manager, cas_store) = manager_over(Store::new(faulty)).await?;
+        let (_, _, result) = run_script(
+            &running_actions_manager,
+            &cas_store,
+            "printf 'looked up' > out.txt",
+            &["out.txt"],
+        )
+        .await?;
+        assert_eq!(result?.output_files[0].digest, digest);
+        assert!(
+            inner.has(digest).await?.is_some(),
+            "the output must be uploaded when the lookup fails"
+        );
+        assert!(logs_contain(
+            "could not ask the CAS whether it holds an output"
+        ));
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let digest_str = digest.to_string();
+        let uploads: Vec<_> = events_of(&events, "output_upload")
+            .into_iter()
+            .filter(|event| event["digest"] == digest_str)
+            .collect();
+        assert_eq!(uploads.len(), 1, "{events:#?}");
+        assert_eq!(uploads[0]["has_result"], "error");
+        assert_ne!(uploads[0]["has_error"], "");
+        assert_eq!(uploads[0]["disposition"], "uploaded");
+        assert_eq!(uploads[0]["error_code"], "");
+
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(finished[0]["outcome"], "completed");
+        assert_eq!(finished[0]["outputs_complete"], "true");
+        Ok(())
+    }
+
+    /// Two runs of one action that produce the same outputs have the same
+    /// manifest fingerprint and different attempt ids, and the second finds
+    /// everything already in the CAS. The fingerprint is what a reader of
+    /// the `output_observed` events can recompute.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_fingerprint_is_stable_across_identical_attempts()
+    -> Result<(), Box<dyn core::error::Error>> {
+        const SCRIPT: &str = "mkdir -p out && printf x > out/x && printf y > y.txt && chmod +x y.txt && ln -s y.txt link";
+        const OUTPUTS: [&str; 3] = ["out", "y.txt", "link"];
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let (first_action, _, first) =
+            run_script(&running_actions_manager, &cas_store, SCRIPT, &OUTPUTS).await?;
+        first?;
+        let (second_action, _, second) =
+            run_script(&running_actions_manager, &cas_store, SCRIPT, &OUTPUTS).await?;
+        second?;
+        assert_eq!(first_action, second_action);
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(finished.len(), 2, "{events:#?}");
+        for attempt in &finished {
+            assert_eq!(attempt["outcome"], "completed");
+            assert_eq!(attempt["outputs_complete"], "true");
+            assert_eq!(attempt["output_count"], "3");
+        }
+        assert_ne!(finished[0]["attempt_id"], finished[1]["attempt_id"]);
+        assert_eq!(
+            finished[0]["manifest_fingerprint"],
+            finished[1]["manifest_fingerprint"]
+        );
+
+        // The second attempt uploads nothing: every digest is already there.
+        let second_uploads: Vec<_> = events_of(&events, "output_upload")
+            .into_iter()
+            .filter(|event| event["attempt_id"] == finished[1]["attempt_id"])
+            .collect();
+        assert!(!second_uploads.is_empty());
+        for upload in &second_uploads {
+            assert_eq!(upload["disposition"], "skipped_present", "{upload:#?}");
+        }
+
+        // Recomputed from the first attempt's events, as a reader would.
+        let mut manifest: Vec<(String, String, String)> = events_of(&events, "output_observed")
+            .into_iter()
+            .filter(|event| {
+                event["attempt_id"] == finished[0]["attempt_id"]
+                    && ["file", "directory_file", "symlink"].contains(&event["kind"].as_str())
+            })
+            .map(|event| {
+                let content = if event["kind"] == "symlink" {
+                    &event["symlink_target"]
+                } else {
+                    &event["digest"]
+                };
+                let mode = if event["executable"] == "true" {
+                    "x"
+                } else {
+                    "-"
+                };
+                (
+                    event["path"].clone(),
+                    event["kind"].clone(),
+                    format!("{}\t{}\t{content}\t{mode}\n", event["kind"], event["path"]),
+                )
+            })
+            .collect();
+        manifest.sort_unstable();
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        for (_, _, line) in &manifest {
+            hasher.update(line.as_bytes());
+        }
+        assert_eq!(
+            finished[0]["manifest_fingerprint"],
+            hasher.finalize_digest().packed_hash().to_string()
+        );
+        assert_eq!(manifest[0].2, "symlink\tlink\ty.txt\t-\n");
+        Ok(())
+    }
+
+    /// An attempt whose upload fails still reports the outputs it observed,
+    /// reports the failed upload, and ends incomplete, with no fingerprint.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_marks_an_attempt_whose_upload_failed_incomplete()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let digest = compute_buf_digest(b"doomed", &mut DigestHasherFunc::Sha256.hasher());
+        let faulty = FaultyStore::new(
+            MemoryStore::new(&MemorySpec::default()),
+            vec![],
+            vec![digest],
+        );
+        let (running_actions_manager, cas_store) = manager_over(Store::new(faulty)).await?;
+        let (_, _, result) = run_script(
+            &running_actions_manager,
+            &cas_store,
+            "printf doomed > out.txt",
+            &["out.txt"],
+        )
+        .await?;
+        assert!(result.is_err(), "{result:?}");
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let files = observed_of(&events, "file");
+        assert_eq!(files.len(), 1, "{events:#?}");
+        assert_eq!(files[0]["path"], "out.txt");
+        assert_eq!(files[0]["digest"], digest.to_string());
+
+        let uploads = events_of(&events, "output_upload");
+        assert_eq!(uploads.len(), 1, "{events:#?}");
+        assert_eq!(uploads[0]["has_result"], "absent");
+        assert_eq!(uploads[0]["disposition"], "upload_failed");
+        assert_ne!(uploads[0]["error_code"], "");
+
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(finished[0]["outcome"], "upload_failed");
+        assert_eq!(finished[0]["outputs_complete"], "false");
+        assert_eq!(finished[0]["manifest_fingerprint"], "");
+        assert_eq!(finished[0]["output_count"], "1");
+        assert_ne!(finished[0]["error_code"], "");
+        Ok(())
+    }
+
+    /// An attempt killed while it fetches its inputs ends as killed, once,
+    /// with no exit code and no outputs: the cleanup and the drop that
+    /// follow do not report it again.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_reports_an_attempt_killed_before_upload()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, action_digest, _store) =
+            hung_fetch_setup(Duration::from_mins(1)).await?;
+        let operation_id = OperationId::default();
+        let action = running_actions_manager
+            .create_and_add_action(
+                "test-worker".to_string(),
+                start_execute_for(action_digest, &operation_id.to_string()),
+            )
+            .await?;
+        let killer = {
+            let manager = running_actions_manager.clone();
+            let operation_id = operation_id.clone();
+            async move {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                manager.kill_operation(&operation_id).await
+            }
+        };
+        let (kill_res, prepare_res) = tokio::join!(killer, action.clone().prepare_action());
+        kill_res?;
+        assert!(prepare_res.is_err());
+        action.clone().cleanup().await?;
+        drop(action);
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let started = events_of(&events, "attempt_started");
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(started.len(), 1, "{events:#?}");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(finished[0]["attempt_id"], started[0]["attempt_id"]);
+        assert_eq!(finished[0]["operation_id"], operation_id.to_string());
+        assert_eq!(finished[0]["outcome"], "killed");
+        assert_eq!(finished[0]["error_code"], "Aborted");
+        assert_eq!(finished[0]["exit_code"], "-1");
+        assert_eq!(finished[0]["outputs_complete"], "false");
+        assert_eq!(finished[0]["output_count"], "0");
+        assert_eq!(finished[0]["manifest_fingerprint"], "");
+        assert_eq!(finished[0]["stdout_digest"], "");
+        Ok(())
+    }
+
+    /// An attempt that is dropped without any phase having ended it still
+    /// has an end, so every `attempt_started` has its `attempt_finished`.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn provenance_reports_an_attempt_dropped_before_it_ran()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, action_digest, _store) =
+            hung_fetch_setup(Duration::from_mins(1)).await?;
+        let operation_id = OperationId::default();
+        let action = running_actions_manager
+            .create_and_add_action(
+                "test-worker".to_string(),
+                start_execute_for(action_digest, &operation_id.to_string()),
+            )
+            .await?;
+        action.clone().cleanup().await?;
+        drop(action);
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let started = events_of(&events, "attempt_started");
+        let finished = events_of(&events, "attempt_finished");
+        assert_eq!(started.len(), 1, "{events:#?}");
+        assert_eq!(finished.len(), 1, "{events:#?}");
+        assert_eq!(finished[0]["attempt_id"], started[0]["attempt_id"]);
+        assert_eq!(finished[0]["outcome"], "failed");
+        assert_eq!(finished[0]["error_code"], "Cancelled");
+        assert_eq!(finished[0]["outputs_complete"], "false");
         Ok(())
     }
 }

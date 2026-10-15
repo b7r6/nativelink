@@ -49,8 +49,8 @@ use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::MetricsComponent;
 use nativelink_proto::build::bazel::remote::execution::v2::{
     Action, ActionResult as ProtoActionResult, Command as ProtoCommand,
-    Directory as ProtoDirectory, Directory, DirectoryNode, ExecuteResponse, FileNode, SymlinkNode,
-    Tree as ProtoTree, UpdateActionResultRequest,
+    Directory as ProtoDirectory, Directory, DirectoryNode, ExecuteResponse, FileNode,
+    RequestMetadata, SymlinkNode, Tree as ProtoTree, UpdateActionResultRequest,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     ActionResourceUsage, HistoricalExecuteResponse, Reservation, ResourceOutcome, StartExecute,
@@ -70,9 +70,10 @@ use nativelink_util::common::{DigestInfo, fs};
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
 use nativelink_util::metrics::{record_input_relink, record_prepare_retry};
 use nativelink_util::metrics_utils::{AsyncCounterWrapper, CounterWithTime};
+use nativelink_util::provenance::{ProvenanceMetadata, provenance_enabled};
 use nativelink_util::store_trait::{Store, StoreLike, UploadSizeInfo};
 use nativelink_util::task::JoinHandleDropGuard;
-use nativelink_util::{background_spawn, spawn, spawn_blocking};
+use nativelink_util::{background_spawn, provenance_event, spawn, spawn_blocking};
 use parking_lot::Mutex;
 use prost::Message;
 use relative_path::RelativePath;
@@ -1681,6 +1682,535 @@ fn is_executable(metadata: &std::fs::Metadata, _full_path: &impl AsRef<Path>) ->
 
 type DigestUploader = Arc<tokio::sync::OnceCell<()>>;
 
+/// What the CAS said when asked whether it already holds an output.
+#[derive(Debug)]
+enum CasLookup {
+    Present,
+    Absent,
+    /// The lookup itself failed. The upload goes ahead as if the digest
+    /// were absent: a write too many costs bandwidth, a write too few loses
+    /// the output.
+    Failed(Error),
+}
+
+impl CasLookup {
+    /// Asks the CAS whether it holds `digest`. A failed lookup is logged
+    /// here, so no caller drops it unseen.
+    async fn of(
+        cas_store: Pin<&dyn nativelink_util::store_trait::StoreDriver>,
+        digest: DigestInfo,
+    ) -> Self {
+        match cas_store.has(digest.into()).await {
+            Ok(Some(_)) => Self::Present,
+            Ok(None) => Self::Absent,
+            Err(err) => {
+                warn!(
+                    ?digest,
+                    ?err,
+                    "upload_file: could not ask the CAS whether it holds an output"
+                );
+                Self::Failed(err)
+            }
+        }
+    }
+
+    /// The `has_result` of an `output_upload` event.
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Present => "present",
+            Self::Absent => "absent",
+            Self::Failed(_) => "error",
+        }
+    }
+}
+
+/// How the upload of one output digest resolved, for `output_upload`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UploadDisposition {
+    /// The CAS said it already held the digest.
+    SkippedPresent,
+    Uploaded,
+    UploadFailed,
+    /// The write failed `NotFound`, but another upload had put the digest
+    /// there in the meantime.
+    UploadedConcurrently,
+}
+
+impl UploadDisposition {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::SkippedPresent => "skipped_present",
+            Self::Uploaded => "uploaded",
+            Self::UploadFailed => "upload_failed",
+            Self::UploadedConcurrently => "uploaded_concurrently",
+        }
+    }
+}
+
+/// What an observed output is, for `output_observed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputKind {
+    /// A declared output file.
+    File,
+    /// A file inside a declared output directory.
+    DirectoryFile,
+    Symlink,
+    Stdout,
+    Stderr,
+    /// The Tree or Directory message uploaded for an output directory.
+    DirectoryIndex,
+}
+
+impl OutputKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::DirectoryFile => "directory_file",
+            Self::Symlink => "symlink",
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+            Self::DirectoryIndex => "directory_index",
+        }
+    }
+
+    /// Whether outputs of this kind are entries of the manifest.
+    const fn in_manifest(self) -> bool {
+        matches!(self, Self::File | Self::DirectoryFile | Self::Symlink)
+    }
+}
+
+/// One output as `output_observed` reports it. The files, directory files
+/// and symlinks among them are the attempt's manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ObservedOutput {
+    kind: OutputKind,
+    /// The path the `ActionResult` names the output by, relative to the
+    /// working directory; empty for stdout and stderr.
+    path: String,
+    /// `None` for a symlink, which has a target instead.
+    digest: Option<DigestInfo>,
+    is_executable: bool,
+    /// Empty unless a symlink.
+    symlink_target: String,
+}
+
+impl ObservedOutput {
+    fn size_bytes(&self) -> u64 {
+        self.digest.map_or(0, |digest| digest.size_bytes())
+    }
+}
+
+/// The fingerprint of an attempt's outputs: the lowercase hex SHA-256 of the
+/// canonical manifest, one line per file, directory file and symlink, sorted
+/// by path and then by kind:
+///
+/// ```text
+/// {kind}\t{path}\t{digest, or the symlink's target}\t{x if executable, else -}\n
+/// ```
+///
+/// It is taken over the member files rather than a Tree digest, so node
+/// properties such as mtimes cannot make identical content look different.
+/// Outputs of the other kinds (stdout, stderr, directory indexes) are not
+/// part of it.
+fn manifest_fingerprint(outputs: &[ObservedOutput]) -> String {
+    let mut entries: Vec<&ObservedOutput> = outputs
+        .iter()
+        .filter(|output| output.kind.in_manifest())
+        .collect();
+    // Two entries that tie on path and kind still land in one order, so the
+    // order they were observed in never shows.
+    entries.sort_unstable_by(|a, b| {
+        a.path
+            .cmp(&b.path)
+            .then_with(|| a.kind.as_str().cmp(b.kind.as_str()))
+            .then_with(|| a.digest.cmp(&b.digest))
+            .then_with(|| a.symlink_target.cmp(&b.symlink_target))
+            .then_with(|| a.is_executable.cmp(&b.is_executable))
+    });
+    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    for entry in entries {
+        // A file has a digest and no target, a symlink the reverse, so one
+        // of the two is always empty.
+        let line = format!(
+            "{}\t{}\t{}{}\t{}\n",
+            entry.kind.as_str(),
+            entry.path,
+            DigestField(entry.digest),
+            entry.symlink_target,
+            if entry.is_executable { "x" } else { "-" },
+        );
+        hasher.update(line.as_bytes());
+    }
+    hasher.finalize_digest().packed_hash().to_string()
+}
+
+/// How an attempt ended, for `attempt_finished`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AttemptOutcome {
+    /// The command ran and its outputs were uploaded, whatever its exit code.
+    Completed,
+    UploadFailed,
+    /// Ended by the worker: on a kill from the scheduler, or past a memory
+    /// or disk reservation. The outputs it left may still have been uploaded.
+    Killed,
+    /// Ended by the worker at the action's timeout. The outputs it left may
+    /// still have been uploaded.
+    TimedOut,
+    /// Any other error before the upload.
+    Failed,
+}
+
+impl AttemptOutcome {
+    /// The outcome of a command whose outputs were uploaded, by why the
+    /// worker ended it, if it did.
+    const fn of_command(kill_reason: Option<KillReason>) -> Self {
+        match kill_reason {
+            None => Self::Completed,
+            Some(KillReason::Timeout) => Self::TimedOut,
+            Some(KillReason::Memory | KillReason::Disk | KillReason::External) => Self::Killed,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::UploadFailed => "upload_failed",
+            Self::Killed => "killed",
+            Self::TimedOut => "timed_out",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// A digest as an event field: `<hash>-<size>`, or empty when there is none.
+#[derive(Debug, Clone, Copy)]
+struct DigestField(Option<DigestInfo>);
+
+impl core::fmt::Display for DigestField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match &self.0 {
+            Some(digest) => core::fmt::Display::fmt(digest, f),
+            None => Ok(()),
+        }
+    }
+}
+
+/// An error's code as an event field, by name (`Unavailable`), or empty
+/// when there was no error.
+#[derive(Debug, Clone, Copy)]
+struct ErrorCodeField(Option<Code>);
+
+impl core::fmt::Display for ErrorCodeField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match &self.0 {
+            Some(code) => Debug::fmt(code, f),
+            None => Ok(()),
+        }
+    }
+}
+
+/// The digest function's name as provenance events spell it.
+const fn digest_function_name(digest_function: DigestHasherFunc) -> &'static str {
+    match digest_function {
+        DigestHasherFunc::Sha256 => "sha256",
+        DigestHasherFunc::Blake3 => "blake3",
+    }
+}
+
+/// One execution attempt's side of the provenance events
+/// ([`nativelink_util::provenance`]): which outputs it observed, how their
+/// uploads went and how it ended. Built only when those events are enabled
+/// as the attempt starts; otherwise the attempt holds `None`, and each call
+/// site costs that one check.
+#[derive(Debug)]
+struct OutputProvenance {
+    /// Fresh for every attempt, so retries and redispatches of one operation
+    /// are told apart, even on the same worker.
+    attempt_id: Uuid,
+    operation_id: OperationId,
+    action_digest: DigestInfo,
+    record: Mutex<AttemptRecord>,
+    /// Set by the one `attempt_finished`.
+    finished: AtomicBool,
+}
+
+/// What `attempt_finished` reports, gathered over the attempt.
+#[derive(Debug, Default)]
+struct AttemptRecord {
+    /// The files, directory files and symlinks observed.
+    manifest: Vec<ObservedOutput>,
+    /// Set once every output was observed and uploaded.
+    outputs_complete: bool,
+    exit_code: Option<i32>,
+    /// Why the worker ended the command; `None` until the command ended,
+    /// and when it ended on its own.
+    kill_reason: Option<KillReason>,
+    /// Set when the operation was killed, in whatever phase.
+    killed: bool,
+    stdout_digest: Option<DigestInfo>,
+    stderr_digest: Option<DigestInfo>,
+}
+
+impl OutputProvenance {
+    /// Starts the record of an attempt, and emits `attempt_started`.
+    fn start(
+        operation_id: &OperationId,
+        action_info: &ActionInfo,
+        worker_id: &str,
+        request_metadata: Option<&RequestMetadata>,
+    ) -> Self {
+        let provenance = Self {
+            attempt_id: Uuid::new_v4(),
+            operation_id: operation_id.clone(),
+            action_digest: action_info.digest(),
+            record: Mutex::default(),
+            finished: AtomicBool::new(false),
+        };
+        let metadata = request_metadata
+            .map(ProvenanceMetadata::from)
+            .unwrap_or_default();
+        provenance_event!("attempt_started", &metadata;
+            attempt_id = %provenance.attempt_id,
+            operation_id = %provenance.operation_id,
+            worker_id = %worker_id,
+            instance_name = %action_info.instance_name(),
+            digest_function = digest_function_name(action_info.unique_qualifier.digest_function()),
+            action_digest = %provenance.action_digest,
+            command_digest = %action_info.command_digest,
+            input_root_digest = %action_info.input_root_digest,
+        );
+        provenance
+    }
+
+    /// Emits `output_observed` for an output just hashed, or a symlink just
+    /// read, and keeps what `attempt_finished` needs of it. `first_in_attempt`
+    /// is false only for content the attempt's upload dedup already had from
+    /// another path; outputs that do not go through it are always first.
+    fn observe(&self, output: ObservedOutput, first_in_attempt: bool) {
+        provenance_event!("output_observed";
+            attempt_id = %self.attempt_id,
+            operation_id = %self.operation_id,
+            action_digest = %self.action_digest,
+            kind = output.kind.as_str(),
+            path = %output.path,
+            digest = %DigestField(output.digest),
+            size_bytes = output.size_bytes(),
+            executable = output.is_executable,
+            symlink_target = %output.symlink_target,
+            first_in_attempt,
+        );
+        let mut record = self.record.lock();
+        match output.kind {
+            OutputKind::Stdout => record.stdout_digest = output.digest,
+            OutputKind::Stderr => record.stderr_digest = output.digest,
+            OutputKind::DirectoryIndex => {}
+            OutputKind::File | OutputKind::DirectoryFile | OutputKind::Symlink => {
+                record.manifest.push(output);
+            }
+        }
+    }
+
+    /// Emits `output_upload` once the upload of `digest` resolved.
+    /// `upload_elapsed` is zero when nothing was written, and `error` is the
+    /// write's, for a failed upload.
+    fn uploaded(
+        &self,
+        digest: DigestInfo,
+        lookup: &CasLookup,
+        has_elapsed: Duration,
+        disposition: UploadDisposition,
+        upload_elapsed: Duration,
+        error: Option<&Error>,
+    ) {
+        let has_error = match lookup {
+            CasLookup::Failed(err) => err.message_string(),
+            CasLookup::Present | CasLookup::Absent => String::new(),
+        };
+        provenance_event!("output_upload";
+            attempt_id = %self.attempt_id,
+            operation_id = %self.operation_id,
+            digest = %digest,
+            size_bytes = digest.size_bytes(),
+            has_result = lookup.as_str(),
+            has_error = %has_error,
+            disposition = disposition.as_str(),
+            error_code = %ErrorCodeField(error.map(|err| err.code)),
+            error = %error.map(Error::message_string).unwrap_or_default(),
+            has_elapsed_ms = u64::try_from(has_elapsed.as_millis()).unwrap_or(u64::MAX),
+            upload_elapsed_ms = u64::try_from(upload_elapsed.as_millis()).unwrap_or(u64::MAX),
+        );
+    }
+
+    /// Keeps the exit code and why the worker ended the command, if it did,
+    /// for `attempt_finished`.
+    fn command_ended(&self, exit_code: i32, kill_reason: Option<KillReason>) {
+        let mut record = self.record.lock();
+        record.exit_code = Some(exit_code);
+        record.kill_reason = kill_reason;
+    }
+
+    /// Notes that the operation was killed, so a phase that fails after it
+    /// is reported as the kill.
+    fn killed(&self) {
+        self.record.lock().killed = true;
+    }
+
+    /// Marks every output as observed and uploaded.
+    fn outputs_complete(&self) {
+        self.record.lock().outputs_complete = true;
+    }
+
+    /// `attempt_finished` for an attempt whose outputs were uploaded:
+    /// `error` is the action's own, a timeout say.
+    fn uploaded_finish(&self, error: Option<&Error>) {
+        let outcome = AttemptOutcome::of_command(self.record.lock().kill_reason);
+        self.finish(outcome, error);
+    }
+
+    /// `attempt_finished` for a phase that failed with `err`: a kill if the
+    /// operation was killed, `outcome` if not.
+    fn phase_failed(&self, outcome: AttemptOutcome, err: &Error) {
+        let outcome = if self.record.lock().killed {
+            AttemptOutcome::Killed
+        } else {
+            outcome
+        };
+        self.finish(outcome, Some(err));
+    }
+
+    /// `attempt_finished` for an attempt that ended in none of its phases:
+    /// its future was dropped, or it was never run. One that did end has
+    /// reported it already.
+    fn dropped(&self) {
+        if !self.finished.load(Ordering::Acquire) {
+            self.phase_failed(
+                AttemptOutcome::Failed,
+                &make_err!(Code::Cancelled, "Attempt was dropped before it finished"),
+            );
+        }
+    }
+
+    /// Emits `attempt_finished`, the first time only: the phase that ends
+    /// the attempt reports it, and the drop of an attempt that never got
+    /// that far reports it then.
+    fn finish(&self, outcome: AttemptOutcome, error: Option<&Error>) {
+        if self.finished.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let record = self.record.lock();
+        let unique_digests: HashSet<DigestInfo> = record
+            .manifest
+            .iter()
+            .filter_map(|output| output.digest)
+            .collect();
+        // Taken only over a manifest known to be whole: a fingerprint of
+        // part of the outputs would look like different content.
+        let fingerprint = if record.outputs_complete {
+            manifest_fingerprint(&record.manifest)
+        } else {
+            String::new()
+        };
+        provenance_event!("attempt_finished";
+            attempt_id = %self.attempt_id,
+            operation_id = %self.operation_id,
+            action_digest = %self.action_digest,
+            exit_code = record.exit_code.unwrap_or(-1),
+            outcome = outcome.as_str(),
+            error_code = %ErrorCodeField(error.map(|err| err.code)),
+            error = %error.map(Error::message_string).unwrap_or_default(),
+            outputs_complete = record.outputs_complete,
+            output_count = record.manifest.len(),
+            output_bytes = record.manifest.iter().map(ObservedOutput::size_bytes).sum::<u64>(),
+            unique_output_bytes = unique_digests.iter().map(DigestInfo::size_bytes).sum::<u64>(),
+            manifest_fingerprint = %fingerprint,
+            stdout_digest = %DigestField(record.stdout_digest),
+            stderr_digest = %DigestField(record.stderr_digest),
+        );
+    }
+}
+
+/// Where an output sits in the `ActionResult`, for `output_observed`: the
+/// declared output a file or symlink was found under and where that output
+/// is on disk. Built only when provenance events are enabled.
+#[derive(Debug)]
+struct OutputOrigin<'a> {
+    provenance: &'a OutputProvenance,
+    /// The declared output path, as the `ActionResult` names it.
+    output_path: String,
+    /// Where `output_path` is on disk.
+    full_output_path: PathBuf,
+}
+
+impl OutputOrigin<'_> {
+    /// The `ActionResult` path of `full_path`, which is the declared output
+    /// itself or a path inside it: `<output_path>/<path inside>`.
+    fn path_of(&self, full_path: &Path) -> String {
+        let mut path = self.output_path.clone();
+        if let Ok(inside) = full_path.strip_prefix(&self.full_output_path) {
+            for component in inside.components() {
+                path.push('/');
+                path.push_str(&component.as_os_str().to_string_lossy());
+            }
+        }
+        path
+    }
+
+    /// Reports a file just hashed: the declared output itself, or a file
+    /// inside a declared output directory.
+    fn observe_file(
+        &self,
+        full_path: &Path,
+        digest: DigestInfo,
+        is_executable: bool,
+        first_in_attempt: bool,
+    ) {
+        let kind = if full_path == self.full_output_path {
+            OutputKind::File
+        } else {
+            OutputKind::DirectoryFile
+        };
+        self.provenance.observe(
+            ObservedOutput {
+                kind,
+                path: self.path_of(full_path),
+                digest: Some(digest),
+                is_executable,
+                symlink_target: String::new(),
+            },
+            first_in_attempt,
+        );
+    }
+
+    /// Reports a symlink kept as a symlink.
+    fn observe_symlink(&self, full_path: &Path, target: &str) {
+        self.provenance.observe(
+            ObservedOutput {
+                kind: OutputKind::Symlink,
+                path: self.path_of(full_path),
+                digest: None,
+                is_executable: false,
+                symlink_target: target.to_string(),
+            },
+            true,
+        );
+    }
+
+    /// Reports the Tree or Directory message uploaded for the directory at
+    /// `full_path`.
+    fn observe_index(&self, full_path: &Path, digest: DigestInfo) {
+        self.provenance.observe(
+            ObservedOutput {
+                kind: OutputKind::DirectoryIndex,
+                path: self.path_of(full_path),
+                digest: Some(digest),
+                is_executable: false,
+                symlink_target: String::new(),
+            },
+            true,
+        );
+    }
+}
+
 async fn upload_file(
     cas_store: Pin<&impl StoreLike>,
     full_path: impl AsRef<Path> + Debug + Send + Sync,
@@ -1688,6 +2218,7 @@ async fn upload_file(
     metadata: std::fs::Metadata,
     digest_uploaders: Arc<Mutex<HashMap<DigestInfo, DigestUploader>>>,
     uploads: Arc<Semaphore>,
+    origin: Option<&OutputOrigin<'_>>,
 ) -> Result<FileInfo, Error> {
     // Held from the open to the end of the upload: this is the bound on
     // files open at once for the whole output tree.
@@ -1707,12 +2238,22 @@ async fn upload_file(
         .await
         .err_tip(|| format!("Failed to hash file in digest_for_file failed for {full_path:?}"))?;
 
-    let digest_uploader = match digest_uploaders.lock().entry(digest) {
-        std::collections::hash_map::Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
-        std::collections::hash_map::Entry::Vacant(vacant_entry) => vacant_entry
-            .insert(Arc::new(tokio::sync::OnceCell::new()))
-            .clone(),
+    let (digest_uploader, first_in_attempt) = match digest_uploaders.lock().entry(digest) {
+        std::collections::hash_map::Entry::Occupied(occupied_entry) => {
+            (occupied_entry.get().clone(), false)
+        }
+        std::collections::hash_map::Entry::Vacant(vacant_entry) => (
+            vacant_entry
+                .insert(Arc::new(tokio::sync::OnceCell::new()))
+                .clone(),
+            true,
+        ),
     };
+    // Every output is reported as hashed, before the dedup or the CAS has a
+    // say in whether it is written.
+    if let Some(origin) = origin {
+        origin.observe_file(full_path.as_ref(), digest, is_executable, first_in_attempt);
+    }
 
     // Only upload a file with a given hash once.  The file may exist multiple
     // times in the output with different names.
@@ -1723,21 +2264,33 @@ async fn upload_file(
             let cas_store = cas_store.as_store_driver_pin();
             let store_key: nativelink_util::store_trait::StoreKey<'_> = digest.into();
             let has_start = std::time::Instant::now();
-            if cas_store
-                .has(store_key.borrow())
-                .await
-                .is_ok_and(|result| result.is_some())
-            {
+            // A lookup that fails uploads as if the digest were absent.
+            let lookup = CasLookup::of(cas_store, digest).await;
+            let has_elapsed = has_start.elapsed();
+            let report = |disposition, upload_elapsed, error: Option<&Error>| {
+                if let Some(origin) = origin {
+                    origin.provenance.uploaded(
+                        digest,
+                        &lookup,
+                        has_elapsed,
+                        disposition,
+                        upload_elapsed,
+                        error,
+                    );
+                }
+            };
+            if matches!(lookup, CasLookup::Present) {
                 trace!(
                     ?digest,
-                    has_elapsed_ms = has_start.elapsed().as_millis(),
+                    has_elapsed_ms = has_elapsed.as_millis(),
                     "upload_file: digest already exists in CAS, skipping upload",
                 );
+                report(UploadDisposition::SkippedPresent, Duration::ZERO, None);
                 return Ok(());
             }
             trace!(
                 ?digest,
-                has_elapsed_ms = has_start.elapsed().as_millis(),
+                has_elapsed_ms = has_elapsed.as_millis(),
                 file_size = digest.size_bytes(),
                 "upload_file: digest not in CAS, starting upload",
             );
@@ -1759,15 +2312,19 @@ async fn upload_file(
                 )
                 .await
                 .map(|_slot| ());
+            let upload_elapsed = file_upload_start.elapsed();
             trace!(
                 ?digest,
-                upload_elapsed_ms = file_upload_start.elapsed().as_millis(),
+                upload_elapsed_ms = upload_elapsed.as_millis(),
                 success = upload_result.is_ok(),
                 "upload_file: update_with_whole_file completed",
             );
 
             match upload_result {
-                Ok(()) => Ok(()),
+                Ok(()) => {
+                    report(UploadDisposition::Uploaded, upload_elapsed, None);
+                    Ok(())
+                }
                 Err(err) => {
                     // Output uploads run concurrently and may overlap (e.g. a file is listed
                     // both as an output file and inside an output directory). When another
@@ -1775,13 +2332,16 @@ async fn upload_file(
                     // NotFound even though the digest is now present. Per the RE spec, missing
                     // outputs should be ignored, so treat this as success if the digest exists.
                     if err.code == Code::NotFound
-                        && cas_store
-                            .has(store_key.borrow())
-                            .await
-                            .is_ok_and(|result| result.is_some())
+                        && matches!(CasLookup::of(cas_store, digest).await, CasLookup::Present)
                     {
+                        report(
+                            UploadDisposition::UploadedConcurrently,
+                            upload_elapsed,
+                            None,
+                        );
                         Ok(())
                     } else {
+                        report(UploadDisposition::UploadFailed, upload_elapsed, Some(&err));
                         Err(err)
                     }
                 }
@@ -1814,6 +2374,7 @@ async fn upload_file(
 async fn upload_symlink(
     full_path: impl AsRef<Path> + Debug,
     full_work_directory_path: impl AsRef<Path>,
+    origin: Option<&OutputOrigin<'_>>,
 ) -> Result<SymlinkInfo, Error> {
     let full_target_path = fs::read_link(full_path.as_ref())
         .await
@@ -1856,6 +2417,9 @@ async fn upload_symlink(
         })?
         .to_string();
 
+    if let Some(origin) = origin {
+        origin.observe_symlink(full_path.as_ref(), &target);
+    }
     Ok(SymlinkInfo {
         name_or_path: NameOrPath::Name(name),
         target,
@@ -1869,6 +2433,7 @@ fn upload_directory<'a, P: AsRef<Path> + Debug + Send + Sync + Clone + 'a>(
     hasher: DigestHasherFunc,
     digest_uploaders: Arc<Mutex<HashMap<DigestInfo, DigestUploader>>>,
     uploads: Arc<Semaphore>,
+    origin: Option<&'a OutputOrigin<'a>>,
 ) -> BoxFuture<'a, Result<(Directory, VecDeque<ProtoDirectory>), Error>> {
     Box::pin(async move {
         let mut file_futures = Vec::new();
@@ -1901,6 +2466,7 @@ fn upload_directory<'a, P: AsRef<Path> + Debug + Send + Sync + Clone + 'a>(
                             hasher,
                             digest_uploaders.clone(),
                             uploads.clone(),
+                            origin,
                         )
                         .and_then(|(dir, all_dirs)| async move {
                             let directory_name = full_path
@@ -1922,6 +2488,9 @@ fn upload_directory<'a, P: AsRef<Path> + Debug + Send + Sync + Clone + 'a>(
                                 serialize_and_upload_message(&dir, cas_store, &mut hasher.hasher())
                                     .await
                                     .err_tip(|| format!("for {}", full_path.display()))?;
+                            if let Some(origin) = origin {
+                                origin.observe_index(&full_path, digest);
+                            }
 
                             Result::<(DirectoryNode, VecDeque<Directory>), Error>::Ok((
                                 DirectoryNode {
@@ -1947,13 +2516,14 @@ fn upload_directory<'a, P: AsRef<Path> + Debug + Send + Sync + Clone + 'a>(
                             metadata,
                             digest_uploaders,
                             uploads,
+                            origin,
                         )
                         .map_ok(TryInto::try_into)
                         .await?
                     });
                 } else if file_type.is_symlink() {
                     symlink_futures.push(
-                        upload_symlink(full_path, &full_work_directory)
+                        upload_symlink(full_path, &full_work_directory, origin)
                             .map(|symlink| symlink?.try_into()),
                     );
                 }
@@ -2274,15 +2844,33 @@ pub async fn capture_output<R: tokio::io::AsyncRead + Unpin>(
 }
 
 /// Uploads captured output to the CAS, from memory or from its spill file.
+/// `stream` is [`OutputKind::Stdout`] or [`OutputKind::Stderr`].
 async fn upload_captured_output(
     cas_store: Pin<&FastSlowStore>,
     output: CapturedOutput,
     hasher: DigestHasherFunc,
-    what: &str,
+    stream: OutputKind,
+    provenance: Option<&OutputProvenance>,
 ) -> Result<DigestInfo, Error> {
+    let what = stream.as_str();
+    let observe = |digest| {
+        if let Some(provenance) = provenance {
+            provenance.observe(
+                ObservedOutput {
+                    kind: stream,
+                    path: String::new(),
+                    digest: Some(digest),
+                    is_executable: false,
+                    symlink_target: String::new(),
+                },
+                true,
+            );
+        }
+    };
     match output {
         CapturedOutput::Memory(data) => {
             let digest = compute_buf_digest(&data, &mut hasher.hasher());
+            observe(digest);
             cas_store
                 .update_oneshot(digest, data)
                 .await
@@ -2298,6 +2886,7 @@ async fn upload_captured_output(
                 .digest_for_file(&path, file.into_inner(), Some(len))
                 .await
                 .err_tip(|| format!("Failed to hash {what} spill file {}", path.display()))?;
+            observe(digest);
             cas_store
                 .update_with_whole_file(
                     digest,
@@ -2356,6 +2945,9 @@ pub struct RunningActionImpl {
     state: Mutex<RunningActionImplState>,
     has_manager_entry: AtomicBool,
     did_cleanup: AtomicBool,
+    /// This attempt's provenance events; `None` when they were disabled as
+    /// the attempt started.
+    provenance: Option<Arc<OutputProvenance>>,
 }
 
 impl RunningActionImpl {
@@ -2402,6 +2994,8 @@ impl RunningActionImpl {
             has_manager_entry: AtomicBool::new(false),
             // Only needs to be cleaned up after a prepare_action call, set there.
             did_cleanup: AtomicBool::new(true),
+            // Set by the manager, which has the request's metadata.
+            provenance: None,
         }
     }
 
@@ -2744,6 +3338,9 @@ impl RunningActionImpl {
         });
         state.execution_metadata.execution_completed_timestamp =
             (self.running_actions_manager.callbacks.now_fn)();
+        if let Some(provenance) = &self.provenance {
+            provenance.command_ended(EXIT_CODE_FOR_SIGNAL, Some(KillReason::External));
+        }
     }
 
     async fn inner_execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
@@ -2976,6 +3573,9 @@ impl RunningActionImpl {
                                 });
                                 state.execution_metadata.execution_completed_timestamp =
                                     (self.running_actions_manager.callbacks.now_fn)();
+                            }
+                            if let Some(provenance) = &self.provenance {
+                                provenance.command_ended(response.exit_code, None);
                             }
                             return Ok(self);
                         }
@@ -3523,6 +4123,9 @@ impl RunningActionImpl {
                         });
                         state.execution_metadata.execution_completed_timestamp = (self.running_actions_manager.callbacks.now_fn)();
                     }
+                    if let Some(provenance) = &self.provenance {
+                        provenance.command_ended(exit_code, kill_reason);
+                    }
                     return Ok(self);
                 },
                 _ = &mut kill_channel_rx => {
@@ -3576,6 +4179,7 @@ impl RunningActionImpl {
         };
         let cas_store = self.running_actions_manager.cas_store.as_ref();
         let hasher = self.action_info.unique_qualifier.digest_function();
+        let provenance = self.provenance.as_deref();
 
         let mut output_path_futures: Vec<BoxFuture<'_, Result<OutputType, Error>>> = Vec::new();
         let mut output_paths = command_proto.output_paths;
@@ -3601,6 +4205,12 @@ impl RunningActionImpl {
             let uploads = uploads.clone();
             output_path_futures.push(
                 async move {
+                    let origin = provenance.map(|provenance| OutputOrigin {
+                        provenance,
+                        output_path: entry.clone(),
+                        full_output_path: PathBuf::from(&full_path),
+                    });
+                    let origin = origin.as_ref();
                     let metadata = {
                         let metadata = match fs::symlink_metadata(&full_path).await {
                             Ok(file) => file,
@@ -3625,6 +4235,7 @@ impl RunningActionImpl {
                                     metadata,
                                     digest_uploaders,
                                     uploads,
+                                    origin,
                                 )
                                 .await
                                 .map(|mut file_info| {
@@ -3645,6 +4256,7 @@ impl RunningActionImpl {
                                 hasher,
                                 digest_uploaders,
                                 uploads,
+                                origin,
                             )
                             .and_then(|(root_dir, children)| async move {
                                 let tree = ProtoTree {
@@ -3658,6 +4270,9 @@ impl RunningActionImpl {
                                 )
                                 .await
                                 .err_tip(|| format!("While processing {entry}"))?;
+                                if let Some(origin) = origin {
+                                    origin.observe_index(&origin.full_output_path, tree_digest);
+                                }
                                 Ok(DirectoryInfo {
                                     path: entry,
                                     tree_digest,
@@ -3692,6 +4307,7 @@ impl RunningActionImpl {
                                                 hasher,
                                                 digest_uploaders,
                                                 uploads,
+                                                origin,
                                             )
                                             .and_then(|(root_dir, children)| async move {
                                                 let tree = ProtoTree {
@@ -3705,6 +4321,12 @@ impl RunningActionImpl {
                                                 )
                                                 .await
                                                 .err_tip(|| format!("While processing {entry}"))?;
+                                                if let Some(origin) = origin {
+                                                    origin.observe_index(
+                                                        &origin.full_output_path,
+                                                        tree_digest,
+                                                    );
+                                                }
                                                 Ok(DirectoryInfo {
                                                     path: entry,
                                                     tree_digest,
@@ -3730,6 +4352,7 @@ impl RunningActionImpl {
                                                 resolved_meta,
                                                 digest_uploaders,
                                                 uploads,
+                                                origin,
                                             )
                                             .await
                                             .map(|mut file_info| {
@@ -3762,7 +4385,7 @@ impl RunningActionImpl {
                         } else {
                             // Relative symlink — action intentionally created it.
                             // Upload as a proper symlink.
-                            let output_symlink = upload_symlink(&full_path, work_directory)
+                            let output_symlink = upload_symlink(&full_path, work_directory, origin)
                                 .await
                                 .map(|mut symlink_info| {
                                     symlink_info.name_or_path = NameOrPath::Path(entry);
@@ -3828,7 +4451,8 @@ impl RunningActionImpl {
                 cas_store.as_pin(),
                 data,
                 hasher,
-                "stdout",
+                OutputKind::Stdout,
+                provenance,
             ))
             .await?;
             debug!(
@@ -3849,7 +4473,8 @@ impl RunningActionImpl {
                 cas_store.as_pin(),
                 data,
                 hasher,
-                "stderr",
+                OutputKind::Stderr,
+                provenance,
             ))
             .await?;
             debug!(
@@ -3925,6 +4550,9 @@ impl RunningActionImpl {
             });
             state.resource_usage = resource_usage;
         }
+        if let Some(provenance) = provenance {
+            provenance.outputs_complete();
+        }
         debug!(
             operation_id = ?self.operation_id,
             total_elapsed_ms = upload_start.elapsed().as_millis(),
@@ -3946,6 +4574,9 @@ impl RunningActionImpl {
 
 impl Drop for RunningActionImpl {
     fn drop(&mut self) {
+        if let Some(provenance) = &self.provenance {
+            provenance.dropped();
+        }
         if self.did_cleanup.load(Ordering::Acquire) {
             if self.has_manager_entry.load(Ordering::Acquire) {
                 drop(
@@ -3996,6 +4627,7 @@ impl RunningAction for RunningActionImpl {
         let download_timeout = self.running_actions_manager.max_download_timeout;
         let operation_id = self.operation_id.clone();
         let metrics = self.metrics().clone();
+        let provenance = self.provenance.clone();
         let mut kill_rx = self.kill_token.subscribe();
         // The retry loop inside stops short of this; the timeout below is
         // the backstop for an attempt that never answers. The retries are
@@ -4063,11 +4695,15 @@ impl RunningAction for RunningActionImpl {
         .and_then(|res| res);
         if let Err(ref e) = res {
             warn!(?e, "Error during prepare_action");
+            if let Some(provenance) = &provenance {
+                provenance.phase_failed(AttemptOutcome::Failed, e);
+            }
         }
         res
     }
 
     async fn execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
+        let provenance = self.provenance.clone();
         let res = self
             .metrics()
             .clone()
@@ -4076,6 +4712,9 @@ impl RunningAction for RunningActionImpl {
             .await;
         if let Err(ref e) = res {
             warn!(?e, "Error during prepare_action");
+            if let Some(provenance) = &provenance {
+                provenance.phase_failed(AttemptOutcome::Failed, e);
+            }
         }
         res
     }
@@ -4090,6 +4729,7 @@ impl RunningAction for RunningActionImpl {
         );
         let metrics = self.metrics().clone();
         let kill_token = self.kill_token.clone();
+        let provenance = self.provenance.clone();
         let upload_fut = metrics
             .upload_results
             .wrap(Self::inner_upload_results(self));
@@ -4137,9 +4777,23 @@ impl RunningAction for RunningActionImpl {
                 upload_timeout.as_secs(),
                 operation_id,
             ))
+        })
+        .inspect_err(|err| {
+            if let Some(provenance) = &provenance {
+                provenance.phase_failed(AttemptOutcome::UploadFailed, err);
+            }
         })?;
         if let Err(ref e) = res {
             warn!(?operation_id, ?e, "Error during upload_results");
+        }
+        if let Some(provenance) = &provenance {
+            match &res {
+                Ok(action) => {
+                    let error = action.state.lock().error.clone();
+                    provenance.uploaded_finish(error.as_ref());
+                }
+                Err(err) => provenance.phase_failed(AttemptOutcome::UploadFailed, err),
+            }
         }
         res
     }
@@ -5069,6 +5723,9 @@ impl RunningActionsManagerImpl {
             operation_id = ?action.operation_id,
             "Sending kill to running operation",
         );
+        if let Some(provenance) = &action.provenance {
+            provenance.killed();
+        }
         // The token first: a phase waiting on it (a fetch, an upload) ends
         // now, whether or not the command ever started.
         action.kill_token.send_replace(true);
@@ -5184,14 +5841,25 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 } else {
                     timeout
                 };
-                let running_action = Arc::new(RunningActionImpl::new(
+                let mut running_action = RunningActionImpl::new(
                     execution_metadata,
                     operation_id.clone(),
                     action_directory,
                     action_info,
                     timeout,
                     self.clone(),
-                ));
+                );
+                // Decided once per attempt: turning the events on halfway
+                // would report an attempt without its start.
+                running_action.provenance = provenance_enabled().then(|| {
+                    Arc::new(OutputProvenance::start(
+                        &operation_id,
+                        &running_action.action_info,
+                        &capture_worker,
+                        capture_metadata.as_ref(),
+                    ))
+                });
+                let running_action = Arc::new(running_action);
                 {
                     let mut running_actions = self.running_actions.lock();
                     // Check if action already exists and is still alive
@@ -5593,5 +6261,156 @@ mod tests {
             retries.retried();
         }
         assert_eq!(*recorded.borrow(), vec!["retried", "abandoned"]);
+    }
+
+    fn observed(
+        kind: OutputKind,
+        path: &str,
+        digest: Option<DigestInfo>,
+        is_executable: bool,
+        symlink_target: &str,
+    ) -> ObservedOutput {
+        ObservedOutput {
+            kind,
+            path: path.to_string(),
+            digest,
+            is_executable,
+            symlink_target: symlink_target.to_string(),
+        }
+    }
+
+    /// A file, an executable file inside an output directory and a symlink.
+    fn sample_manifest() -> Vec<ObservedOutput> {
+        vec![
+            observed(
+                OutputKind::File,
+                "out/a.txt",
+                Some(DigestInfo::new([1; 32], 3)),
+                false,
+                "",
+            ),
+            observed(
+                OutputKind::DirectoryFile,
+                "dir/b",
+                Some(DigestInfo::new([2; 32], 5)),
+                true,
+                "",
+            ),
+            observed(OutputKind::Symlink, "link", None, false, "out/a.txt"),
+        ]
+    }
+
+    #[test]
+    fn manifest_fingerprint_is_the_sha256_of_the_canonical_manifest() {
+        // Worked out by hand, and hashed outside this code base.
+        let canonical = concat!(
+            "directory_file\tdir/b\t0202020202020202020202020202020202020202020202020202020202020202-5\tx\n",
+            "symlink\tlink\tout/a.txt\t-\n",
+            "file\tout/a.txt\t0101010101010101010101010101010101010101010101010101010101010101-3\t-\n",
+        );
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        hasher.update(canonical.as_bytes());
+        let expected = hasher.finalize_digest().packed_hash().to_string();
+        assert_eq!(
+            expected,
+            "1a80e77c3ea0478f1dc05835dd1bda1b51cff2df1277d34a0e5205f31948b775"
+        );
+        assert_eq!(manifest_fingerprint(&sample_manifest()), expected);
+        // No outputs at all is the hash of the empty manifest.
+        assert_eq!(
+            manifest_fingerprint(&[]),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn manifest_fingerprint_ignores_the_order_outputs_were_observed_in() {
+        let manifest = sample_manifest();
+        let expected = manifest_fingerprint(&manifest);
+        for order in [[0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
+            let reordered: Vec<ObservedOutput> =
+                order.iter().map(|&i| manifest[i].clone()).collect();
+            assert_eq!(manifest_fingerprint(&reordered), expected, "{order:?}");
+        }
+        // One path seen as a declared file and inside a declared directory:
+        // ordered by kind, whichever was seen first.
+        let file = observed(
+            OutputKind::File,
+            "out/a",
+            Some(DigestInfo::new([1; 32], 3)),
+            false,
+            "",
+        );
+        let directory_file = ObservedOutput {
+            kind: OutputKind::DirectoryFile,
+            ..file.clone()
+        };
+        assert_eq!(
+            manifest_fingerprint(&[file.clone(), directory_file.clone()]),
+            manifest_fingerprint(&[directory_file, file]),
+        );
+    }
+
+    #[test]
+    fn manifest_fingerprint_changes_with_content_mode_path_or_target() {
+        let expected = manifest_fingerprint(&sample_manifest());
+        let after = |change: fn(&mut Vec<ObservedOutput>)| {
+            let mut manifest = sample_manifest();
+            change(&mut manifest);
+            manifest_fingerprint(&manifest)
+        };
+        assert_ne!(
+            after(|manifest| manifest[0].digest = Some(DigestInfo::new([3; 32], 3))),
+            expected,
+            "content"
+        );
+        assert_ne!(
+            after(|manifest| manifest[0].is_executable = true),
+            expected,
+            "executable bit"
+        );
+        assert_ne!(
+            after(|manifest| manifest[1].path = "dir/c".to_string()),
+            expected,
+            "path"
+        );
+        assert_ne!(
+            after(|manifest| manifest[2].symlink_target = "elsewhere".to_string()),
+            expected,
+            "symlink target"
+        );
+        assert_ne!(
+            after(|manifest| drop(manifest.pop())),
+            expected,
+            "a missing output"
+        );
+    }
+
+    #[test]
+    fn manifest_fingerprint_leaves_out_stdout_stderr_and_directory_indexes() {
+        let expected = manifest_fingerprint(&sample_manifest());
+        let mut manifest = sample_manifest();
+        manifest.push(observed(
+            OutputKind::Stdout,
+            "",
+            Some(DigestInfo::new([4; 32], 7)),
+            false,
+            "",
+        ));
+        manifest.push(observed(
+            OutputKind::Stderr,
+            "",
+            Some(DigestInfo::new([5; 32], 9)),
+            false,
+            "",
+        ));
+        manifest.push(observed(
+            OutputKind::DirectoryIndex,
+            "dir",
+            Some(DigestInfo::new([6; 32], 80)),
+            false,
+            "",
+        ));
+        assert_eq!(manifest_fingerprint(&manifest), expected);
     }
 }
