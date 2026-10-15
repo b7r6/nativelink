@@ -35,6 +35,7 @@ rust_library(
         "src/origin_event_publisher.rs",
         "src/platform_properties.rs",
         "src/proto_stream_utils.rs",
+        "src/provenance.rs",
         "src/resource_info.rs",
         "src/retry.rs",
         "src/shutdown_guard.rs",
