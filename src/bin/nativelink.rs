@@ -901,9 +901,11 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .on_thread_start(|| {
             let _ = nativelink_worker::qos::set_user_initiated();
+            rtdiag::note_thread();
         })
         .enable_all()
         .build()?;
+    rtdiag::start(runtime.handle().clone());
 
     // The OTLP exporters need to run in a Tokio context
     // Do this first so all the other logging works
@@ -983,4 +985,125 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
         })
         .err_tip(|| "main() function failed")?;
     Ok(())
+}
+
+
+/// Lab-only runtime diagnostics (branch test/throttle-v176-rtdiag). Built with
+/// RUSTFLAGS="--cfg tokio_unstable --cfg tokio_taskdump". Observes only: a
+/// plain OS thread samples the runtime's per-worker counters into
+/// `NL_RTDIAG_FILE` (JSON lines) and, on SIGUSR2, a task dumps every task's
+/// await-point backtrace into `NL_RTDIAG_FILE.dump`. Nothing here changes
+/// scheduling, stores or the worker.
+mod rtdiag {
+    use core::time::Duration;
+    use std::io::Write;
+
+    fn path() -> Option<String> {
+        std::env::var("NL_RTDIAG_FILE").ok().filter(|p| !p.is_empty())
+    }
+
+    fn append(path: &str, line: &str) {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            drop(f.write_all(line.as_bytes()));
+        }
+    }
+
+    fn now_ms() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    }
+
+    /// Records the OS thread id of a runtime thread next to its Rust `ThreadId`,
+    /// so a worker index from the metrics can be matched to a gdb/proc thread.
+    pub(crate) fn note_thread() {
+        let Some(p) = path() else { return };
+        let tid = std::fs::read_link("/proc/thread-self")
+            .ok()
+            .and_then(|l| l.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        let name = std::thread::current().name().unwrap_or("").to_string();
+        append(
+            &p,
+            &format!(
+                "{{\"ts\":{},\"thread_start\":{{\"tid\":\"{tid}\",\"rust_id\":\"{:?}\",\"name\":\"{name}\"}}}}\n",
+                now_ms(),
+                std::thread::current().id()
+            ),
+        );
+    }
+
+    pub(crate) fn start(handle: tokio::runtime::Handle) {
+        let Some(p) = path() else { return };
+        let interval = std::env::var("NL_RTDIAG_INTERVAL_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5000u64);
+        let sampler_handle = handle.clone();
+        let sampler_path = p.clone();
+        drop(
+            std::thread::Builder::new()
+                .name("nl-rtdiag".into())
+                .spawn(move || {
+                    loop {
+                        std::thread::sleep(Duration::from_millis(interval));
+                        let m = sampler_handle.metrics();
+                        let mut s = format!(
+                            "{{\"ts\":{},\"alive_tasks\":{},\"global_q\":{},\"blocking_threads\":{},\"idle_blocking\":{},\"blocking_q\":{},\"workers\":[",
+                            now_ms(),
+                            m.num_alive_tasks(),
+                            m.global_queue_depth(),
+                            m.num_blocking_threads(),
+                            m.num_idle_blocking_threads(),
+                            m.blocking_queue_depth()
+                        );
+                        for w in 0..m.num_workers() {
+                            if w > 0 {
+                                s.push(',');
+                            }
+                            s.push_str(&format!(
+                                "{{\"w\":{w},\"rust_id\":\"{:?}\",\"poll\":{},\"park\":{},\"unpark\":{},\"busy_ms\":{},\"local_q\":{},\"steal\":{},\"noop\":{}}}",
+                                m.worker_thread_id(w),
+                                m.worker_poll_count(w),
+                                m.worker_park_count(w),
+                                m.worker_park_unpark_count(w),
+                                m.worker_total_busy_duration(w).as_millis(),
+                                m.worker_local_queue_depth(w),
+                                m.worker_steal_count(w),
+                                m.worker_noop_count(w)
+                            ));
+                        }
+                        s.push_str("]}\n");
+                        append(&sampler_path, &s);
+                    }
+                }),
+        );
+        let dump_path = format!("{p}.dump");
+        handle.spawn(async move {
+            let Ok(mut usr2) =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined2())
+            else {
+                return;
+            };
+            while usr2.recv().await.is_some() {
+                append(&dump_path, &format!("=== dump requested ts={}\n", now_ms()));
+                let Ok(dump) = tokio::time::timeout(
+                    Duration::from_secs(20),
+                    tokio::runtime::Handle::current().dump(),
+                )
+                .await
+                else {
+                    append(&dump_path, &format!("=== dump timed out after 20s ts={}\n", now_ms()));
+                    continue;
+                };
+                let mut out = String::new();
+                for (i, task) in dump.tasks().iter().enumerate() {
+                    out.push_str(&format!("--- task {i} id={:?}\n{}\n", task.id(), task.trace()));
+                }
+                out.push_str(&format!("=== dump done ts={} tasks={}\n", now_ms(), dump.tasks().iter().count()));
+                append(&dump_path, &out);
+            }
+        });
+    }
 }

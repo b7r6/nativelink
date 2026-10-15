@@ -71,6 +71,7 @@ tokio = { version = "1.52.2", features = [
   "io-util",
   "rt-multi-thread",
   "signal",
+  "taskdump",
 ], default-features = false }
 tokio-rustls = { version = "0.26.2", default-features = false, features = [
   "ring",
