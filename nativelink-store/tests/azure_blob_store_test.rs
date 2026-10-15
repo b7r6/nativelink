@@ -31,6 +31,7 @@ use nativelink_store::azure_blob_store::AzureBlobStore;
 use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::instant_wrapper::MockInstantWrapped;
+use nativelink_util::provenance::provenance_enabled;
 use nativelink_util::store_trait::{StoreKey, StoreLike, UploadSizeInfo};
 use sha2::{Digest, Sha256};
 
@@ -133,6 +134,10 @@ impl MockTransport {
         self.upload.lock().unwrap().push_back(response);
     }
 
+    fn push_commit(&self, response: CannedResponse) {
+        self.commit.lock().unwrap().push_back(response);
+    }
+
     fn request_count(&self) -> usize {
         self.count.load(Ordering::SeqCst)
     }
@@ -201,6 +206,23 @@ fn create_test_store(
     retry: Option<Retry>,
     consider_expired_after_s: Option<u32>,
 ) -> Result<TestStore, Error> {
+    let spec = ExperimentalAzureSpec {
+        account_name: TEST_ACCOUNT.to_string(),
+        container: TEST_CONTAINER.to_string(),
+        common: CommonObjectSpec {
+            consider_expired_after_s: consider_expired_after_s.unwrap_or(0),
+            retry: retry.unwrap_or_default(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    create_test_store_with_spec(mock, &spec)
+}
+
+fn create_test_store_with_spec(
+    mock: Arc<MockTransport>,
+    spec: &ExperimentalAzureSpec,
+) -> Result<TestStore, Error> {
     let mut options = BlobContainerClientOptions::default();
     // NativeLink's own `Retrier` wraps each operation, so disable the SDK's retry
     // policy to keep request counts deterministic.
@@ -214,19 +236,8 @@ fn create_test_store(
     let client = BlobContainerClient::new(container_url, None, Some(options))
         .expect("failed to build BlobContainerClient");
 
-    let spec = ExperimentalAzureSpec {
-        account_name: TEST_ACCOUNT.to_string(),
-        container: TEST_CONTAINER.to_string(),
-        common: CommonObjectSpec {
-            consider_expired_after_s: consider_expired_after_s.unwrap_or(0),
-            retry: retry.unwrap_or_default(),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
     AzureBlobStore::new_with_client_and_jitter(
-        &spec,
+        spec,
         client,
         Arc::new(|_| Duration::from_secs(0)),
         MockInstantWrapped::default,
@@ -510,7 +521,7 @@ async fn a_throttled_download_waits_at_most_the_cap() -> Result<(), Error> {
     assert_eq!(result, VALUE.as_bytes());
     assert_eq!(mock.request_count(), 2);
     assert!(
-        started.elapsed() >= cap && started.elapsed() < Duration::from_secs(3600),
+        started.elapsed() >= cap && started.elapsed() < Duration::from_hours(1),
         "waited {:?}, expected the {cap:?} cap, not the hour asked for",
         started.elapsed()
     );
@@ -845,5 +856,187 @@ async fn the_requested_range_starts_at_the_offset_plus_what_was_sent() -> Result
             "attempt {n} asked for {range:?}, expected it to start at {OFFSET}"
         );
     }
+    Ok(())
+}
+
+const TEST_KEY_PREFIX: &str = "cas/";
+
+/// A store whose blobs live under [`TEST_KEY_PREFIX`], so the provenance
+/// tests can see that `key` names the blob path actually written.
+fn create_prefixed_test_store(mock: Arc<MockTransport>) -> Result<TestStore, Error> {
+    let spec = ExperimentalAzureSpec {
+        account_name: TEST_ACCOUNT.to_string(),
+        container: TEST_CONTAINER.to_string(),
+        common: CommonObjectSpec {
+            key_prefix: Some(TEST_KEY_PREFIX.to_string()),
+            retry: Retry {
+                max_retries: 0,
+                delay: 0.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    create_test_store_with_spec(mock, &spec)
+}
+
+fn test_payload(len: usize) -> Bytes {
+    (0..len).map(|i| u8::try_from(i % 251).unwrap()).collect()
+}
+
+/// Checks that exactly one `backend_write` provenance event was logged and
+/// that its line carries every `expected` field, as the text formatter
+/// prints it.
+fn check_one_backend_write(lines: &[&str], expected: &[String]) -> Result<(), String> {
+    let events: Vec<&&str> = lines
+        .iter()
+        .filter(|line| line.contains("event=\"backend_write\""))
+        .collect();
+    let [event] = events.as_slice() else {
+        return Err(format!(
+            "expected one backend_write event, found {}: {events:#?}",
+            events.len()
+        ));
+    };
+    for field in expected {
+        if !event.contains(field.as_str()) {
+            return Err(format!("backend_write is missing `{field}`: {event}"));
+        }
+    }
+    Ok(())
+}
+
+/// A small blob of known size goes up in one Put Blob, and the event says so.
+#[nativelink_test]
+async fn a_single_request_upload_emits_one_backend_write() -> Result<(), Error> {
+    const CONTENT_LENGTH: usize = 1024;
+    assert!(
+        provenance_enabled(),
+        "the test subscriber must enable DEBUG on nativelink_provenance"
+    );
+
+    let mock = MockTransport::new();
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT_LENGTH)?;
+    store
+        .update_oneshot(digest, test_payload(CONTENT_LENGTH))
+        .await?;
+    assert_eq!(mock.request_count(), 1);
+
+    let expected = [
+        "store=\"azure_blob\"".to_string(),
+        format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{CONTENT_LENGTH} "),
+        format!("size_bytes={CONTENT_LENGTH} "),
+        "mode=\"single\"".to_string(),
+        "block_count=0 ".to_string(),
+        "result=\"ok\"".to_string(),
+        "error_code= ".to_string(),
+        "elapsed_ms=".to_string(),
+    ];
+    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// A blob past the block size is staged in blocks and committed with Put
+/// Block List; the event counts the blocks.
+#[nativelink_test]
+async fn a_block_upload_emits_one_backend_write_with_its_block_count() -> Result<(), Error> {
+    const BLOCK_SIZE: usize = 5 * 1024 * 1024; // DEFAULT_BLOCK_SIZE.
+    const TOTAL_SIZE: usize = BLOCK_SIZE * 2 + 50;
+
+    let mock = MockTransport::new();
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, TOTAL_SIZE)?;
+    store
+        .update_oneshot(digest, test_payload(TOTAL_SIZE))
+        .await?;
+    // 3 staged blocks + 1 committed block list.
+    assert_eq!(mock.request_count(), 4);
+
+    let expected = [
+        format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{TOTAL_SIZE} "),
+        format!("size_bytes={TOTAL_SIZE} "),
+        "mode=\"blocks\"".to_string(),
+        "block_count=3 ".to_string(),
+        "result=\"ok\"".to_string(),
+    ];
+    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// A Put Blob that fails with retries exhausted still emits the event, as
+/// an error carrying the code and the size that was expected.
+#[nativelink_test]
+async fn a_failed_single_request_upload_emits_an_error_backend_write() -> Result<(), Error> {
+    const CONTENT_LENGTH: usize = 512;
+
+    let mock = MockTransport::new();
+    mock.push_upload(error_response(StatusCode::InternalServerError));
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, CONTENT_LENGTH)?;
+    let err = store
+        .update_oneshot(digest, test_payload(CONTENT_LENGTH))
+        .await
+        .expect_err("the upload must fail with no retries left");
+    assert_eq!(err.code, Code::Aborted);
+
+    let expected = [
+        format!("key={TEST_KEY_PREFIX}{TEST_HASH}-{CONTENT_LENGTH} "),
+        format!("size_bytes={CONTENT_LENGTH} "),
+        "mode=\"single\"".to_string(),
+        "result=\"error\"".to_string(),
+        "error_code=Aborted ".to_string(),
+        "error=Error {".to_string(),
+        "Failed to upload blob in single chunk".to_string(),
+    ];
+    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// A failed Put Block List still emits the event, with the blocks that were
+/// staged before it.
+#[nativelink_test]
+async fn a_failed_block_list_commit_emits_an_error_backend_write() -> Result<(), Error> {
+    const BLOCK_SIZE: usize = 5 * 1024 * 1024; // DEFAULT_BLOCK_SIZE.
+    const TOTAL_SIZE: usize = BLOCK_SIZE * 2 + 50;
+
+    let mock = MockTransport::new();
+    mock.push_commit(error_response(StatusCode::InternalServerError));
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::try_new(TEST_HASH, TOTAL_SIZE)?;
+    let err = store
+        .update_oneshot(digest, test_payload(TOTAL_SIZE))
+        .await
+        .expect_err("the commit must fail with no retries left");
+    assert_eq!(err.code, Code::Aborted);
+
+    let expected = [
+        format!("size_bytes={TOTAL_SIZE} "),
+        "mode=\"blocks\"".to_string(),
+        "block_count=3 ".to_string(),
+        "result=\"error\"".to_string(),
+        "error_code=Aborted ".to_string(),
+    ];
+    logs_assert(|lines| check_one_backend_write(lines, &expected));
+    Ok(())
+}
+
+/// A zero-size update writes nothing, so it emits nothing.
+#[nativelink_test]
+async fn a_zero_size_update_emits_no_backend_write() -> Result<(), Error> {
+    let mock = MockTransport::new();
+    let store = create_prefixed_test_store(Arc::clone(&mock))?;
+    let digest = DigestInfo::new(Sha256::new().finalize().into(), 0);
+    store.update_oneshot(digest, Bytes::new()).await?;
+    assert_eq!(mock.request_count(), 0);
+
+    logs_assert(|lines| {
+        if lines.iter().any(|line| line.contains("backend_write")) {
+            return Err("a zero-size update emitted backend_write".to_string());
+        }
+        Ok(())
+    });
     Ok(())
 }
