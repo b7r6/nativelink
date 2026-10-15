@@ -151,6 +151,27 @@ rust_test(
     ],
 )
 
+rust_binary(
+    name = "verify_fast_store",
+    srcs = [
+        "src/bin/verify_fast_store.rs",
+    ],
+    deps = [
+        "//nativelink-util",
+        "@crates//:clap",
+    ],
+)
+
+rust_test(
+    name = "verify_fast_store_test",
+    timeout = "short",
+    crate = ":verify_fast_store",
+    deps = [
+        "@crates//:hex",
+        "@crates//:sha2",
+    ],
+)
+
 filegroup(
     name = "docs",
     srcs = [
