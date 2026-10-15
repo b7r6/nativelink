@@ -29,9 +29,10 @@ use nativelink_proto::build::bazel::remote::execution::v2::content_addressable_s
 use nativelink_proto::build::bazel::remote::execution::v2::{
     BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
     BatchUpdateBlobsResponse, Digest, Directory, DirectoryNode, FindMissingBlobsRequest,
-    GetTreeRequest, GetTreeResponse, NodeProperties, SpliceBlobRequest, SplitBlobRequest,
-    SplitBlobResponse, batch_read_blobs_response, batch_update_blobs_request,
-    batch_update_blobs_response, chunking_function, compressor, digest_function,
+    GetTreeRequest, GetTreeResponse, NodeProperties, RequestMetadata, SpliceBlobRequest,
+    SplitBlobRequest, SplitBlobResponse, ToolDetails, batch_read_blobs_response,
+    batch_update_blobs_request, batch_update_blobs_response, chunking_function, compressor,
+    digest_function,
 };
 use nativelink_proto::google::rpc::Status as GrpcStatus;
 use nativelink_service::cas_server::CasServer;
@@ -43,9 +44,13 @@ use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
+use nativelink_util::origin_event::{BAZEL_METADATA_KEY, request_metadata_to_baggage};
 use nativelink_util::store_trait::{
     RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
 };
+use opentelemetry::KeyValue;
+use opentelemetry::baggage::BaggageExt;
+use opentelemetry::context::FutureExt;
 use pretty_assertions::assert_eq;
 use prost::Message;
 use prost_types::Timestamp;
@@ -1744,5 +1749,260 @@ async fn chunking_infers_blake3_when_digest_function_unset()
         .await?
         .into_inner();
     assert_eq!(split_response.chunk_digests, vec![other_digest]);
+    Ok(())
+}
+
+/// The provenance events of `kind` among a test's log lines.
+fn provenance_events<'a>(lines: &[&'a str], kind: &str) -> Vec<&'a str> {
+    let event = format!("event=\"{kind}\"");
+    lines
+        .iter()
+        .copied()
+        .filter(|line| line.contains("nativelink_provenance") && line.contains(&event))
+        .collect()
+}
+
+/// Checks that a test logged one provenance event of `kind` per entry of
+/// `events`, each carrying every field of its entry.
+fn expect_events(lines: &[&str], kind: &str, events: &[&[&str]]) -> Result<(), String> {
+    let logged = provenance_events(lines, kind);
+    if logged.len() != events.len() {
+        return Err(format!(
+            "expected {} {kind} events, got {}:\n{}",
+            events.len(),
+            logged.len(),
+            logged.join("\n")
+        ));
+    }
+    for fields in events {
+        if !logged
+            .iter()
+            .any(|line| fields.iter().all(|field| line.contains(field)))
+        {
+            return Err(format!(
+                "no {kind} event carries all of {}:\n{}",
+                fields.join(", "),
+                logged.join("\n")
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A context carrying Bazel's `RequestMetadata` the way the gRPC middleware
+/// leaves it for a request that sent the `requestmetadata-bin` header.
+fn request_metadata_context() -> opentelemetry::Context {
+    let metadata = RequestMetadata {
+        tool_details: Some(ToolDetails {
+            tool_name: "bazel".to_string(),
+            tool_version: "8.4.2".to_string(),
+        }),
+        tool_invocation_id: "invocation-1234".to_string(),
+        target_id: "//app:bin".to_string(),
+        action_mnemonic: "CppLink".to_string(),
+        ..Default::default()
+    };
+    opentelemetry::Context::current().with_baggage(vec![KeyValue::new(
+        BAZEL_METADATA_KEY,
+        request_metadata_to_baggage(&metadata),
+    )])
+}
+
+#[nativelink_test]
+async fn batch_update_blobs_emits_cas_write_per_blob() -> Result<(), Box<dyn core::error::Error>> {
+    const VALUE1: &str = "1";
+    const VALUE2: &str = "23";
+
+    let store_manager = make_store_manager().await?;
+    let cas_server = make_cas_server(&store_manager)?;
+
+    cas_server
+        .batch_update_blobs(Request::new(BatchUpdateBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            requests: vec![
+                batch_update_blobs_request::Request {
+                    digest: Some(Digest {
+                        hash: HASH1.to_string(),
+                        size_bytes: VALUE1.len().try_into()?,
+                    }),
+                    data: VALUE1.into(),
+                    compressor: compressor::Value::Identity.into(),
+                },
+                batch_update_blobs_request::Request {
+                    digest: Some(Digest {
+                        hash: HASH2.to_string(),
+                        size_bytes: VALUE2.len().try_into()?,
+                    }),
+                    data: VALUE2.into(),
+                    compressor: compressor::Value::Identity.into(),
+                },
+            ],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .await?;
+
+    let digest1 = format!("digest={HASH1}-1 ");
+    let digest2 = format!("digest={HASH2}-2 ");
+    let common = [
+        "source=\"batch_update\"",
+        "instance_name=foo_instance_name ",
+        "digest_function=\"sha256\"",
+        "result=\"ok\"",
+        "error_code=\"\"",
+    ];
+    let blob1: Vec<&str> = [&digest1, " size_bytes=1 "]
+        .into_iter()
+        .chain(common)
+        .collect();
+    let blob2: Vec<&str> = [&digest2, " size_bytes=2 "]
+        .into_iter()
+        .chain(common)
+        .collect();
+    logs_assert(|lines| expect_events(lines, "cas_write", &[&blob1, &blob2]));
+    Ok(())
+}
+
+#[nativelink_test]
+async fn batch_update_blobs_failure_emits_cas_write_per_blob()
+-> Result<(), Box<dyn core::error::Error>> {
+    const VALUE: &str = "1";
+
+    let store_manager = make_store_manager().await?;
+    let cas_server = make_cas_server(&store_manager)?;
+
+    // A blob without a digest fails the whole batch.
+    let result = cas_server
+        .batch_update_blobs(Request::new(BatchUpdateBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            requests: vec![
+                batch_update_blobs_request::Request {
+                    digest: Some(Digest {
+                        hash: HASH1.to_string(),
+                        size_bytes: VALUE.len().try_into()?,
+                    }),
+                    data: VALUE.into(),
+                    compressor: compressor::Value::Identity.into(),
+                },
+                batch_update_blobs_request::Request {
+                    digest: None,
+                    data: VALUE.into(),
+                    compressor: compressor::Value::Identity.into(),
+                },
+            ],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .await;
+    assert!(result.is_err());
+
+    let digest = format!("digest={HASH1}-1 ");
+    logs_assert(|lines| {
+        expect_events(
+            lines,
+            "cas_write",
+            &[
+                &[&digest, "result=\"error\"", "error_code=\"Internal\""],
+                &["digest= ", " size_bytes=0 ", "result=\"error\""],
+            ],
+        )
+    });
+    Ok(())
+}
+
+#[nativelink_test]
+async fn find_missing_blobs_emits_find_missing_provenance_event()
+-> Result<(), Box<dyn core::error::Error>> {
+    const VALUE: &str = "1";
+
+    let store_manager = make_store_manager().await?;
+    let cas_server = make_cas_server(&store_manager)?;
+    let store = store_manager.get_store("main_cas").unwrap();
+
+    store
+        .update_oneshot(DigestInfo::try_new(HASH1, VALUE.len())?, VALUE.into())
+        .await?;
+    let response = cas_server
+        .find_missing_blobs(Request::new(FindMissingBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            blob_digests: vec![
+                Digest {
+                    hash: HASH1.to_string(),
+                    size_bytes: 1,
+                },
+                Digest {
+                    hash: HASH2.to_string(),
+                    size_bytes: 3,
+                },
+                Digest {
+                    hash: HASH3.to_string(),
+                    size_bytes: 5,
+                },
+            ],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .await?
+        .into_inner();
+    assert_eq!(response.missing_blob_digests.len(), 2);
+
+    logs_assert(|lines| {
+        expect_events(
+            lines,
+            "find_missing",
+            &[&[
+                "instance_name=foo_instance_name ",
+                "digest_function=\"sha256\"",
+                "requested_count=3 ",
+                "requested_bytes=9 ",
+                "missing_count=2 ",
+                "missing_bytes=8 ",
+                "result=\"ok\"",
+                "error_code=\"\"",
+            ]],
+        )
+    });
+    Ok(())
+}
+
+#[nativelink_test]
+async fn cas_provenance_events_carry_request_metadata() -> Result<(), Box<dyn core::error::Error>> {
+    const VALUE: &str = "1";
+
+    let store_manager = make_store_manager().await?;
+    let cas_server = make_cas_server(&store_manager)?;
+
+    let digest = Digest {
+        hash: HASH1.to_string(),
+        size_bytes: VALUE.len().try_into()?,
+    };
+    cas_server
+        .batch_update_blobs(Request::new(BatchUpdateBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            requests: vec![batch_update_blobs_request::Request {
+                digest: Some(digest.clone()),
+                data: VALUE.into(),
+                compressor: compressor::Value::Identity.into(),
+            }],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .with_context(request_metadata_context())
+        .await?;
+    cas_server
+        .find_missing_blobs(Request::new(FindMissingBlobsRequest {
+            instance_name: INSTANCE_NAME.to_string(),
+            blob_digests: vec![digest],
+            digest_function: digest_function::Value::Sha256.into(),
+        }))
+        .with_context(request_metadata_context())
+        .await?;
+
+    let metadata: &[&str] = &[
+        "tool_name=bazel ",
+        "tool_invocation_id=invocation-1234 ",
+        "action_mnemonic=CppLink ",
+        "target_id=//app:bin ",
+    ];
+    logs_assert(|lines| {
+        expect_events(lines, "cas_write", &[metadata])?;
+        expect_events(lines, "find_missing", &[metadata])
+    });
     Ok(())
 }

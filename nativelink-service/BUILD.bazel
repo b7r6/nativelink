@@ -19,6 +19,7 @@ rust_library(
         "src/fetch_server.rs",
         "src/health_server.rs",
         "src/lib.rs",
+        "src/provenance.rs",
         "src/push_server.rs",
         "src/remote_asset_proto.rs",
         "src/wire_compression.rs",
