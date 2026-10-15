@@ -725,8 +725,8 @@ pub(crate) fn interpretation(comparison: &Comparison) -> Vec<String> {
             "The oracle is stable ({} local runs, one manifest) and NativeLink varies ({} distinct \
              manifests over {} runs): the difference is on the NativeLink side (inputs \
              materialized, worker environment, or output handling). Check whether the manifests \
-             follow the worker column, and investigate those attempts with the worker's \
-             provenance events (input_audit, if the deployed NativeLink emits them).",
+             follow the worker column, and check those attempts' input_audit events (emitted \
+             when RUST_LOG includes nativelink_input_audit=debug).",
             comparison.oracle.completed,
             comparison.nativelink.fingerprints.len(),
             comparison.nativelink.completed
