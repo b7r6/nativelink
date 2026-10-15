@@ -156,12 +156,13 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                         };
                         // Lazy implementation making assumptions.
                         assert_eq!(
-                            args[load_offset..load_offset + 4],
+                            args[load_offset..load_offset + 5],
                             vec![
                                 OwnedFrame::BulkString(b"LOAD".to_vec()),
-                                OwnedFrame::BulkString(b"2".to_vec()),
+                                OwnedFrame::BulkString(b"3".to_vec()),
                                 OwnedFrame::BulkString(b"data".to_vec()),
-                                OwnedFrame::BulkString(b"version".to_vec())
+                                OwnedFrame::BulkString(b"version".to_vec()),
+                                OwnedFrame::BulkString(b"@__key".to_vec())
                             ]
                         );
                         let mut results = vec![Value::Int(0)];
@@ -178,12 +179,13 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                                 let desc = matches!(args.get(i + 3), Some(OwnedFrame::BulkString(d)) if d == b"DESC");
                                 Some((field, desc))
                             });
-                        let sorted = |mut rows: Vec<HashMap<String, Value>>| {
+                        let sorted = |mut rows: Vec<(String, HashMap<String, Value>)>| {
                             if let Some((field, desc)) = &sort_spec {
-                                let key = |r: &HashMap<String, Value>| match r.get(field) {
-                                    Some(Value::BulkString(b)) => b.clone(),
-                                    _ => Vec::new(),
-                                };
+                                let key =
+                                    |r: &(String, HashMap<String, Value>)| match r.1.get(field) {
+                                        Some(Value::BulkString(b)) => b.clone(),
+                                        _ => Vec::new(),
+                                    };
                                 rows.sort_by_key(key);
                                 if *desc {
                                     rows.reverse();
@@ -199,16 +201,20 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                                 .table
                                 .lock()
                                 .unwrap()
-                                .values()
-                                .filter(|f| f.contains_key("data") && f.contains_key("version"))
-                                .cloned()
+                                .iter()
+                                .filter(|(_, f)| {
+                                    f.contains_key("data") && f.contains_key("version")
+                                })
+                                .map(|(k, f)| (k.clone(), f.clone()))
                                 .collect();
-                            for fields in sorted(rows) {
+                            for (key, fields) in sorted(rows) {
                                 results.push(Value::Array(vec![
                                     Value::BulkString(b"data".to_vec()),
                                     fields["data"].clone(),
                                     Value::BulkString(b"version".to_vec()),
                                     fields["version"].clone(),
+                                    Value::BulkString(b"__key".to_vec()),
+                                    Value::BulkString(key.into_bytes()),
                                 ]));
                             }
                         } else {
@@ -225,14 +231,14 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                                 .table
                                 .lock()
                                 .unwrap()
-                                .values()
-                                .filter(|f| {
+                                .iter()
+                                .filter(|(_, f)| {
                                     f.get(field)
                                         == Some(&Value::BulkString(value.as_bytes().to_vec()))
                                 })
-                                .cloned()
+                                .map(|(k, f)| (k.clone(), f.clone()))
                                 .collect();
-                            for fields in sorted(rows) {
+                            for (key, fields) in sorted(rows) {
                                 {
                                     let mut record = vec![
                                         Value::BulkString(b"data".to_vec()),
@@ -245,6 +251,8 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                                         record.push(Value::BulkString(b"version".to_vec()));
                                         record.push(version.clone());
                                     }
+                                    record.push(Value::BulkString(b"__key".to_vec()));
+                                    record.push(Value::BulkString(key.into_bytes()));
                                     results.push(Value::Array(record));
                                 }
                             }
@@ -351,6 +359,38 @@ impl<S: SubscriptionManagerNotify + Send + 'static + Sync> FakeRedisBackend<S> {
                             r
                         } else {
                             Value::Array(vec![Value::Int(1), Value::Int(version)])
+                        }
+                    }
+
+                    "EVAL" => {
+                        // Only the delete-lost-record script is run via
+                        // EVAL; emulate its semantics: delete KEYS[1] only
+                        // if the liveness guard KEYS[2] does not exist and
+                        // the record still holds version ARGV[1].
+                        let script =
+                            str::from_utf8(args[0].as_bytes().expect("Script not bytes")).unwrap();
+                        assert!(script.contains("DEL"), "Unexpected EVAL script: {script:?}");
+                        assert_eq!(args[1], OwnedFrame::BulkString(b"2".to_vec()));
+                        let key = str::from_utf8(args[2].as_bytes().expect("Key not bytes"))
+                            .expect("Key cannot be parsed as string")
+                            .to_string();
+                        let guard_key =
+                            str::from_utf8(args[3].as_bytes().expect("Guard key not bytes"))
+                                .expect("Guard key cannot be parsed as string")
+                                .to_string();
+                        let expected_version =
+                            args[4].as_bytes().expect("Version not bytes").to_vec();
+                        let mut table = self.table.lock().unwrap();
+                        if table.contains_key(&guard_key) {
+                            Value::Int(-1)
+                        } else if table.get(&key).and_then(|f| f.get("version"))
+                            == Some(&Value::BulkString(expected_version))
+                        {
+                            table.remove(&key);
+                            debug!(%key, "Deleted key via delete-lost-record");
+                            Value::Int(1)
+                        } else {
+                            Value::Int(0)
                         }
                     }
 
