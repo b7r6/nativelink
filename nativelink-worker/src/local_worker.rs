@@ -110,6 +110,36 @@ fn reconnect_delay(attempt: u32) -> Duration {
 /// `cas_server.rs` must also be updated.
 const DEFAULT_ENDPOINT_TIMEOUT_S: f32 = 5.;
 
+/// TEST ONLY: fault injection for the dispatch-acknowledgement mechanism
+/// test. Not for production use.
+///
+/// With `NL_TEST_DELAY_START_ACTION_S` set to a positive number of seconds,
+/// the worker's run loop sleeps that long before it processes each of the
+/// first `NL_TEST_DELAY_START_ACTION_COUNT` (default 1) `StartAction`
+/// messages. The run loop is the only reader of the scheduler's stream, so
+/// everything queued behind that `StartAction` (later dispatches, kills)
+/// is read late too, while the keepalive task, spawned on its own, keeps
+/// sending: a worker that reads its dispatches late but is plainly alive.
+fn test_delay_start_action() -> Option<Duration> {
+    static DELAYED: AtomicU64 = AtomicU64::new(0);
+    let secs: f64 = env::var("NL_TEST_DELAY_START_ACTION_S")
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    if !secs.is_finite() || secs <= 0.0 {
+        return None;
+    }
+    let count: u64 = env::var("NL_TEST_DELAY_START_ACTION_COUNT")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(1);
+    if DELAYED.fetch_add(1, Ordering::AcqRel) >= count {
+        return None;
+    }
+    Some(Duration::from_secs_f64(secs))
+}
+
 /// Keepalive defaults for the scheduler connection, the same as a store's
 /// gRPC endpoint (`tls_utils::endpoint`).
 const DEFAULT_TCP_KEEPALIVE: Duration = Duration::from_secs(30);
@@ -551,6 +581,19 @@ impl<'a, T: WorkerApiClientTrait + 'static, U: RunningActionsManager> LocalWorke
                             }
                         }
                         Update::StartAction(start_execute) => {
+                            // TEST ONLY: see `test_delay_start_action`.
+                            if let Some(delay) = test_delay_start_action() {
+                                warn!(
+                                    operation_id = %start_execute.operation_id,
+                                    delay_s = delay.as_secs_f64(),
+                                    "NL_TEST_DELAY_START_ACTION_S: stalling the run loop before processing StartAction"
+                                );
+                                time::sleep(delay).await;
+                                warn!(
+                                    operation_id = %start_execute.operation_id,
+                                    "NL_TEST_DELAY_START_ACTION_S: stall over, processing StartAction"
+                                );
+                            }
                             // Don't accept any new requests if we're shutting down.
                             if shutting_down || (self.config.single_use
                                 && self.accepted_action.load(Ordering::Acquire)) {
