@@ -2062,6 +2062,9 @@ struct OutputProvenance {
     /// so an attempt whose start fell before a log window is still
     /// attributed.
     metadata: ProvenanceMetadata,
+    /// Whether the attempt's inputs are audited, decided as it starts so its
+    /// two audits come as a pair.
+    audit_inputs: bool,
     record: Mutex<AttemptRecord>,
     /// Set by the one `attempt_finished`.
     finished: AtomicBool,
@@ -2101,6 +2104,7 @@ impl OutputProvenance {
             metadata: request_metadata
                 .map(ProvenanceMetadata::from)
                 .unwrap_or_default(),
+            audit_inputs: tracing::enabled!(target: INPUT_AUDIT_TARGET, tracing::Level::DEBUG),
             record: Mutex::default(),
             finished: AtomicBool::new(false),
         };
@@ -2173,6 +2177,42 @@ impl OutputProvenance {
             error = %error.map(Error::message_string).unwrap_or_default(),
             has_elapsed_ms = u64::try_from(has_elapsed.as_millis()).unwrap_or(u64::MAX),
             upload_elapsed_ms = u64::try_from(upload_elapsed.as_millis()).unwrap_or(u64::MAX),
+        );
+    }
+
+    /// Emits `input_audit` for one pass of the input audit, and warns of the
+    /// first input that differs, if one does.
+    fn input_audited(&self, phase: AuditPhase, audit: &InputAudit, elapsed: Duration) {
+        let first = audit.mismatches.first();
+        if let Some(first) = first {
+            warn!(
+                operation_id = %self.operation_id,
+                phase = phase.as_str(),
+                path = %first.path,
+                kind = first.kind.as_str(),
+                expected = %first.expected,
+                actual = %first.actual,
+                shared_inode = first.shared_inode,
+                mismatch_count = audit.mismatches.len(),
+                "Input audit: a materialized input differs from the input root",
+            );
+        }
+        provenance_event!("input_audit";
+            attempt_id = %self.attempt_id,
+            operation_id = %self.operation_id,
+            action_digest = %self.action_digest,
+            phase = phase.as_str(),
+            result = audit.result(),
+            files_checked = audit.files_checked,
+            bytes_checked = audit.bytes_checked,
+            mismatch_count = audit.mismatches.len(),
+            first_mismatch_path = %first.map_or("", |mismatch| mismatch.path.as_str()),
+            first_mismatch_kind = first.map_or("", |mismatch| mismatch.kind.as_str()),
+            first_mismatch_expected = %first.map_or("", |mismatch| mismatch.expected.as_str()),
+            first_mismatch_actual = %first.map_or("", |mismatch| mismatch.actual.as_str()),
+            shared_inode = first.is_some_and(|mismatch| mismatch.shared_inode),
+            error = %audit.error.as_ref().map(Error::message_string).unwrap_or_default(),
+            elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
         );
     }
 
@@ -2347,6 +2387,419 @@ impl OutputOrigin<'_> {
             true,
         );
     }
+}
+
+/// The tracing target that turns the input audit on, beside the provenance
+/// target: `RUST_LOG=info,nativelink_provenance=debug,nativelink_input_audit=debug`.
+/// The audit's `input_audit` events go to the provenance target with the
+/// rest. The name is deliberately not under `nativelink_provenance`: a
+/// `RUST_LOG` directive applies to every target its own is a prefix of, so a
+/// name there would be turned on, and every input read twice per action, by
+/// `nativelink_provenance=debug` alone.
+pub const INPUT_AUDIT_TARGET: &str = "nativelink_input_audit";
+
+/// How many input files the input audit hashes at once.
+const INPUT_AUDIT_CONCURRENCY: usize = 16;
+
+/// When the input audit runs, for `input_audit`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuditPhase {
+    /// Once the inputs are materialized, right before the command starts.
+    BeforeExecution,
+    /// Once the command exited, before its outputs are uploaded.
+    AfterExecution,
+}
+
+impl AuditPhase {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::BeforeExecution => "before_execution",
+            Self::AfterExecution => "after_execution",
+        }
+    }
+}
+
+/// How a materialized input differs from the input root, for `input_audit`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum MismatchKind {
+    Content,
+    Missing,
+    ExecutableBit,
+    SymlinkTarget,
+    /// A file where a directory or symlink should be, or the reverse.
+    Type,
+}
+
+impl MismatchKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Content => "content",
+            Self::Missing => "missing",
+            Self::ExecutableBit => "executable_bit",
+            Self::SymlinkTarget => "symlink_target",
+            Self::Type => "type",
+        }
+    }
+}
+
+/// One input that is not what the input root says it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InputMismatch {
+    /// Relative to the input root.
+    path: String,
+    kind: MismatchKind,
+    /// A digest, a symlink target, `x` or `-` for the executable bit, or the
+    /// kind of node: `file`, `dir`, `symlink` or `absent`.
+    expected: String,
+    actual: String,
+    /// The file on disk has other links, so what is wrong with it is wrong
+    /// with the CAS or directory cache copy it is linked to as well.
+    shared_inode: bool,
+}
+
+impl InputMismatch {
+    fn new(
+        path: &str,
+        kind: MismatchKind,
+        expected: impl Into<String>,
+        actual: impl Into<String>,
+        shared_inode: bool,
+    ) -> Self {
+        Self {
+            path: path.to_string(),
+            kind,
+            expected: expected.into(),
+            actual: actual.into(),
+            shared_inode,
+        }
+    }
+}
+
+/// One node of the input tree the action asked for, with its path relative
+/// to the input root.
+#[derive(Debug)]
+enum ExpectedInput {
+    File {
+        path: String,
+        digest: DigestInfo,
+        is_executable: bool,
+    },
+    Symlink {
+        path: String,
+        target: String,
+    },
+    Directory {
+        path: String,
+    },
+}
+
+/// What one pass of the input audit found.
+#[derive(Debug, Default)]
+struct InputAudit {
+    files_checked: u64,
+    bytes_checked: u64,
+    /// Sorted by path, so the first is the same whatever order the checks
+    /// finished in.
+    mismatches: Vec<InputMismatch>,
+    /// Why the audit could not check everything, when it could not.
+    error: Option<Error>,
+}
+
+impl InputAudit {
+    /// The `result` of an `input_audit` event. A mismatch found is reported
+    /// even when something else could not be checked.
+    const fn result(&self) -> &'static str {
+        if !self.mismatches.is_empty() {
+            "failed"
+        } else if self.error.is_some() {
+            "error"
+        } else {
+            "passed"
+        }
+    }
+}
+
+/// The kind of node `metadata` describes, as an `input_audit` event names it.
+fn node_kind(metadata: &std::fs::Metadata) -> &'static str {
+    if metadata.is_dir() {
+        "dir"
+    } else if metadata.is_symlink() {
+        "symlink"
+    } else {
+        "file"
+    }
+}
+
+/// Whether the file has links besides the one being looked at.
+#[cfg(target_family = "unix")]
+fn shared_inode(metadata: &std::fs::Metadata) -> bool {
+    metadata.nlink() > 1
+}
+
+#[cfg(not(target_family = "unix"))]
+const fn shared_inode(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
+/// `Some` for a node that is there, `None` for one that is not.
+fn present(metadata: Result<std::fs::Metadata, Error>) -> Result<Option<std::fs::Metadata>, Error> {
+    match metadata {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(err) if err.code == Code::NotFound => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Reads one Directory of the expected input tree, from the fast tier or
+/// else the slow one, without populating either: the audit must not change
+/// what it audits. The bytes are checked against the digest, so the audit
+/// measures against the client's tree, not whatever a tier holds for it.
+async fn read_expected_directory(
+    cas_store: &FastSlowStore,
+    hasher: DigestHasherFunc,
+    digest: DigestInfo,
+) -> Result<ProtoDirectory, Error> {
+    let (tier, bytes) = match cas_store
+        .fast_store()
+        .get_part_unchunked(digest, 0, None)
+        .await
+    {
+        Ok(bytes) => ("fast", bytes),
+        Err(err) if err.code == Code::NotFound => (
+            "slow",
+            cas_store
+                .slow_store()
+                .get_part_unchunked(digest, 0, None)
+                .await
+                .err_tip(|| format!("Reading input directory {digest} for the audit"))?,
+        ),
+        Err(err) => {
+            return Err(err).err_tip(|| format!("Reading input directory {digest} for the audit"));
+        }
+    };
+    let actual = compute_buf_digest(&bytes, &mut hasher.hasher());
+    if actual != digest {
+        return Err(make_err!(
+            Code::DataLoss,
+            "Input directory {digest} in the {tier} tier hashes to {actual}"
+        ));
+    }
+    ProtoDirectory::decode(bytes).map_err(|err| {
+        make_err!(
+            Code::DataLoss,
+            "Input directory {digest} does not decode: {err}"
+        )
+    })
+}
+
+/// Every file, symlink and directory the input root names.
+async fn expected_inputs(
+    cas_store: &FastSlowStore,
+    hasher: DigestHasherFunc,
+    input_root: DigestInfo,
+) -> Result<Vec<ExpectedInput>, Error> {
+    let mut inputs = Vec::new();
+    let mut directories = vec![(String::new(), input_root)];
+    while let Some((prefix, digest)) = directories.pop() {
+        let directory = read_expected_directory(cas_store, hasher, digest).await?;
+        let path_of = |name: &str| {
+            if prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{prefix}/{name}")
+            }
+        };
+        for file in directory.files {
+            inputs.push(ExpectedInput::File {
+                path: path_of(&file.name),
+                digest: file
+                    .digest
+                    .err_tip(|| "Expected Digest to exist in Directory::file::digest")?
+                    .try_into()
+                    .err_tip(|| "In Directory::file::digest")?,
+                is_executable: file.is_executable,
+            });
+        }
+        for symlink in directory.symlinks {
+            inputs.push(ExpectedInput::Symlink {
+                path: path_of(&symlink.name),
+                target: symlink.target,
+            });
+        }
+        for sub_directory in directory.directories {
+            let path = path_of(&sub_directory.name);
+            let digest: DigestInfo = sub_directory
+                .digest
+                .err_tip(|| "Expected Digest to exist in Directory::directories::digest")?
+                .try_into()
+                .err_tip(|| "In Directory::directories::digest")?;
+            inputs.push(ExpectedInput::Directory { path: path.clone() });
+            directories.push((path, digest));
+        }
+    }
+    Ok(inputs)
+}
+
+/// Checks one expected input against what is on disk under `root`, and
+/// returns the bytes it hashed and how the input differs, if it does. A file
+/// is looked at through any symlink in its place: what matters is what the
+/// action reads.
+async fn check_input(
+    root: &Path,
+    input: &ExpectedInput,
+    hasher: DigestHasherFunc,
+) -> Result<(u64, Option<InputMismatch>), Error> {
+    match input {
+        ExpectedInput::File {
+            path,
+            digest,
+            is_executable: expected_executable,
+        } => {
+            let full_path = root.join(path);
+            let Some(metadata) = present(fs::metadata(&full_path).await)? else {
+                let mismatch = InputMismatch::new(
+                    path,
+                    MismatchKind::Missing,
+                    digest.to_string(),
+                    "absent",
+                    false,
+                );
+                return Ok((0, Some(mismatch)));
+            };
+            if metadata.is_dir() {
+                let mismatch = InputMismatch::new(path, MismatchKind::Type, "file", "dir", false);
+                return Ok((0, Some(mismatch)));
+            }
+            let file = fs::open_file(&full_path, 0, u64::MAX)
+                .await
+                .err_tip(|| format!("Opening input {path} for the audit"))?;
+            let (actual, _file) = hasher
+                .hasher()
+                .digest_for_file(&full_path, file.into_inner(), Some(metadata.len()))
+                .await
+                .err_tip(|| format!("Hashing input {path} for the audit"))?;
+            let actual_executable = is_executable(&metadata, &full_path);
+            let mode = |executable: bool| if executable { "x" } else { "-" };
+            let mismatch = if actual != *digest {
+                Some(InputMismatch::new(
+                    path,
+                    MismatchKind::Content,
+                    digest.to_string(),
+                    actual.to_string(),
+                    shared_inode(&metadata),
+                ))
+            } else if actual_executable != *expected_executable {
+                Some(InputMismatch::new(
+                    path,
+                    MismatchKind::ExecutableBit,
+                    mode(*expected_executable),
+                    mode(actual_executable),
+                    shared_inode(&metadata),
+                ))
+            } else {
+                None
+            };
+            Ok((metadata.len(), mismatch))
+        }
+        ExpectedInput::Symlink { path, target } => {
+            let full_path = root.join(path);
+            let Some(metadata) = present(fs::symlink_metadata(&full_path).await)? else {
+                let mismatch =
+                    InputMismatch::new(path, MismatchKind::Missing, target, "absent", false);
+                return Ok((0, Some(mismatch)));
+            };
+            if !metadata.is_symlink() {
+                let mismatch = InputMismatch::new(
+                    path,
+                    MismatchKind::Type,
+                    "symlink",
+                    node_kind(&metadata),
+                    false,
+                );
+                return Ok((0, Some(mismatch)));
+            }
+            let actual = fs::read_link(&full_path)
+                .await
+                .err_tip(|| format!("Reading input symlink {path} for the audit"))?;
+            let mismatch = (actual.as_os_str() != OsStr::new(target)).then(|| {
+                InputMismatch::new(
+                    path,
+                    MismatchKind::SymlinkTarget,
+                    target,
+                    actual.to_string_lossy(),
+                    false,
+                )
+            });
+            Ok((0, mismatch))
+        }
+        ExpectedInput::Directory { path } => {
+            let full_path = root.join(path);
+            let mismatch = match present(fs::metadata(&full_path).await)? {
+                None => Some(InputMismatch::new(
+                    path,
+                    MismatchKind::Missing,
+                    "dir",
+                    "absent",
+                    false,
+                )),
+                Some(metadata) if !metadata.is_dir() => Some(InputMismatch::new(
+                    path,
+                    MismatchKind::Type,
+                    "dir",
+                    node_kind(&metadata),
+                    false,
+                )),
+                Some(_) => None,
+            };
+            Ok((0, mismatch))
+        }
+    }
+}
+
+/// Checks every input `input_root` names against what is on disk under
+/// `root`, reading every input byte. Files no input names, the outputs among
+/// them, are not looked at.
+async fn check_inputs(
+    cas_store: &FastSlowStore,
+    hasher: DigestHasherFunc,
+    input_root: DigestInfo,
+    root: &Path,
+) -> InputAudit {
+    let inputs = match expected_inputs(cas_store, hasher, input_root).await {
+        Ok(inputs) => inputs,
+        Err(err) => {
+            return InputAudit {
+                error: Some(err),
+                ..InputAudit::default()
+            };
+        }
+    };
+    let mut audit = InputAudit::default();
+    let mut checks = futures::stream::iter(inputs.into_iter().map(|input| async move {
+        let is_file = matches!(input, ExpectedInput::File { .. });
+        (is_file, check_input(root, &input, hasher).await)
+    }))
+    .buffer_unordered(INPUT_AUDIT_CONCURRENCY);
+    while let Some((is_file, checked)) = checks.next().await {
+        if is_file {
+            audit.files_checked += 1;
+        }
+        match checked {
+            Ok((bytes, mismatch)) => {
+                audit.bytes_checked += bytes;
+                audit.mismatches.extend(mismatch);
+            }
+            Err(err) => {
+                if audit.error.is_none() {
+                    audit.error = Some(err);
+                }
+            }
+        }
+    }
+    audit
+        .mismatches
+        .sort_unstable_by(|a, b| a.path.cmp(&b.path).then_with(|| a.kind.cmp(&b.kind)));
+    audit
 }
 
 async fn upload_file(
@@ -3625,6 +4078,40 @@ impl RunningActionImpl {
         if let Some(provenance) = &self.provenance {
             provenance.command_ended(EXIT_CODE_FOR_SIGNAL, Some(KillReason::External));
         }
+    }
+
+    /// Audits the materialized inputs against the input root and reports it,
+    /// when the audit is on for this attempt; does nothing otherwise. Only a
+    /// kill that arrives during the audit cuts it short, so an attempt killed
+    /// earlier still has its inputs audited before its outputs go up.
+    async fn audit_inputs(&self, phase: AuditPhase) {
+        let Some(provenance) = self
+            .provenance
+            .as_deref()
+            .filter(|provenance| provenance.audit_inputs)
+        else {
+            return;
+        };
+        let started = std::time::Instant::now();
+        let mut kill_rx = self.kill_token.subscribe();
+        kill_rx.borrow_and_update();
+        let audit = tokio::select! {
+            audit = check_inputs(
+                &self.running_actions_manager.cas_store,
+                self.action_info.unique_qualifier.digest_function(),
+                self.action_info.input_root_digest,
+                Path::new(&self.work_directory),
+            ) => audit,
+            Ok(()) = kill_rx.changed() => InputAudit {
+                error: Some(make_err!(
+                    Code::Aborted,
+                    "Operation {} was killed during the input audit",
+                    self.operation_id
+                )),
+                ..InputAudit::default()
+            },
+        };
+        provenance.input_audited(phase, &audit, started.elapsed());
     }
 
     async fn inner_execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
@@ -4999,6 +5486,7 @@ impl RunningAction for RunningActionImpl {
     }
 
     async fn execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
+        self.audit_inputs(AuditPhase::BeforeExecution).await;
         let provenance = self.provenance.clone();
         let res = self
             .metrics()
@@ -5016,6 +5504,7 @@ impl RunningAction for RunningActionImpl {
     }
 
     async fn upload_results(self: Arc<Self>) -> Result<Arc<Self>, Error> {
+        self.audit_inputs(AuditPhase::AfterExecution).await;
         let upload_timeout = self.running_actions_manager.max_upload_timeout;
         let operation_id = self.operation_id.clone();
         info!(

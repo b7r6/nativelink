@@ -120,6 +120,59 @@ Emitted by the worker once per execution attempt, when it accepts
 | `command_digest` | digest | The `Command` the action names. |
 | `input_root_digest` | digest | The input root the action names. |
 
+## `input_audit` [#input_audit]
+
+Emitted by the worker twice per audited attempt: with `phase`
+`before_execution` once the inputs are materialized, right before the command
+starts, and with `phase` `after_execution` once the command has exited, before
+its outputs are uploaded. It tells an action that is nondeterministic from a
+worker that handed it the wrong inputs. An unchanged `input_root_digest` does
+not prove the action read the right bytes: the worker's fast tier and directory
+cache hand inputs out as hardlinks without checking them again, and an action
+that writes into a hardlinked input changes the copy every later action on that
+worker gets.
+
+**Off by default, and expensive.** The audit reads every input byte, twice per
+action. It runs only on an attempt that has provenance events on and whose
+worker also enables the `nativelink_input_audit` target at `DEBUG`, for example
+`RUST_LOG=info,nativelink_provenance=debug,nativelink_input_audit=debug`. Turn
+it on for a small pool of workers. The target is outside `nativelink_provenance`
+on purpose: a `RUST_LOG` directive covers every target whose name starts with
+its own, so `nativelink_provenance=debug` alone leaves the audit off. The worker
+decides when the attempt starts, so an audited attempt has both events.
+
+The audit walks the input tree the action names. It reads each `Directory`
+from the worker's CAS without populating either tier and checks it against its
+digest. It then compares every file (digest, with the action's digest function,
+and executable bit), symlink (target) and directory with what is on disk. It
+does not look at files the input root does not name, which include the
+outputs. The worker also logs a warning naming the first input that differs.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `attempt_id`, `operation_id`, `action_digest` | | Join keys, as on `attempt_started`. |
+| `phase` | string | `before_execution` or `after_execution`. |
+| `result` | string | `passed`, `failed` (at least one input differs), or `error` (no input differs, but the audit could not check everything; see `error`). A difference is reported as `failed` even when something else could not be checked. |
+| `files_checked` | integer | Files the input root names that the audit looked at. |
+| `bytes_checked` | integer | Bytes the audit hashed. |
+| `mismatch_count` | integer | Inputs that differ. |
+| `first_mismatch_path` | string | The first input that differs, in path order, relative to the input root. The command's working directory is a path inside the input root. `""` when nothing differs. |
+| `first_mismatch_kind` | string | `content`, `missing`, `executable_bit`, `symlink_target`, or `type` (a file where a directory or symlink should be, or the reverse). `""` when nothing differs. |
+| `first_mismatch_expected`, `first_mismatch_actual` | string | For `content`, digests. For `symlink_target`, the targets. For `executable_bit`, `x` or `-`. For `missing`, what was expected (a digest, a symlink target, or `dir`) and `absent`. For `type`, the kind expected and the kind found: `file`, `dir` or `symlink`. |
+| `shared_inode` | boolean | The first input that differs is a file with more than one link (`st_nlink` above 1). It is hardlinked from the worker's CAS or directory cache, so the copy there is wrong too, for every later action that gets it. |
+| `error` | string | Why the audit could not check everything, or `""`. |
+| `elapsed_ms` | integer | How long the audit took. |
+
+Reading the two together:
+
+- **`before_execution` failed:** the worker handed the action wrong inputs, for
+  example from a corrupted fast tier or directory cache.
+- **`before_execution` passed, `after_execution` failed:** the action changed
+  its own inputs. With `shared_inode` `true` it also changed the worker's copy,
+  and later actions on that worker fail `before_execution` for the same input.
+- **Both passed:** the inputs were intact, so a difference in the outputs is
+  the action's own.
+
 ## `output_observed` [#output_observed]
 
 Emitted by the worker for every output right after hashing it, whether or not

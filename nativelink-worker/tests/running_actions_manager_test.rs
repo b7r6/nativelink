@@ -69,6 +69,8 @@ mod tests {
     use nativelink_store::ac_utils::compute_buf_digest;
     use nativelink_store::ac_utils::{get_and_decode_digest, serialize_and_upload_message};
     use nativelink_store::fast_slow_store::FastSlowStore;
+    #[cfg(target_family = "unix")]
+    use nativelink_store::filesystem_store::FileEntry;
     use nativelink_store::filesystem_store::FilesystemStore;
     use nativelink_store::memory_store::MemoryStore;
     #[cfg(target_family = "unix")]
@@ -96,14 +98,14 @@ mod tests {
     use nativelink_worker::running_actions_manager::MemoryLimit;
     #[cfg(target_family = "unix")]
     use nativelink_worker::running_actions_manager::download_to_directory_bounded;
-    #[cfg(target_family = "unix")]
-    use nativelink_worker::running_actions_manager::free_disk_kb;
     use nativelink_worker::running_actions_manager::{
         Callbacks, ExecutionConfiguration, KillReason, PersistentWorkersSettings,
         ResourceEnforcement, RunningAction, RunningActionImpl, RunningActionsManager,
         RunningActionsManagerArgs, RunningActionsManagerImpl, classify_outcome,
         download_to_directory, log_excerpt, parse_kb_field,
     };
+    #[cfg(target_family = "unix")]
+    use nativelink_worker::running_actions_manager::{INPUT_AUDIT_TARGET, free_disk_kb};
     use pretty_assertions::assert_eq;
     use prost::Message;
     #[cfg(target_family = "unix")]
@@ -112,6 +114,8 @@ mod tests {
     #[cfg(target_family = "unix")]
     use tokio::sync::watch;
     use tracing::info;
+    #[cfg(target_family = "unix")]
+    use tracing::instrument::WithSubscriber;
 
     const DEFAULT_MAX_UPLOAD_TIMEOUT: u64 = 600;
     const DEFAULT_MAX_DOWNLOAD_TIMEOUT: u64 = 600;
@@ -10571,6 +10575,26 @@ done
         output_paths: &[&str],
     ) -> Result<(DigestInfo, OperationId, Result<ActionResult, Error>), Box<dyn core::error::Error>>
     {
+        run_script_with_inputs(
+            running_actions_manager,
+            cas_store,
+            script,
+            &Directory::default(),
+            output_paths,
+        )
+        .await
+    }
+
+    /// `run_script`, with `inputs` as the contents of [`PROVENANCE_CWD`].
+    #[cfg(target_family = "unix")]
+    async fn run_script_with_inputs(
+        running_actions_manager: &Arc<RunningActionsManagerImpl>,
+        cas_store: &Arc<FastSlowStore>,
+        script: &str,
+        inputs: &Directory,
+        output_paths: &[&str],
+    ) -> Result<(DigestInfo, OperationId, Result<ActionResult, Error>), Box<dyn core::error::Error>>
+    {
         let command = Command {
             arguments: vec!["sh".to_string(), "-c".to_string(), script.to_string()],
             output_paths: output_paths.iter().map(ToString::to_string).collect(),
@@ -10593,7 +10617,7 @@ done
                     name: PROVENANCE_CWD.to_string(),
                     digest: Some(
                         serialize_and_upload_message(
-                            &Directory::default(),
+                            inputs,
                             cas_store.as_pin(),
                             &mut DigestHasherFunc::Sha256.hasher(),
                         )
@@ -11101,6 +11125,313 @@ done
         assert_eq!(finished[0]["outcome"], "failed");
         assert_eq!(finished[0]["error_code"], "Cancelled");
         assert_eq!(finished[0]["outputs_complete"], "false");
+        Ok(())
+    }
+
+    /// The working-directory inputs of the audit tests.
+    #[cfg(target_family = "unix")]
+    const AUDIT_INPUT: &[u8] = b"hello audit\n";
+    #[cfg(target_family = "unix")]
+    const AUDIT_TOOL: &[u8] = b"#!/bin/sh\necho hi\n";
+    #[cfg(target_family = "unix")]
+    const AUDIT_DATA: &[u8] = b"0123456789";
+
+    #[cfg(target_family = "unix")]
+    fn sha256_of(content: &[u8]) -> DigestInfo {
+        compute_buf_digest(content, &mut DigestHasherFunc::Sha256.hasher())
+    }
+
+    /// Puts the audit tests' inputs in the CAS and returns the working
+    /// directory holding them: a file, an executable, a file in a
+    /// subdirectory and a symlink.
+    #[cfg(target_family = "unix")]
+    async fn audit_fixture(
+        cas_store: &Arc<FastSlowStore>,
+    ) -> Result<Directory, Box<dyn core::error::Error>> {
+        for content in [AUDIT_INPUT, AUDIT_TOOL, AUDIT_DATA] {
+            cas_store
+                .as_ref()
+                .update_oneshot(sha256_of(content), Bytes::from_static(content))
+                .await?;
+        }
+        let sub_digest = serialize_and_upload_message(
+            &Directory {
+                files: vec![FileNode {
+                    name: "data.bin".to_string(),
+                    digest: Some(sha256_of(AUDIT_DATA).into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            cas_store.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        Ok(Directory {
+            files: vec![
+                FileNode {
+                    name: "in.txt".to_string(),
+                    digest: Some(sha256_of(AUDIT_INPUT).into()),
+                    ..Default::default()
+                },
+                FileNode {
+                    name: "tool.sh".to_string(),
+                    digest: Some(sha256_of(AUDIT_TOOL).into()),
+                    is_executable: true,
+                    ..Default::default()
+                },
+            ],
+            directories: vec![DirectoryNode {
+                name: "sub".to_string(),
+                digest: Some(sub_digest.into()),
+            }],
+            symlinks: vec![SymlinkNode {
+                name: "link".to_string(),
+                target: "in.txt".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+    }
+
+    /// Where the fast tier keeps its copy of `digest`.
+    #[cfg(target_family = "unix")]
+    async fn fast_store_blob_path(
+        cas_store: &FastSlowStore,
+        digest: DigestInfo,
+    ) -> Result<OsString, Box<dyn core::error::Error>> {
+        let fast_store = cas_store
+            .fast_store()
+            .downcast_ref::<FilesystemStore>(None)
+            .err_tip(|| "The fast tier should be a FilesystemStore")?;
+        Ok(fast_store
+            .get_file_entry_for_digest(&digest)
+            .await?
+            .get_file_path_locked(|path| async move { Ok::<_, Error>(path) })
+            .await?)
+    }
+
+    /// The input audit events of this test, from `events`.
+    #[cfg(target_family = "unix")]
+    fn audits_by_phase(events: &[ProvenanceEvent]) -> (&ProvenanceEvent, &ProvenanceEvent) {
+        let audits = events_of(events, "input_audit");
+        assert_eq!(audits.len(), 2, "{events:#?}");
+        let phase = |phase: &str| {
+            *audits
+                .iter()
+                .find(|audit| audit["phase"] == phase)
+                .unwrap_or_else(|| panic!("no {phase} audit in {audits:#?}"))
+        };
+        (phase("before_execution"), phase("after_execution"))
+    }
+
+    /// With the audit on, an attempt whose inputs are intact is audited
+    /// twice, before and after the command, and passes both times, having
+    /// hashed every input file.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn input_audit_passes_for_intact_inputs() -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = audit_fixture(&cas_store).await?;
+        let (_, _, result) = run_script_with_inputs(
+            &running_actions_manager,
+            &cas_store,
+            "cat in.txt sub/data.bin link > /dev/null && test -x tool.sh && printf out > out.txt",
+            &inputs,
+            &["out.txt"],
+        )
+        .await?;
+        assert_eq!(result?.exit_code, 0);
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let started = events_of(&events, "attempt_started");
+        assert_eq!(started.len(), 1, "{events:#?}");
+        let audits: [&ProvenanceEvent; 2] = audits_by_phase(&events).into();
+        let bytes = AUDIT_INPUT.len() + AUDIT_TOOL.len() + AUDIT_DATA.len();
+        for audit in audits {
+            assert_eq!(audit["attempt_id"], started[0]["attempt_id"]);
+            assert_eq!(audit["result"], "passed", "{audit:#?}");
+            assert_eq!(audit["files_checked"], "3");
+            assert_eq!(audit["bytes_checked"], bytes.to_string());
+            assert_eq!(audit["mismatch_count"], "0");
+            assert_eq!(audit["first_mismatch_path"], "");
+            assert_eq!(audit["first_mismatch_kind"], "");
+            assert_eq!(audit["shared_inode"], "false");
+            assert_eq!(audit["error"], "");
+        }
+        Ok(())
+    }
+
+    /// An input whose copy in the worker's own fast tier no longer matches
+    /// its digest is materialized as is, and the audit before the command
+    /// names it. The command still runs, on the wrong bytes.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn input_audit_reports_an_input_corrupted_in_the_fast_store()
+    -> Result<(), Box<dyn core::error::Error>> {
+        const CORRUPTED: &[u8] = b"HELLO AUDIT\n";
+        assert_eq!(CORRUPTED.len(), AUDIT_INPUT.len());
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = audit_fixture(&cas_store).await?;
+        // Overwritten in place, at the same size, as a stray write would.
+        let blob = fast_store_blob_path(&cas_store, sha256_of(AUDIT_INPUT)).await?;
+        std::fs::set_permissions(&blob, std::fs::Permissions::from_mode(0o644))?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&blob)?
+            .write_all(CORRUPTED)?;
+        std::fs::set_permissions(&blob, std::fs::Permissions::from_mode(0o444))?;
+
+        let (_, _, result) = run_script_with_inputs(
+            &running_actions_manager,
+            &cas_store,
+            "cat in.txt > out.txt",
+            &inputs,
+            &["out.txt"],
+        )
+        .await?;
+        let action_result = result?;
+        assert_eq!(action_result.exit_code, 0);
+        assert_eq!(action_result.output_files[0].digest, sha256_of(CORRUPTED));
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let (before, _) = audits_by_phase(&events);
+        assert_eq!(before["result"], "failed", "{before:#?}");
+        assert_eq!(before["files_checked"], "3");
+        assert_eq!(before["mismatch_count"], "1");
+        assert_eq!(before["first_mismatch_path"], "cwd/in.txt");
+        assert_eq!(before["first_mismatch_kind"], "content");
+        assert_eq!(
+            before["first_mismatch_expected"],
+            sha256_of(AUDIT_INPUT).to_string()
+        );
+        assert_eq!(
+            before["first_mismatch_actual"],
+            sha256_of(CORRUPTED).to_string()
+        );
+        // Hardlinked from the fast tier, so the bad bytes are shared.
+        assert_eq!(before["shared_inode"], "true");
+        assert!(logs_contain(
+            "Input audit: a materialized input differs from the input root"
+        ));
+        Ok(())
+    }
+
+    /// A command that writes into one of its inputs in place passes the
+    /// audit before it runs and fails the one after, and the input is
+    /// reported as sharing its inode: the worker's CAS copy changed with it.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn input_audit_reports_an_input_the_action_modified_in_place()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = audit_fixture(&cas_store).await?;
+        let blob = fast_store_blob_path(&cas_store, sha256_of(AUDIT_INPUT)).await?;
+        let (_, _, result) = run_script_with_inputs(
+            &running_actions_manager,
+            &cas_store,
+            "chmod u+w in.txt && printf x >> in.txt",
+            &inputs,
+            &[],
+        )
+        .await?;
+        assert_eq!(result?.exit_code, 0);
+        let modified = [AUDIT_INPUT, b"x"].concat();
+
+        let events = Mutex::new(Vec::new());
+        logs_assert(|lines| {
+            *events.lock().unwrap() = parse_provenance_events(lines);
+            Ok(())
+        });
+        let events = events.into_inner().unwrap();
+
+        let (before, after) = audits_by_phase(&events);
+        assert_eq!(before["result"], "passed", "{before:#?}");
+        assert_eq!(after["result"], "failed", "{after:#?}");
+        assert_eq!(after["mismatch_count"], "1");
+        assert_eq!(after["first_mismatch_path"], "cwd/in.txt");
+        assert_eq!(after["first_mismatch_kind"], "content");
+        assert_eq!(
+            after["first_mismatch_expected"],
+            sha256_of(AUDIT_INPUT).to_string()
+        );
+        assert_eq!(
+            after["first_mismatch_actual"],
+            sha256_of(&modified).to_string()
+        );
+        assert_eq!(after["shared_inode"], "true");
+        // What shared_inode warns of: the fast tier's copy is now wrong too.
+        assert_eq!(std::fs::read(&blob)?, modified);
+        Ok(())
+    }
+
+    /// Where the audit-off test's own subscriber writes.
+    #[cfg(target_family = "unix")]
+    static AUDIT_OFF_LOG: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+
+    /// The filter an operator sets to collect provenance events turns
+    /// neither the audit nor its reads on: the audit has a target of its
+    /// own, outside the provenance target's prefix.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn input_audit_is_off_unless_its_own_target_is_enabled()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let dispatch = tracing_test::internal::get_subscriber(
+            tracing_test::internal::MockWriter::new(&AUDIT_OFF_LOG),
+            "info,nativelink_provenance=debug",
+        );
+        let (provenance_on, audit_on, prefixed_on) =
+            tracing::dispatcher::with_default(&dispatch, || {
+                (
+                    provenance_enabled(),
+                    tracing::enabled!(target: INPUT_AUDIT_TARGET, tracing::Level::DEBUG),
+                    // Why: a directive covers every target it is a prefix of.
+                    tracing::enabled!(
+                        target: "nativelink_provenance_audit",
+                        tracing::Level::DEBUG
+                    ),
+                )
+            });
+        assert!(provenance_on);
+        assert!(!audit_on);
+        assert!(prefixed_on);
+
+        let (running_actions_manager, cas_store) =
+            manager_over(Store::new(MemoryStore::new(&MemorySpec::default()))).await?;
+        let inputs = audit_fixture(&cas_store).await?;
+        let (_, _, result) = run_script_with_inputs(
+            &running_actions_manager,
+            &cas_store,
+            "cat in.txt > /dev/null",
+            &inputs,
+            &[],
+        )
+        .with_subscriber(dispatch)
+        .await?;
+        assert_eq!(result?.exit_code, 0);
+
+        let log = String::from_utf8(AUDIT_OFF_LOG.lock().unwrap().clone())?;
+        let lines: Vec<&str> = log.lines().collect();
+        let events = parse_provenance_events(&lines);
+        assert_eq!(events_of(&events, "attempt_started").len(), 1, "{log}");
+        assert_eq!(events_of(&events, "attempt_finished").len(), 1, "{log}");
+        assert!(events_of(&events, "input_audit").is_empty(), "{log}");
+        assert!(!log.contains("Input audit"), "{log}");
         Ok(())
     }
 }
