@@ -1851,10 +1851,11 @@ enum AttemptOutcome {
     Completed,
     UploadFailed,
     /// Ended by the worker: on a kill from the scheduler, or past a memory
-    /// or disk reservation. The outputs it left may still have been uploaded.
+    /// or disk reservation. The outputs it left may still have been
+    /// uploaded, and then `outputs_complete` is true.
     Killed,
     /// Ended by the worker at the action's timeout. The outputs it left may
-    /// still have been uploaded.
+    /// still have been uploaded, and then `outputs_complete` is true.
     TimedOut,
     /// Any other error before the upload.
     Failed,
@@ -1929,6 +1930,10 @@ struct OutputProvenance {
     attempt_id: Uuid,
     operation_id: OperationId,
     action_digest: DigestInfo,
+    /// The request's metadata, on `attempt_finished` as on `attempt_started`,
+    /// so an attempt whose start fell before a log window is still
+    /// attributed.
+    metadata: ProvenanceMetadata,
     record: Mutex<AttemptRecord>,
     /// Set by the one `attempt_finished`.
     finished: AtomicBool,
@@ -1939,7 +1944,9 @@ struct OutputProvenance {
 struct AttemptRecord {
     /// The files, directory files and symlinks observed.
     manifest: Vec<ObservedOutput>,
-    /// Set once every output was observed and uploaded.
+    /// Set once every output was observed and uploaded. That includes the
+    /// outputs a killed or timed-out command left, so it is no sign the
+    /// command ran to the end: `attempt_finished`'s outcome says that.
     outputs_complete: bool,
     exit_code: Option<i32>,
     /// Why the worker ended the command; `None` until the command ended,
@@ -1963,13 +1970,13 @@ impl OutputProvenance {
             attempt_id: Uuid::new_v4(),
             operation_id: operation_id.clone(),
             action_digest: action_info.digest(),
+            metadata: request_metadata
+                .map(ProvenanceMetadata::from)
+                .unwrap_or_default(),
             record: Mutex::default(),
             finished: AtomicBool::new(false),
         };
-        let metadata = request_metadata
-            .map(ProvenanceMetadata::from)
-            .unwrap_or_default();
-        provenance_event!("attempt_started", &metadata;
+        provenance_event!("attempt_started", &provenance.metadata;
             attempt_id = %provenance.attempt_id,
             operation_id = %provenance.operation_id,
             worker_id = %worker_id,
@@ -2104,13 +2111,16 @@ impl OutputProvenance {
             .filter_map(|output| output.digest)
             .collect();
         // Taken only over a manifest known to be whole: a fingerprint of
-        // part of the outputs would look like different content.
+        // part of the outputs would look like different content. Whole is
+        // not finished, though: the outputs a killed or timed-out command
+        // left are whole once uploaded, so comparing attempts by
+        // fingerprint wants `completed` ones only.
         let fingerprint = if record.outputs_complete {
             manifest_fingerprint(&record.manifest)
         } else {
             String::new()
         };
-        provenance_event!("attempt_finished";
+        provenance_event!("attempt_finished", &self.metadata;
             attempt_id = %self.attempt_id,
             operation_id = %self.operation_id,
             action_digest = %self.action_digest,

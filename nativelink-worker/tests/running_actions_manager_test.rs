@@ -9899,6 +9899,10 @@ done
         assert_eq!(finished[0]["unique_output_bytes"], "9");
         assert_eq!(finished[0]["manifest_fingerprint"].len(), 64);
         assert_eq!(finished[0]["error_code"], "");
+        // The metadata is on the end too, for a log window that lost the start.
+        assert_eq!(finished[0]["target_id"], "//provenance:target");
+        assert_eq!(finished[0]["action_mnemonic"], "Genrule");
+        assert_eq!(finished[0]["tool_invocation_id"], "");
         Ok(())
     }
 
