@@ -15,6 +15,7 @@
 use core::cmp;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use core::task::{Context, Poll};
 use core::time::Duration;
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -24,7 +25,11 @@ use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
 use azure_core::error::ErrorKind;
 use azure_core::http::headers::{RETRY_AFTER, RETRY_AFTER_MS, X_MS_RETRY_AFTER_MS};
-use azure_core::http::{RequestContent, RetryOptions, StatusCode, Transport, Url};
+use azure_core::http::headers::Headers;
+use azure_core::http::{
+    AsyncRawResponse, AsyncResponseBody, HttpClient, Request, RequestContent, RetryOptions,
+    StatusCode, Transport, Url,
+};
 use azure_identity::WorkloadIdentityCredential;
 use azure_storage_blob::clients::{BlobContainerClient, BlobContainerClientOptions};
 use azure_storage_blob::models::{
@@ -33,10 +38,11 @@ use azure_storage_blob::models::{
 };
 use futures::future::FusedFuture;
 use futures::stream::{FuturesUnordered, unfold};
-use futures::{FutureExt, StreamExt, TryStreamExt};
+use futures::{FutureExt, Stream, StreamExt, TryStreamExt};
 use nativelink_config::stores::ExperimentalAzureSpec;
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_metric::MetricsComponent;
+use nativelink_util::fill_diag::{self, now_ms};
 use nativelink_util::buf_channel::{
     DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
 };
@@ -80,6 +86,164 @@ const DEFAULT_BLOB_ENDPOINT_SUFFIX: &str = "blob.core.windows.net";
 // The longest `error` a `backend_write` provenance event carries, in
 // characters. The SDK's error dump alone runs to several hundred.
 const MAX_PROVENANCE_ERROR_CHARS: usize = 300;
+
+/// Fill experiment: a header's value, matched case-insensitively.
+fn fill_header(headers: &Headers, name: &str) -> String {
+    headers
+        .iter()
+        .find(|(k, _)| k.as_str().eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str().to_string())
+        .unwrap_or_default()
+}
+
+/// Fill experiment: the HTTP client under the Azure SDK. Counts every
+/// request, its `Range`, the response bytes the SDK actually pulled, and
+/// whether each body was read to the end or dropped part way.
+#[derive(Debug)]
+struct FillCountingClient {
+    inner: Arc<dyn HttpClient>,
+}
+
+#[async_trait]
+impl HttpClient for FillCountingClient {
+    async fn execute_request(&self, request: &Request) -> azure_core::Result<AsyncRawResponse> {
+        let id = fill_diag::HTTP_REQUESTS.fetch_add(1, Ordering::Relaxed);
+        let range = {
+            let r = fill_header(request.headers(), "x-ms-range");
+            if r.is_empty() {
+                fill_header(request.headers(), "range")
+            } else {
+                r
+            }
+        };
+        let method = format!("{:?}", request.method());
+        let path = request.url().path().to_string();
+        let started = Instant::now();
+        let inflight = fill_diag::inflight_inc();
+        event!(
+            target: "fill",
+            Level::INFO,
+            ev = "http_start",
+            id,
+            method = %method,
+            path = %path,
+            range = %range,
+            inflight,
+            t_ms = now_ms(),
+        );
+        match self.inner.execute_request(request).await {
+            Err(err) => {
+                let inflight = fill_diag::inflight_dec();
+                event!(
+                    target: "fill",
+                    Level::INFO,
+                    ev = "http_error",
+                    id,
+                    range = %range,
+                    error = %err,
+                    inflight,
+                    elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    t_ms = now_ms(),
+                );
+                Err(err)
+            }
+            Ok(response) => {
+                let (status, headers, body) = response.deconstruct();
+                event!(
+                    target: "fill",
+                    Level::INFO,
+                    ev = "http_headers",
+                    id,
+                    range = %range,
+                    status = ?status,
+                    content_length = %fill_header(&headers, "content-length"),
+                    content_range = %fill_header(&headers, "content-range"),
+                    elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    t_ms = now_ms(),
+                );
+                Ok(AsyncRawResponse::new(
+                    status,
+                    headers,
+                    Box::pin(FillCountingBody {
+                        inner: Box::pin(body),
+                        id,
+                        range,
+                        bytes: 0,
+                        started,
+                        done: false,
+                    }),
+                ))
+            }
+        }
+    }
+}
+
+/// Fill experiment: a response body that counts what is read from it.
+struct FillCountingBody {
+    inner: Pin<Box<AsyncResponseBody>>,
+    id: u64,
+    range: String,
+    bytes: u64,
+    started: Instant,
+    done: bool,
+}
+
+impl FillCountingBody {
+    fn finish(&mut self, how: &'static str, error: &str) {
+        if self.done {
+            return;
+        }
+        self.done = true;
+        let inflight = fill_diag::inflight_dec();
+        if how == "complete" {
+            fill_diag::add(&fill_diag::HTTP_BODIES_COMPLETED, 1);
+        } else {
+            fill_diag::add(&fill_diag::HTTP_BODIES_DROPPED, 1);
+        }
+        event!(
+            target: "fill",
+            Level::INFO,
+            ev = "http_end",
+            id = self.id,
+            how,
+            range = %self.range,
+            bytes = self.bytes,
+            error = %error,
+            inflight,
+            elapsed_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            t_ms = now_ms(),
+        );
+    }
+}
+
+impl Stream for FillCountingBody {
+    type Item = azure_core::Result<bytes::Bytes>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        let polled = this.inner.as_mut().poll_next(cx);
+        match &polled {
+            Poll::Ready(Some(Ok(chunk))) => {
+                let len = chunk.len() as u64;
+                this.bytes += len;
+                fill_diag::add(&fill_diag::HTTP_RESPONSE_BYTES, len);
+            }
+            Poll::Ready(Some(Err(err))) => {
+                let err = err.to_string();
+                this.finish("error", &err);
+            }
+            Poll::Ready(None) => this.finish("complete", ""),
+            Poll::Pending => {}
+        }
+        polled
+    }
+}
+
+impl Drop for FillCountingBody {
+    fn drop(&mut self) {
+        self.finish("dropped", "");
+    }
+}
 
 /// How one `update` wrote its blob, for the `backend_write` provenance event.
 #[derive(Clone, Debug, Default)]
@@ -250,7 +414,8 @@ where
             .build()
             .map_err(|e| make_err!(Code::Unavailable, "Failed to build Azure HTTP client: {e}"))?;
 
-        Ok(Transport::new(Arc::new(client)))
+        let inner: Arc<dyn HttpClient> = Arc::new(client);
+        Ok(Transport::new(Arc::new(FillCountingClient { inner })))
     }
 
     pub fn new_with_client_and_jitter(
@@ -1014,10 +1179,24 @@ where
                         }
                     };
 
-                    if read.attempts.fetch_add(1, Ordering::Relaxed) > 0 {
+                    let attempt = read.attempts.fetch_add(1, Ordering::Relaxed) + 1;
+                    if attempt > 1 {
                         read.resumed_bytes
                             .fetch_add(sent.saturating_sub(bytes_before), Ordering::Relaxed);
                     }
+                    fill_diag::add(&fill_diag::AZURE_READ_ATTEMPTS, 1);
+                    let attempt_started = Instant::now();
+                    event!(
+                        target: "fill",
+                        Level::INFO,
+                        ev = "az_attempt_start",
+                        attempt,
+                        req_offset = offset + sent,
+                        req_len = remaining.unwrap_or(0),
+                        range = ?range,
+                        delivered_before = sent.saturating_sub(bytes_before),
+                        t_ms = now_ms(),
+                    );
 
                     // The error carries the wait a throttled response asked for.
                     let result: Result<(), (Error, Option<Duration>)> = async {
@@ -1075,6 +1254,7 @@ where
                                 }
                                 None => chunk,
                             };
+                            let chunk_len = chunk.len() as u64;
                             writer.send(chunk).await.map_err(|e| {
                                 (
                                     make_err!(
@@ -1084,6 +1264,7 @@ where
                                     None,
                                 )
                             })?;
+                            fill_diag::add(&fill_diag::AZURE_DELIVERED_BYTES, chunk_len);
                             if max_bytes.is_some_and(|max| writer.get_bytes_written() >= max) {
                                 break;
                             }
@@ -1098,6 +1279,32 @@ where
                         Ok(())
                     }
                     .await;
+
+                    {
+                        let now_written = writer.get_bytes_written();
+                        let error = match &result {
+                            Ok(()) => String::new(),
+                            Err((e, _)) => {
+                                let mut m = e.message_string();
+                                if let Some((end, _)) = m.char_indices().nth(240) {
+                                    m.truncate(end);
+                                }
+                                m
+                            }
+                        };
+                        event!(
+                            target: "fill",
+                            Level::INFO,
+                            ev = "az_attempt_end",
+                            attempt,
+                            ok = result.is_ok(),
+                            delivered_this_attempt = now_written.saturating_sub(sent),
+                            delivered_total = now_written.saturating_sub(bytes_before),
+                            error = %error,
+                            elapsed_ms = u64::try_from(attempt_started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                            t_ms = now_ms(),
+                        );
+                    }
 
                     match result {
                         Ok(()) => Some((RetryResult::Ok(()), writer)),

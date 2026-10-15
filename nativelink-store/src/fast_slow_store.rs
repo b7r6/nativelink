@@ -367,8 +367,23 @@ impl FastSlowStore {
                 );
 
                 bytes_received += output_buf_len;
+                nativelink_util::fill_diag::add(
+                    &nativelink_util::fill_diag::FASTSLOW_SLOW_BYTES,
+                    output_buf_len,
+                );
 
                 let (fast_tx_res, writer_res) = join!(fast_tx.send(output_buf), writer_fut);
+                if fast_tx_res.is_err() || writer_res.is_err() {
+                    tracing::event!(
+                        target: "fill",
+                        tracing::Level::INFO,
+                        ev = "fastslow_pump_error",
+                        bytes_received,
+                        fast_send_ok = fast_tx_res.is_ok(),
+                        writer_send_ok = writer_res.is_ok(),
+                        t_ms = nativelink_util::fill_diag::now_ms(),
+                    );
+                }
                 fast_tx_res.err_tip(|| "Failed to write to fast store in fast_slow store")?;
                 writer_res.err_tip(|| "Failed to write result to writer in fast_slow store")?;
             }
@@ -379,8 +394,32 @@ impl FastSlowStore {
             .fast_store
             .update(key.borrow(), fast_rx, reader_stream_size);
 
+        let fill_fast_store_fut = async {
+            let res = fast_store_fut.await;
+            tracing::event!(
+                target: "fill",
+                tracing::Level::INFO,
+                ev = "fastslow_fast_update_end",
+                ok = res.is_ok(),
+                error = %res.as_ref().err().map(Error::message_string).unwrap_or_default(),
+                t_ms = nativelink_util::fill_diag::now_ms(),
+            );
+            res
+        };
+        let fill_slow_store_fut = async {
+            let res = slow_store_fut.await;
+            tracing::event!(
+                target: "fill",
+                tracing::Level::INFO,
+                ev = "fastslow_slow_get_end",
+                ok = res.is_ok(),
+                error = %res.as_ref().err().map(Error::message_string).unwrap_or_default(),
+                t_ms = nativelink_util::fill_diag::now_ms(),
+            );
+            res
+        };
         let (data_stream_res, slow_res, fast_res) =
-            join!(data_stream_fut, slow_store_fut, fast_store_fut);
+            join!(data_stream_fut, fill_slow_store_fut, fill_fast_store_fut);
         match data_stream_res {
             Ok((fast_eof_res, maybe_writer_pin)) =>
             // Sending the EOF will drop us almost immediately in bytestream_server
