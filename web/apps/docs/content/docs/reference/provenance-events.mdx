@@ -68,9 +68,10 @@ as log records whose attributes are these fields.
 
 ## Request metadata fields [#request-metadata-fields]
 
-`attempt_started`, `cas_write`, `find_missing` and `backend_write` also carry
-the client's `RequestMetadata`, flattened. Bazel sends it in the
-`requestmetadata-bin` header. A field the client did not send is `""`.
+`attempt_started`, `attempt_finished`, `cas_write`, `find_missing` and
+`backend_write` also carry the client's `RequestMetadata`, flattened. Bazel
+sends it in the `requestmetadata-bin` header. A field the client did not send
+is `""`.
 
 | Field | Meaning |
 | --- | --- |
@@ -155,15 +156,25 @@ for each try.
 
 Emitted by the worker once per attempt, when output upload completes or fails.
 Also emitted, where the worker can do so cleanly, when an attempt ends without
-uploading because it was killed, timed out or failed earlier.
+uploading because it was killed, timed out or failed earlier. Carries the same
+[request metadata fields](#request-metadata-fields) as `attempt_started`, so an
+attempt whose `attempt_started` fell before the start of a log window can still
+be attributed to its target.
+
+A command the worker kills or times out still has the outputs it left
+uploaded. Such an attempt ends with `outcome` `killed` or `timed_out`, and can
+still have `outputs_complete` `true` and a `manifest_fingerprint`. To compare
+attempts for exact identity, such as one `action_digest` with more than one
+fingerprint, use only attempts with `outcome` `completed` and
+`outputs_complete` `true`.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `attempt_id`, `operation_id`, `action_digest` | | Join keys. |
 | `exit_code` | integer | The command's exit code, or `-1` if there is none. |
-| `outcome` | string | `completed` (the command ran and its outputs were uploaded, whatever the exit code), `upload_failed`, `killed`, `timed_out`, or `failed` (any other error before upload). |
+| `outcome` | string | `completed` (the command ran to the end and its outputs were uploaded, whatever the exit code), `upload_failed`, `killed` (the worker ended the command on a scheduler kill or past a memory or disk reservation, or the operation was killed during another phase), `timed_out` (the worker ended the command at the action's timeout), or `failed` (any other error before upload). |
 | `error_code`, `error` | string | |
-| `outputs_complete` | boolean | `true` only if every output was observed and uploaded without error. |
+| `outputs_complete` | boolean | `true` only if every output was observed and uploaded without error. Can be `true` with `outcome` `killed` or `timed_out`, when the outputs of a stopped command were uploaded. |
 | `output_count` | integer | Number of [manifest entries](#manifest-fingerprint). |
 | `output_bytes` | integer | Sum of `size_bytes` over manifest entries, per path. |
 | `unique_output_bytes` | integer | Sum of `size_bytes` over distinct digests in the manifest. |
