@@ -875,7 +875,9 @@ where
 
                     match result {
                         Ok(()) => Some((RetryResult::Ok(()), writer)),
-                        Err((e, _)) if e.code == Code::NotFound => {
+                        // Retrying the origin cannot repair a failed destination.
+                        // Bypass both retry policies while preserving the error.
+                        Err((e, _)) if e.code == Code::NotFound || writer.is_pipe_broken() => {
                             Some((RetryResult::Err(e), writer))
                         }
                         Err((e, Some(wait))) => Some((RetryResult::RetryAfter(e, wait), writer)),
