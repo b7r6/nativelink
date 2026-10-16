@@ -29,6 +29,8 @@ use clap::Parser;
 use nativelink_config::cas_server::{CasConfig, StoreConfig};
 use nativelink_error::{Error, ResultExt, make_err};
 use nativelink_store::default_store_factory::store_factory;
+use nativelink_store::fast_slow_store::FastSlowStore;
+use nativelink_util::store_trait::StoreKey;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_util::common::DigestInfo;
@@ -71,6 +73,16 @@ struct Args {
     /// HTTP requests are in flight, so the drop lands mid-transfer.
     #[arg(long, default_value_t = 0)]
     cancel_min_inflight: u64,
+    /// Item B: instead of one get_part, run this many FastSlowStore
+    /// populate_fast_store calls on the digest (the worker input-fill path),
+    /// to observe repeated initializations when the fill fails terminally.
+    #[arg(long, default_value_t = 0)]
+    populate_callers: u64,
+    /// Item B: "sequential" (one after another; each failed init removes the
+    /// OnceCell entry so the next caller re-fills) or "concurrent" (all at once;
+    /// the dedup map shares one fill across the batch).
+    #[arg(long, default_value = "sequential")]
+    populate_mode: String,
 }
 
 /// Pod network counters for eth0 (rx, tx bytes).
@@ -185,6 +197,10 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
         }
     });
 
+    if args.populate_callers > 0 {
+        return run_populate(&args, &store, digest, sampler).await;
+    }
+
     let (tx, mut rx) = make_buf_channel_pair();
     let consumer = async move {
         loop {
@@ -285,6 +301,75 @@ async fn linger(
     sampler.abort();
     sample("final");
     info!(target: "fill", ev = "driver_end", t_ms = now_ms(), reason);
+    Ok(())
+}
+
+/// Item B: run N populate_fast_store calls on the digest and log each call's
+/// origin bytes and outcome, so repeated full initializations are visible when
+/// the fast-tier write fails terminally (ENOSPC on the capped volume).
+async fn run_populate(
+    args: &Args,
+    store: &nativelink_util::store_trait::Store,
+    digest: DigestInfo,
+    sampler: tokio::task::JoinHandle<()>,
+) -> Result<(), Error> {
+    let fss = store
+        .downcast_ref::<FastSlowStore>(None)
+        .and_then(FastSlowStore::get_arc)
+        .ok_or_else(|| make_err!(nativelink_error::Code::InvalidArgument, "store is not a FastSlowStore"))?;
+    let key = StoreKey::Digest(digest);
+    info!(
+        target: "fill",
+        ev = "populate_begin",
+        t_ms = now_ms(),
+        callers = args.populate_callers,
+        mode = %args.populate_mode,
+    );
+    let call = |i: u64| {
+        let fss = fss.clone();
+        let key = key.borrow().into_owned();
+        async move {
+            let http0 = get(&fill_diag::HTTP_RESPONSE_BYTES);
+            let az0 = get(&fill_diag::AZURE_DELIVERED_BYTES);
+            let fs0 = get(&fill_diag::FS_BYTES_ACCEPTED);
+            let req0 = get(&fill_diag::HTTP_REQUESTS);
+            let att0 = get(&fill_diag::AZURE_READ_ATTEMPTS);
+            let started = Instant::now();
+            info!(target: "fill", ev = "populate_call_start", caller = i, t_ms = now_ms());
+            let res = fss.populate_fast_store(key.borrow()).await;
+            info!(
+                target: "fill",
+                ev = "populate_call_end",
+                caller = i,
+                ok = res.is_ok(),
+                error = %res.as_ref().err().map(Error::message_string).unwrap_or_default(),
+                origin_http_bytes = get(&fill_diag::HTTP_RESPONSE_BYTES).saturating_sub(http0),
+                origin_delivered_bytes = get(&fill_diag::AZURE_DELIVERED_BYTES).saturating_sub(az0),
+                fs_accepted_bytes = get(&fill_diag::FS_BYTES_ACCEPTED).saturating_sub(fs0),
+                http_requests = get(&fill_diag::HTTP_REQUESTS).saturating_sub(req0),
+                azure_read_attempts = get(&fill_diag::AZURE_READ_ATTEMPTS).saturating_sub(att0),
+                elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                t_ms = now_ms(),
+            );
+            res
+        }
+    };
+    if args.populate_mode == "concurrent" {
+        let mut set = Vec::new();
+        for i in 0..args.populate_callers {
+            set.push(tokio::spawn(call(i)));
+        }
+        for h in set {
+            let _ = h.await;
+        }
+    } else {
+        for i in 0..args.populate_callers {
+            let _ = call(i).await;
+        }
+    }
+    sampler.abort();
+    sample("populate_final");
+    info!(target: "fill", ev = "populate_end", t_ms = now_ms());
     Ok(())
 }
 
