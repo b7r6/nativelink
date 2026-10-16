@@ -1,0 +1,4476 @@
+{
+  "analysis_source_sha256": "09eb63370924b5d2fbdbb353bfcfffd6f2a4ebcce402902f1fb7b052333b8a3c",
+  "batches": [
+    {
+      "non_success_invocations": [],
+      "planned_invocations": 40,
+      "source": "/tmp/azure-fleet-confirm-20261016/batch.json",
+      "source_sha256": "ec54f3bb91a20b55bd02aa3429e64d6d174f2ef160bf9520e639d80d3a96f5b6",
+      "status": "success",
+      "unavailable_reports": []
+    }
+  ],
+  "difference_direction": "fixed minus baseline",
+  "inference_limits": [
+    "Intervals describe stochastic variation under this fixture, not calibration or production uncertainty.",
+    "Completed-only timings exclude censored outcomes; consult failed/censored counts and recovery proportions.",
+    "Per-completed-action payload includes warmup and sentinel overhead and is reported only for fully successful runs.",
+    "Repeated ranges include ordinary failed-read retry/recovery; they are not automatically futile or preventable bytes.",
+    "Failed client attempts remain counted even when an explicit post-repair resubmission eventually succeeds; these are not scheduler attempt counts.",
+    "Same-process sentinel completion bounds recovery time from above; it does not locate the first reusable instant.",
+    "Sentinel-window traffic includes any surviving background requests; it is not automatically attributed to the sentinel action.",
+    "A token bucket limits admitted bytes over time, not each short-window body-output rate.",
+    "Scheduler snapshots sample reservations; they do not rule out unaccounted physical execution or prove process teardown after reporting."
+  ],
+  "runs": [
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.654852583,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 251,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 972.0,
+        "payload_mib_per_completed_action": 54.0,
+        "peak_body_mib_s": 1374.375,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 264.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04590390900000063,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03187250996015936,
+        "throttled_get_requests": 8,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.009117742
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.598280924,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.056571658999999386
+      },
+      "seed": 2026101800,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101800/baseline/run.json",
+      "source_sha256": "9d0688ac80c8b5f10dece9972998c769761cd6099745f1af16c982f9ccb4cb8d",
+      "start_unix_s": 1792170640.9367473,
+      "workload_sha256": "96fde69cb46a14898670ad8f31e08e712cae273c503e85bc2d073e1fcb0d9fc6"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.687934321,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 260,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1000.0,
+        "payload_mib_per_completed_action": 55.55555555555556,
+        "peak_body_mib_s": 1335.0,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 292.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.052818410000000426,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.038461538461538464,
+        "throttled_get_requests": 10,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.9890604320000005
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.650808914,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.037125406999999555
+      },
+      "seed": 2026101800,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101800/fixed/run.json",
+      "source_sha256": "d6ac2b76fd91b7c22bb31228e9838bcc835a3e5c632d61f9242d21ac12466f50",
+      "start_unix_s": 1792170655.122741,
+      "workload_sha256": "96fde69cb46a14898670ad8f31e08e712cae273c503e85bc2d073e1fcb0d9fc6"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.920142233,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 22,
+        "completed_work": 22,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 259,
+        "has_repeated_payload": true,
+        "intended_work": 22,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1008.0,
+        "payload_mib_per_completed_action": 45.81818181818182,
+        "peak_body_mib_s": 1306.25,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 260.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05476077299999993,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.02702702702702703,
+        "throttled_get_requests": 7,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.212623508
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.868320502,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 43,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.051821731000000426
+      },
+      "seed": 2026101801,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101801/baseline/run.json",
+      "source_sha256": "b7bd80eff98700b8b187f65db58d1c9ac74adbac09ce78cf5119f1dc1070a14c",
+      "start_unix_s": 1792170749.1102886,
+      "workload_sha256": "5313e84c8868b4baf1c5306aa19904ee25d14a707f75ce3f804c9ca84ae0e708"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.71215386,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 22,
+        "completed_work": 22,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 228,
+        "has_repeated_payload": true,
+        "intended_work": 22,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 884.0,
+        "payload_mib_per_completed_action": 40.18181818181818,
+        "peak_body_mib_s": 1294.375,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 136.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.053477115999999825,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03070175438596491,
+        "throttled_get_requests": 7,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.000097108
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.68409022,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.028063640000000944
+      },
+      "seed": 2026101801,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101801/fixed/run.json",
+      "source_sha256": "43541731e795ec286f4789865476bd6b683d72fbc1658d8a6faddc875cf57e88",
+      "start_unix_s": 1792170734.7588441,
+      "workload_sha256": "5313e84c8868b4baf1c5306aa19904ee25d14a707f75ce3f804c9ca84ae0e708"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.49891377,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 226,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 872.0,
+        "payload_mib_per_completed_action": 54.5,
+        "peak_body_mib_s": 1283.125,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 200.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.0535992460000001,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.035398230088495575,
+        "throttled_get_requests": 8,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.872436092
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.409555035,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.08935873499999936
+      },
+      "seed": 2026101802,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101802/baseline/run.json",
+      "source_sha256": "fa39799c48c221d4aceb248d1c66a8d859eed5f89af292c4cd2bd3a9f9b59ee4",
+      "start_unix_s": 1792170836.5520499,
+      "workload_sha256": "8c8c6704e0ff3635c4c1c2b0560e476e0c83f3cb5c2a1103e1a81d54550662b6"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.592224488,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 225,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 868.0,
+        "payload_mib_per_completed_action": 54.25,
+        "peak_body_mib_s": 1386.875,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 196.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.052092934000000035,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.035555555555555556,
+        "throttled_get_requests": 8,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.922362165
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.45050126,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.14172322800000003
+      },
+      "seed": 2026101802,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101802/fixed/run.json",
+      "source_sha256": "e8eb36cd4bd68c89adc2695e3c307ad5f17134c9be8bfbeefbc0f2e756e716bb",
+      "start_unix_s": 1792170853.073133,
+      "workload_sha256": "8c8c6704e0ff3635c4c1c2b0560e476e0c83f3cb5c2a1103e1a81d54550662b6"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.701236551000001,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 253,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 984.0,
+        "payload_mib_per_completed_action": 61.5,
+        "peak_body_mib_s": 1265.625,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 292.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06273784199999977,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.02766798418972332,
+        "throttled_get_requests": 7,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.997872808
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.584327911,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.11690864000000012
+      },
+      "seed": 2026101803,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101803/baseline/run.json",
+      "source_sha256": "eab1679b14077b7f83228a78f7f08333fe71ba2fd16ca5349018eac5dd35c533",
+      "start_unix_s": 1792170950.1920118,
+      "workload_sha256": "7b7ec3da219ada8580277471b5fafb21664e90e455b99949722846f6b231295e"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.593878318,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 250,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 968.0,
+        "payload_mib_per_completed_action": 60.5,
+        "peak_body_mib_s": 1297.5,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 276.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.054923763999999764,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.032,
+        "throttled_get_requests": 8,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.888692731999999
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.406932359,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1869459589999991
+      },
+      "seed": 2026101803,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101803/fixed/run.json",
+      "source_sha256": "79b0dcbc37e4ee35bcacc46a52489fbb0f405900ba439b2da29399a6294493d4",
+      "start_unix_s": 1792170935.0531416,
+      "workload_sha256": "7b7ec3da219ada8580277471b5fafb21664e90e455b99949722846f6b231295e"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 10.610981364,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 266,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1020.0,
+        "payload_mib_per_completed_action": 44.34782608695652,
+        "peak_body_mib_s": 1415.0,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 292.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.0492927260000009,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.041353383458646614,
+        "throttled_get_requests": 11,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 6.906268970999999
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 10.498152394,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 51,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1128289700000007
+      },
+      "seed": 2026101804,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101804/baseline/run.json",
+      "source_sha256": "f878ac8fea7520f795a67ce6a9031d225d7ecefc6db7cb5a07a51785b603c0f9",
+      "start_unix_s": 1792171028.6763904,
+      "workload_sha256": "2576c7009c64f9230776486d9c0ec5d18e76b8a3afd0e12fcdf612aa42c75273"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.632423062,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 255,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 984.0,
+        "payload_mib_per_completed_action": 42.78260869565217,
+        "peak_body_mib_s": 1494.375,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 256.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04855876199999987,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03529411764705882,
+        "throttled_get_requests": 9,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.970238414
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.445331916,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1870911460000002
+      },
+      "seed": 2026101804,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101804/fixed/run.json",
+      "source_sha256": "d0985d8cd53a72cc6ce5f1faf1fc19655da71d3e664df11cfa4dfe64783c92f4",
+      "start_unix_s": 1792171044.8980808,
+      "workload_sha256": "2576c7009c64f9230776486d9c0ec5d18e76b8a3afd0e12fcdf612aa42c75273"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 6.794145072,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 26,
+        "completed_work": 26,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 217,
+        "has_repeated_payload": true,
+        "intended_work": 26,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 856.0,
+        "payload_mib_per_completed_action": 32.92307692307692,
+        "peak_body_mib_s": 1255.0,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 96.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06756436100000052,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.013824884792626729,
+        "throttled_get_requests": 3,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 3.083239496
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 6.641830325,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 32,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.15231474700000014
+      },
+      "seed": 2026101805,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101805/baseline/run.json",
+      "source_sha256": "e6bc3d49b5fe24278c0b496eac4f0255b2ffac189d3f6cf9fc0275de89987947",
+      "start_unix_s": 1792171142.347033,
+      "workload_sha256": "460aa287d086fc6d19a2b4d6e3894389e13270ddb0a3f8ec73cce173ab1fc2db"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 6.824799907,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 26,
+        "completed_work": 26,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 220,
+        "has_repeated_payload": true,
+        "intended_work": 26,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 868.0,
+        "payload_mib_per_completed_action": 33.38461538461539,
+        "peak_body_mib_s": 1239.375,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 108.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06547722599999961,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.013636363636363636,
+        "throttled_get_requests": 3,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 3.0750931440000002
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 6.66466762,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 32,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1601322869999997
+      },
+      "seed": 2026101805,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101805/fixed/run.json",
+      "source_sha256": "4cd195679c9d1644241e47dc0621f3e80532b813e404a5f8716489ef59767d8f",
+      "start_unix_s": 1792171129.2381885,
+      "workload_sha256": "460aa287d086fc6d19a2b4d6e3894389e13270ddb0a3f8ec73cce173ab1fc2db"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.873172972,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 263,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1016.0,
+        "payload_mib_per_completed_action": 44.17391304347826,
+        "peak_body_mib_s": 1451.875,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 244.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04433374099999998,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.034220532319391636,
+        "throttled_get_requests": 9,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.1302023850000005
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.676607551,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.19656542100000074
+      },
+      "seed": 2026101806,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101806/baseline/run.json",
+      "source_sha256": "bc4fc7cff58bccae3a83d8b302d4888ceb28dcf5ab5bd7b834ed1df5050582b3",
+      "start_unix_s": 1792171220.5757143,
+      "workload_sha256": "611055e2ecf2e4f909168f44caa6b9eb141602756817c7a784df889649496719"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.853504812,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 269,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1040.0,
+        "payload_mib_per_completed_action": 45.21739130434783,
+        "peak_body_mib_s": 1360.625,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 268.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.0432113799999998,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03345724907063197,
+        "throttled_get_requests": 9,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.129466873
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.682832273,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1706725389999999
+      },
+      "seed": 2026101806,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101806/fixed/run.json",
+      "source_sha256": "06a21e31426549684f0cf6bbe01264191ed635db601d11d78d71d0d28685c6d5",
+      "start_unix_s": 1792171235.140653,
+      "workload_sha256": "611055e2ecf2e4f909168f44caa6b9eb141602756817c7a784df889649496719"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 10.582932084,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 19,
+        "completed_work": 19,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 279,
+        "has_repeated_payload": true,
+        "intended_work": 19,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1068.0,
+        "payload_mib_per_completed_action": 56.21052631578947,
+        "peak_body_mib_s": 1357.5,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 332.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.07157477700000037,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.043010752688172046,
+        "throttled_get_requests": 12,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 6.942475937999999
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 10.413796366,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 51,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1691357179999997
+      },
+      "seed": 2026101807,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101807/baseline/run.json",
+      "source_sha256": "3da204fa5738d0398ef9cff5e4133399b4cab4f8ef0ad082dce8e23a404157c1",
+      "start_unix_s": 1792171329.6201184,
+      "workload_sha256": "d3fbbbb3cc44f89d67dca93eb34dd29aafec11f2e6b798270ec223b8ca9c2f16"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.693291509,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 19,
+        "completed_work": 19,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 248,
+        "has_repeated_payload": true,
+        "intended_work": 19,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 964.0,
+        "payload_mib_per_completed_action": 50.73684210526316,
+        "peak_body_mib_s": 1308.125,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 228.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06477171600000009,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.028225806451612902,
+        "throttled_get_requests": 7,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.970327215
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.681517772,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 42,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.011773737000000395
+      },
+      "seed": 2026101807,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101807/fixed/run.json",
+      "source_sha256": "5a22aca8fda360c2c01ee26b9e8b09c85e4834c7f56ccbc401dfdd0e90fc4f7c",
+      "start_unix_s": 1792171315.3318021,
+      "workload_sha256": "d3fbbbb3cc44f89d67dca93eb34dd29aafec11f2e6b798270ec223b8ca9c2f16"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.998494678,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 28,
+        "completed_work": 28,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 266,
+        "has_repeated_payload": true,
+        "intended_work": 28,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1024.0,
+        "payload_mib_per_completed_action": 36.57142857142857,
+        "peak_body_mib_s": 1310.0,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 236.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.051755365,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03759398496240601,
+        "throttled_get_requests": 10,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.29129974
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.858422285,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 43,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.14007239300000052
+      },
+      "seed": 2026101808,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101808/baseline/run.json",
+      "source_sha256": "a140724d41ea1bc2e7521f0bb8140561e1d8c998278c76245e023216920b2ec3",
+      "start_unix_s": 1792171419.5288804,
+      "workload_sha256": "aa3165cdc6350e22a48bc52b9f87eff113c3d9e08f14c533ca9814b328297814"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 10.948161733,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 28,
+        "completed_work": 28,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 295,
+        "has_repeated_payload": true,
+        "intended_work": 28,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1124.0,
+        "payload_mib_per_completed_action": 40.142857142857146,
+        "peak_body_mib_s": 1393.75,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 336.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05655333600000034,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.04745762711864407,
+        "throttled_get_requests": 14,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.182170587999999
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 10.935907508,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 53,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.012254224999999508
+      },
+      "seed": 2026101808,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101808/fixed/run.json",
+      "source_sha256": "9d60b2b2fe3fc1a03b905359d21d75bdc004ce1e9ff7694ed19c116917083799",
+      "start_unix_s": 1792171433.9643683,
+      "workload_sha256": "aa3165cdc6350e22a48bc52b9f87eff113c3d9e08f14c533ca9814b328297814"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.612062523,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 232,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 872.0,
+        "payload_mib_per_completed_action": 48.44444444444444,
+        "peak_body_mib_s": 1327.5,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 192.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04285564900000072,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.0603448275862069,
+        "throttled_get_requests": 14,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.901138694
+      },
+      "pair_order": 1,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.469001508,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.14306101500000068
+      },
+      "seed": 2026101809,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101809/baseline/run.json",
+      "source_sha256": "30f35cd5a7d7a4583fa8089edd842e749b12189cceede137af8156b1af01ea15",
+      "start_unix_s": 1792171534.2971082,
+      "workload_sha256": "34fd5be5d9f91131a3619559470679683cdcf8821eb39aa0ec25146ae67eef13"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 8.572518781,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 233,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 864.0,
+        "payload_mib_per_completed_action": 48.0,
+        "peak_body_mib_s": 1427.5,
+        "repair_to_last_sentinel_s": null,
+        "repeated_mib": 184.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.042945816999999664,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.07296137339055794,
+        "throttled_get_requests": 17,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 4.917850431
+      },
+      "pair_order": 0,
+      "scenario": "control",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 8.409616043,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 41,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.16290273799999966
+      },
+      "seed": 2026101809,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/control/2026101809/fixed/run.json",
+      "source_sha256": "7241832dcbf08dba027faa34f5c71747d78de404e75cd9587dab0da4ae10cd93",
+      "start_unix_s": 1792171518.7918527,
+      "workload_sha256": "34fd5be5d9f91131a3619559470679683cdcf8821eb39aa0ec25146ae67eef13"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 42.345213356,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 360,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1432.0,
+        "payload_mib_per_completed_action": 79.55555555555556,
+        "peak_body_mib_s": 1260.625,
+        "repair_to_last_sentinel_s": 37.178005769,
+        "repeated_mib": 724.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05476304700000156,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.005555555555555556,
+        "throttled_get_requests": 2,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 38.218043368000004
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 42.250852303,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 209,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.09436105300000008
+      },
+      "seed": 2026101800,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101800/baseline/run.json",
+      "source_sha256": "b0552a4be9d25333944f84c2da672bba4e3ce365a98250c0fdb6a22bfcaaa398",
+      "start_unix_s": 1792170669.4152205,
+      "workload_sha256": "96fde69cb46a14898670ad8f31e08e712cae273c503e85bc2d073e1fcb0d9fc6"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 9.202658898,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 284,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1088.0,
+        "payload_mib_per_completed_action": 60.44444444444444,
+        "peak_body_mib_s": 1342.5,
+        "repair_to_last_sentinel_s": 4.030114272,
+        "repeated_mib": 380.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04656802100000057,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.04225352112676056,
+        "throttled_get_requests": 12,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.08302154
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 9.114850688,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 44,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.08780820999999861
+      },
+      "seed": 2026101800,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101800/fixed/run.json",
+      "source_sha256": "b9958ecf65fa5b1ce2e5439aaf6a088c4ddb4801b3d402f142b0bb880750f599",
+      "start_unix_s": 1792170718.3033864,
+      "workload_sha256": "96fde69cb46a14898670ad8f31e08e712cae273c503e85bc2d073e1fcb0d9fc6"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 48.930063802,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 22,
+        "completed_work": 22,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 385,
+        "has_repeated_payload": true,
+        "intended_work": 22,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1528.0,
+        "payload_mib_per_completed_action": 69.45454545454545,
+        "peak_body_mib_s": 1298.125,
+        "repair_to_last_sentinel_s": 43.893131151999995,
+        "repeated_mib": 780.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.062098272999996595,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.007792207792207792,
+        "throttled_get_requests": 3,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 44.933106249
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 48.744377692,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 241,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1856861099999989
+      },
+      "seed": 2026101801,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101801/baseline/run.json",
+      "source_sha256": "1b3f14b1b4c70e7db4f715e5cd59a91f83adca4ac3b9bebc1ecfc91a0c7804fa",
+      "start_unix_s": 1792170780.9504223,
+      "workload_sha256": "5313e84c8868b4baf1c5306aa19904ee25d14a707f75ce3f804c9ca84ae0e708"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.425930185,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 22,
+        "completed_work": 22,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 353,
+        "has_repeated_payload": true,
+        "intended_work": 22,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1352.0,
+        "payload_mib_per_completed_action": 61.45454545454545,
+        "peak_body_mib_s": 1486.875,
+        "repair_to_last_sentinel_s": 6.399542963,
+        "repeated_mib": 604.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05022166100000014,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.042492917847025496,
+        "throttled_get_requests": 15,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.453034216
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.235425223,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 55,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.19050496200000033
+      },
+      "seed": 2026101801,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101801/fixed/run.json",
+      "source_sha256": "9b91aff80bfda518fc7458bc5c8365fb4e272691be68929d4488ec4589ef251f",
+      "start_unix_s": 1792170763.8001783,
+      "workload_sha256": "5313e84c8868b4baf1c5306aa19904ee25d14a707f75ce3f804c9ca84ae0e708"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 46.385309481,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 352,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1400.0,
+        "payload_mib_per_completed_action": 87.5,
+        "peak_body_mib_s": 1245.0,
+        "repair_to_last_sentinel_s": 41.401817781999995,
+        "repeated_mib": 728.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05099169500000045,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.005681818181818182,
+        "throttled_get_requests": 2,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 42.471443283
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 46.258312876,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 229,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1269966050000022
+      },
+      "seed": 2026101802,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101802/baseline/run.json",
+      "source_sha256": "2332216db3d880e1821d215e9e6bbe772a85f62e3d66395be82ed0a159dbb75c",
+      "start_unix_s": 1792170867.7115104,
+      "workload_sha256": "8c8c6704e0ff3635c4c1c2b0560e476e0c83f3cb5c2a1103e1a81d54550662b6"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 9.045725444,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 285,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1084.0,
+        "payload_mib_per_completed_action": 67.75,
+        "peak_body_mib_s": 1371.875,
+        "repair_to_last_sentinel_s": 4.089005632999999,
+        "repeated_mib": 412.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.051456218999999415,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.04912280701754386,
+        "throttled_get_requests": 14,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.131718146
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 9.01803119,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 44,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.02769425400000003
+      },
+      "seed": 2026101802,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101802/fixed/run.json",
+      "source_sha256": "9e0100ef899abde925c4705e392eb97f75d9d228366755dc4a02d6c134b2c54f",
+      "start_unix_s": 1792170920.1198492,
+      "workload_sha256": "8c8c6704e0ff3635c4c1c2b0560e476e0c83f3cb5c2a1103e1a81d54550662b6"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 41.09361122,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 349,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1380.0,
+        "payload_mib_per_completed_action": 86.25,
+        "peak_body_mib_s": 1470.625,
+        "repair_to_last_sentinel_s": 36.074608787,
+        "repeated_mib": 688.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.056660588999996264,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.011461318051575931,
+        "throttled_get_requests": 4,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 37.114351590999995
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 41.014008657,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 203,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.07960256300000168
+      },
+      "seed": 2026101803,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101803/baseline/run.json",
+      "source_sha256": "a32761f1b706a9cd2a17627c207471d488075e3b43633d98bd797068c34a82f8",
+      "start_unix_s": 1792170981.7068422,
+      "workload_sha256": "7b7ec3da219ada8580277471b5fafb21664e90e455b99949722846f6b231295e"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.246668215,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 16,
+        "completed_work": 16,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 308,
+        "has_repeated_payload": true,
+        "intended_work": 16,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1184.0,
+        "payload_mib_per_completed_action": 74.0,
+        "peak_body_mib_s": 1428.125,
+        "repair_to_last_sentinel_s": 6.128819986000001,
+        "repeated_mib": 492.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06406960700000042,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03896103896103896,
+        "throttled_get_requests": 12,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.152491716
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.04583533,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 54,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.20083288500000052
+      },
+      "seed": 2026101803,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101803/fixed/run.json",
+      "source_sha256": "7db993da421ed4596d6ace4cfa25b0e783d607d0801b4cfff46306f9140223c6",
+      "start_unix_s": 1792170964.765646,
+      "workload_sha256": "7b7ec3da219ada8580277471b5fafb21664e90e455b99949722846f6b231295e"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 47.608623172,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 350,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1396.0,
+        "payload_mib_per_completed_action": 60.69565217391305,
+        "peak_body_mib_s": 1290.0,
+        "repair_to_last_sentinel_s": 42.575152957,
+        "repeated_mib": 668.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.048069759000000545,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.002857142857142857,
+        "throttled_get_requests": 1,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 43.62076475400001
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 47.50051234,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 235,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.10811083200000127
+      },
+      "seed": 2026101804,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101804/baseline/run.json",
+      "source_sha256": "013573539d0cee9ca69dc1e500bc550e6c7ae75c62bc4c6819ec73a4d43aaffb",
+      "start_unix_s": 1792171059.168838,
+      "workload_sha256": "2576c7009c64f9230776486d9c0ec5d18e76b8a3afd0e12fcdf612aa42c75273"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.181807376,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 328,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1240.0,
+        "payload_mib_per_completed_action": 53.91304347826087,
+        "peak_body_mib_s": 1488.75,
+        "repair_to_last_sentinel_s": 6.131698406,
+        "repeated_mib": 512.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.054123838000000646,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.054878048780487805,
+        "throttled_get_requests": 18,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.182358933
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.080918238,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 54,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.10088913799999943
+      },
+      "seed": 2026101804,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101804/fixed/run.json",
+      "source_sha256": "8cbda4dce828f662700bc280ff2acd965fb2b950fd8ecdd0be6c6512c2f8a37a",
+      "start_unix_s": 1792171112.3774817,
+      "workload_sha256": "2576c7009c64f9230776486d9c0ec5d18e76b8a3afd0e12fcdf612aa42c75273"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 44.006765448,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 26,
+        "completed_work": 26,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 353,
+        "has_repeated_payload": true,
+        "intended_work": 26,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1404.0,
+        "payload_mib_per_completed_action": 54.0,
+        "peak_body_mib_s": 1348.125,
+        "repair_to_last_sentinel_s": 38.993343507,
+        "repeated_mib": 644.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06250427799999869,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.0056657223796034,
+        "throttled_get_requests": 2,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 40.013440646999996
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 43.900543254,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 217,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.10622219400000432
+      },
+      "seed": 2026101805,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101805/baseline/run.json",
+      "source_sha256": "8013f60929472b6627916ff864ae26276ccbee78d22f93e59dc7dde8615ae9fb",
+      "start_unix_s": 1792171170.956592,
+      "workload_sha256": "460aa287d086fc6d19a2b4d6e3894389e13270ddb0a3f8ec73cce173ab1fc2db"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 7.964119344,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 26,
+        "completed_work": 26,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 309,
+        "has_repeated_payload": true,
+        "intended_work": 26,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1192.0,
+        "payload_mib_per_completed_action": 45.84615384615385,
+        "peak_body_mib_s": 1371.25,
+        "repair_to_last_sentinel_s": 2.8378653729999996,
+        "repeated_mib": 432.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06358744000000005,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.03559870550161812,
+        "throttled_get_requests": 11,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 3.8720814710000004
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 7.881957508,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 38,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.08216183600000004
+      },
+      "seed": 2026101805,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101805/fixed/run.json",
+      "source_sha256": "1488c27be9ab68e144e79222d2ef07ab146edd31c9e3ad14c50c31de14d950b1",
+      "start_unix_s": 1792171155.6008446,
+      "workload_sha256": "460aa287d086fc6d19a2b4d6e3894389e13270ddb0a3f8ec73cce173ab1fc2db"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 44.589718863,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 371,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1468.0,
+        "payload_mib_per_completed_action": 63.82608695652174,
+        "peak_body_mib_s": 1356.25,
+        "repair_to_last_sentinel_s": 39.519616519,
+        "repeated_mib": 696.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04363080099999905,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.01078167115902965,
+        "throttled_get_requests": 4,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 40.566645137
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 44.50184792,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 220,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.08787094299999865
+      },
+      "seed": 2026101806,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101806/baseline/run.json",
+      "source_sha256": "8f5b0692430be93ed9a7f4b601a237c1da5159cfebc77f179c7c22b85c5effc4",
+      "start_unix_s": 1792171249.747047,
+      "workload_sha256": "611055e2ecf2e4f909168f44caa6b9eb141602756817c7a784df889649496719"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 9.783340606,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 23,
+        "completed_work": 23,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 315,
+        "has_repeated_payload": true,
+        "intended_work": 23,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1212.0,
+        "payload_mib_per_completed_action": 52.69565217391305,
+        "peak_body_mib_s": 1383.75,
+        "repair_to_last_sentinel_s": 4.562556251000001,
+        "repeated_mib": 440.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04469633500000114,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.0380952380952381,
+        "throttled_get_requests": 12,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 5.628770258
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 9.676843349,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 47,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.10649725699999912
+      },
+      "seed": 2026101806,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101806/fixed/run.json",
+      "source_sha256": "ec1afbc9501d6ca9f3066d22c7a6913e72655d2492c87fac75bf9690517a674b",
+      "start_unix_s": 1792171299.9321375,
+      "workload_sha256": "611055e2ecf2e4f909168f44caa6b9eb141602756817c7a784df889649496719"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 48.479164904,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 19,
+        "completed_work": 19,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 355,
+        "has_repeated_payload": true,
+        "intended_work": 19,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1408.0,
+        "payload_mib_per_completed_action": 74.10526315789474,
+        "peak_body_mib_s": 1241.25,
+        "repair_to_last_sentinel_s": 43.404925471,
+        "repeated_mib": 672.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06500693499999954,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.008450704225352112,
+        "throttled_get_requests": 3,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 44.446079906
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 48.327976618,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 239,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.151188286
+      },
+      "seed": 2026101807,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101807/baseline/run.json",
+      "source_sha256": "ac132f3b55e4eec086741465782534f9ac57ed321f73152551b3e0411c255e3c",
+      "start_unix_s": 1792171365.282184,
+      "workload_sha256": "d3fbbbb3cc44f89d67dca93eb34dd29aafec11f2e6b798270ec223b8ca9c2f16"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.143671735,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 19,
+        "completed_work": 19,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 327,
+        "has_repeated_payload": true,
+        "intended_work": 19,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1188.0,
+        "payload_mib_per_completed_action": 62.526315789473685,
+        "peak_body_mib_s": 1451.875,
+        "repair_to_last_sentinel_s": 6.008497148999999,
+        "repeated_mib": 452.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.06755017999999957,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.09174311926605505,
+        "throttled_get_requests": 30,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.049188244
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.128820725,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 54,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.01485100999999922
+      },
+      "seed": 2026101807,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101807/fixed/run.json",
+      "source_sha256": "4ca60813924b3d068e52e7911debc076a58dde77caf13d5f09625ba402ba1a19",
+      "start_unix_s": 1792171346.7099783,
+      "workload_sha256": "d3fbbbb3cc44f89d67dca93eb34dd29aafec11f2e6b798270ec223b8ca9c2f16"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 46.07047195,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 28,
+        "completed_work": 28,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 363,
+        "has_repeated_payload": true,
+        "intended_work": 28,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1444.0,
+        "payload_mib_per_completed_action": 51.57142857142857,
+        "peak_body_mib_s": 1335.0,
+        "repair_to_last_sentinel_s": 40.991320282000004,
+        "repeated_mib": 656.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05318619400000557,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.005509641873278237,
+        "throttled_get_requests": 2,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 42.039125495
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 45.903398129,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 227,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.16707382099999535
+      },
+      "seed": 2026101808,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101808/baseline/run.json",
+      "source_sha256": "f83355162f79b853ab660ed5de744292b94cce9ddea881b5bc299a22abe50c16",
+      "start_unix_s": 1792171450.3023887,
+      "workload_sha256": "aa3165cdc6350e22a48bc52b9f87eff113c3d9e08f14c533ca9814b328297814"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.630907811,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 28,
+        "completed_work": 28,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 342,
+        "has_repeated_payload": true,
+        "intended_work": 28,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1256.0,
+        "payload_mib_per_completed_action": 44.857142857142854,
+        "peak_body_mib_s": 1478.75,
+        "repair_to_last_sentinel_s": 6.514777168,
+        "repeated_mib": 468.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.05038568500000018,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.08187134502923976,
+        "throttled_get_requests": 28,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.5753383030000006
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.510992367,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 56,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.1199154440000001
+      },
+      "seed": 2026101808,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101808/fixed/run.json",
+      "source_sha256": "e9246b4367f2a772ee0e1fe8bce23c0ddecafd6d61171836f44dd113652b47c8",
+      "start_unix_s": 1792171501.8035936,
+      "workload_sha256": "aa3165cdc6350e22a48bc52b9f87eff113c3d9e08f14c533ca9814b328297814"
+    },
+    {
+      "arm": "baseline",
+      "binary_sha256": "a6ea8a5b3402e53d46e520a4b89a8bc273b5f945c5b421ac9c477666c214b138",
+      "build": {
+        "arm": "baseline",
+        "azure_source_sha256": "cfc4b29eb6101e2daccfc329dc7fe16fdad780e7e6542bdc09882fde9747709f",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 47.202736526,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 354,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1396.0,
+        "payload_mib_per_completed_action": 77.55555555555556,
+        "peak_body_mib_s": 1264.375,
+        "repair_to_last_sentinel_s": 42.063432122,
+        "repeated_mib": 716.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.04392251599999497,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.014124293785310734,
+        "throttled_get_requests": 5,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 43.119071211000005
+      },
+      "pair_order": 1,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 47.133404109,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 233,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.06933241700000536
+      },
+      "seed": 2026101809,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101809/baseline/run.json",
+      "source_sha256": "74953bf52883de4a1d0bda0a55fc5bfaddd7e81c464b521bf9f76b88a33f361a",
+      "start_unix_s": 1792171568.4105828,
+      "workload_sha256": "34fd5be5d9f91131a3619559470679683cdcf8821eb39aa0ec25146ae67eef13"
+    },
+    {
+      "arm": "fixed",
+      "binary_sha256": "65f4d1c48aba57737302160a65cc33806ee99692992301ac774dee33f3b7c202",
+      "build": {
+        "arm": "fixed",
+        "azure_source_sha256": "7b643cdc1b564f7627ba509dd1a6129a18ddf7fb3a885ffdec995695c724ce30",
+        "revision": "b4bbc7cd32de7908800acc28f0ae8a8fd14e408f"
+      },
+      "duration_s": 11.210198903,
+      "metrics": {
+        "accepted": true,
+        "all_sentinels_cache_reused": true,
+        "all_sentinels_succeeded_same_process": true,
+        "all_work_succeeded": true,
+        "censored_client_attempts": 0,
+        "censored_work": 0,
+        "client_attempts": 18,
+        "completed_work": 18,
+        "completed_work_fraction": 1.0,
+        "failed_client_attempts": 0,
+        "failed_work": 0,
+        "final_scheduler_reserved_actions": 0,
+        "get_requests": 310,
+        "has_repeated_payload": true,
+        "intended_work": 18,
+        "maximum_sampled_worker_actions": 2,
+        "payload_mib": 1168.0,
+        "payload_mib_per_completed_action": 64.88888888888889,
+        "peak_body_mib_s": 1443.75,
+        "repair_to_last_sentinel_s": 6.167619268000001,
+        "repeated_mib": 488.0,
+        "scheduler_accounting_passed": true,
+        "sentinel_roundtrip_max_s": 0.044545240000001485,
+        "sentinel_window_get_requests": 0,
+        "sentinel_window_payload_mib": 0.0,
+        "throttled_get_fraction": 0.05806451612903226,
+        "throttled_get_requests": 18,
+        "timing_outside_fit_requests": 0,
+        "work_drain_s": 7.215823553
+      },
+      "pair_order": 0,
+      "scenario": "failed-fill",
+      "scheduler_audit": {
+        "final_original_membership": true,
+        "final_reserved_actions": 0,
+        "final_snapshot_after_sentinel": true,
+        "final_snapshot_s": 11.034035704,
+        "maximum_sampled_worker_actions": 2,
+        "passed": true,
+        "sampled_counts_within_configured_two": true,
+        "samples": 54,
+        "scope": "scheduler reservations sampled every 200 ms; does not bound between-sample or unaccounted physical execution",
+        "snapshot_age_at_report_s": 0.17616319899999944
+      },
+      "seed": 2026101809,
+      "source": "/tmp/azure-fleet-confirm-20261016/runs/failed-fill/2026101809/fixed/run.json",
+      "source_sha256": "9af5d0618150ccc8e50cc2414bb7c924f037f35d62a357c2bf1dcc29408da449",
+      "start_unix_s": 1792171551.094372,
+      "workload_sha256": "34fd5be5d9f91131a3619559470679683cdcf8821eb39aa0ec25146ae67eef13"
+    }
+  ],
+  "scenarios": {
+    "control": {
+      "all_pairs_have_equal_successful_work_and_recovery": true,
+      "arms": {
+        "baseline": {
+          "metrics": {
+            "censored_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "censored_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "client_attempts": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work_fraction": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 10,
+              "p95": 1.0,
+              "p99": 1.0,
+              "sd": 0.0
+            },
+            "failed_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "failed_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "final_scheduler_reserved_actions": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "get_requests": {
+              "ci95": [
+                236.91752320625213,
+                265.4824767937478
+              ],
+              "mean": 251.2,
+              "median": 256.0,
+              "n": 10,
+              "p95": 273.15,
+              "p99": 277.83,
+              "sd": 19.965525843869532
+            },
+            "intended_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "maximum_sampled_worker_actions": {
+              "ci95": [
+                2.0,
+                2.0
+              ],
+              "mean": 2.0,
+              "median": 2.0,
+              "n": 10,
+              "p95": 2.0,
+              "p99": 2.0,
+              "sd": 0.0
+            },
+            "payload_mib": {
+              "ci95": [
+                915.361715631542,
+                1023.0382843684581
+              ],
+              "mean": 969.2,
+              "median": 996.0,
+              "n": 10,
+              "p95": 1048.2,
+              "p99": 1064.04,
+              "sd": 75.26073197742484
+            },
+            "payload_mib_per_completed_action": {
+              "ci95": [
+                41.45705871851399,
+                54.24082072215721
+              ],
+              "mean": 47.8489397203356,
+              "median": 47.131313131313135,
+              "n": 10,
+              "p95": 59.119736842105254,
+              "p99": 61.023947368421055,
+              "sd": 8.9352335155673
+            },
+            "peak_body_mib_s": {
+              "ci95": [
+                1288.4324629735427,
+                1380.8175370264573
+              ],
+              "mean": 1334.625,
+              "median": 1318.75,
+              "n": 10,
+              "p95": 1435.28125,
+              "p99": 1448.55625,
+              "sd": 64.57271418073323
+            },
+            "repair_to_last_sentinel_s": {
+              "ci95": null,
+              "mean": null,
+              "median": null,
+              "n": 0,
+              "p95": null,
+              "p99": null,
+              "sd": null
+            },
+            "repeated_mib": {
+              "ci95": [
+                193.4003844739261,
+                288.1996155260739
+              ],
+              "mean": 240.8,
+              "median": 252.0,
+              "n": 10,
+              "p95": 313.99999999999994,
+              "p99": 328.4,
+              "sd": 66.2600935707157
+            },
+            "sentinel_roundtrip_max_s": {
+              "ci95": [
+                0.047370579550553384,
+                0.0615050982494472
+              ],
+              "mean": 0.05443783890000029,
+              "median": 0.05267730550000005,
+              "n": 10,
+              "p95": 0.06977008980000043,
+              "p99": 0.07121383956000038,
+              "sd": 0.00987934734460608
+            },
+            "sentinel_window_get_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "sentinel_window_payload_mib": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "throttled_get_fraction": {
+              "ci95": [
+                0.02653737806218137,
+                0.043925445352389667
+              ],
+              "mean": 0.03523141170728552,
+              "median": 0.034809381203943605,
+              "n": 10,
+              "p95": 0.052544493882091196,
+              "p99": 0.05878476084538377,
+              "sd": 0.012153421002216018
+            },
+            "throttled_get_requests": {
+              "ci95": [
+                6.702871970606948,
+                11.097128029393053
+              ],
+              "mean": 8.9,
+              "median": 8.5,
+              "n": 10,
+              "p95": 13.099999999999998,
+              "p99": 13.82,
+              "sd": 3.0713731999438516
+            },
+            "timing_outside_fit_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "work_drain_s": {
+              "ci95": [
+                4.454541861627269,
+                6.014793213172731
+              ],
+              "mean": 5.2346675374,
+              "median": 5.069660063500001,
+              "n": 10,
+              "p95": 6.92618280285,
+              "p99": 6.939217310969999,
+              "sd": 1.0905404970043335
+            }
+          },
+          "run_proportions": {
+            "accepted": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_cache_reused": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_succeeded_same_process": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_work_succeeded": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "has_repeated_payload": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "scheduler_accounting_passed": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            }
+          }
+        },
+        "fixed": {
+          "metrics": {
+            "censored_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "censored_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "client_attempts": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work_fraction": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 10,
+              "p95": 1.0,
+              "p99": 1.0,
+              "sd": 0.0
+            },
+            "failed_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "failed_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "final_scheduler_reserved_actions": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "get_requests": {
+              "ci95": [
+                231.80692461964315,
+                264.79307538035687
+              ],
+              "mean": 248.3,
+              "median": 249.0,
+              "n": 10,
+              "p95": 283.29999999999995,
+              "p99": 292.66,
+              "sd": 23.055729584349887
+            },
+            "intended_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "maximum_sampled_worker_actions": {
+              "ci95": [
+                2.0,
+                2.0
+              ],
+              "mean": 2.0,
+              "median": 2.0,
+              "n": 10,
+              "p95": 2.0,
+              "p99": 2.0,
+              "sd": 0.0
+            },
+            "payload_mib": {
+              "ci95": [
+                894.5206398332344,
+                1018.2793601667655
+              ],
+              "mean": 956.4,
+              "median": 966.0,
+              "n": 10,
+              "p95": 1086.1999999999998,
+              "p99": 1116.44,
+              "sd": 86.50138084960777
+            },
+            "payload_mib_per_completed_action": {
+              "ci95": [
+                41.12451384162945,
+                53.02582383239243
+              ],
+              "mean": 47.07516883701094,
+              "median": 46.608695652173914,
+              "n": 10,
+              "p95": 58.275,
+              "p99": 60.055,
+              "sd": 8.318442089137413
+            },
+            "peak_body_mib_s": {
+              "ci95": [
+                1300.343454460065,
+                1407.156545539935
+              ],
+              "mean": 1353.75,
+              "median": 1347.8125,
+              "n": 10,
+              "p95": 1464.28125,
+              "p99": 1488.35625,
+              "sd": 74.65720271123655
+            },
+            "repair_to_last_sentinel_s": {
+              "ci95": null,
+              "mean": null,
+              "median": null,
+              "n": 0,
+              "p95": null,
+              "p99": null,
+              "sd": null
+            },
+            "repeated_mib": {
+              "ci95": [
+                176.70669830267997,
+                279.29330169732003
+              ],
+              "mean": 228.0,
+              "median": 242.0,
+              "n": 10,
+              "p95": 316.19999999999993,
+              "p99": 332.04,
+              "sd": 71.70309151866002
+            },
+            "sentinel_roundtrip_max_s": {
+              "ci95": [
+                0.048014425220149946,
+                0.058951666979849944
+              ],
+              "mean": 0.053483046099999945,
+              "median": 0.053147763000000126,
+              "n": 10,
+              "p95": 0.06515974649999982,
+              "p99": 0.06541373009999965,
+              "sd": 0.007644604859765283
+            },
+            "sentinel_window_get_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "sentinel_window_payload_mib": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "throttled_get_fraction": {
+              "ci95": [
+                0.025823778915972456,
+                0.0477264982276132
+              ],
+              "mean": 0.03677513857179283,
+              "median": 0.034375683358845395,
+              "n": 10,
+              "p95": 0.06148468756819667,
+              "p99": 0.0706660362260857,
+              "sd": 0.015308945177457282
+            },
+            "throttled_get_requests": {
+              "ci95": [
+                6.42328463036027,
+                11.976715369639727
+              ],
+              "mean": 9.2,
+              "median": 8.5,
+              "n": 10,
+              "p95": 15.649999999999997,
+              "p99": 16.73,
+              "sd": 3.8815804341359033
+            },
+            "timing_outside_fit_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "work_drain_s": {
+              "ci95": [
+                4.308894803472358,
+                5.700177016927641
+              ],
+              "mean": 5.0045359101999995,
+              "median": 4.9702828145,
+              "n": 10,
+              "p95": 6.258453916249998,
+              "p99": 6.99742725365,
+              "sd": 0.9724392130998282
+            }
+          },
+          "run_proportions": {
+            "accepted": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_cache_reused": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_succeeded_same_process": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_work_succeeded": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "has_repeated_payload": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "scheduler_accounting_passed": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            }
+          }
+        }
+      },
+      "fully_successful_recovered_pairs": 10,
+      "matching_final_output_pairs": 10,
+      "n_pairs": 10,
+      "output_comparison": [
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101800
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101801
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101802
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101803
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101804
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101805
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101806
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101807
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101808
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101809
+        }
+      ],
+      "paired_difference_fixed_minus_baseline": {
+        "censored_client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "censored_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "completed_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "completed_work_fraction": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "failed_client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "failed_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "final_scheduler_reserved_actions": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "get_requests": {
+          "ci95": [
+            -15.82248685442688,
+            10.02248685442688
+          ],
+          "mean": -2.9,
+          "median": 0.0,
+          "n": 10,
+          "p95": 19.99999999999998,
+          "p99": 27.200000000000003,
+          "sd": 18.0643910005907
+        },
+        "intended_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "maximum_sampled_worker_actions": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "payload_mib": {
+          "ci95": [
+            -59.09267569959481,
+            33.49267569959481
+          ],
+          "mean": -12.8,
+          "median": -6.0,
+          "n": 10,
+          "p95": 67.59999999999992,
+          "p99": 93.52000000000001,
+          "sd": 64.71269839323139
+        },
+        "payload_mib_per_completed_action": {
+          "ci95": [
+            -2.8515821275626223,
+            1.3040403609133067
+          ],
+          "mean": -0.7737708833246579,
+          "median": -0.34722222222222143,
+          "n": 10,
+          "p95": 2.6642857142857155,
+          "p99": 3.390000000000005,
+          "sd": 2.9045798354579264
+        },
+        "peak_body_mib_s": {
+          "ci95": [
+            -30.970914587739422,
+            69.22091458773943
+          ],
+          "mean": 19.125,
+          "median": 10.0,
+          "n": 10,
+          "p95": 102.0625,
+          "p99": 103.4125,
+          "sd": 70.02925975777713
+        },
+        "repair_to_last_sentinel_s": {
+          "ci95": null,
+          "mean": null,
+          "median": null,
+          "n": 0,
+          "p95": null,
+          "p99": null,
+          "sd": null
+        },
+        "repeated_mib": {
+          "ci95": [
+            -59.09267569959481,
+            33.49267569959481
+          ],
+          "mean": -12.8,
+          "median": -6.0,
+          "n": 10,
+          "p95": 67.59999999999992,
+          "p99": 93.52000000000001,
+          "sd": 64.71269839323139
+        },
+        "sentinel_roundtrip_max_s": {
+          "ci95": [
+            -0.0041462737403251725,
+            0.0022366881403244766
+          ],
+          "mean": -0.0009547928000003481,
+          "median": -0.0012030090000001437,
+          "n": 10,
+          "p95": 0.00596206250000004,
+          "p99": 0.006724013299999845,
+          "sd": 0.004461382721949568
+        },
+        "sentinel_window_get_requests": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "sentinel_window_payload_mib": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "throttled_get_fraction": {
+          "ci95": [
+            -0.004120583208694761,
+            0.00720803693770937
+          ],
+          "mean": 0.0015437268645073048,
+          "median": 0.0019160264129989314,
+          "n": 10,
+          "p95": 0.011377739162700197,
+          "p99": 0.012368784476020876,
+          "sd": 0.007918159489235918
+        },
+        "throttled_get_requests": {
+          "ci95": [
+            -1.51756347037723,
+            2.11756347037723
+          ],
+          "mean": 0.3,
+          "median": 0.0,
+          "n": 10,
+          "p95": 3.549999999999999,
+          "p99": 3.91,
+          "sd": 2.5407785333546005
+        },
+        "timing_outside_fit_requests": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "work_drain_s": {
+          "ci95": [
+            -1.0117206824811547,
+            0.5514574280811545
+          ],
+          "mean": -0.2301316272000001,
+          "median": -0.01410183099999962,
+          "n": 10,
+          "p95": 1.0624456992499973,
+          "p99": 1.725185818249999,
+          "sd": 1.0925861604993103
+        }
+      },
+      "paired_seeds": [
+        2026101800,
+        2026101801,
+        2026101802,
+        2026101803,
+        2026101804,
+        2026101805,
+        2026101806,
+        2026101807,
+        2026101808,
+        2026101809
+      ],
+      "payload_difference_on_fully_successful_recovered_pairs_mib": {
+        "ci95": [
+          -59.09267569959481,
+          33.49267569959481
+        ],
+        "mean": -12.8,
+        "median": -6.0,
+        "n": 10,
+        "p95": 67.59999999999992,
+        "p99": 93.52000000000001,
+        "sd": 64.71269839323139
+      },
+      "representative_trace_seed": 2026101801,
+      "trace_selection": "upper median baseline payload, stable seed order for ties; treatment difference is not consulted"
+    },
+    "failed-fill": {
+      "all_pairs_have_equal_successful_work_and_recovery": true,
+      "arms": {
+        "baseline": {
+          "metrics": {
+            "censored_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "censored_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "client_attempts": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work_fraction": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 10,
+              "p95": 1.0,
+              "p99": 1.0,
+              "sd": 0.0
+            },
+            "failed_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "failed_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "final_scheduler_reserved_actions": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "get_requests": {
+              "ci95": [
+                351.1362214458094,
+                367.2637785541906
+              ],
+              "mean": 359.2,
+              "median": 354.5,
+              "n": 10,
+              "p95": 378.7,
+              "p99": 383.74,
+              "sd": 11.272385136547928
+            },
+            "intended_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "maximum_sampled_worker_actions": {
+              "ci95": [
+                2.0,
+                2.0
+              ],
+              "mean": 2.0,
+              "median": 2.0,
+              "n": 10,
+              "p95": 2.0,
+              "p99": 2.0,
+              "sd": 0.0
+            },
+            "payload_mib": {
+              "ci95": [
+                1393.6737389189404,
+                1457.5262610810594
+              ],
+              "mean": 1425.6,
+              "median": 1406.0,
+              "n": 10,
+              "p95": 1501.0,
+              "p99": 1522.6,
+              "sd": 44.62983556122767
+            },
+            "payload_mib_per_completed_action": {
+              "ci95": [
+                61.35852206806667,
+                79.54429541701626
+              ],
+              "mean": 70.45140874254146,
+              "median": 71.77990430622009,
+              "n": 10,
+              "p95": 86.9375,
+              "p99": 87.3875,
+              "sd": 12.710979091110744
+            },
+            "peak_body_mib_s": {
+              "ci95": [
+                1260.9072241689464,
+                1360.9677758310536
+              ],
+              "mean": 1310.9375,
+              "median": 1294.0625,
+              "n": 10,
+              "p95": 1419.1562499999998,
+              "p99": 1460.33125,
+              "sd": 69.93750310296885
+            },
+            "repair_to_last_sentinel_s": {
+              "ci95": [
+                38.73972724804272,
+                42.479343621557284
+              ],
+              "mean": 40.6095354348,
+              "median": 41.196569032,
+              "n": 10,
+              "p95": 43.673438595549996,
+              "p99": 43.849192640709994,
+              "sd": 2.6138116108911382
+            },
+            "repeated_mib": {
+              "ci95": [
+                668.0174906483478,
+                726.3825093516523
+              ],
+              "mean": 697.2,
+              "median": 692.0,
+              "n": 10,
+              "p95": 756.5999999999999,
+              "p99": 775.32,
+              "sd": 40.794335118711984
+            },
+            "sentinel_roundtrip_max_s": {
+              "ci95": [
+                0.04864269889348525,
+                0.059524118506513395
+              ],
+              "mean": 0.05408340869999932,
+              "median": 0.05397462050000357,
+              "n": 10,
+              "p95": 0.06388073934999916,
+              "p99": 0.06478169586999946,
+              "sd": 0.007605587869640534
+            },
+            "sentinel_window_get_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "sentinel_window_payload_mib": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "throttled_get_fraction": {
+              "ci95": [
+                0.00532753930983669,
+                0.0102484758623382
+              ],
+              "mean": 0.0077880075860874455,
+              "median": 0.0067370129870129875,
+              "n": 10,
+              "p95": 0.01292595470513007,
+              "p99": 0.013884625969274603,
+              "sd": 0.003439497481207869
+            },
+            "throttled_get_requests": {
+              "ci95": [
+                1.920631360342929,
+                3.6793686396570706
+              ],
+              "mean": 2.8,
+              "median": 2.5,
+              "n": 10,
+              "p95": 4.549999999999999,
+              "p99": 4.91,
+              "sd": 1.2292725943057183
+            },
+            "timing_outside_fit_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "work_drain_s": {
+              "ci95": [
+                39.7816753631262,
+                43.526738965073804
+              ],
+              "mean": 41.6542071641,
+              "median": 42.255284388999996,
+              "n": 10,
+              "p95": 44.71394439465,
+              "p99": 44.88927387813,
+              "sd": 2.6176189610317255
+            }
+          },
+          "run_proportions": {
+            "accepted": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_cache_reused": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_succeeded_same_process": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_work_succeeded": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "has_repeated_payload": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "scheduler_accounting_passed": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            }
+          }
+        },
+        "fixed": {
+          "metrics": {
+            "censored_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "censored_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "client_attempts": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "completed_work_fraction": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0,
+              "median": 1.0,
+              "n": 10,
+              "p95": 1.0,
+              "p99": 1.0,
+              "sd": 0.0
+            },
+            "failed_client_attempts": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "failed_work": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "final_scheduler_reserved_actions": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "get_requests": {
+              "ci95": [
+                300.2023651761627,
+                331.99763482383736
+              ],
+              "mean": 316.1,
+              "median": 312.5,
+              "n": 10,
+              "p95": 348.05,
+              "p99": 352.01,
+              "sd": 22.22336108192858
+            },
+            "intended_work": {
+              "ci95": [
+                17.93225058331147,
+                23.86774941668853
+              ],
+              "mean": 20.9,
+              "median": 20.5,
+              "n": 10,
+              "p95": 27.099999999999998,
+              "p99": 27.82,
+              "sd": 4.1486276177925525
+            },
+            "maximum_sampled_worker_actions": {
+              "ci95": [
+                2.0,
+                2.0
+              ],
+              "mean": 2.0,
+              "median": 2.0,
+              "n": 10,
+              "p95": 2.0,
+              "p99": 2.0,
+              "sd": 0.0
+            },
+            "payload_mib": {
+              "ci95": [
+                1140.3041783128633,
+                1252.4958216871369
+              ],
+              "mean": 1196.4,
+              "median": 1190.0,
+              "n": 10,
+              "p95": 1308.8,
+              "p99": 1343.3600000000001,
+              "sd": 78.41655154082942
+            },
+            "payload_mib_per_completed_action": {
+              "ci95": [
+                52.11347535779692,
+                65.56176202876769
+              ],
+              "mean": 58.83761869328231,
+              "median": 60.94949494949495,
+              "n": 10,
+              "p95": 71.1875,
+              "p99": 73.4375,
+              "sd": 9.399704230661511
+            },
+            "peak_body_mib_s": {
+              "ci95": [
+                1386.2388458808684,
+                1463.2611541191316
+              ],
+              "mean": 1424.75,
+              "median": 1435.9375,
+              "n": 10,
+              "p95": 1487.90625,
+              "p99": 1488.58125,
+              "sd": 53.83488129869374
+            },
+            "repair_to_last_sentinel_s": {
+              "ci95": [
+                4.363483379320283,
+                6.210615914479717
+              ],
+              "mean": 5.2870496469,
+              "median": 6.0686585675,
+              "n": 10,
+              "p95": 6.46292177575,
+              "p99": 6.50440608955,
+              "sd": 1.291056617852222
+            },
+            "repeated_mib": {
+              "ci95": [
+                423.6299274371422,
+                512.3700725628578
+              ],
+              "mean": 468.0,
+              "median": 460.0,
+              "n": 10,
+              "p95": 562.5999999999999,
+              "p99": 595.72,
+              "sd": 62.02508453126937
+            },
+            "sentinel_roundtrip_max_s": {
+              "ci95": [
+                0.047682576806337015,
+                0.0597582683936637
+              ],
+              "mean": 0.05372042260000036,
+              "median": 0.0509209519999998,
+              "n": 10,
+              "p95": 0.06598392214999994,
+              "p99": 0.06723692842999965,
+              "sd": 0.008440326420656577
+            },
+            "sentinel_window_get_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "sentinel_window_payload_mib": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "throttled_get_fraction": {
+              "ci95": [
+                0.039556685832370944,
+                0.06705956571843705
+              ],
+              "mean": 0.053308125775403996,
+              "median": 0.04580786243228468,
+              "n": 10,
+              "p95": 0.08730082085948816,
+              "p99": 0.09085465958474168,
+              "sd": 0.01922318751417348
+            },
+            "throttled_get_requests": {
+              "ci95": [
+                12.136508236362964,
+                21.863491763637036
+              ],
+              "mean": 17.0,
+              "median": 14.5,
+              "n": 10,
+              "p95": 29.099999999999998,
+              "p99": 29.82,
+              "sd": 6.79869268479038
+            },
+            "timing_outside_fit_requests": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0,
+              "median": 0.0,
+              "n": 10,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sd": 0.0
+            },
+            "work_drain_s": {
+              "ci95": [
+                5.409607979807683,
+                7.259157296192317
+              ],
+              "mean": 6.334382638,
+              "median": 7.10083998,
+              "n": 10,
+              "p95": 7.52030146385,
+              "p99": 7.56433093517,
+              "sd": 1.2927458314496787
+            }
+          },
+          "run_proportions": {
+            "accepted": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_cache_reused": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_sentinels_succeeded_same_process": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "all_work_succeeded": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "has_repeated_payload": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            },
+            "scheduler_accounting_passed": {
+              "ci95": [
+                0.7224672001371107,
+                0.9999999999999999
+              ],
+              "n": 10,
+              "proportion": 1.0,
+              "successes": 10
+            }
+          }
+        }
+      },
+      "fully_successful_recovered_pairs": 10,
+      "matching_final_output_pairs": 10,
+      "n_pairs": 10,
+      "output_comparison": [
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101800
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101801
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101802
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101803
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101804
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101805
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101806
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101807
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101808
+        },
+        {
+          "all_work_output_digests_match": true,
+          "seed": 2026101809
+        }
+      ],
+      "paired_difference_fixed_minus_baseline": {
+        "censored_client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "censored_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "completed_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "completed_work_fraction": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "failed_client_attempts": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "failed_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "final_scheduler_reserved_actions": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "get_requests": {
+          "ci95": [
+            -56.39978268842343,
+            -29.800217311576578
+          ],
+          "mean": -43.1,
+          "median": -42.5,
+          "n": 10,
+          "p95": -21.450000000000003,
+          "p99": -21.09,
+          "sd": 18.591814208289506
+        },
+        "intended_work": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "maximum_sampled_worker_actions": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "payload_mib": {
+          "ci95": [
+            -272.38660192515744,
+            -186.01339807484254
+          ],
+          "mean": -229.2,
+          "median": -216.0,
+          "n": 10,
+          "p95": -165.00000000000003,
+          "p99": -157.8,
+          "sd": 60.370706656641204
+        },
+        "payload_mib_per_completed_action": {
+          "ci95": [
+            -14.956650143817203,
+            -8.270929954701113
+          ],
+          "mean": -11.613790049259158,
+          "median": -11.354691075514875,
+          "n": 10,
+          "p95": -6.745031055900624,
+          "p99": -6.720434782608697,
+          "sd": 4.67299618785693
+        },
+        "peak_body_mib_s": {
+          "ci95": [
+            51.314490967319195,
+            176.3105090326808
+          ],
+          "mean": 113.8125,
+          "median": 135.3125,
+          "n": 10,
+          "p95": 205.28125,
+          "p99": 209.55625,
+          "sd": 87.36619233147339
+        },
+        "repair_to_last_sentinel_s": {
+          "ci95": [
+            -37.00424845898006,
+            -33.64072311681994
+          ],
+          "mean": -35.3224857879,
+          "median": -36.025645494,
+          "n": 10,
+          "p95": -31.386735014200006,
+          "p99": -30.23397804364,
+          "sd": 2.3509421060220004
+        },
+        "repeated_mib": {
+          "ci95": [
+            -272.38660192515744,
+            -186.01339807484254
+          ],
+          "mean": -229.2,
+          "median": -216.0,
+          "n": 10,
+          "p95": -165.00000000000003,
+          "p99": -157.8,
+          "sd": 60.370706656641204
+        },
+        "sentinel_roundtrip_max_s": {
+          "ci95": [
+            -0.004599548165782908,
+            0.003873575965784982
+          ],
+          "mean": -0.00036298609999896314,
+          "median": 0.0008441290000043011,
+          "n": 10,
+          "p95": 0.006799295450002328,
+          "p99": 0.007287073490003788,
+          "sd": 0.005922305398080099
+        },
+        "sentinel_window_get_requests": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "sentinel_window_payload_mib": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "throttled_get_fraction": {
+          "ci95": [
+            0.031370649446432745,
+            0.05966958693220036
+          ],
+          "mean": 0.045520118189316554,
+          "median": 0.04006947720346534,
+          "n": 10,
+          "p95": 0.0801735946925693,
+          "p99": 0.08266865097107622,
+          "sd": 0.019779593409648372
+        },
+        "throttled_get_requests": {
+          "ci95": [
+            9.177762018390633,
+            19.222237981609368
+          ],
+          "mean": 14.2,
+          "median": 12.0,
+          "n": 10,
+          "p95": 26.549999999999997,
+          "p99": 26.91,
+          "sd": 7.0206045956804095
+        },
+        "timing_outside_fit_requests": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "median": 0.0,
+          "n": 10,
+          "p95": 0.0,
+          "p99": 0.0,
+          "sd": 0.0
+        },
+        "work_drain_s": {
+          "ci95": [
+            -37.00065508081525,
+            -33.63899397138475
+          ],
+          "mean": -35.3198245261,
+          "median": -36.022303417,
+          "n": 10,
+          "p95": -31.389782753850003,
+          "p99": -30.247444450769997,
+          "sd": 2.349639097192381
+        }
+      },
+      "paired_seeds": [
+        2026101800,
+        2026101801,
+        2026101802,
+        2026101803,
+        2026101804,
+        2026101805,
+        2026101806,
+        2026101807,
+        2026101808,
+        2026101809
+      ],
+      "payload_difference_on_fully_successful_recovered_pairs_mib": {
+        "ci95": [
+          -272.38660192515744,
+          -186.01339807484254
+        ],
+        "mean": -229.2,
+        "median": -216.0,
+        "n": 10,
+        "p95": -165.00000000000003,
+        "p99": -157.8,
+        "sd": 60.370706656641204
+      },
+      "representative_trace_seed": 2026101807,
+      "trace_selection": "upper median baseline payload, stable seed order for ties; treatment difference is not consulted"
+    }
+  },
+  "schema_version": 1,
+  "statistical_unit": "independent seeded run; pairing by scenario, seed, and manifest hash",
+  "status": ">=10 paired seeds per scenario; condition order alternated",
+  "warnings": []
+}

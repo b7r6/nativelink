@@ -8,6 +8,11 @@ load(
     "rust_test_suite",
 )
 
+exports_files(
+    ["tests/fixtures/azure_download_response.json"],
+    visibility = ["//examples/azure_fleet:__pkg__"],
+)
+
 # Definitions for the glibc-only symbol names AWS-LC ends up referencing when
 # it is linked against musl (see aws_lc_musl_shims.c). Empty everywhere else.
 # Linked into aws-lc-sys through the crate annotation in MODULE.bazel;
