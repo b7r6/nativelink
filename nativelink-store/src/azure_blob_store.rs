@@ -1192,6 +1192,14 @@ where
                             self.note_read_ok();
                             Some((RetryResult::Err(e), writer))
                         }
+                        // Retrying the origin cannot repair a failed destination.
+                        // Preserve throttle feedback without crediting a successful read.
+                        Err((e, wait)) if writer.is_pipe_broken() => {
+                            if wait.is_some() {
+                                self.note_read_throttled();
+                            }
+                            Some((RetryResult::Err(e), writer))
+                        }
                         Err((e, Some(wait))) => {
                             self.note_read_throttled();
                             Some((RetryResult::RetryAfter(e, wait), writer))

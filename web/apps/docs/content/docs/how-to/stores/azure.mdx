@@ -136,6 +136,20 @@ described in [the shared options section](/how-to/stores/s3-and-compatible);
 `insecure_allow_http` and `disable_http2` are accepted but not read by the
 Azure store.
 
+<Callout type="info" title="Unreleased: stop retries after destination failure">
+  When a download fails to send data because its destination has closed, the
+  read returns the delivery error without starting another retry. Transient
+  Azure errors remain retryable while the destination is usable. Requests
+  already started by the Azure SDK may still finish after the read returns.
+</Callout>
+
+The source link below shows the released implementation, which predates this
+change. The regression tests in `nativelink-store/tests/azure_blob_store_test.rs`
+and `azure_download_egress_test.rs` check that a failed destination stops retries
+and repeated range downloads.
+
+<SourceLink file="nativelink-store/src/azure_blob_store.rs" symbol="AzureBlobStore (released implementation)" />
+
 ## Steps [#steps]
 
 <Steps>
