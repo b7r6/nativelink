@@ -443,6 +443,54 @@ async fn test_get_with_retries() -> Result<(), Error> {
     Ok(())
 }
 
+/// Once delivery fails, another origin read cannot repair the same writer.
+/// A throttle before the failed send may still be retried: dropping the reader
+/// alone does not tell the writer that its pipe is broken.
+#[nativelink_test(start_paused = true)]
+async fn a_failed_download_destination_is_not_retried() -> Result<(), Error> {
+    const RETRIES: usize = 6;
+    const VALUE: &[u8] = b"test_content";
+
+    for initially_throttled in [false, true] {
+        let mock = MockTransport::new();
+        if initially_throttled {
+            mock.push_download(error_response(StatusCode::ServiceUnavailable));
+        }
+        // Every retry could obtain valid data. The destination is the failure.
+        for _ in 0..=RETRIES {
+            mock.push_download(download_ok(StatusCode::Ok, VALUE.to_vec()));
+        }
+        let store = create_test_store(
+            Arc::clone(&mock),
+            Some(Retry {
+                max_retries: RETRIES,
+                delay: 0.0,
+                jitter: 0.0,
+                ..Default::default()
+            }),
+            None,
+        )?;
+        let (mut writer, reader) = make_buf_channel_pair();
+        drop(reader);
+
+        let err = store
+            .get_part(create_test_digest()?, &mut writer, 0, None)
+            .await
+            .expect_err("a disconnected destination must fail the read");
+
+        assert_eq!(err.code, Code::Aborted);
+        assert!(err.to_string().contains("Failed to send data to writer"));
+        assert!(writer.is_pipe_broken());
+        assert_eq!(writer.get_bytes_written(), 0);
+        assert_eq!(
+            mock.download_ranges().len(),
+            1 + usize::from(initially_throttled),
+            "a failed send must be terminal even when Aborted is retryable"
+        );
+    }
+    Ok(())
+}
+
 // Paused tokio time: the only thing that advances the clock is the store's
 // own sleep, so the elapsed time is exactly what the retrier waited.
 #[nativelink_test(start_paused = true)]
@@ -510,7 +558,7 @@ async fn a_throttled_download_waits_at_most_the_cap() -> Result<(), Error> {
     assert_eq!(result, VALUE.as_bytes());
     assert_eq!(mock.request_count(), 2);
     assert!(
-        started.elapsed() >= cap && started.elapsed() < Duration::from_secs(3600),
+        started.elapsed() >= cap && started.elapsed() < Duration::from_hours(1),
         "waited {:?}, expected the {cap:?} cap, not the hour asked for",
         started.elapsed()
     );
