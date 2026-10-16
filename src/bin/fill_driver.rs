@@ -67,6 +67,10 @@ struct Args {
     /// whole read future (caller cancellation, no disk error).
     #[arg(long)]
     cancel_after_bytes: Option<u64>,
+    /// With `--cancel-after-bytes`, also wait until at least this many Azure
+    /// HTTP requests are in flight, so the drop lands mid-transfer.
+    #[arg(long, default_value_t = 0)]
+    cancel_min_inflight: u64,
 }
 
 /// Pod network counters for eth0 (rx, tx bytes).
@@ -200,10 +204,13 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
         tokio::join!(store.get_part(digest, tx, 0, None), consumer)
     });
     let cancel_after = args.cancel_after_bytes;
+    let min_inflight = args.cancel_min_inflight;
     let cancel = async move {
         match cancel_after {
             Some(n) => {
-                while DELIVERED.load(Ordering::Relaxed) < n {
+                while DELIVERED.load(Ordering::Relaxed) < n
+                    || get(&fill_diag::HTTP_INFLIGHT) < min_inflight
+                {
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
             }
@@ -220,6 +227,7 @@ async fn run(args: Args, cfg: CasConfig) -> Result<(), Error> {
             ev = "caller_cancel",
             t_ms = now_ms(),
             delivered = DELIVERED.load(Ordering::Relaxed),
+            http_inflight = get(&fill_diag::HTTP_INFLIGHT),
         );
         sample("caller_cancel");
         drop(read);
