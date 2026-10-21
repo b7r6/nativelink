@@ -671,19 +671,18 @@ async fn has_zero_digests_skips_inner_store() -> Result<(), Error> {
 #[nativelink_test]
 async fn has_mixed_digests_preserves_result_order() -> Result<(), Error> {
     let (store, inner_store) = make_recording_compression_store()?;
+    let first = DigestInfo::try_new(VALID_HASH, 1)?;
+    let second = DigestInfo::try_new(VALID_HASH, 2)?;
     let keys = [
         StoreKey::from(ZERO_BYTE_DIGESTS[0]),
-        StoreKey::new_str("first"),
+        StoreKey::from(first),
         StoreKey::from(ZERO_BYTE_DIGESTS[1]),
-        StoreKey::new_str("second"),
+        StoreKey::from(second),
     ];
     let mut results = [None; 4];
 
     store.has_with_results(&keys, &mut results).await?;
-    let expected_keys = [
-        StoreKey::new_str("first").into_owned(),
-        StoreKey::new_str("second").into_owned(),
-    ];
+    let expected_keys = [StoreKey::from(first), StoreKey::from(second)];
     assert_eq!(
         (
             results,
@@ -692,7 +691,7 @@ async fn has_mixed_digests_preserves_result_order() -> Result<(), Error> {
             inner_store.has_keys.lock().unwrap().as_slice(),
         ),
         (
-            [Some(0), Some(100), Some(0), Some(101)],
+            [Some(0), Some(1), Some(0), Some(2)],
             1,
             2,
             expected_keys.as_slice(),
@@ -704,14 +703,14 @@ async fn has_mixed_digests_preserves_result_order() -> Result<(), Error> {
 #[nativelink_test]
 async fn has_nonzero_digests_delegates_single_batch() -> Result<(), Error> {
     let (store, inner_store) = make_recording_compression_store()?;
-    let keys = [StoreKey::new_str("first"), StoreKey::new_str("second")];
+    let first = DigestInfo::try_new(VALID_HASH, 1)?;
+    let second = DigestInfo::try_new(VALID_HASH, 2)?;
+    let keys = [StoreKey::from(first), StoreKey::from(second)];
     let mut results = [None; 2];
 
     store.has_with_results(&keys, &mut results).await?;
-    let expected_keys = [
-        StoreKey::new_str("first").into_owned(),
-        StoreKey::new_str("second").into_owned(),
-    ];
+    // The inner store reports 100 and 101, standing in for compressed lengths;
+    // `has()` reports each digest's own size instead.
     assert_eq!(
         (
             results,
@@ -719,7 +718,88 @@ async fn has_nonzero_digests_delegates_single_batch() -> Result<(), Error> {
             inner_store.has_key_count.load(Ordering::Relaxed),
             inner_store.has_keys.lock().unwrap().as_slice(),
         ),
-        ([Some(100), Some(101)], 1, 2, expected_keys.as_slice())
+        ([Some(1), Some(2)], 1, 2, keys.as_slice())
+    );
+    Ok(())
+}
+
+/// Text lz4 shrinks to a fraction of its size, spanning two blocks so the
+/// footer carries an index entry.
+fn compressible_data() -> Bytes {
+    let data = Bytes::from(b"the uncompressed size, not the stored one. ".repeat(2048));
+    assert!(data.len() > DEFAULT_BLOCK_SIZE as usize);
+    data
+}
+
+fn make_compression_store_over(inner_store: &Arc<MemoryStore>) -> Result<Store, Error> {
+    Ok(Store::new(CompressionStore::new(
+        &CompressionSpec {
+            backend: StoreSpec::Memory(MemorySpec::default()),
+            compression_algorithm: nativelink_config::stores::CompressionAlgorithm::Lz4(
+                nativelink_config::stores::Lz4Config::default(),
+            ),
+        },
+        Store::new(inner_store.clone()),
+    )?))
+}
+
+// `has()` used to forward the inner store's size, which is the length of the
+// compressed stream. A fast_slow store filled its fast tier with that as an
+// `ExactSize`, and a filesystem fast tier refuses a write whose length differs
+// from it, so every populate through a compression slow tier failed.
+#[nativelink_test]
+async fn has_reports_uncompressed_size_of_digest() -> Result<(), Error> {
+    let inner_store = MemoryStore::new(&MemorySpec::default());
+    let store = make_compression_store_over(&inner_store)?;
+    let data = compressible_data();
+    let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
+    store.update_oneshot(digest, data.clone()).await?;
+
+    let stored_size = inner_store.has(digest).await?.err_tip(|| "Not stored")?;
+    assert!(
+        stored_size < data.len() as u64 / 4,
+        "Expected {stored_size} to be well below {}",
+        data.len()
+    );
+    let missing = DigestInfo::try_new(VALID_HASH, data.len() + 1)?;
+    assert_eq!(
+        store
+            .has_many(&[ZERO_BYTE_DIGESTS[0].into(), digest.into(), missing.into()])
+            .await?,
+        vec![Some(0), Some(data.len() as u64), None]
+    );
+    Ok(())
+}
+
+// A string key carries no size of its own, so `has()` reads the uncompressed
+// size out of the footer at the end of the stream.
+#[nativelink_test]
+async fn has_reports_uncompressed_size_of_string_key() -> Result<(), Error> {
+    let inner_store = MemoryStore::new(&MemorySpec::default());
+    let store = make_compression_store_over(&inner_store)?;
+    let data = compressible_data();
+    let key = StoreKey::new_str("compressible");
+    let empty_key = StoreKey::new_str("empty");
+    store.update_oneshot(key.borrow(), data.clone()).await?;
+    store
+        .update_oneshot(empty_key.borrow(), Bytes::new())
+        .await?;
+
+    let stored_size = inner_store
+        .has(key.borrow())
+        .await?
+        .err_tip(|| "Not stored")?;
+    assert!(
+        stored_size < data.len() as u64 / 4,
+        "Expected {stored_size} to be well below {}",
+        data.len()
+    );
+    assert_ne!(inner_store.has(empty_key.borrow()).await?, Some(0));
+    assert_eq!(
+        store
+            .has_many(&[key, empty_key, StoreKey::new_str("missing")])
+            .await?,
+        vec![Some(data.len() as u64), Some(0), None]
     );
     Ok(())
 }
@@ -966,7 +1046,7 @@ async fn compressed_slow_tier_refills_filesystem_with_the_uncompressed_size() ->
 }
 
 #[nativelink_test]
-async fn has_preserves_missing_digests_and_stored_string_key_sizes() -> Result<(), Error> {
+async fn has_preserves_missing_digests_and_reports_string_key_sizes() -> Result<(), Error> {
     let backend = Store::new(MemoryStore::new(&MemorySpec::default()));
     let store = CompressionStore::new(
         &CompressionSpec {
@@ -983,8 +1063,9 @@ async fn has_preserves_missing_digests_and_stored_string_key_sizes() -> Result<(
         .update_oneshot(digest, vec![b'a'; 4096].into())
         .await?;
     store.update_oneshot(named.borrow(), "tiny".into()).await?;
-    let named_stored_size = backend.has(named.borrow()).await?;
-    assert_ne!(named_stored_size, Some(4));
+    // The stored, framed length is not the blob's; `has()` reads the blob's
+    // from the footer.
+    assert_ne!(backend.has(named.borrow()).await?, Some(4));
     let keys = [
         StoreKey::from(DigestInfo::try_new(VALID_HASH, 78)?),
         StoreKey::from(digest),
@@ -993,6 +1074,6 @@ async fn has_preserves_missing_digests_and_stored_string_key_sizes() -> Result<(
     ];
     let mut results = [None; 4];
     store.has_with_results(&keys, &mut results).await?;
-    assert_eq!(results, [None, Some(4096), Some(0), named_stored_size]);
+    assert_eq!(results, [None, Some(4096), Some(0), Some(4)]);
     Ok(())
 }
