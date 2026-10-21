@@ -2469,7 +2469,6 @@ dependencies = [
  "nativelink-util",
  "serde_json5",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 

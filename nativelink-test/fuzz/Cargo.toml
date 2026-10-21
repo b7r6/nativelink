@@ -21,7 +21,6 @@ scheduler_race = [
   "dep:nativelink-scheduler",
   "dep:nativelink-util",
   "dep:tokio",
-  "dep:tracing",
   "dep:tracing-subscriber",
   "nativelink-util/mock_operation_id",
 ]
@@ -45,7 +44,6 @@ tokio = { version = "1", features = [
   "test-util",
   "time",
 ], optional = true }
-tracing = { version = "0.1", default-features = false, optional = true }
 tracing-subscriber = { version = "0.3", features = [
   "env-filter",
   "fmt",
