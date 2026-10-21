@@ -7,11 +7,13 @@ on:
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+      - '**/*.md'
   pull_request:
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+      - '**/*.md'
   # Two jobs here run only on the nightly schedule and on demand: Cargo Dev
   # (nix-cargo) and the end-to-end integration tests (buildstream, buck2,
   # mongo). See their per-job `if`. The rest (Bazel Dev, installation and the

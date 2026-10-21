@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - '.github/styles/**'
       - 'web/**'
+      - '**/*.md'
   schedule:
     - cron: '0 7 * * *' # 07:00 UTC daily (off-peak)
   workflow_dispatch:
