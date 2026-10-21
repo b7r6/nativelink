@@ -1,0 +1,66 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+_SOURCES = [
+    "account.rs",
+    "checks.rs",
+    "main.rs",
+    "node.rs",
+    "transport.rs",
+    "witness.rs",
+    "workload.rs",
+]
+
+_COMPILE_DATA = ["//nativelink-store:tests/fixtures/azure_download_response.json"]
+
+_DEPS = [
+    "//nativelink-config",
+    "//nativelink-proto",
+    "//nativelink-scheduler",
+    "//nativelink-service",
+    "//nativelink-store",
+    "//nativelink-util",
+    "//nativelink-worker",
+    "@crates//:async-trait",
+    "@crates//:axum",
+    "@crates//:azure_core",
+    "@crates//:azure_storage_blob",
+    "@crates//:bytes",
+    "@crates//:clap",
+    "@crates//:futures",
+    "@crates//:hex",
+    "@crates//:libc",
+    "@crates//:prost",
+    "@crates//:prost-types",
+    "@crates//:reqwest",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:sha2",
+    "@crates//:tokio",
+    "@crates//:tokio-rustls",
+    "@crates//:tonic",
+    "@crates//:tracing",
+    "@crates//:tracing-subscriber",
+]
+
+# The complete experiment runs explicitly: it needs unshare, mount, taskset,
+# and a writable output directory. Ordinary tests exercise the account's real
+# SDK transport and disk accounting without mounting filesystems or running a fleet.
+rust_binary(
+    name = "azure_fleet",
+    srcs = _SOURCES,
+    compile_data = _COMPILE_DATA,
+    crate_root = "main.rs",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = _DEPS,
+)
+
+rust_test(
+    name = "azure_fleet_test",
+    size = "small",
+    timeout = "short",
+    srcs = _SOURCES,
+    compile_data = _COMPILE_DATA,
+    crate_root = "main.rs",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = _DEPS,
+)

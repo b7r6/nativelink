@@ -8,6 +8,11 @@ load(
     "rust_test_suite",
 )
 
+exports_files(
+    ["tests/fixtures/azure_download_response.json"],
+    visibility = ["//examples/azure_fleet:__pkg__"],
+)
+
 # Definitions for the glibc-only symbol names AWS-LC ends up referencing when
 # it is linked against musl (see aws_lc_musl_shims.c). Empty everywhere else.
 # Linked into aws-lc-sys through the crate annotation in MODULE.bazel;
@@ -143,6 +148,7 @@ rust_test_suite(
     srcs = [
         "tests/ac_utils_test.rs",
         "tests/azure_blob_store_test.rs",
+        "tests/azure_download_egress_test.rs",
         "tests/azurite_store_test.rs",
         "tests/cache_metrics_remove_metrics_test.rs",
         "tests/cache_metrics_store_test.rs",
@@ -173,6 +179,7 @@ rust_test_suite(
         "tests/verify_store_test.rs",
     ],
     compile_data = [
+        "tests/fixtures/azure_download_response.json",
         "tests/mongo_runner/mod.rs",
         "tests/mongo_runner/process.rs",
         "tests/mongo_runner/extractor.rs",
