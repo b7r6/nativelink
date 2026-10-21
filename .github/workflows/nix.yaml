@@ -9,6 +9,7 @@ on:
       - 'web/**'
       - '**/*.md'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
@@ -31,7 +32,9 @@ concurrency:
 
 jobs:
   nix-bazel:
-    if: ${{ github.event_name != 'schedule' }}
+    if: >-
+      github.event_name != 'schedule'
+      && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     strategy:
       fail-fast: false
       matrix:
@@ -126,7 +129,9 @@ jobs:
           nativelink_attic_token: ${{ secrets.NATIVELINK_ATTIC_TOKEN }}
 
   installation:
-    if: ${{ github.event_name != 'schedule' }}
+    if: >-
+      github.event_name != 'schedule'
+      && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     strategy:
       fail-fast: false
       matrix:
@@ -187,7 +192,9 @@ jobs:
 
   # rbe-toolchain is slow because it has many subcommands, so split it out
   generate-rbe-commands:
-    if: ${{ github.event_name != 'schedule' }}
+    if: >-
+      github.event_name != 'schedule'
+      && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}

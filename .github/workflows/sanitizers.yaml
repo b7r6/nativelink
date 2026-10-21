@@ -9,6 +9,7 @@ on:
       - 'web/**'
       - '**/*.md'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths-ignore:
       - '.github/styles/**'
@@ -23,6 +24,7 @@ concurrency:
 
 jobs:
   sanitized-tests:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
