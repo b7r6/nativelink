@@ -297,28 +297,34 @@ impl CompletenessCheckingStore {
             // Poll both futures at the same time.
             select! {
                 r = check_existence_fut => {
-                    return Err(make_err!(
-                        Code::Internal,
-                        "CompletenessCheckingStore's check_existence_fut ended unexpectedly {r:?}"
-                    ));
+                    // Before `done` is set, this future only finishes when a CAS
+                    // existence check fails. Keep that error's code, so a
+                    // transient CAS fault stays retryable instead of reaching
+                    // the client as Internal.
+                    return Err(match r {
+                        Err(err) => err,
+                        Ok(()) => make_err!(
+                            Code::Internal,
+                            "CompletenessCheckingStore's check_existence_fut ended unexpectedly"
+                        ),
+                    });
                 }
                 maybe_result = futures.next() => {
                     match maybe_result {
                         Some(Ok(())) => self.complete_entries_counter.inc(),
                         Some(Err((err, i))) => {
-                            self.incomplete_entries_counter.inc();
-                            // Only a genuine `NotFound` may be laundered into a "missing"
-                            // slot (which callers surface as `Code::NotFound`). That covers
-                            // a truly absent action-result record and a clean completeness
-                            // miss — the intended eviction-coherence behavior (an evicted
-                            // referent must still 404). ANY other code is a real backend
-                            // read/decode failure; collapsing it into `None` would make an
-                            // I/O fault indistinguishable from absence and get served as a
-                            // 404. Propagate it so the caller can tell "genuinely absent"
-                            // from "could not determine".
+                            // Only a `NotFound` becomes a miss: an absent action
+                            // result, or an absent Tree blob. Records that fail to
+                            // decode also arrive as `NotFound` (`ac_utils` maps
+                            // them), so they stay misses too. Any other code is a
+                            // backend failure, such as an unavailable store or a
+                            // timeout, and turning it into a miss would serve an
+                            // outage as a 404 and throw away a valid cached
+                            // result. Propagate it instead.
                             if err.code != Code::NotFound {
                                 return Err(err);
                             }
+                            self.incomplete_entries_counter.inc();
                             state_mux.lock().results[i] = None;
                         }
                         None => {

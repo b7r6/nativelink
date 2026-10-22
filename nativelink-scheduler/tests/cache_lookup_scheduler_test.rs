@@ -48,11 +48,10 @@ use tokio::{self};
 use tokio_stream::StreamExt;
 use utils::scheduler_utils::{TokioWatchActionStateResult, make_base_action_info};
 
-/// An AC store whose reads always fail with a non-`NotFound` backend error.
+/// An AC store whose operations always fail with a non-`NotFound` backend error.
 #[derive(Debug, MetricsComponent)]
 struct AlwaysErrStore {
-    #[metric(help = "Error code every operation fails with")]
-    code: u32,
+    code: Code,
 }
 
 #[async_trait]
@@ -66,7 +65,7 @@ impl StoreDriver for AlwaysErrStore {
         _keys: &[StoreKey<'_>],
         _results: &mut [Option<u64>],
     ) -> Result<(), Error> {
-        Err(make_err!(Code::Unavailable, "injected AC backend failure"))
+        Err(make_err!(self.code, "injected AC backend failure"))
     }
 
     async fn update(
@@ -75,7 +74,7 @@ impl StoreDriver for AlwaysErrStore {
         _reader: DropCloserReadHalf,
         _size_info: UploadSizeInfo,
     ) -> Result<u64, Error> {
-        Err(make_err!(Code::Unavailable, "injected AC backend failure"))
+        Err(make_err!(self.code, "injected AC backend failure"))
     }
 
     async fn get_part(
@@ -85,7 +84,7 @@ impl StoreDriver for AlwaysErrStore {
         _offset: u64,
         _length: Option<u64>,
     ) -> Result<(), Error> {
-        Err(make_err!(Code::Unavailable, "injected AC backend failure"))
+        Err(make_err!(self.code, "injected AC backend failure"))
     }
 
     fn inner_store(&self, _key: Option<StoreKey>) -> &dyn StoreDriver {
@@ -199,14 +198,14 @@ async fn add_action_handles_skip_cache() -> Result<(), Error> {
     Ok(())
 }
 
-/// A faulting AC backend (unavailable Redis, decode error) must degrade the
+/// A faulting AC backend (an unavailable Redis, a timeout) must degrade the
 /// cache lookup to execution, not fail the Execute request: a cache fault
 /// costs a redundant execution, never a failed build.
 #[nativelink_test]
 async fn ac_fault_falls_through_to_execution() -> Result<(), Error> {
     let mock_scheduler = Arc::new(MockActionScheduler::new());
     let ac_store = Store::new(Arc::new(AlwaysErrStore {
-        code: Code::Unavailable as u32,
+        code: Code::Unavailable,
     }));
     let cache_scheduler = CacheLookupScheduler::new(ac_store, mock_scheduler.clone())?;
     let action_info = make_base_action_info(UNIX_EPOCH, DigestInfo::new([7; 32], 123));
@@ -218,14 +217,20 @@ async fn ac_fault_falls_through_to_execution() -> Result<(), Error> {
             last_transition_timestamp: SystemTime::now(),
         }));
     let client_operation_id = OperationId::default();
-    let (add_result, _) = join!(
-        cache_scheduler.add_action(client_operation_id.clone(), action_info.clone()),
-        mock_scheduler.expect_add_action(Ok(Box::new(TokioWatchActionStateResult::new(
-            client_operation_id,
-            action_info,
-            forward_watch_channel_rx
-        ))))
-    );
+    // If the fault failed the request instead, the mock would never see the
+    // action and `expect_add_action` would wait forever; bound it.
+    let (add_result, _) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        join!(
+            cache_scheduler.add_action(client_operation_id.clone(), action_info.clone()),
+            mock_scheduler.expect_add_action(Ok(Box::new(TokioWatchActionStateResult::new(
+                client_operation_id,
+                action_info,
+                forward_watch_channel_rx
+            ))))
+        )
+    })
+    .await
+    .expect("the AC fault was not forwarded to execution");
     add_result.expect("AC backend fault must fall through to execution, not fail the client");
     Ok(())
 }
