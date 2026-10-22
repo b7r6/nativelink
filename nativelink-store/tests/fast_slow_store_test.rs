@@ -2584,11 +2584,10 @@ async fn populate_from_filesystem_slow_tier_at_default_block_size() -> Result<()
     let data = Bytes::from_static(b"seventeen bytes!!");
     let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
     slow.update_oneshot(digest, data.clone()).await?;
-    assert_eq!(
-        slow.has(digest).await?,
-        Some(4096),
-        "the filesystem store reports its block-rounded size"
-    );
+    // Before #3006 a filesystem store's `has()` reported its block-rounded
+    // size on disk (4096 here); since then it reports the content length.
+    // Either way the populate must not refuse the 17 bytes it gets.
+    assert!(slow.has(digest).await?.is_some());
     let store = Store::new(FastSlowStore::new(
         &FastSlowSpec {
             fast: StoreSpec::Memory(MemorySpec::default()),
@@ -2603,6 +2602,9 @@ async fn populate_from_filesystem_slow_tier_at_default_block_size() -> Result<()
     let got = store.get_part_unchunked(digest, 0, None).await?;
     assert_eq!(got, data);
     assert_eq!(fast.has(digest).await?, Some(data.len() as u64));
+    Ok(())
+}
+
 // Regression test for N14: an interrupted ByteStream upload is parked for
 // resumption, keeping its FastSlowStore::update() future (and in-flight
 // slow-write registration) alive. Existence-check waiters that subscribed to

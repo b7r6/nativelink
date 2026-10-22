@@ -1921,6 +1921,26 @@ async fn the_listing_reads_records_concurrently_in_the_stores_order() -> Result<
         OperationFilter {
             stages: OperationStageFlags::Queued,
             order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?
+    .collect::<Vec<_>>()
+    .await;
+    let mut priorities = Vec::with_capacity(listed.len());
+    for operation in &listed {
+        priorities.push(operation.as_action_info().await?.0.priority);
+    }
+    let expected: Vec<i32> = (0..QUEUE).rev().collect();
+    assert_eq!(priorities, expected, "the listing keeps the store's order");
+    assert_eq!(
+        gauge.peak.load(Ordering::SeqCst),
+        LISTING_READ_CONCURRENCY,
+        "the reads run this many at a time"
+    );
+    Ok(())
+}
+
 /// N3: matching and assignment must agree on the action's requirements.
 ///
 /// Two schedulers (two matchers) share one action DB and memory escalation
@@ -1964,18 +1984,6 @@ async fn assignment_rejects_a_stale_placement_after_escalation() -> Result<(), E
         },
     )
     .await?
-    .collect::<Vec<_>>()
-    .await;
-    let mut priorities = Vec::with_capacity(listed.len());
-    for operation in &listed {
-        priorities.push(operation.as_action_info().await?.0.priority);
-    }
-    let expected: Vec<i32> = (0..QUEUE).rev().collect();
-    assert_eq!(priorities, expected, "the listing keeps the store's order");
-    assert_eq!(
-        gauge.peak.load(Ordering::SeqCst),
-        LISTING_READ_CONCURRENCY,
-        "the reads run this many at a time"
     .next()
     .await
     .expect("the queued operation")
