@@ -21,13 +21,15 @@
 //! or tombstones; saturation stops admission pending a future retirement design.
 //! A candidate result alone cannot become the current core's `Complete` event:
 //! that event releases its reservation, so the adapter must also require trusted
-//! `Quiescent` evidence. Long-phase meaningful-progress observations and timeout
-//! qualification are unfinished; short subprocess tests do not qualify them.
+//! `Quiescent` evidence. Byte and owned-child observations are implemented, but
+//! supported-load and optimized cache/mount liveness remain unqualified. See
+//! `nativelink-scheduler/design/categorical/worker-progress.md`.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use nativelink_error::{Code, Error, make_err};
 use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
@@ -40,6 +42,7 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
 };
 use nativelink_util::action_messages::{ActionResult, ActionStage, OperationId};
 use nativelink_util::background_spawn;
+use nativelink_util::work_progress::{PhaseProgress, ProgressObserver, ProgressPhase};
 use parking_lot::Mutex;
 use prost::Message;
 use tokio::sync::{oneshot, watch};
@@ -49,11 +52,12 @@ use crate::running_actions_manager::{RunningAction, RunningActionsManager};
 pub const PROTOCOL_VERSION: u32 = 1;
 /// Includes inventory envelope headroom, below tonic's default 4 MiB limit.
 pub const MAX_RECONCILIATION_BYTES: usize = 3 * 1024 * 1024;
-pub const REQUIRED_CAPABILITIES: [i32; 4] = [
+pub const REQUIRED_CAPABILITIES: [i32; 5] = [
     AuthorityCapability::AttemptEffectIdentities as i32,
     AuthorityCapability::ReconnectReconciliation as i32,
     AuthorityCapability::CleanupTombstones as i32,
     AuthorityCapability::CandidateResults as i32,
+    AuthorityCapability::MeaningfulProgress as i32,
 ];
 
 struct Receipt {
@@ -428,7 +432,8 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                 }
                 entry.dispatch = Some(fingerprint);
                 entry.report.dispatch_effect_id = command.effect_id;
-                entry.report.observation_sequence += 1;
+                entry.report.observation_sequence =
+                    entry.report.observation_sequence.saturating_add(1);
                 let resources = dispatch.reserved_resources.expect("validated resources");
                 let fits = resources.cpu_millis <= available.cpu_millis
                     && resources.memory_bytes <= available.memory_bytes
@@ -464,7 +469,8 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                     return Err(invalid("Cancel effect identity mismatch"));
                 }
                 if entry.report.cancel_effect_id == 0 {
-                    entry.report.observation_sequence += 1;
+                    entry.report.observation_sequence =
+                        entry.report.observation_sequence.saturating_add(1);
                 }
                 entry.report.cancel_effect_id = command.effect_id;
                 if !entry.cancelled.send_replace(true) {
@@ -505,14 +511,50 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
             return;
         }
         entry.report.phase = phase as i32;
-        entry.report.observation_sequence += 1;
+        entry.report.phase_progress = 0;
+        let Some(sequence) = entry.report.observation_sequence.checked_add(1) else {
+            return;
+        };
+        entry.report.observation_sequence = sequence;
+        drop(ledger);
+        self.changed.send_replace(());
+    }
+
+    fn progress(&self, attempt: u64, progress: PhaseProgress) {
+        if progress.exhausted {
+            return;
+        }
+        let phase = match progress.phase {
+            ProgressPhase::Preparing => AuthorityAttemptPhase::Preparing,
+            ProgressPhase::Running => AuthorityAttemptPhase::Running,
+            ProgressPhase::Uploading => AuthorityAttemptPhase::Uploading,
+        };
+        let mut ledger = self.ledger.lock();
+        let entry = ledger.attempts.get_mut(&attempt).expect("retained receipt");
+        // A lost launch receipt must remain uncertain even when the process
+        // observer is alive. Old phases and cancellation can never renew.
+        if *entry.cancelled.borrow()
+            || entry.report.phase != phase as i32
+            || progress.progress <= entry.report.phase_progress
+        {
+            return;
+        }
+        let Some(sequence) = entry.report.observation_sequence.checked_add(1) else {
+            tracing::warn!(
+                attempt,
+                "Attempt report sequence exhausted; renewal disabled"
+            );
+            return;
+        };
+        entry.report.observation_sequence = sequence;
+        entry.report.phase_progress = progress.progress;
         drop(ledger);
         self.changed.send_replace(());
     }
 
     async fn run_action(
         &self, target: AuthorityAttemptIdentity, dispatch: AuthorityDispatch,
-        cancelled: watch::Receiver<bool>, observer: oneshot::Sender<u32>,
+        cancelled: watch::Receiver<bool>, observer: oneshot::Sender<u32>, progress: ProgressObserver,
     ) -> (Result<ActionResult, Error>, bool, Option<nativelink_proto::com::github::trace_machina::nativelink::remote_execution::ActionResourceUsage>){
         let start = StartExecute {
             execute_request: dispatch.execute_request,
@@ -524,9 +566,14 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         };
         // Creation does not launch the action process. The launch seam below
         // is the only observation that permits a Running report.
+        self.phase(target.attempt_id, AuthorityAttemptPhase::Preparing);
         let action = match self
             .manager
-            .create_and_add_authority_action(self.identity.worker_id.to_string(), start)
+            .create_and_add_authority_action_observed(
+                self.identity.worker_id.to_string(),
+                start,
+                progress,
+            )
             .await
         {
             Ok(action) => action,
@@ -540,7 +587,6 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                     "Attempt cancelled before preparation"
                 ));
             }
-            self.phase(target.attempt_id, AuthorityAttemptPhase::Preparing);
             action.clone().prepare_action().await?;
             if *cancelled.borrow() {
                 return Err(make_err!(
@@ -574,13 +620,29 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         if lose_receipt {
             launched.close();
         }
-        let run = self.run_action(target, dispatch, cancelled.clone(), observer);
+        let progress = ProgressObserver::new();
+        let mut progress_updates = progress.subscribe();
+        let report_progress = async {
+            loop {
+                if progress_updates.changed().await.is_err() {
+                    std::future::pending::<()>().await;
+                }
+                // Only an actual change arms this delay. Timer ticks by
+                // themselves never publish or increment progress.
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                let progress = *progress_updates.borrow_and_update();
+                self.progress(target.attempt_id, progress);
+            }
+        };
+        tokio::pin!(report_progress);
+        let run = self.run_action(target, dispatch, cancelled.clone(), observer, progress);
         tokio::pin!(run);
         let mut receipt_done = lose_receipt;
         let mut signalled = false;
         let (result, quiescent, usage) = loop {
             tokio::select! {
                 result = &mut run => break result,
+                () = &mut report_progress => unreachable!(),
                 receipt = &mut launched, if !receipt_done => {
                     receipt_done = true;
                     if receipt.is_ok() { self.phase(target.attempt_id, AuthorityAttemptPhase::Running); }
@@ -611,7 +673,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
             Err(error) => authority_attempt_report::Result::InternalError(error.into()),
         });
         entry.report.resource_usage = usage;
-        entry.report.observation_sequence += 1;
+        entry.report.observation_sequence = entry.report.observation_sequence.saturating_add(1);
         if entry.report.encoded_len() > self.max_payload_bytes {
             entry.report.result = Some(authority_attempt_report::Result::InternalError(
                 make_err!(

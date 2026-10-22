@@ -1,188 +1,166 @@
 # Worker progress observations
 
-Status: implementation proposal, 2026-10-22. Progress observation plumbing and
-the protocol field described below are **pending**. This document records a
-source inspection; it does not qualify M2 or change production services. The
-existing candidate recipient reports phase changes, not sustained transfer
-progress. The separately bounded initial Action fetch described below is already
-implemented and tested.
+Status: implemented candidate, 2026-10-22. The experimental recipient and real
+action manager now observe byte advancement, completed work, and owned-child
+liveness. These services remain test wiring. This document does not qualify M2,
+a production clock mapping, or all worker optimization paths.
 
-## Required distinction
+## Protocol and leases
 
-The [authority contract](contract.md) separates renewable progress-stall leases
-from the nonrenewable execution deadline. A healthy long input preparation or
-output upload currently outlives a phase-only report: the model's progress lease
-is 30 logical ticks. Those ticks are provisional and are not a production
-seconds mapping. Transport traffic, capacity reports, and reconnect inventories
-cannot establish action progress.
+`AuthorityAttemptReport.phase_progress` is field 10, separate from
+`observation_sequence`. The mandatory `MeaningfulProgress` capability is enum
+value 5 in experimental protocol version 1. Negotiation rejects a peer missing
+it. This is not a rolling-upgrade compatibility claim.
 
-Add a `phase_progress` unsigned integer to `AuthorityAttemptReport`, separate
-from `observation_sequence`. The latter orders complete reports, including
-cancellation and terminal evidence. It must never be substituted for progress.
-Protocol tag 10 is currently available; the implementation must check it again
-and regenerate the protobuf code. Require the new progress capability during
-experimental negotiation before qualifying this behavior.
+A report sequence orders the retained complete observation; it is not evidence
+of useful work. Within one phase, only a strictly greater work counter can renew
+a progress-stall lease. Reconnect, capacity traffic, duplicate dispatch, and
+inventory publication retain the same counter. Old-phase observations cannot
+advance a newer phase, and cancellation disables further renewal. A lost launch
+receipt stays uncertain even if the local process observer can see the child.
 
-Within one attempt and phase, only a strictly greater progress value renews its
-lease. A phase transition is a separate event; it may start the next phase's
-counter at zero. An inventory retry or reconnect sends the retained value again.
-Late Preparing observations cannot change an attempt already Uploading, and no
-progress observation restores revoked authority or releases a reservation.
-Running progress does not alter either the worker's execution timer or the
-authority's already installed `running_deadline`.
+Running liveness does not change the worker's exact execution timeout or the
+authority's original `running_deadline`. The model still uses a provisional
+30-logical-tick progress lease. The worker observes a running child and coalesces
+changed progress at five-second intervals. Those settings have not been
+qualified as a production logical-time/monotonic-time mapping.
 
-## Observer and bounded reporting
+## Bounded observation state
 
-The proposed worker API installs one observer before preparation through an
-authority-only creation argument or a `RunningAction::observe_progress` method.
-An implementation lacking the hook must return an explicit unsupported error.
-The observer supplies a bounded `watch` channel carrying the latest
-`PhaseProgress { phase, progress }`; it does not enqueue one message per byte.
-The recipient consumes observations only for the matching current phase, updates
-the retained report, and notifies its existing bounded inventory publisher.
+[The shared utility](../../../nativelink-util/src/work_progress.rs) owns one
+registry per attempt. Its fixed-size key contains the phase, work kind, and a
+SHA256 hash of a stable object identity. CAS operations use the object key;
+hashing and materialization use the output or destination path. Separate kinds
+distinguish a CAS read, cache population, write, hash, materialization, and the
+owned process. No authority identity or resource charge lives in this utility.
 
-Use checked counter arithmetic. Exhaustion closes progress reporting with a
-diagnostic; it must not wrap or reset. Transport rate limiting may publish the
-latest changed value at a fixed interval shorter than the qualified lease. A
-timer alone never manufactures an advancement. The interval and real-time lease
-mapping need qualification together; five seconds is a proposal, not a selected
-production setting. Coalescing cannot discard the final candidate or physical
-termination uncertainty.
+Each entry retains its greatest byte offset and a completion bit. Only a larger
+offset or the first successful completion advances the phase counter. Completion
+closes that identity permanently: even an optimized completion with no byte
+callbacks cannot later gain credit from a replayed prefix. Retrying a transfer,
+rebuilding an evicted input, and duplicate callbacks cannot recount old work.
+The counter counts meaningful observations, not bytes or elapsed time.
 
-Maintain a bounded per-attempt registry keyed by phase, work kind, and stable
-object identity. Each entry retains the greatest observed byte offset and a
-completion bit. Input identity can use the CAS digest, with a separate stable
-path identity for materialization. Output hashing needs a stable output path
-before its digest exists; completed CAS writes can use the digest. Every work
-kind has an explicit meaning, so hashing and publication are not confused.
+The cap is **4096 identities across all phases**, with no eviction. Keys contain
+no retained variable-length path or object string. Checked counter exhaustion or
+registry saturation emits a diagnostic and permanently disables renewal for
+that attempt, including already known identities and later phases. This is a
+bounded observation-state policy, not a process-RSS bound.
 
-Only an increase in greatest offset or the first completion earns credit.
-Repeated callbacks, replayed prefixes, retrying a successful Command fetch, and
-staging already counted inputs again earn no additional credit. Registry entries
-remain until attempt termination; evicting one and recounting it on retry would
-allow a permanently failing transfer to renew forever. Choose and test a finite
-entry/byte bound before implementation. Exhausting that bound must fail the
-attempt or conservatively stop renewal with a diagnostic, never evict and mint
-new credit. This registry is observation state, not a second reservation ledger.
+This cap has a concrete qualification cost: roughly 2048 distinct cold plain
+input files consume the limit through population and materialization alone,
+before Action, Command, and Directory observations. Warm files still consume
+materialization identities. Large input/output sets and subsequent Running
+renewal after exhaustion are not qualified. Raising the cap requires workload
+and memory measurements; eviction is not a valid remedy.
 
-## Concrete observation sites
+A `watch` channel retains only the latest `PhaseProgress` value. The recipient
+arms its five-second reporting delay only after an actual change; the delay
+cannot manufacture progress. Phase, candidate-result, and uncertainty updates
+continue through the existing retained-inventory publisher. Transport backpressure
+coalesces complete inventories instead of accumulating individual byte events.
 
-| Work | Existing implementation | Proposed evidence |
-| --- | --- | --- |
-| Action load before action creation | `RunningActionsManagerImpl::create_action_info` | Actual CAS bytes or successful Action decoding, if an observer is added before creation. The existing local deadline alone provides no renewable progress evidence. |
-| Command and Directory load | `fetch_command`, `collect_download_links` in the action manager | Successfully decoded object; partial transfer bytes require the store hook below. Repeated decoding on retry is deduplicated. |
-| Plain/executable input files | `resolve_plain_files`, `resolve_exec_files`, `materialize_inline_nodes`, `materialize_links` | Successful transfer offset advancement and first successful materialization. Attempting an operation or entering a retry backoff is not progress. |
-| Slow-to-fast CAS fill | `FastSlowStore::populate_and_maybe_stream` | Greatest received offset after forwarding each nonempty chunk successfully. Completion only after both tier operations settle successfully. |
-| Output hashing | `DigestHasher::compute_from_reader` / `digest_for_file` | Newly hashed bytes for the stable output identity. The BLAKE3 `mmap` path currently exposes only completion; it needs an observed implementation or an explicit qualification gap. |
-| Output file publication | `upload_file` and `slow_update_store_with_file` | Newly forwarded bytes and first successful CAS completion. A successful existence check can establish object completion, once. |
-| Tree/Directory/stdout/stderr publication | `inner_upload_results`, `upload_captured_output` | Actual byte advancement or successful object completion, including spill files and small in-memory uploads. |
-| Running process | The action manager's owned `child_process_guard` wait loop | A successful probe showing the owned child remains live and has not been reaped, while the attempt is Running and termination has not been requested. |
+## Scope and shared operations
+
+`create_and_add_authority_action_observed` installs the observer before loading
+the initial Action. Implementations without this additive seam return an
+unsupported error. The real manager retains it across preparation, execution,
+and upload. Explicit task-local scopes carry it through nested helper futures;
+legacy manager calls have no observer and retain their existing hashing and
+transfer paths. A scope alone cannot observe a different task's work.
+
+[FastSlowStore](../../../nativelink-store/src/fast_slow_store.rs) therefore keeps
+one independent greatest-offset watch value beside each shared loader. Every
+interested caller subscribes its own registry, including a follower of a legacy
+caller. Bytes advance only after successful forwarding to the bounded cache and
+caller pipelines. The retained offset survives replacement of a canceled loader
+leader. Canceling a subscriber drops its observation future; it does not cancel
+a different caller's required fill. A replacement replaying a prefix earns no
+new credit for a surviving observer.
+
+Cache population and generic byte consumption have separate work identities.
+A byte already in flight can therefore settle through more than one bounded
+pipeline after the upstream stops. Stall assertions must allow this finite
+credit to drain. No periodic observation extends it indefinitely.
+
+## Implemented observation sites
+
+| Work | Observation and completion boundary |
+| --- | --- |
+| Initial Action, Command, and Directory reads | `consume_observed` records actual received bytes. Generic reads close the identity only at offset zero with the full digest size, or an unbounded read of a non-digest key. A partial range does not close the whole object. |
+| Plain/executable input CAS fill | Every `populate_fast_store` subscriber receives shared forwarding offsets. Successful cache population closes its own identity; a repeated cache hit cannot reopen it. |
+| Batched hardlinks | Each successful destination link reports completion from the blocking batch. Failed links do not count. |
+| Inline input nodes | Successful symlink/metadata materialization reports completion; observed private-file copies report actual written chunks. |
+| Output hashing | SHA256 and BLAKE3 observed file hashing use chunks. The observed BLAKE3 path bypasses its callback-free `mmap` optimization. Legacy hashing retains that optimization. |
+| Whole-file output transfer | `slow_update_store_with_file` reports actual forwarded offsets, including FastSlowStore's optimized filesystem path. The manager closes publication only after the composed upload returns successfully, or a successful existence check. |
+| Tree, Directory, stdout, and stderr publication | Observed in-memory uploads forward bounded chunks; logical publication owners record successful completion. Spilled stdout/stderr use observed hashing and whole-file transfer. A nested tier's acknowledgment cannot close the outer publication. |
+| Running child | An actual `Child::try_wait() == Ok(None)` probe of the owned child advances liveness. Exit, probe failure, cancellation, or a recorded kill reason disables further probes. |
 
 Source files:
 
 - [Action manager](../../../nativelink-worker/src/running_actions_manager.rs)
 - [Recipient](../../../nativelink-worker/src/authority_worker.rs) and
   [session transport](../../../nativelink-worker/src/authority_worker_transport.rs)
-- [Fast/slow store](../../../nativelink-store/src/fast_slow_store.rs)
-- [Whole-file transfer helper](../../../nativelink-util/src/store_trait.rs)
+- [Transfer helpers](../../../nativelink-util/src/store_trait.rs)
 - [Hashing](../../../nativelink-util/src/digest_hasher.rs)
 - [Worker protocol](../../../nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto)
 
-Current manager `Callbacks` expose only time and sleep. Aggregate store metrics
-are shared by actions and cannot renew a particular attempt. Add explicit
-observed variants while keeping existing legacy entry points; a task-local
-callback alone is insufficient for shared downloads.
+Forwarded bytes establish work advancement, not durable CAS publication. After
+all bytes have crossed the bounded pipeline, an unacknowledged commit stops
+renewing. The authority still requires separate result acceptance and physical
+process-domain quiescence before releasing reservations.
 
-Forwarding bytes into a bounded pipeline is evidence of advancement, not proof
-of durable CAS publication. A downstream stall can consume only the remaining
-bounded pipeline credit. Once the bytes stop advancing, the lease must expire;
-after all bytes are forwarded, an unacknowledged CAS commit must eventually
-stall too. Completion credit requires successful settlement of the operation.
+The initial Action load retains its independent `max_download_timeout` budget
+before action-directory allocation. Preparation has its own download budget;
+neither consumes the exact finite Action execution timeout. Observing partial
+Action bytes now closes the earlier observation gap before action creation.
 
-## Shared downloads and optimized paths
+## Evidence and remaining qualification
 
-`FastSlowStore::get_loader` deduplicates concurrent fills through a shared
-`OnceCell`. Only one caller performs the transfer; the other actions await that
-same fill. A callback attached solely to the leader would falsely expire healthy
-followers. Extend the shared loader with bounded latest progress state and allow
-every interested caller to subscribe. A late subscriber observes the current
-greatest offset, then subsequent increases. Cancellation detaches that observer
-without canceling another action's required fill. Leader failure and replacement
-must not reset the greatest offset retained by an attempt.
+Focused fixtures exercise:
 
-The ordinary read path, explicit `populate_fast_store`, and bypass-dedup path
-must all reach the appropriate observation seam. Whole-file upload optimization
-also bypasses generic byte-channel code: the fast/slow implementation calls
-`slow_update_store_with_file` before moving a local file. Observing generic
-`StoreDriver::update` alone misses this path.
+- Two observers sharing a chunk-gated fill, with both observed and legacy
+  leaders; leader cancellation; replacement replaying an identical prefix;
+  survivor advancement only after new bytes.
+- A partial successful read followed by the full object; repeated complete
+  reads; completion before byte callbacks; registry exhaustion without eviction.
+- A CAS that consumes an upload but withholds acknowledgment. Progress settles
+  and remains unchanged until actual success.
+- SHA256 and BLAKE3 intermediate hashing, duplicate hashing, and the optimized
+  filesystem whole-file transfer with a withheld slow-tier acknowledgment.
+- A real quiet child, retained progress across reconnect and duplicate dispatch,
+  and termination at its original twelve-second execution deadline.
+- Initial Action bytes observed before action creation, followed by an open
+  stalled read after bounded pipeline credit drains.
+- The separate committed-authority bridge: actual child progress renews the
+  phase lease, replayed observations do not, and the original running deadline
+  survives restart and remains unchanged.
+- One real 2 MiB input blob, forwarded in gated chunks through the normal
+  filesystem population path, remains incomplete while its observed bytes
+  renew a committed authority lease beyond the original expiry. After forwarding
+  stops and finite pipeline credit drains, reconnect inventories, duplicate
+  dispatch, newer report sequences, and real recipient capacity observations
+  leave the deadline unchanged. Expiry revokes authorization while retaining the
+  charge; cancellation observes pre-execution quiescence. This fixture commits
+  actual recipient observations directly; it does not inject faults into a
+  network transport.
 
-Directory-cache hits/builds, read-only input mounts, relinking after eviction,
-and BLAKE3 `mmap` hashing need separate inspection and fixtures. They cannot be
-silently counted as complete at operation start. If an initial slice only
-observes completed objects, it qualifies multi-object progress only: one healthy
-blob, hash, or cache materialization lasting longer than a lease still has no
-intermediate evidence. Full byte and shared-loader coverage is required before
-claiming that long transfers generally stay live.
+Exact commands and raw outputs belong in the evidence directory; a fixture name
+alone does not establish a passing run. The bounded registry tests belong to
+`nativelink-util` unit tests, transfer fixtures to `fast_slow_store_test`, initial
+creation to `running_actions_manager_test`, and recipient/authority integration
+to `authority_worker_test` and `authority_scheduler_test`.
 
-## Initial Action load and process liveness
+Directory-cache builds and materialization, read-only input mounts, executable
+variant construction, and generic streaming callers that bypass an observed
+consumer still require explicit intermediate-work coverage. Background tasks do
+not automatically inherit the observer scope. The normal worker file population
+and protobuf-consumer paths are covered, but that does not qualify arbitrary
+store compositions or every cache/mount optimization. Persistent-worker execution
+is also outside the current owned-child observation contract.
 
-The authority-only manager creation seam already bounds `create_action_info`
-using `max_download_timeout`, before allocating an action directory. Command and
-input-tree preparation has its own download budget; neither consumes the exact
-finite Action execution timeout. These are separate local budgets, not one
-shared end-to-end preparation interval. The existing paused-clock hanging-store
-test establishes the initial Action-fetch bound.
-
-The initial Action load happens before the `RunningAction` exists. Installing an
-observer only after creation leaves this progress gap. A bounded local deadline
-prevents an indefinite wait but does not keep a slow healthy Action load alive
-past the authority's Accepted lease. Either pass the observer into authority
-creation or qualify an explicit relation between the initial Action-load deadline
-and the Accepted lease. No such real-time relation is currently qualified.
-
-For Running, a periodic `Child::try_wait() == Ok(None)` probe within the owned
-child wait loop is meaningful process liveness. Ownership of the child before
-reaping prevents the numeric-PID reuse ambiguity of looking up a later `/proc/PID` or
-sending a signal to a recycled PID. If the probe observes exit, process the exit
-normally and stop renewal. A sleep or quiet compiler can remain live without
-producing output. Stop observations after cancellation/termination begins and
-retain existing process-domain quiescence requirements for releasing capacity.
-
-Wrapper liveness proves only this defined Running liveness. It is not evidence
-of input or output progress, successful execution, descendant quiescence, or
-durable results. Persistent-worker execution remains separately unqualified by
-the current authority launch seam. The execution deadline is installed once and
-still fires even when every liveness probe succeeds.
-
-## Required fault fixtures
-
-1. Transfer one large input in gated chunks for longer than a progress lease.
-   Genuine new offsets keep Preparing live. Stop the chunks while transport,
-   capacity reports, and reconnects continue; the unchanged progress expires.
-2. Repeatedly fail and replay the same prefix or re-fetch an already completed
-   Command. Progress stops increasing until new work is accomplished. Exercise
-   duplicate completion callbacks and registry exhaustion without eviction.
-3. Let two attempts share one deduplicated fill. Both see advancement; cancel
-   one subscriber, fail/replace the loader leader, and verify the survivor's
-   observations and retained greatest offsets.
-4. Upload multiple objects and a single large output, including stdout/stderr
-   spill files. New bytes/objects keep Uploading live. A CAS that consumes all
-   bytes but never acknowledges completion eventually stops renewing.
-5. Gate hashing and optimized cache/mount materialization where supported.
-   Document any path lacking intermediate observations; do not renew from its
-   wrapper's continued existence.
-6. Keep a real quiet child Running longer than a progress lease. Owned-child
-   probes renew that lease, but its original finite execution deadline still
-   terminates it. No later probe revives the revoked attempt or renews an
-   Uploading/Preparing phase.
-7. Reconnect and redeliver older/equal report sequences and progress values.
-   Preserve the phase progress and original execution deadline across authority
-   restart. A newer report sequence carrying unchanged progress is not renewal.
-8. Delay initial Action creation in a real store fixture. Verify its independent
-   local deadline, and separately test any future progress observer installed before creation.
-
-Existing manager fixtures `FlakyStore`, `HangingStore`, and `GatedStore` provide
-transient failures, stalled reads, and gated writes. A chunk-gated store is still
-needed for real byte-level and shared-loader cases. Use a real child process for
-Running observations and the committed authority adapter for lease/deadline
-claims. Passing DTO or timer tests alone does not establish these behaviors.
+Remaining gates include long multi-object output and captured-output spill
+campaigns through the committed-authority bridge, stalled transfer with continued
+network transport traffic, follower-only cancellation, optimized cache/mount
+fixtures, and supported-load tests around the identity cap. These gaps must be
+closed or explicitly excluded before claiming general long-transfer liveness.

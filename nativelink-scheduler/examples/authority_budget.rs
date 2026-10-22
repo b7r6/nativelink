@@ -805,7 +805,7 @@ async fn measure(args: &Arguments) -> Result<(Value, Samples), String> {
 /// so serialization/probe overhead is excluded from the reported workload rate.
 fn component_probes(args: &Arguments, samples: &mut Samples) -> Result<Value, Box<dyn Error>> {
     const PROBE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("probe");
-    let mut state = State::new(ClusterEpoch(1), measurement_limits(args)?);
+    let mut state = State::new(ClusterEpoch(1), measurement_limits(args)?)?;
     for event in &samples.events {
         let start = Instant::now();
         let reply = state.apply(event.clone());

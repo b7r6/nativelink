@@ -83,6 +83,7 @@ enum AuthorityCapability {
     AUTHORITY_CAPABILITY_RECONNECT_RECONCILIATION = 2;
     AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES = 3;
     AUTHORITY_CAPABILITY_CANDIDATE_RESULTS = 4;
+    AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS = 5;
 }
 
 message AuthorityRegistration {
@@ -171,6 +172,10 @@ message AuthorityAttemptReport {
         AuthorityDecline decline = 9;
     }
     ActionResourceUsage resource_usage = 8;
+    /// Monotonic work advancement within this phase, independent of report order.
+    /// Reconnect, retries, and transport traffic do not advance it. Running
+    /// liveness never extends the original execution deadline.
+    uint64 phase_progress = 10;
 }
 
 /// Complete process-incarnation inventory, including uncertain launches,

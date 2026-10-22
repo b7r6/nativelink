@@ -66,7 +66,49 @@ def conflate_lookup_policy(source):
     return replace_once(source, old, new)
 
 
+def ignore_membership_byte_limit(source):
+    start = source.index("fn validate_membership(")
+    end = source.index("\nfn validate_entry(", start)
+    return source[:start] + """fn validate_membership(
+    membership: &Membership<u64, BasicNode>, verb: ErrorVerb,
+) -> Result<()> {
+    let _ = (membership, verb);
+    Ok(())
+}
+""" + source[end:]
+
+
 MUTANTS = [
+    (
+        "admit_without_aggregate_completion_credit", CORE,
+        lambda s: replace_once(s,
+            "if self\n            .submit_byte_credit(&request, joining.is_none())",
+            "if false && self\n            .submit_byte_credit(&request, joining.is_none())"),
+        "adversarial::byte_credit_counts_distinct_coalesced_ingress_and_prepays_complete_terminal_copies",
+        "admission prepays completion bytes before mutating state",
+    ),
+    (
+        "forget_coalesced_operation_terminal_bytes", CORE,
+        lambda s: replace_once(s,
+            "let results = operations.checked_add(executions.checked_mul(2)?)?;",
+            "let results = executions.checked_mul(2)?;"),
+        "adversarial::byte_credit_counts_distinct_coalesced_ingress_and_prepays_complete_terminal_copies",
+        "each coalesced operation prepays its own retained result",
+    ),
+    (
+        "accept_membership_without_snapshot_headroom", JOURNAL,
+        ignore_membership_byte_limit,
+        "oversized_membership_is_rejected_before_durable_log_acknowledgment",
+        "membership bytes are bounded before append and apply",
+    ),
+    (
+        "accept_unbounded_snapshot_identifier", JOURNAL,
+        lambda s: replace_once(s,
+            "if meta.snapshot_id.len() > MAX_SNAPSHOT_ID_BYTES {",
+            "if false {"),
+        "incoming_snapshot_metadata_limits_cannot_be_bypassed_by_valid_checksums",
+        "snapshot metadata fits reserved byte headroom",
+    ),
     (
         "remove_attempt_incarnation_fence",
         CORE,
@@ -85,9 +127,11 @@ MUTANTS = [
         "omit_pending_effects_from_snapshot",
         CORE,
         lambda s: replace_once(
-            s,
-            "state: self.clone(),",
-            "state: { let mut broken = self.clone(); broken.effects.clear(); broken },",
+            replace_once(s,
+                "        let mut snapshot = SnapshotBytes::default();",
+                "        let mut snapshot = SnapshotBytes::default();\n        let mut broken = self.clone();\n        broken.effects.clear();"),
+            "state: self,",
+            "state: &broken,",
         ),
         "uncertain_dispatch_survives_snapshot_and_sender_loss",
         "REC 1 / EFFECT 2",
@@ -297,16 +341,21 @@ def main():
             and (relative in ("Cargo.lock", "Cargo.toml")
                  or relative.startswith("nativelink-scheduler/"))
         }
+        # Validate every source anchor before spending time compiling the baseline.
+        # A stale anchor is a broken experiment, never evidence of a killed fault.
+        prepared = []
+        for name, relative, mutate, test_filter, property_name in selected:
+            original = (checkout / relative).read_text()
+            prepared.append((name, relative, original, mutate(original), test_filter, property_name))
         baseline = run_test(checkout, evidence, "baseline", None, target, baseline_targets)
         report["baseline"] = baseline
         if baseline["status"] != 0 or not baseline["executed"]:
             (evidence / "mutations.json").write_text(json.dumps(report, indent=2) + "\n")
             raise SystemExit("mutation baseline failed; see baseline.txt")
-        for name, relative, mutate, test_filter, property_name in selected:
+        for name, relative, original, mutated, test_filter, property_name in prepared:
             path = checkout / relative
-            original = path.read_text()
             try:
-                path.write_text(mutate(original))
+                path.write_text(mutated)
                 test_target = "retention_test" if relative == COARSE else ("authority_raft_test" if relative in (JOURNAL, SNAPSHOT_BUFFER) else "authority_test")
                 outcome = run_test(checkout, evidence, name, test_filter, target, test_target)
                 outcome["property"] = property_name

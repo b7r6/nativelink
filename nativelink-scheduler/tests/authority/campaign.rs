@@ -49,7 +49,11 @@ struct Recording {
     last_allocator: Option<u64>,
     last_clock: Option<u64>,
     last_hold_state: Option<u64>,
+    last_credit_release: Option<u64>,
+    max_reserved_bytes: usize,
+    max_snapshot_bytes: usize,
     attempt_states: BTreeMap<AttemptId, u64>,
+    execution_states: BTreeMap<ExecutionId, u64>,
     attempt_generations: BTreeMap<(AttemptId, u64), u64>,
     execution_deadlines: BTreeMap<AttemptId, u64>,
     interest_generations: BTreeMap<(OperationId, u64), u64>,
@@ -71,7 +75,11 @@ impl Recording {
             last_allocator: None,
             last_clock: None,
             last_hold_state: None,
+            last_credit_release: None,
+            max_reserved_bytes: 1024,
+            max_snapshot_bytes: 0,
             attempt_states: BTreeMap::new(),
+            execution_states: BTreeMap::new(),
             attempt_generations: BTreeMap::new(),
             execution_deadlines: BTreeMap::new(),
             interest_generations: BTreeMap::new(),
@@ -113,6 +121,9 @@ impl Recording {
         if let Some(parent) = self.last_hold_state {
             parents.insert(parent);
         }
+        if let Some(parent) = self.last_credit_release {
+            parents.insert(parent);
+        }
         let attempted = match &event {
             Event::WorkerAccepted { attempt, .. }
             | Event::Progress { attempt, .. }
@@ -129,6 +140,11 @@ impl Recording {
         {
             // Keep the successful phase transition that enabled this input,
             // even when it allocated no new identity or effect.
+            parents.insert(*parent);
+        }
+        if let Event::RetireExecution { execution } = &event
+            && let Some(parent) = self.execution_states.get(execution)
+        {
             parents.insert(*parent);
         }
         match event {
@@ -191,6 +207,16 @@ impl Recording {
             self.schedule(Schedule::Apply)?
         };
         let after = self.harness.view();
+        // Apply/recovery just compared this exact state, including its full
+        // canonical encoding. Metrics reuse those sizes, not another encoding.
+        let (reserved, canonical) = self.harness.checked_byte_sizes()?;
+        self.max_reserved_bytes = self.max_reserved_bytes.max(reserved);
+        self.max_snapshot_bytes = self.max_snapshot_bytes.max(canonical);
+        if after.operations.len() < before.operations.len()
+            || after.executions.len() < before.executions.len()
+        {
+            self.last_credit_release = Some(id);
+        }
         if after
             .operations
             .iter()
@@ -244,6 +270,11 @@ impl Recording {
                 self.execution_deadlines.entry(trial.id).or_insert(id);
             }
         }
+        for execution in &after.executions {
+            if before.executions.iter().find(|old| old.id == execution.id) != Some(execution) {
+                self.execution_states.insert(execution.id, id);
+            }
+        }
         for operation in &after.operations {
             self.interest_generations
                 .entry((operation.id, operation.interest_deadline.generation))
@@ -295,6 +326,8 @@ fn failure_class(error: &str) -> &str {
         "REFINEMENT_STATE"
     } else if error.contains("CORE_INVARIANT") {
         "CORE_INVARIANT"
+    } else if error.contains("BYTE_CREDIT") {
+        "BYTE_CREDIT"
     } else {
         "HARNESS"
     }
@@ -867,6 +900,79 @@ fn causal_reduction_keeps_memory_growth_that_produced_a_later_grant() {
 }
 
 #[test]
+fn causal_reduction_keeps_terminal_retirement_that_funds_later_byte_admission() {
+    let mut recording = Recording::new(
+        "retirement-credit-dependency",
+        0,
+        Limits {
+            max_payload_bytes: 512 * 1024,
+            ..Limits::default()
+        },
+    );
+    for operation in 1..=9 {
+        recording
+            .input(
+                Event::Submit {
+                    operation: OperationId(operation),
+                    request: super::request(operation),
+                },
+                0,
+            )
+            .unwrap();
+    }
+    let submit = Event::Submit {
+        operation: OperationId(10),
+        request: super::request(10),
+    };
+    assert_eq!(
+        recording.input(submit.clone(), 0).unwrap(),
+        Some(Reply::Rejected(Rejection::Overloaded))
+    );
+    recording
+        .input(
+            Event::Cancel {
+                operation: OperationId(1),
+            },
+            0,
+        )
+        .unwrap();
+    recording
+        .input(
+            Event::AdvanceTime {
+                now: TERMINAL_RETENTION,
+            },
+            0,
+        )
+        .unwrap();
+    assert_eq!(
+        recording
+            .input(
+                Event::RetireExecution {
+                    execution: ExecutionId(1)
+                },
+                0
+            )
+            .unwrap(),
+        Some(Reply::Applied)
+    );
+    assert!(matches!(
+        recording.input(submit, 0).unwrap(),
+        Some(Reply::Submitted {
+            execution: ExecutionId(10),
+            ..
+        })
+    ));
+    let reduced = shrink_inputs(&recording.scenario.inputs, |candidate| {
+        candidate.iter().any(|input| input.id == 14)
+    });
+    for parent in [11, 12, 13] {
+        assert!(reduced.iter().any(|input| input.id == parent));
+    }
+    assert!(!reduced.iter().any(|input| input.id == 10));
+    committed_replay(&recording.scenario, &reduced).unwrap();
+}
+
+#[test]
 fn generated_histories_with_crashes_and_reordered_observations() {
     const SEEDS: u64 = 64;
     const STEPS: usize = 256;
@@ -875,13 +981,19 @@ fn generated_histories_with_crashes_and_reordered_observations() {
     let mut replies = BTreeMap::<String, u64>::new();
     let mut phases = BTreeSet::new();
     let mut schedules = 0;
+    let mut max_reserved_bytes = 0;
+    let mut max_snapshot_bytes = 0;
     for seed in 1..=SEEDS {
         let limits = Limits {
             max_executions: 24,
             max_operations: 96,
             max_workers: 3,
             max_effects: 192,
-            ..Limits::default()
+            max_payload_bytes: if seed.is_multiple_of(4) {
+                512 * 1024
+            } else {
+                64 * 1024
+            },
         };
         let mut recording = Recording::new("generated-authority", seed, limits);
         for event in [super::register(1, 1, 1, 2), super::register(2, 1, 1, 2)] {
@@ -956,6 +1068,8 @@ fn generated_histories_with_crashes_and_reordered_observations() {
         );
         assert_eq!(replayed.delivered, recording.harness.delivered);
         schedules += recording.scenario.schedule.len();
+        max_reserved_bytes = max_reserved_bytes.max(recording.max_reserved_bytes);
+        max_snapshot_bytes = max_snapshot_bytes.max(recording.max_snapshot_bytes);
     }
     assert_eq!(
         coverage.len(),
@@ -981,6 +1095,9 @@ fn generated_histories_with_crashes_and_reordered_observations() {
         "fixed_lifecycle_prefix_steps_per_seed": 11,
         "schedule_steps": schedules, "command_counts": coverage, "reply_counts": replies,
         "successful_command_counts": successful_commands,
+        "payload_bound_policy": "Seeds divisible by four use 512 KiB; all other seeds use 64 KiB. Count limits remain E24/O96/W3/effects192.",
+        "max_reserved_bytes": max_reserved_bytes, "max_canonical_snapshot_bytes": max_snapshot_bytes,
+        "byte_invariant": "After every applied input and recovery: canonical snapshot bytes <= independently recomputed prepaid credits <= 14 MiB.",
         "phases": phases, "replayed": true,
         "scope": "Pure authority and explicit proposal/commit/apply/outbox simulation; no real Raft, RPC, or physical worker." }),
     );

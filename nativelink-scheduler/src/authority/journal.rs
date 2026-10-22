@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Experimental durable singleton using the real `OpenRaft` commit/apply path.
+//! Experimental journal using the real `OpenRaft` commit/apply path.
 //!
-//! This bounded prototype persists the complete scheduler snapshot per apply
+//! This bounded prototype records the complete scheduler snapshot per apply
 //! batch. It is not a qualified production representation, replicated transport,
 //! format-upgrade implementation, or power-loss certification. No external
-//! effects are executed here; their durable intents remain in the core state.
+//! effects are executed here; their intents remain in the core state. File
+//! journals persist through restart. Fresh volatile journals lose every fact
+//! with their backend and must never resume a member whose history was lost.
 
 // The pinned split-storage traits require this unboxed third-party error type.
 #![allow(clippy::result_large_err)]
@@ -42,8 +44,9 @@ use openraft::raft::{
 };
 use openraft::storage::{LogFlushed, RaftLogStorage, RaftStateMachine};
 use openraft::{
-    BasicNode, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, LogState, Raft, RaftLogReader,
-    RaftSnapshotBuilder, Snapshot, SnapshotMeta, StorageError, StoredMembership, Vote,
+    BasicNode, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, LogState, Membership, Raft,
+    RaftLogReader, RaftSnapshotBuilder, Snapshot, SnapshotMeta, StorageError, StoredMembership,
+    Vote,
 };
 use redb::{
     Database, Durability, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
@@ -80,6 +83,10 @@ type Result<T> = std::result::Result<T, StorageError<u64>>;
 
 pub const MAX_BATCH_EVENTS: usize = 64;
 pub const MAX_BATCH_BYTES: usize = 1024 * 1024;
+/// Canonical membership bytes, independently bounded on append, apply and restore.
+pub const MAX_MEMBERSHIP_BYTES: usize = 1024 * 1024;
+/// UTF-8 bytes before JSON escaping, including IDs received from another member.
+pub const MAX_SNAPSHOT_ID_BYTES: usize = 1024;
 // A canonical log record embeds the already byte-bounded command in an escaped
 // JSON payload plus fixed Raft/envelope fields. Reject oversized records before
 // allocating strings during deserialization. This is an experimental bound on
@@ -149,18 +156,21 @@ impl<'de> Deserialize<'de> for Batch {
     }
 }
 
-struct BoundedEncodedSize(usize);
+struct BoundedEncodedSize {
+    used: usize,
+    limit: usize,
+}
 
 impl io::Write for BoundedEncodedSize {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let size = self
-            .0
+            .used
             .checked_add(bytes.len())
-            .ok_or_else(|| io::Error::other("batch encoded size overflow"))?;
-        if size > MAX_BATCH_BYTES {
-            return Err(io::Error::other("batch exceeds encoded byte bound"));
+            .ok_or_else(|| io::Error::other("encoded size overflow"))?;
+        if size > self.limit {
+            return Err(io::Error::other("value exceeds encoded byte bound"));
         }
-        self.0 = size;
+        self.used = size;
         Ok(bytes.len())
     }
 
@@ -201,9 +211,12 @@ impl Batch {
     }
 
     pub fn encoded_bytes(&self) -> std::result::Result<usize, String> {
-        let mut size = BoundedEncodedSize(0);
+        let mut size = BoundedEncodedSize {
+            used: 0,
+            limit: MAX_BATCH_BYTES,
+        };
         serde_json::to_writer(&mut size, self).map_err(|error| error.to_string())?;
-        Ok(size.0)
+        Ok(size.used)
     }
 
     fn validate(&self) -> std::result::Result<(), String> {
@@ -219,7 +232,8 @@ impl Batch {
 }
 
 /// Replies correspond exactly to event ordinals. No reply escapes before the
-/// whole entry's applied state and final outbox have committed durably.
+/// whole entry's applied state and final outbox have committed in the selected
+/// backend. A volatile commit carries no process-loss durability claim.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BatchReply {
@@ -322,7 +336,32 @@ fn decode_log(epoch: ClusterEpoch, index: u64, bytes: &[u8]) -> Result<Entry<Typ
     if entry.log_id.index != index {
         return Err(failure(ErrorVerb::Read, "journal key/log index mismatch"));
     }
+    validate_entry(&entry, ErrorVerb::Read)?;
     Ok(entry)
+}
+
+fn validate_membership(membership: &Membership<u64, BasicNode>, verb: ErrorVerb) -> Result<()> {
+    let mut size = BoundedEncodedSize {
+        used: 0,
+        limit: MAX_MEMBERSHIP_BYTES,
+    };
+    serde_json::to_writer(&mut size, membership)
+        .map_err(|error| failure(verb, format!("membership exceeds byte bound: {error}")))
+}
+
+fn validate_entry(entry: &Entry<TypeConfig>, verb: ErrorVerb) -> Result<()> {
+    match &entry.payload {
+        EntryPayload::Blank => Ok(()),
+        EntryPayload::Normal(batch) => batch.validate().map_err(|error| failure(verb, error)),
+        EntryPayload::Membership(membership) => validate_membership(membership, verb),
+    }
+}
+
+fn validate_snapshot_meta(meta: &SnapshotMeta<u64, BasicNode>) -> Result<()> {
+    if meta.snapshot_id.len() > MAX_SNAPSHOT_ID_BYTES {
+        return Err(failure(ErrorVerb::Read, "snapshot ID exceeds byte bound"));
+    }
+    validate_membership(meta.last_membership.membership(), ErrorVerb::Read)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -342,6 +381,7 @@ struct AppliedState {
 
 impl AppliedState {
     fn state(&self, epoch: ClusterEpoch) -> Result<State> {
+        validate_membership(self.membership.membership(), ErrorVerb::Read)?;
         let state =
             State::restore(self.scheduler.as_bytes()).map_err(|e| failure(ErrorVerb::Read, e))?;
         if state.view().epoch != epoch {
@@ -351,7 +391,8 @@ impl AppliedState {
             ));
         }
         if (self.last_applied.is_none()
-            && (state != State::new(epoch, state.limits)
+            && (state
+                != State::new(epoch, state.limits).map_err(|e| failure(ErrorVerb::Read, e))?
                 || self.membership != StoredMembership::default()))
             || self.membership.log_id() > &self.last_applied
         {
@@ -373,6 +414,7 @@ struct SavedSnapshot {
 
 impl SavedSnapshot {
     fn validate(&self, epoch: ClusterEpoch) -> Result<()> {
+        validate_snapshot_meta(&self.meta)?;
         self.applied.state(epoch)?;
         if self.meta.last_log_id != self.applied.last_applied
             || self.meta.last_membership != self.applied.membership
@@ -435,6 +477,7 @@ struct OperationCounters {
     calls: AtomicU64,
     completed_calls: AtomicU64,
     durable_commits: AtomicU64,
+    volatile_commits: AtomicU64,
     batch_items: AtomicU64,
     max_batch_items: AtomicU64,
     queue_wait_ns: AtomicU64,
@@ -455,7 +498,10 @@ struct MeasurementCounters {
 pub struct JournalOperationMeasurement {
     pub calls: u64,
     pub completed_calls: u64,
+    /// Successful Immediate commits to the file backend, not device fsync counts.
     pub durable_commits: u64,
+    /// Successful atomic RAM commits; these do not survive backend loss.
+    pub volatile_commits: u64,
     /// Entries presented to append/apply, not logical commands inside an entry.
     pub batch_items: u64,
     pub max_batch_items: u64,
@@ -468,6 +514,14 @@ fn elapsed_ns(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
+/// The failure envelope of a journal's transactions. Both backends use the same
+/// ordered commit/apply path; only the file backend can recover member history.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JournalPersistence {
+    Durable,
+    Volatile,
+}
+
 /// Cloneable split storage handles share one serialized blocking-I/O queue.
 #[derive(Clone)]
 pub struct Journal {
@@ -478,6 +532,7 @@ pub struct Journal {
     node_id: u64,
     epoch: ClusterEpoch,
     created: bool,
+    persistence: JournalPersistence,
 }
 
 impl Debug for Journal {
@@ -485,11 +540,104 @@ impl Debug for Journal {
         f.debug_struct("Journal")
             .field("node_id", &self.node_id)
             .field("epoch", &self.epoch)
+            .field("persistence", &self.persistence)
             .finish_non_exhaustive()
     }
 }
 
 impl Journal {
+    fn initialize_database(
+        database: &Database,
+        node_id: u64,
+        epoch: ClusterEpoch,
+        initial: &State,
+    ) -> Result<()> {
+        let mut tx = database
+            .begin_write()
+            .map_err(|e| failure(ErrorVerb::Write, e))?;
+        tx.set_durability(Durability::Immediate)
+            .map_err(|e| failure(ErrorVerb::Write, e))?;
+        {
+            let mut table = tx
+                .open_table(META)
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+            let identity = encode(epoch, &Identity { node_id, epoch })?;
+            table
+                .insert("identity", identity.as_slice())
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+            let applied = encode(
+                epoch,
+                &AppliedState {
+                    last_applied: None,
+                    membership: StoredMembership::default(),
+                    scheduler: state_json(initial)?,
+                },
+            )?;
+            table
+                .insert("applied", applied.as_slice())
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+            tx.open_table(LOGS)
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+        }
+        tx.commit().map_err(|e| failure(ErrorVerb::Write, e))
+    }
+
+    fn from_database(
+        database: Database,
+        node_id: u64,
+        epoch: ClusterEpoch,
+        created: bool,
+        persistence: JournalPersistence,
+    ) -> Self {
+        Self {
+            database: Arc::new(database),
+            queue: Arc::new(Mutex::new(())),
+            fault: Arc::new(AtomicU8::new(0)),
+            measurements: Arc::new(MeasurementCounters::default()),
+            node_id,
+            epoch,
+            created,
+            persistence,
+        }
+    }
+
+    /// Allocate a pristine RAM journal, with no vote, log, membership or applied
+    /// history. Clones share this backend; a new call never reopens a prior one.
+    /// This does not initialize Raft, join a cluster, or promote a voter.
+    ///
+    /// After member history is lost, the caller must obtain a fresh member ID
+    /// and join as a learner through the surviving quorum. This constructor
+    /// cannot prove that an externally supplied ID has never been used. It must
+    /// not be used to resume the lost identity or automatically bootstrap after
+    /// quorum loss. A whole-cluster reset requires external fencing or an
+    /// isolated authority domain; a changed epoch alone cannot fence old nodes.
+    ///
+    /// Redb's RAM backend has no durable sync operation. The shared transaction
+    /// path preserves atomicity and callback order only while this backend lives.
+    pub async fn fresh_volatile(node_id: u64, epoch: ClusterEpoch, limits: Limits) -> Result<Self> {
+        let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
+        let database = spawn_blocking!("authority_journal_fresh_volatile", move || {
+            let database = Database::builder()
+                .create_with_backend(redb::backends::InMemoryBackend::new())
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+            Self::initialize_database(&database, node_id, epoch, &initial)?;
+            Ok::<_, StorageError<u64>>(database)
+        })
+        .await
+        .map_err(|e| failure(ErrorVerb::Write, e))??;
+        Ok(Self::from_database(
+            database,
+            node_id,
+            epoch,
+            true,
+            JournalPersistence::Volatile,
+        ))
+    }
+
+    pub const fn persistence(&self) -> JournalPersistence {
+        self.persistence
+    }
+
     /// Open only a valid existing database, or exclusively create a new one.
     /// An existing empty/corrupt file is never interpreted as a fresh cluster.
     pub async fn open(
@@ -498,6 +646,8 @@ impl Journal {
         epoch: ClusterEpoch,
         limits: Limits,
     ) -> Result<Self> {
+        // Refuse an invalid admission envelope before creating any durable file.
+        let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
         let path = path.as_ref().to_owned();
         let (database, created) = spawn_blocking!("authority_journal_open", move || {
             let (database, created) = match OpenOptions::new()
@@ -519,34 +669,7 @@ impl Journal {
                 Err(e) => return Err(failure(ErrorVerb::Write, e)),
             };
             if created {
-                let mut tx = database
-                    .begin_write()
-                    .map_err(|e| failure(ErrorVerb::Write, e))?;
-                tx.set_durability(Durability::Immediate)
-                    .map_err(|e| failure(ErrorVerb::Write, e))?;
-                {
-                    let mut table = tx
-                        .open_table(META)
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
-                    let identity = encode(epoch, &Identity { node_id, epoch })?;
-                    table
-                        .insert("identity", identity.as_slice())
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
-                    let applied = encode(
-                        epoch,
-                        &AppliedState {
-                            last_applied: None,
-                            membership: StoredMembership::default(),
-                            scheduler: state_json(&State::new(epoch, limits))?,
-                        },
-                    )?;
-                    table
-                        .insert("applied", applied.as_slice())
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
-                    tx.open_table(LOGS)
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
-                }
-                tx.commit().map_err(|e| failure(ErrorVerb::Write, e))?;
+                Self::initialize_database(&database, node_id, epoch, &initial)?;
                 // Persist the new directory entry as well as database contents.
                 let parent = path
                     .parent()
@@ -644,15 +767,13 @@ impl Journal {
         })
         .await
         .map_err(|e| failure(ErrorVerb::Read, e))??;
-        Ok(Self {
-            database: Arc::new(database),
-            queue: Arc::new(Mutex::new(())),
-            fault: Arc::new(AtomicU8::new(0)),
-            measurements: Arc::new(MeasurementCounters::default()),
+        Ok(Self::from_database(
+            database,
             node_id,
             epoch,
             created,
-        })
+            JournalPersistence::Durable,
+        ))
     }
 
     async fn io<T: Send + 'static>(
@@ -704,6 +825,7 @@ impl Journal {
     ) -> Result<T> {
         let fault = self.fault.clone();
         let measurements = self.measurements.clone();
+        let persistence = self.persistence;
         self.io(kind, batch_items, move |database| {
             let mut tx = database
                 .begin_write()
@@ -713,14 +835,18 @@ impl Journal {
             let result = operation(&tx)?;
             let cutpoint = fault.swap(0, Ordering::SeqCst);
             if cutpoint == JournalFault::BeforeCommit as u8 {
-                return Err(failure(ErrorVerb::Write, "injected before durable commit"));
+                return Err(failure(ErrorVerb::Write, "injected before backend commit"));
             }
             let measured = measurements.enabled.load(Ordering::Relaxed);
             let commit_started = measured.then(Instant::now);
             tx.commit().map_err(|e| failure(ErrorVerb::Write, e))?;
             if let Some(started) = commit_started {
                 let counter = &measurements.operations[kind as usize];
-                counter.durable_commits.fetch_add(1, Ordering::Relaxed);
+                let commits = match persistence {
+                    JournalPersistence::Durable => &counter.durable_commits,
+                    JournalPersistence::Volatile => &counter.volatile_commits,
+                };
+                commits.fetch_add(1, Ordering::Relaxed);
                 counter
                     .commit_elapsed_ns
                     .fetch_add(elapsed_ns(started), Ordering::Relaxed);
@@ -728,7 +854,7 @@ impl Journal {
             if cutpoint == JournalFault::AfterCommit as u8 {
                 return Err(failure(
                     ErrorVerb::Write,
-                    "injected after durable commit before reply",
+                    "injected after backend commit before reply",
                 ));
             }
             Ok(result)
@@ -781,7 +907,7 @@ impl Journal {
         .await
     }
 
-    /// Consistent persisted applied state. Callers serving authority reads must
+    /// Consistent backend applied state. Callers serving authority reads must
     /// first pass the real Raft read barrier, as `Singleton::read` does.
     pub async fn read_applied(&self) -> Result<(Option<LogId<u64>>, State)> {
         let applied: AppliedState = self
@@ -820,6 +946,7 @@ impl Journal {
                         calls: counter.calls.load(Ordering::Relaxed),
                         completed_calls: counter.completed_calls.load(Ordering::Relaxed),
                         durable_commits: counter.durable_commits.load(Ordering::Relaxed),
+                        volatile_commits: counter.volatile_commits.load(Ordering::Relaxed),
                         batch_items: counter.batch_items.load(Ordering::Relaxed),
                         max_batch_items: counter.max_batch_items.load(Ordering::Relaxed),
                         queue_wait_ns: counter.queue_wait_ns.load(Ordering::Relaxed),
@@ -926,8 +1053,13 @@ impl RaftLogStorage<TypeConfig> for Journal {
     {
         let epoch = self.epoch;
         let entries: Vec<_> = entries.into_iter().collect();
-        let result = self
-            .write(MeasuredOperation::Append, entries.len(), move |tx| {
+        let result = async {
+            // Validate every command and membership before beginning the write.
+            // The completion callback must receive validation failures too.
+            for entry in &entries {
+                validate_entry(entry, ErrorVerb::Write)?;
+            }
+            self.write(MeasuredOperation::Append, entries.len(), move |tx| {
                 let mut table = tx
                     .open_table(LOGS)
                     .map_err(|e| failure(ErrorVerb::Write, e))?;
@@ -945,8 +1077,11 @@ impl RaftLogStorage<TypeConfig> for Journal {
                 }
                 Ok(())
             })
-            .await;
-        // The callback can precede append's return, but never durable commit.
+            .await
+        }
+        .await;
+        // The callback can precede append's return, but never backend commit.
+        // Only JournalPersistence::Durable carries a restart durability claim.
         callback.log_io_completed(match &result {
             Ok(()) => Ok(()),
             Err(error) => Err(io::Error::other(error.to_string())),
@@ -1018,6 +1153,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             .read_meta("applied")
             .await?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
+        validate_membership(applied.membership.membership(), ErrorVerb::Read)?;
         Ok((applied.last_applied, applied.membership))
     }
 
@@ -1027,15 +1163,11 @@ impl RaftStateMachine<TypeConfig> for Journal {
         I::IntoIter: Send,
     {
         let entries: Vec<_> = entries.into_iter().collect();
-        // Revalidate every batch before applying even the first event. This is
+        // Revalidate every batch and membership before applying the first event. This is
         // required at the committed boundary, independently of RPC constructors
         // and deserialization. Malformed later entries cannot partially apply.
         for entry in &entries {
-            if let EntryPayload::Normal(batch) = &entry.payload {
-                batch
-                    .validate()
-                    .map_err(|error| failure(ErrorVerb::Write, error))?;
-            }
+            validate_entry(entry, ErrorVerb::Write)?;
         }
         let epoch = self.epoch;
         self.write(MeasuredOperation::Apply, entries.len(), move |tx| {
@@ -1091,6 +1223,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
         meta: &SnapshotMeta<u64, BasicNode>,
         snapshot: Box<SnapshotBuffer>,
     ) -> Result<()> {
+        validate_snapshot_meta(meta)?;
         let bytes = snapshot
             .into_inner()
             .map_err(|e| failure(ErrorVerb::Read, e))?;
@@ -1360,6 +1493,38 @@ impl Singleton {
 mod batch_validation_tests {
     use super::*;
     use crate::authority::{EffectId, Event, ResultPayload};
+
+    #[test]
+    fn fixed_snapshot_metadata_and_nested_escape_budget_fit_receive_bound() {
+        const METADATA_MARGIN: usize = 16 * 1024;
+        let position = Some(LogId::new(
+            openraft::CommittedLeaderId::new(u64::MAX, u64::MAX),
+            u64::MAX,
+        ));
+        let membership = StoredMembership::new(position, Membership::default());
+        let saved = SavedSnapshot {
+            meta: SnapshotMeta {
+                last_log_id: position,
+                last_membership: membership.clone(),
+                snapshot_id: "\0".repeat(MAX_SNAPSHOT_ID_BYTES),
+            },
+            applied: AppliedState {
+                last_applied: position,
+                membership,
+                scheduler: String::new(),
+            },
+        };
+        // Includes worst scalar widths, all wrappers/checksum/section names,
+        // two memberships' fixed framing, and the maximally escaped ID. This
+        // shape check does not assert that an empty scheduler is valid state.
+        assert!(encode(ClusterEpoch(u64::MAX), &saved).unwrap().len() <= METADATA_MARGIN);
+        // Core JSON is nested as a string twice; each of the two canonical
+        // memberships is nested once. Their encoded byte limits pay for all
+        // variable fields, including escaped node addresses and map keys.
+        let budget =
+            4 * crate::authority::MAX_STATE_BYTES + 4 * MAX_MEMBERSHIP_BYTES + METADATA_MARGIN;
+        assert!(budget <= MAX_SNAPSHOT_BYTES);
+    }
 
     #[nativelink_macro::nativelink_test]
     async fn malformed_later_batch_cannot_partially_apply_an_earlier_entry() {

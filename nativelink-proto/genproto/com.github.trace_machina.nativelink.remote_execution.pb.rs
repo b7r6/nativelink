@@ -205,6 +205,11 @@ pub struct AuthorityAttemptReport {
     pub phase: i32,
     #[prost(message, optional, tag = "8")]
     pub resource_usage: ::core::option::Option<ActionResourceUsage>,
+    /// / Monotonic work advancement within this phase, independent of report order.
+    /// / Reconnect, retries, and transport traffic do not advance it. Running
+    /// / liveness never extends the original execution deadline.
+    #[prost(uint64, tag = "10")]
+    pub phase_progress: u64,
     #[prost(oneof = "authority_attempt_report::Result", tags = "6, 7, 9")]
     pub result: ::core::option::Option<authority_attempt_report::Result>,
 }
@@ -676,6 +681,7 @@ pub enum AuthorityCapability {
     ReconnectReconciliation = 2,
     CleanupTombstones = 3,
     CandidateResults = 4,
+    MeaningfulProgress = 5,
 }
 impl AuthorityCapability {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -693,6 +699,7 @@ impl AuthorityCapability {
             }
             Self::CleanupTombstones => "AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES",
             Self::CandidateResults => "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS",
+            Self::MeaningfulProgress => "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -707,6 +714,7 @@ impl AuthorityCapability {
             }
             "AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES" => Some(Self::CleanupTombstones),
             "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS" => Some(Self::CandidateResults),
+            "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS" => Some(Self::MeaningfulProgress),
             _ => None,
         }
     }

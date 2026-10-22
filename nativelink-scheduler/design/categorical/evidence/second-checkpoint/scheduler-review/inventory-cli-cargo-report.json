@@ -1,0 +1,338 @@
+{
+  "format": "nativelink-experimental-migration-inventory-v1",
+  "deployable": false,
+  "candidate_configuration": null,
+  "input_bytes": 5602,
+  "schema_validation": "accepted_deserialization_only",
+  "runtime_semantics_validated": false,
+  "inventory_complete": true,
+  "constructions": [
+    {
+      "path": "/schedulers/0",
+      "kind": "scheduler",
+      "selector": "simple",
+      "disposition": "replace_with_committed_authority",
+      "provider": null,
+      "roles": [
+        "execution_authority",
+        "worker_authority"
+      ]
+    },
+    {
+      "path": "/stores/0",
+      "kind": "store",
+      "selector": "filesystem",
+      "disposition": "qualify_physical_destination_and_shared_or_local_role",
+      "provider": null,
+      "roles": [
+        "action_cache",
+        "worker_mutable_ac"
+      ]
+    },
+    {
+      "path": "/stores/1",
+      "kind": "store",
+      "selector": "fast_slow",
+      "disposition": "replace_composition_with_explicit_cache_gateway_worker_roles",
+      "provider": null,
+      "roles": [
+        "cas",
+        "worker_cas"
+      ]
+    },
+    {
+      "path": "/stores/1/fast_slow/fast",
+      "kind": "store",
+      "selector": "filesystem",
+      "disposition": "qualify_physical_destination_and_shared_or_local_role",
+      "provider": null,
+      "roles": [
+        "cas",
+        "worker_cas"
+      ]
+    },
+    {
+      "path": "/stores/1/fast_slow/slow",
+      "kind": "store",
+      "selector": "noop",
+      "disposition": "test_only_never_authoritative_storage",
+      "provider": null,
+      "roles": [
+        "cas",
+        "worker_cas"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "path": "/servers/0/services/ac/0/ac_store",
+      "kind": "store",
+      "name": "AC_MAIN_STORE",
+      "role": "action_cache",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/ac/1/ac_store",
+      "kind": "store",
+      "name": "AC_MAIN_STORE",
+      "role": "action_cache",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/bytestream/0/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/bytestream/1/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/capabilities/0/remote_execution/scheduler",
+      "kind": "scheduler",
+      "name": "MAIN_SCHEDULER",
+      "role": "execution_authority",
+      "matching_declarations": 1,
+      "targets": [
+        "/schedulers/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/capabilities/1/remote_execution/scheduler",
+      "kind": "scheduler",
+      "name": "MAIN_SCHEDULER",
+      "role": "execution_authority",
+      "matching_declarations": 1,
+      "targets": [
+        "/schedulers/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/cas/0/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/cas/1/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/execution/0/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/execution/0/scheduler",
+      "kind": "scheduler",
+      "name": "MAIN_SCHEDULER",
+      "role": "execution_authority",
+      "matching_declarations": 1,
+      "targets": [
+        "/schedulers/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/execution/1/cas_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/0/services/execution/1/scheduler",
+      "kind": "scheduler",
+      "name": "MAIN_SCHEDULER",
+      "role": "execution_authority",
+      "matching_declarations": 1,
+      "targets": [
+        "/schedulers/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/servers/1/services/worker_api/scheduler",
+      "kind": "scheduler",
+      "name": "MAIN_SCHEDULER",
+      "role": "worker_authority",
+      "matching_declarations": 1,
+      "targets": [
+        "/schedulers/0"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/workers/0/local/cas_fast_slow_store",
+      "kind": "store",
+      "name": "WORKER_FAST_SLOW_STORE",
+      "role": "worker_cas",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/1"
+      ],
+      "resolution": "resolved"
+    },
+    {
+      "path": "/workers/0/local/upload_action_result/ac_store",
+      "kind": "store",
+      "name": "AC_MAIN_STORE",
+      "role": "worker_mutable_ac",
+      "matching_declarations": 1,
+      "targets": [
+        "/stores/0"
+      ],
+      "resolution": "resolved"
+    }
+  ],
+  "fields": [
+    {
+      "path": "/schedulers/0/simple/supported_platform_properties",
+      "purpose": "retired_scheduler_policy_value_withheld"
+    },
+    {
+      "path": "/servers/0/listener/http/socket_address",
+      "purpose": "endpoint_value_withheld"
+    },
+    {
+      "path": "/servers/1/listener/http/socket_address",
+      "purpose": "endpoint_value_withheld"
+    },
+    {
+      "path": "/stores/0/filesystem/content_path",
+      "purpose": "placement_or_prefix_value_withheld"
+    },
+    {
+      "path": "/stores/0/filesystem/temp_path",
+      "purpose": "placement_or_prefix_value_withheld"
+    },
+    {
+      "path": "/stores/1/fast_slow/fast/filesystem/content_path",
+      "purpose": "placement_or_prefix_value_withheld"
+    },
+    {
+      "path": "/stores/1/fast_slow/fast/filesystem/temp_path",
+      "purpose": "placement_or_prefix_value_withheld"
+    },
+    {
+      "path": "/workers/0/local/additional_environment",
+      "purpose": "credential_or_secret_location_values_withheld"
+    },
+    {
+      "path": "/workers/0/local/work_directory",
+      "purpose": "placement_or_prefix_value_withheld"
+    },
+    {
+      "path": "/workers/0/local/worker_api_endpoint/uri",
+      "purpose": "endpoint_value_withheld"
+    }
+  ],
+  "cycles": [],
+  "blockers": [
+    {
+      "code": "authority_fencing",
+      "path": "",
+      "question": "Which externally fenced authority epoch, membership, worker cohort, and execution domain will own new work after draining the old authority?"
+    },
+    {
+      "code": "experimental_inventory_only",
+      "path": "",
+      "question": "A qualified canonical schema and converter are still required; this report is not a configuration or cutover authorization."
+    },
+    {
+      "code": "implicit_worker_history_route",
+      "path": "/workers/0/local",
+      "question": "The legacy schema defaults historical storage to the worker CAS. Confirm the effective history-upload strategy and its authority-controlled replacement; omission is not evidence that the worker performs no publication."
+    },
+    {
+      "code": "legacy_scheduler_policy",
+      "path": "/schedulers/0/simple/supported_platform_properties",
+      "question": "Which fixed resource requirements and validated normalization preserve the intended behavior when configurable matching, wrapper, or class policy is removed?"
+    },
+    {
+      "code": "legacy_top_level_selector",
+      "path": "/schedulers",
+      "question": "The future canonical entry point refuses this key even when empty or null; this tool does not alter today's runtime."
+    },
+    {
+      "code": "legacy_top_level_selector",
+      "path": "/stores",
+      "question": "The future canonical entry point refuses this key even when empty or null; this tool does not alter today's runtime."
+    },
+    {
+      "code": "listener_worker_exclusion",
+      "path": "",
+      "question": "What credential or network evidence excludes workers from every writable AC listener and mutable sink, including external proxies?"
+    },
+    {
+      "code": "parser_dependency_closure",
+      "path": "",
+      "question": "This experiment uses the current config crate and its dependency closure; it does not establish the final isolated legacy parser or Redis removal."
+    },
+    {
+      "code": "placement_and_namespace",
+      "path": "",
+      "question": "Which explicit physical destinations and namespace identities preserve or deliberately relocate each old placement? No destination is inferred."
+    },
+    {
+      "code": "publication_and_collection",
+      "path": "",
+      "question": "Who owns accepted publication and collection, and how are prior writes, retained results, and storage lifetime obligations settled or isolated?"
+    },
+    {
+      "code": "worker_publication_bypass",
+      "path": "/workers/0/local",
+      "question": "Remove or isolate direct worker AC/history writes; only current-attempt authority acceptance may authorize publication."
+    },
+    {
+      "code": "writable_ac_boundary_unproven",
+      "path": "/servers/0",
+      "question": "Prove worker exclusion on this writable AC route; different ports or a shared permissive mTLS trust do not establish exclusion."
+    }
+  ]
+}

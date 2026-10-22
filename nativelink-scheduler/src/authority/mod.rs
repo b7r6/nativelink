@@ -19,7 +19,7 @@
 //! commit, application, and effect delivery. External work is represented only
 //! by the recoverable outbox; this module has no I/O or clock dependencies.
 //!
-//! Snapshot version 3 is an experimental test format, not a production durable
+//! Snapshot version 4 is an experimental test format, not a production durable
 //! format. M0 workload qualification and M3 format activation remain required.
 
 #[cfg(test)]
@@ -40,7 +40,11 @@ pub use types::*;
 /// slots, one cache lookup, and one accepted-result handoff. This conservative
 /// bound prevents admission from consuming the space needed to finish work.
 const EFFECT_HEADROOM: usize = MAX_ATTEMPTS as usize * 2 + 2;
-const SNAPSHOT_VERSION: u32 = 3;
+const SNAPSHOT_VERSION: u32 = 4;
+/// Audited fixed fields, map key, and punctuation for every current row kind.
+/// Variable request/result/property subtrees are charged separately.
+const FIXED_ROW_BYTES: usize = 1024;
+const EXECUTION_ROWS: usize = 1 + MAX_ATTEMPTS as usize * 2 + EFFECT_HEADROOM;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -72,9 +76,44 @@ pub struct State {
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Snapshot {
+struct Snapshot<T = State> {
     version: u32,
-    state: State,
+    state: T,
+}
+
+/// Defense against an omitted future field in the credit proof. No encoded
+/// snapshot bytes are exposed if serialization exceeds the fixed limit.
+#[derive(Default)]
+struct SnapshotBytes {
+    bytes: Vec<u8>,
+}
+
+impl Write for SnapshotBytes {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let size = self
+            .bytes
+            .len()
+            .checked_add(bytes.len())
+            .filter(|size| *size <= MAX_STATE_BYTES)
+            .ok_or_else(|| io::Error::other("authority snapshot exceeds byte bound"))?;
+        if size > self.bytes.capacity() {
+            let capacity = self
+                .bytes
+                .capacity()
+                .saturating_mul(2)
+                .max(size)
+                .clamp(1024, MAX_STATE_BYTES);
+            self.bytes
+                .try_reserve_exact(capacity - self.bytes.len())
+                .map_err(io::Error::other)?;
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Count the exact encoded payload without allocating a serialized copy before
@@ -138,9 +177,13 @@ const fn phase_rank(phase: Phase) -> Option<u8> {
 }
 
 impl State {
-    #[must_use]
-    pub const fn new(epoch: ClusterEpoch, limits: Limits) -> Self {
-        Self {
+    /// Initialize only limits whose largest accepted payload can be committed.
+    /// Zero ceilings are valid and may deliberately prevent admission.
+    pub fn new(epoch: ClusterEpoch, limits: Limits) -> Result<Self, String> {
+        if limits.max_payload_bytes > MAX_PAYLOAD_BYTES {
+            return Err("authority payload limit exceeds fixed command byte bound".to_owned());
+        }
+        Ok(Self {
             epoch,
             limits,
             now: 0,
@@ -156,7 +199,7 @@ impl State {
             attempts: BTreeMap::new(),
             reservations: BTreeMap::new(),
             effects: BTreeMap::new(),
-        }
+        })
     }
 
     /// Apply exactly one committed event. Rejections and ignored events leave
@@ -441,14 +484,72 @@ impl State {
     }
 
     fn payload_fits<T: Serialize>(&self, value: &T) -> bool {
-        serde_json::to_writer(
-            &mut PayloadSizeLimit {
-                used: 0,
-                limit: self.limits.max_payload_bytes,
-            },
-            value,
-        )
-        .is_ok()
+        self.payload_bytes(value).is_some()
+    }
+
+    fn payload_bytes<T: Serialize>(&self, value: &T) -> Option<usize> {
+        let mut count = PayloadSizeLimit {
+            used: 0,
+            limit: self.limits.max_payload_bytes,
+        };
+        serde_json::to_writer(&mut count, value).ok()?;
+        Some(count.used)
+    }
+
+    /// Every admitted lifecycle prepays its maximum terminal copies and rows.
+    /// Count from immutable durable facts rather than maintaining a second
+    /// mutable accounting ledger. See design/categorical/byte-headroom.md.
+    fn byte_credit(&self) -> Option<usize> {
+        let operations = self.operations.len();
+        let executions = self.executions.len();
+        let rows = operations
+            .checked_add(executions.checked_mul(EXECUTION_ROWS)?)?
+            .checked_add(self.workers.len().checked_mul(2)?)?
+            .checked_add(1)?;
+        let results = operations.checked_add(executions.checked_mul(2)?)?;
+        let mut credit = rows
+            .checked_mul(FIXED_ROW_BYTES)?
+            .checked_add(results.checked_mul(self.limits.max_payload_bytes)?)?;
+        for operation in self.operations.values() {
+            credit = credit.checked_add(self.payload_bytes(&operation.original_request)?)?;
+        }
+        for execution in self.executions.values() {
+            credit = credit.checked_add(self.payload_bytes(&execution.request)?.checked_mul(3)?)?;
+        }
+        for worker in self.workers.values() {
+            credit = credit.checked_add(self.payload_bytes(&worker.properties)?)?;
+        }
+        Some(credit)
+    }
+
+    fn submit_byte_credit(&self, request: &Request, new_execution: bool) -> Option<usize> {
+        let request_bytes = self.payload_bytes(request)?;
+        let mut credit = self
+            .byte_credit()?
+            .checked_add(request_bytes)?
+            .checked_add(self.limits.max_payload_bytes)?
+            .checked_add(FIXED_ROW_BYTES)?;
+        if new_execution {
+            credit = credit
+                .checked_add(request_bytes.checked_mul(3)?)?
+                .checked_add(self.limits.max_payload_bytes.checked_mul(2)?)?
+                .checked_add(EXECUTION_ROWS.checked_mul(FIXED_ROW_BYTES)?)?;
+        }
+        Some(credit)
+    }
+
+    fn register_byte_credit(
+        &self,
+        worker: WorkerId,
+        properties: &BTreeMap<String, String>,
+    ) -> Option<usize> {
+        let mut credit = self.byte_credit()?;
+        if let Some(old) = self.workers.get(&worker) {
+            credit = credit.checked_sub(self.payload_bytes(&old.properties)?)?;
+        } else {
+            credit = credit.checked_add(FIXED_ROW_BYTES.checked_mul(2)?)?;
+        }
+        credit.checked_add(self.payload_bytes(properties)?)
     }
 
     fn register(
@@ -469,19 +570,29 @@ impl State {
             {
                 return Reply::Rejected(Rejection::Stale);
             }
-            if incarnation != old.incarnation {
-                let revoked: Vec<_> = self
-                    .attempts
-                    .values()
-                    .filter(|attempt| attempt.worker == worker && attempt.authorized)
-                    .map(|attempt| attempt.id)
-                    .collect();
-                for attempt in revoked {
-                    self.revoke(attempt, false);
-                }
-            }
         } else if self.workers.len() >= self.limits.max_workers {
             return Reply::Rejected(Rejection::Overloaded);
+        }
+        if self
+            .register_byte_credit(worker, &properties)
+            .is_none_or(|credit| credit > MAX_STATE_BYTES)
+        {
+            return Reply::Rejected(Rejection::Overloaded);
+        }
+        if self
+            .workers
+            .get(&worker)
+            .is_some_and(|old| incarnation != old.incarnation)
+        {
+            let revoked: Vec<_> = self
+                .attempts
+                .values()
+                .filter(|attempt| attempt.worker == worker && attempt.authorized)
+                .map(|attempt| attempt.id)
+                .collect();
+            for attempt in revoked {
+                self.revoke(attempt, false);
+            }
         }
         self.workers.insert(
             worker,
@@ -536,6 +647,12 @@ impl State {
                     && !(request.skip_cache_lookup && execution.phase == Phase::Lookup)
             })
             .map(|execution| execution.id);
+        if self
+            .submit_byte_credit(&request, joining.is_none())
+            .is_none_or(|credit| credit > MAX_STATE_BYTES)
+        {
+            return Reply::Rejected(Rejection::Overloaded);
+        }
         let execution = if let Some(execution) = joining {
             execution
         } else {
@@ -1397,15 +1514,23 @@ impl State {
     /// Serialize canonical state including IDs and the complete pending outbox.
     pub fn snapshot(&self) -> Result<Vec<u8>, String> {
         self.check_invariants()?;
-        serde_json::to_vec(&Snapshot {
-            version: SNAPSHOT_VERSION,
-            state: self.clone(),
-        })
-        .map_err(|error| error.to_string())
+        let mut snapshot = SnapshotBytes::default();
+        serde_json::to_writer(
+            &mut snapshot,
+            &Snapshot {
+                version: SNAPSHOT_VERSION,
+                state: self,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        Ok(snapshot.bytes)
     }
 
     /// Restore only the declared experimental format and validate its relations.
     pub fn restore(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > MAX_STATE_BYTES {
+            return Err("authority snapshot exceeds fixed byte bound".to_owned());
+        }
         let snapshot: Snapshot =
             serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
         if snapshot.version != SNAPSHOT_VERSION {
@@ -1421,6 +1546,13 @@ impl State {
     /// Check named safety predicates independently of external observations.
     pub fn check_invariants(&self) -> Result<(), String> {
         let fail = |name: &str| Err(name.to_owned());
+        if self.limits.max_payload_bytes > MAX_PAYLOAD_BYTES
+            || self
+                .byte_credit()
+                .is_none_or(|credit| credit > MAX_STATE_BYTES)
+        {
+            return fail("BOUND2: aggregate bytes and prepaid finalization fit fixed limits");
+        }
         if self.executions.len() > self.limits.max_executions
             || self.operations.len() > self.limits.max_operations
             || self.workers.len() > self.limits.max_workers

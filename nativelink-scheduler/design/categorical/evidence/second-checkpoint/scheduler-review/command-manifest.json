@@ -1,0 +1,111 @@
+{
+  "utc": "2026-10-22T23:42:02.641389+00:00",
+  "commands": [
+    {
+      "name": "inventory-cargo-test",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "nativelink-config",
+        "--example",
+        "experimental_migration_inventory"
+      ],
+      "exit_code": 0,
+      "seconds": 2.595,
+      "log": "/tmp/nativelink-categorical-evidence/scheduler-review-final/inventory-cargo-test.log"
+    },
+    {
+      "name": "inventory-cargo-clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "nativelink-config",
+        "--example",
+        "experimental_migration_inventory",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 0.553,
+      "log": "/tmp/nativelink-categorical-evidence/scheduler-review-final/inventory-cargo-clippy.log"
+    },
+    {
+      "name": "authority-metrics-reuse-cargo-test",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_test",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "seconds": 47.836,
+      "log": "/tmp/nativelink-categorical-evidence/scheduler-review-final/authority-metrics-reuse-cargo-test.log"
+    },
+    {
+      "name": "authority-metrics-reuse-cargo-clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 0.456,
+      "log": "/tmp/nativelink-categorical-evidence/scheduler-review-final/authority-metrics-reuse-cargo-clippy.log"
+    }
+  ],
+  "copied_bazel_evidence": {
+    "command": [
+      "bazel",
+      "test",
+      "//nativelink-config:experimental-migration-inventory-test",
+      "--test_output=errors"
+    ],
+    "origin": "bazel-testlogs/nativelink-config/experimental-migration-inventory-test/{test.log,test.xml}",
+    "note": "Copied existing successful final 12-test run; no new Bazel invocation."
+  },
+  "cli_smoke": {
+    "binaries": [
+      "target/debug/examples/experimental_migration_inventory",
+      "bazel-bin/nativelink-config/experimental-migration-inventory"
+    ],
+    "argument": "nativelink-config/examples/basic_cas.json5",
+    "runs_each": 2,
+    "expected_exit_code": 2,
+    "summary": "inventory-cli-smoke-summary.json"
+  },
+  "sha256": {
+    "authority-metrics-reuse-cargo-clippy.log": "c2af368a7358bd647e6abf4181c544dfb83682ef50967ca838edb496eade053c",
+    "authority-metrics-reuse-cargo-test.log": "d38b4c895f018146ebe007c23ffb4639b65d8a99517fa19e45d7c6945f437bfe",
+    "authority-receipts/exhaustive.json": "4e080edbb5c7894df34204601c51a66b334bc8782ec7d7229343209c9ec4f0a3",
+    "authority-receipts/fair-drain.json": "c7e63caa0a7f968b48f445fae37ee0b908998aa4ddfb5ac139ee3399f5bdfcf1",
+    "authority-receipts/generated.json": "8a02203fef8aea37058ae7ce9ed40bb1f5c11dfdc0542c25b9a9891e7c1ab255",
+    "inventory-bazel-test.log": "97ca598ae41e1c476b1700deafbcc84f1e9e744f45cdc5247cd44cbe4abb84f6",
+    "inventory-bazel-test.xml": "8612965720e77c5a1690d3409dc612e22bb2a2754eaa3a6577f51707b801c8a4",
+    "inventory-cargo-clippy.log": "8e0a83a469b1c6d6c18510442142d12ce4660b243e006e6e5871c264e39c7abf",
+    "inventory-cargo-test.log": "d47a96b84c502083f47df1e828b1c2f087ec4e72ec6d8db0103fc73f3e3fb5fc",
+    "inventory-cli-bazel-report.json": "f1633d14ee5e9955309dbb806617d5872bcc417da1e20c244c542a94ae0ae0f2",
+    "inventory-cli-cargo-report.json": "f1633d14ee5e9955309dbb806617d5872bcc417da1e20c244c542a94ae0ae0f2",
+    "inventory-cli-smoke-summary.json": "6b47dff82aac7a8fb5deb105e8376843b575467ae2f90d19132260d2a7fdaf94"
+  }
+}

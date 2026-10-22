@@ -72,6 +72,7 @@ use nativelink_util::metrics::{INPUT_MOUNT_METRICS, record_input_relink, record_
 use nativelink_util::metrics_utils::{AsyncCounterWrapper, CounterWithTime};
 use nativelink_util::store_trait::{Store, StoreLike, UploadSizeInfo};
 use nativelink_util::task::JoinHandleDropGuard;
+use nativelink_util::work_progress::{self, ProgressObserver, ProgressPhase, WorkKind};
 use nativelink_util::{background_spawn, spawn, spawn_blocking};
 use parking_lot::Mutex;
 use prost::Message;
@@ -1590,7 +1591,12 @@ async fn materialize_inline_nodes(
     let mut futures = Vec::with_capacity(nodes.len());
     for node in nodes {
         futures.push(async move {
-            match node {
+            let progress = match &node {
+                #[cfg(target_family = "unix")]
+                InlineNode::Symlink { dst, .. } => ProgressObserver::path_object(WorkKind::Materialize, Path::new(dst)),
+                InlineNode::File { dst, .. } => ProgressObserver::path_object(WorkKind::Materialize, Path::new(dst)),
+            };
+            let result = match node {
                 #[cfg(target_family = "unix")]
                 InlineNode::Symlink { target, dst } => fs::symlink(&target, &dst)
                     .await
@@ -1606,7 +1612,7 @@ async fn materialize_inline_nodes(
                         let _permit = acquire_download_permit(downloads).await?;
                         cas_store.populate_fast_store(digest.into()).await?;
                     }
-                    async move {
+                    async {
                         if is_zero_digest(digest) {
                             // Zero-digest files are never persisted by the
                             // FilesystemStore, so materialise them directly in
@@ -1633,8 +1639,26 @@ async fn materialize_inline_nodes(
                                 .get_file_path_locked(|src| async move { Ok(src) })
                                 .await?;
                             let spawned_dest = dest.clone();
+                            let copy_progress = progress.clone();
                             spawn_blocking!("download_to_directory_private_copy", move || {
-                                std::fs::copy(&src_path, &spawned_dest).map(|_| ()).map_err(|e| {
+                                let copy = || -> std::io::Result<()> {
+                                    let Some(progress) = copy_progress else {
+                                        return std::fs::copy(&src_path, &spawned_dest).map(|_| ());
+                                    };
+                                    let mut source = std::fs::File::open(&src_path)?;
+                                    let mut destination = std::fs::File::create(&spawned_dest)?;
+                                    let mut buffer = vec![0_u8; fs::DEFAULT_READ_BUFF_SIZE];
+                                    let mut offset = 0_u64;
+                                    loop {
+                                        let count = std::io::Read::read(&mut source, &mut buffer)?;
+                                        if count == 0 { return Ok(()); }
+                                        std::io::Write::write_all(&mut destination, &buffer[..count])?;
+                                        offset = offset.checked_add(count as u64)
+                                            .ok_or_else(|| std::io::Error::other("Copy offset exhausted"))?;
+                                        progress.offset(offset);
+                                    }
+                                };
+                                copy().map_err(|e| {
                                     make_err!(
                                         Code::Internal,
                                         "Failed to copy CAS blob into a private inode at {spawned_dest}: {e:?}"
@@ -1668,7 +1692,10 @@ async fn materialize_inline_nodes(
                     .await
                     .map_err(|e: Error| e.append(format!("for digest {digest}")))
                 }
-            }
+            };
+            if result.is_ok()
+                && let Some(progress) = progress { progress.complete(); }
+            result
         });
     }
     futures::stream::iter(futures)
@@ -1835,6 +1862,7 @@ async fn upload_file(
         .await
         .err_tip(|| format!("Failed to hash file in digest_for_file failed for {full_path:?}"))?;
 
+    let progress = ProgressObserver::store_object(WorkKind::Write, &digest.into());
     let digest_uploader = match digest_uploaders.lock().entry(digest) {
         std::collections::hash_map::Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
         std::collections::hash_map::Entry::Vacant(vacant_entry) => vacant_entry
@@ -1917,6 +1945,9 @@ async fn upload_file(
         })
         .await
         .err_tip(|| format!("for {full_path:?}"))?;
+    if let Some(progress) = progress {
+        progress.complete();
+    }
 
     let name = full_path
         .as_ref()
@@ -2431,6 +2462,10 @@ async fn upload_captured_output(
                 .update_oneshot(digest, data)
                 .await
                 .err_tip(|| format!("Uploading {what}"))?;
+            if let Some(progress) = ProgressObserver::store_object(WorkKind::Write, &digest.into())
+            {
+                progress.complete();
+            }
             Ok(digest)
         }
         CapturedOutput::Spilled { path, len, .. } => {
@@ -2451,6 +2486,10 @@ async fn upload_captured_output(
                 )
                 .await
                 .err_tip(|| format!("Uploading {what} from {}", path.display()))?;
+            if let Some(progress) = ProgressObserver::store_object(WorkKind::Write, &digest.into())
+            {
+                progress.complete();
+            }
             Ok(digest)
         }
     }
@@ -2497,6 +2536,7 @@ pub struct RunningActionImpl {
     input_lease: Option<Arc<ActionInputLease>>,
     timeout: Duration,
     authority_request: bool,
+    progress: Option<ProgressObserver>,
     running_actions_manager: Arc<RunningActionsManagerImpl>,
     /// Set on a kill; every phase that can wait watches it, so a kill ends
     /// a fetch or an upload as surely as it ends the command.
@@ -2534,6 +2574,7 @@ impl RunningActionImpl {
             input_lease,
             timeout,
             authority_request: false,
+            progress: None,
             running_actions_manager,
             state: Mutex::new(RunningActionImplState {
                 command_proto: None,
@@ -3420,6 +3461,9 @@ impl RunningActionImpl {
         // Ours until the wait below collects it; the reaper leaves it alone.
         let _owned_child = crate::reaper::OwnedChild::new(child_process.id());
         self.state.lock().process_domain_quiescent = false;
+        if let Some(progress) = &self.progress {
+            progress.set_phase(ProgressPhase::Running);
+        }
         // A lost receipt leaves the authority adapter uncertain; it neither
         // retries this launch nor assumes the child failed to start. Legacy
         // execution installs no observer and follows the same process path.
@@ -3586,8 +3630,34 @@ impl RunningActionImpl {
 
         let timer = self.metrics().child_process.begin_timer();
         let mut sleep_fut = (self.running_actions_manager.callbacks.sleep_fn)(self.timeout).fuse();
+        let process_progress = self
+            .progress
+            .as_ref()
+            .map(|progress| progress.object(WorkKind::Process, b"owned-child"));
+        let mut progress_tick = tokio::time::interval(Duration::from_secs(5));
+        progress_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut progress_probe = 0_u64;
+        let mut progress_enabled = process_progress.is_some();
         loop {
             tokio::select! {
+                _ = progress_tick.tick(), if progress_enabled && kill_reason.is_none() && !*self.kill_token.borrow() => {
+                    match child_process_guard.try_wait() {
+                        Ok(None) => {
+                            if let Some(next) = progress_probe.checked_add(1) {
+                                progress_probe = next;
+                                if let Some(progress) = &process_progress { progress.offset(next); }
+                            } else {
+                                progress_enabled = false;
+                                warn!("Owned-child progress counter exhausted; renewal disabled");
+                            }
+                        }
+                        Ok(Some(_)) => progress_enabled = false,
+                        Err(error) => {
+                            progress_enabled = false;
+                            warn!(?error, "Owned-child progress probe failed; renewal disabled");
+                        }
+                    }
+                }
                 () = &mut sleep_fut => {
                     self.running_actions_manager.metrics.task_timeouts.inc();
                     kill_reason = Some(KillReason::Timeout);
@@ -4403,11 +4473,14 @@ impl RunningAction for RunningActionImpl {
         let download_deadline = Instant::now().checked_add(retry_window);
         // Boxed: the prepare state machine is large, and pinning it on the
         // stack next to the select below overflowed a test thread.
-        let mut prepare_fut = Box::pin(
-            metrics
-                .prepare_action
-                .wrap(Self::inner_prepare_action(self, download_deadline)),
-        );
+        let mut prepare_fut = Box::pin(work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                metrics
+                    .prepare_action
+                    .wrap(Self::inner_prepare_action(self, download_deadline)),
+            ),
+        ));
         // A fetch that never answers would otherwise hold the slot for good
         // while the worker's keepalives say it is fine: name it every minute
         // and give up at the timeout, so the scheduler can retry elsewhere.
@@ -4461,12 +4534,16 @@ impl RunningAction for RunningActionImpl {
     }
 
     async fn execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
-        let res = self
-            .metrics()
-            .clone()
-            .execute
-            .wrap(Self::inner_execute(self))
-            .await;
+        let res = work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                self.metrics()
+                    .clone()
+                    .execute
+                    .wrap(Self::inner_execute(self)),
+            ),
+        )
+        .await;
         if let Err(ref e) = res {
             warn!(?e, "Error during prepare_action");
         }
@@ -4483,9 +4560,17 @@ impl RunningAction for RunningActionImpl {
         );
         let metrics = self.metrics().clone();
         let kill_token = self.kill_token.clone();
-        let upload_fut = metrics
-            .upload_results
-            .wrap(Self::inner_upload_results(self));
+        if let Some(progress) = &self.progress {
+            progress.set_phase(ProgressPhase::Uploading);
+        }
+        let upload_fut = work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                metrics
+                    .upload_results
+                    .wrap(Self::inner_upload_results(self)),
+            ),
+        );
 
         let stall_warn_fut = async {
             let mut elapsed_secs = 0u64;
@@ -4605,6 +4690,21 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
             Err(make_err!(
                 Code::Unimplemented,
                 "authority action creation is unsupported"
+            ))
+        }
+    }
+
+    /// Install a bounded observer before the initial Action CAS fetch.
+    fn create_and_add_authority_action_observed(
+        self: &Arc<Self>,
+        _worker_id: String,
+        _start_execute: StartExecute,
+        _progress: ProgressObserver,
+    ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
+        async {
+            Err(make_err!(
+                Code::Unimplemented,
+                "authority progress observation is unsupported"
             ))
         }
     }
@@ -5713,6 +5813,7 @@ impl RunningActionsManagerImpl {
                     self.clone(),
                 );
                 running_action.authority_request = authority_request;
+                running_action.progress = if authority_request { ProgressObserver::current() } else { None };
                 let running_action = Arc::new(running_action);
                 {
                     let mut running_actions = self.running_actions.lock();
@@ -5776,6 +5877,19 @@ impl RunningActionsManager for RunningActionsManagerImpl {
     ) -> Result<Arc<RunningActionImpl>, Error> {
         self.create_and_add_action_impl(worker_id, start_execute, true)
             .await
+    }
+
+    async fn create_and_add_authority_action_observed(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+        progress: ProgressObserver,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        work_progress::scope(
+            Some(progress),
+            self.create_and_add_action_impl(worker_id, start_execute, true),
+        )
+        .await
     }
 
     async fn cache_action_result(

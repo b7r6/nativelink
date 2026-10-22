@@ -1,0 +1,7 @@
+{
+  "campaign": "fair-drain",
+  "jobs": 16,
+  "steps": 130,
+  "step_bound": 130,
+  "assumptions": "No new arrivals; fixed eligible workers; every selected dispatch receives acceptance, progress, a successful completion, and publication acknowledgment. This is a bounded scheduler progress witness, not GC or partition liveness."
+}

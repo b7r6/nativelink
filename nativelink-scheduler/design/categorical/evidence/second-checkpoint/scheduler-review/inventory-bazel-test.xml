@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="nativelink-config/experimental-migration-inventory-test" tests="1" failures="0" errors="0">
+    <testcase name="nativelink-config/experimental-migration-inventory-test" status="run" duration="0" time="0"></testcase>
+      <system-out>
+Generated test.log (if the file is not UTF-8, then this may be unreadable):
+<![CDATA[exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //nativelink-config:experimental-migration-inventory-test
+-----------------------------------------------------------------------------
+
+running 12 tests
+test inventory::tests::all_current_selectors_have_an_explicit_disposition ... ok
+test inventory::tests::duplicate_keys_invalid_bytes_and_depth_are_refused_without_error_value_leakage ... ok
+test inventory::tests::readonly_ac_does_not_prove_external_worker_exclusion ... ok
+test inventory::tests::old_service_maps_and_bytestream_references_are_inventoried ... ok
+test inventory::tests::interpolation_never_reads_environment_and_unknown_schema_never_passes ... ok
+test inventory::tests::cycles_missing_and_duplicate_references_are_not_silently_resolved ... ok
+test inventory::tests::omitted_history_store_is_not_evidence_of_no_worker_publication ... ok
+test inventory::tests::scheduler_state_and_data_aliases_propagate_through_nested_wrappers ... ok
+test inventory::tests::writable_ac_colocation_and_direct_worker_publication_block_cutover ... ok
+test inventory::tests::nested_placement_and_aliases_preserve_every_branch_without_secret_values ... ok
+test inventory::tests::traversal_and_long_chain_analysis_exhaust_explicit_work_budgets ... ok
+test inventory::tests::repeated_ambiguous_references_never_clone_the_target_cross_product ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s]]>
+      </system-out>
+    </testsuite>
+</testsuites>

@@ -36,6 +36,9 @@ use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
+pub(crate) const CREDIT_LIMIT: usize = 14 * 1024 * 1024;
+const COMPLETE_PAYLOAD_LIMIT: usize = 512 * 1024;
+
 /// Independent decoding of the agreed capture envelope, not its producer or
 /// projection implementation. Raw protobuf values remain the source of facts.
 #[derive(Deserialize)]
@@ -127,7 +130,7 @@ mod contract_tests {
 
     #[test]
     fn replacement_requires_cleanup_and_retains_original_charge() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         register(&mut model, 1, 1);
         apply(
             &mut model,
@@ -179,7 +182,7 @@ mod contract_tests {
 
     #[test]
     fn transport_reconnect_and_late_decline_do_not_create_a_second_slot() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         register(&mut model, 1, 1);
         apply(
             &mut model,
@@ -224,7 +227,7 @@ mod contract_tests {
 
     #[test]
     fn priority_interest_and_invocation_identity_are_distinct_relations() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         let base = request("a");
         apply(
             &mut model,
@@ -273,7 +276,7 @@ mod contract_tests {
 
     #[test]
     fn snapshot_keeps_uncertain_effects_and_stale_timer_cannot_expire_progress() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         register(&mut model, 1, 1);
         apply(
             &mut model,
@@ -323,7 +326,7 @@ mod contract_tests {
 
     #[test]
     fn retired_handle_identity_survives_snapshot_and_invalid_ids_do_not_advance_it() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         register(&mut model, 1, 1);
         let mut original = request("first");
         original.do_not_cache = true;
@@ -405,7 +408,7 @@ mod contract_tests {
 
     #[test]
     fn one_live_capacity_observation_cannot_fund_two_dispatches() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         let first = request("one");
         assert_eq!(
             apply(
@@ -447,7 +450,7 @@ mod contract_tests {
 
     #[test]
     fn absolute_execution_expiry_is_independent_of_renewed_progress() {
-        let mut model = Reference::new(ClusterEpoch(1), Limits::default());
+        let mut model = Reference::new(ClusterEpoch(1), Limits::default()).unwrap();
         register(&mut model, 1, 1);
         let mut req = request("absolute-deadline");
         req.execution_timeout = 5;
@@ -604,8 +607,11 @@ pub(crate) struct Reference {
 }
 
 impl Reference {
-    pub(crate) const fn new(epoch: ClusterEpoch, limits: Limits) -> Self {
-        Self {
+    pub(crate) fn new(epoch: ClusterEpoch, limits: Limits) -> Result<Self, String> {
+        if limits.max_payload_bytes > COMPLETE_PAYLOAD_LIMIT {
+            return Err("independent reference payload bound exceeds commit envelope".into());
+        }
+        Ok(Self {
             epoch,
             clock: 0,
             limits,
@@ -621,7 +627,7 @@ impl Reference {
             next_reservation: 1,
             next_effect: 1,
             highest_admitted_operation: 0,
-        }
+        })
     }
 
     pub(crate) fn apply(&mut self, recorded: RecordedEvent) -> Reply {
@@ -1042,6 +1048,13 @@ impl Reference {
             {
                 return Reply::Rejected(Rejection::Stale);
             }
+            let prospective = self
+                .reserved_bytes()
+                .and_then(|credit| credit.checked_sub(Self::worker_credit(&old.properties)?))
+                .and_then(|credit| credit.checked_add(Self::worker_credit(&properties)?));
+            if prospective.is_none_or(|credit| credit > CREDIT_LIMIT) {
+                return Reply::Rejected(Rejection::Overloaded);
+            }
             if incarnation != old.incarnation {
                 let mut revoke: Vec<_> = self
                     .trials
@@ -1067,6 +1080,13 @@ impl Reference {
             };
         } else {
             if self.nodes.len() >= self.limits.max_workers {
+                return Reply::Rejected(Rejection::Overloaded);
+            }
+            if self
+                .reserved_bytes()
+                .and_then(|credit| credit.checked_add(Self::worker_credit(&properties)?))
+                .is_none_or(|credit| credit > CREDIT_LIMIT)
+            {
                 return Reply::Rejected(Rejection::Overloaded);
             }
             self.nodes.push(Node {
@@ -1107,11 +1127,11 @@ impl Reference {
         if operation.0 <= self.highest_admitted_operation {
             return Reply::Rejected(Rejection::Stale);
         }
-        if self.interests.len() >= self.limits.max_operations {
-            return Reply::Rejected(Rejection::Overloaded);
-        }
         if !self.valid_request(&request) {
             return Reply::Rejected(Rejection::Invalid);
+        }
+        if self.interests.len() >= self.limits.max_operations {
+            return Reply::Rejected(Rejection::Overloaded);
         }
         let join = self
             .jobs
@@ -1123,6 +1143,19 @@ impl Reference {
             })
             .min_by_key(|row| row.execution)
             .map(|row| row.execution);
+        let prospective = self
+            .reserved_bytes()
+            .and_then(|credit| credit.checked_add(self.operation_credit(&request)?))
+            .and_then(|credit| {
+                if join.is_some() {
+                    Some(credit)
+                } else {
+                    credit.checked_add(self.execution_credit(&request)?)
+                }
+            });
+        if prospective.is_none_or(|credit| credit > CREDIT_LIMIT) {
+            return Reply::Rejected(Rejection::Overloaded);
+        }
         let execution = if let Some(execution) = join {
             execution
         } else {
@@ -1996,15 +2029,62 @@ impl Reference {
 
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, String> {
         // Tuple framing is independent from the implementation's envelope.
-        serde_json::to_vec(&("independent-authority-relations-v3", self))
-            .map_err(|error| error.to_string())
+        let bytes = serde_json::to_vec(&("independent-authority-relations-v4", self))
+            .map_err(|error| error.to_string())?;
+        if bytes.len() > CREDIT_LIMIT {
+            return Err("independent reference snapshot exceeds byte limit".into());
+        }
+        Ok(bytes)
     }
 
     pub(crate) fn restore(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > CREDIT_LIMIT {
+            return Err("independent reference raw snapshot exceeds byte limit".into());
+        }
         let (format, state): (String, Self) =
             serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
-        if format != "independent-authority-relations-v3" {
+        if format != "independent-authority-relations-v4" {
             return Err("unknown independent reference format".to_owned());
+        }
+        if state.limits.max_payload_bytes > COMPLETE_PAYLOAD_LIMIT
+            || state
+                .reserved_bytes()
+                .is_none_or(|credit| credit > CREDIT_LIMIT)
+        {
+            return Err("independent reference has invalid future byte credits".into());
+        }
+        if state.interests.len() > state.limits.max_operations
+            || state.jobs.len() > state.limits.max_executions
+            || state.nodes.len() > state.limits.max_workers
+            || state.outbox.len() > state.limits.max_effects
+            || state.trials.len() != state.charges.len()
+        {
+            return Err("independent reference exceeds prepaid relation counts".into());
+        }
+        let unique =
+            |ids: Vec<u64>| ids.iter().copied().collect::<BTreeSet<_>>().len() == ids.len();
+        if !unique(state.interests.iter().map(|row| row.operation.0).collect())
+            || !unique(state.jobs.iter().map(|row| row.execution.0).collect())
+            || !unique(state.nodes.iter().map(|row| row.worker.0).collect())
+            || !unique(state.trials.iter().map(|row| row.attempt.0).collect())
+            || !unique(state.charges.iter().map(|row| row.reservation.0).collect())
+            || !unique(state.charges.iter().map(|row| row.attempt.0).collect())
+            || !unique(state.outbox.iter().map(|row| row.id.0).collect())
+        {
+            return Err("independent reference duplicates prepaid relation identity".into());
+        }
+        if state.interests.iter().any(|interest| {
+            !state
+                .jobs
+                .iter()
+                .any(|job| job.execution == interest.execution)
+        }) || state.trials.iter().any(|trial| {
+            !state
+                .jobs
+                .iter()
+                .any(|job| job.execution == trial.execution)
+        }) {
+            return Err("independent reference has an unowned prepaid row".into());
         }
         for request in state
             .interests
@@ -2054,6 +2134,22 @@ impl Reference {
             {
                 return Err("independent reference effect ownership bounds are invalid".into());
             }
+            let owner = state
+                .jobs
+                .iter()
+                .find(|job| job.execution == execution)
+                .unwrap();
+            match &effect.kind {
+                EffectKind::Lookup { action, .. } | EffectKind::PublishResult { action, .. }
+                    if action != &owner.request.action =>
+                {
+                    return Err("independent reference has an unpaid action-key copy".into());
+                }
+                EffectKind::Dispatch { request, .. } if request != &owner.request => {
+                    return Err("independent reference has an unpaid dispatch request copy".into());
+                }
+                _ => {}
+            }
             if let EffectKind::PublishResult { result, .. } = &effect.kind
                 && !state.valid_result(result)
             {
@@ -2072,6 +2168,39 @@ impl Reference {
             }
         }
         for job in &state.jobs {
+            let trials: Vec<_> = state
+                .trials
+                .iter()
+                .filter(|trial| trial.execution == job.execution)
+                .collect();
+            let current: Vec<_> = trials.iter().filter(|trial| trial.valid).collect();
+            let lookup_count = state
+                .outbox
+                .iter()
+                .filter(|effect| {
+                    matches!(effect.kind,
+                EffectKind::Lookup { execution, .. } if execution == job.execution)
+                })
+                .count();
+            let dispatch_count = state
+                .outbox
+                .iter()
+                .filter(|effect| {
+                    matches!(effect.kind,
+                EffectKind::Dispatch { execution, .. } if execution == job.execution)
+                })
+                .count();
+            if trials.len() != job.attempts as usize
+                || job.attempts > MAX_ATTEMPTS
+                || current.len() > 1
+                || job.current != current.first().map(|trial| trial.attempt)
+                || lookup_count != usize::from(job.phase == Phase::Lookup)
+                || dispatch_count != usize::from(job.phase == Phase::Dispatching)
+            {
+                return Err(
+                    "independent reference exceeds prepaid execution rows or payload copies".into(),
+                );
+            }
             if job.target.cpu_millis != job.request.resources.cpu_millis
                 || job.target.slots != job.request.resources.slots
                 || job.target.memory_bytes < job.request.resources.memory_bytes
@@ -2136,6 +2265,46 @@ impl Reference {
             }
         }
         Ok(state)
+    }
+
+    /// Charge each relation for its lifetime independently. This row-by-row
+    /// sum is algebraically RO+3RE+P(O+2E)+WP+1024(O+15E+2W+1).
+    pub(crate) fn reserved_bytes(&self) -> Option<usize> {
+        let mut credit = 1024_usize;
+        for interest in &self.interests {
+            credit = credit.checked_add(self.operation_credit(&interest.original)?)?;
+        }
+        for job in &self.jobs {
+            credit = credit.checked_add(self.execution_credit(&job.request)?)?;
+        }
+        for node in &self.nodes {
+            credit = credit.checked_add(Self::worker_credit(&node.properties)?)?;
+        }
+        Some(credit)
+    }
+
+    fn operation_credit(&self, request: &Request) -> Option<usize> {
+        serde_json::to_vec(request)
+            .ok()?
+            .len()
+            .checked_add(self.limits.max_payload_bytes)?
+            .checked_add(1024)
+    }
+
+    fn execution_credit(&self, request: &Request) -> Option<usize> {
+        serde_json::to_vec(request)
+            .ok()?
+            .len()
+            .checked_mul(3)?
+            .checked_add(self.limits.max_payload_bytes.checked_mul(2)?)?
+            .checked_add(15 * 1024)
+    }
+
+    fn worker_credit(properties: &BTreeMap<String, String>) -> Option<usize> {
+        serde_json::to_vec(properties)
+            .ok()?
+            .len()
+            .checked_add(2 * 1024)
     }
 
     fn valid_request(&self, request: &Request) -> bool {

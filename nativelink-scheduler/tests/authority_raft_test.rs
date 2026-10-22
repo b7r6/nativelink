@@ -23,12 +23,12 @@ use std::time::Duration;
 
 use nativelink_macro::nativelink_test;
 use nativelink_scheduler::authority::journal::{
-    Batch, Journal, JournalFault, MAX_BATCH_BYTES, MAX_BATCH_EVENTS, MAX_SNAPSHOT_BYTES, Singleton,
-    SnapshotBuffer, TypeConfig,
+    Batch, Journal, JournalFault, MAX_BATCH_BYTES, MAX_BATCH_EVENTS, MAX_MEMBERSHIP_BYTES,
+    MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_ID_BYTES, Singleton, SnapshotBuffer, TypeConfig,
 };
 use nativelink_scheduler::authority::{
-    ActionKey, ClusterEpoch, Event, Limits, OperationId, RecordedEvent, Reply, Request, Resources,
-    State,
+    ActionKey, ClusterEpoch, Event, IncarnationId, Limits, MAX_PAYLOAD_BYTES, OperationId,
+    RecordedEvent, Rejection, Reply, Request, Resources, ResultPayload, SessionId, State, WorkerId,
 };
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
 use nativelink_util::spawn_blocking;
@@ -434,7 +434,7 @@ async fn real_batch_refines_ordered_events_and_replies_through_restart() {
     let mut wrong_epoch = event(2);
     wrong_epoch.epoch = ClusterEpoch(EPOCH.0 + 1);
     let events = vec![event(1), wrong_epoch, event(2), event(1), event(3)];
-    let mut reference = State::new(EPOCH, Limits::default());
+    let mut reference = State::new(EPOCH, Limits::default()).unwrap();
     let expected: Vec<_> = events
         .iter()
         .cloned()
@@ -479,7 +479,7 @@ async fn entire_batch_and_outbox_are_atomic_at_commit_cutpoints() {
     assert!(journal.apply([batch_entry.clone()]).await.is_err());
     let (position, state) = journal.read_applied().await.unwrap();
     assert_eq!(position, None);
-    assert_eq!(state, State::new(EPOCH, Limits::default()));
+    assert_eq!(state, State::new(EPOCH, Limits::default()).unwrap());
     journal.inject_failure_once(JournalFault::AfterCommit);
     assert!(journal.apply([batch_entry]).await.is_err());
     drop(journal);
@@ -488,7 +488,7 @@ async fn entire_batch_and_outbox_are_atomic_at_commit_cutpoints() {
     assert_eq!(position, Some(log_id(1)));
     assert_eq!(state.view().operations.len(), 3);
     assert_eq!(state.view().effects.len(), 3);
-    let mut expected = State::new(EPOCH, Limits::default());
+    let mut expected = State::new(EPOCH, Limits::default()).unwrap();
     for operation in 1..=3 {
         expected.apply(event(operation));
     }
@@ -497,30 +497,356 @@ async fn entire_batch_and_outbox_are_atomic_at_commit_cutpoints() {
 
 #[nativelink_test]
 async fn oversized_membership_is_rejected_before_durable_log_acknowledgment() {
+    // Both values exceed canonical membership bytes. The control-character
+    // address is much smaller in memory, so counting raw string bytes is wrong.
+    for address in [
+        "x".repeat(MAX_MEMBERSHIP_BYTES),
+        "\0".repeat(MAX_MEMBERSHIP_BYTES / 6),
+    ] {
+        let directory = Directory::new();
+        let mut journal = open(&directory.database()).await;
+        let before = journal.read_applied().await.unwrap();
+        let membership = membership_with_address(address);
+        assert!(serde_json::to_vec(&membership).unwrap().len() > MAX_MEMBERSHIP_BYTES);
+        let oversized = Entry {
+            log_id: log_id(1),
+            payload: EntryPayload::Membership(membership),
+        };
+        let error = journal
+            .blocking_append([entry(0), oversized.clone()])
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("membership exceeds byte bound"));
+        assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+        // A malformed later membership cannot commit the preceding command
+        // through the state-machine interface either.
+        let error = journal.apply([entry(0), oversized]).await.unwrap_err();
+        assert!(error.to_string().contains("membership exceeds byte bound"));
+        assert_eq!(journal.read_applied().await.unwrap(), before);
+        drop(journal);
+        let mut journal = open(&directory.database()).await;
+        assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+        assert_eq!(journal.read_applied().await.unwrap(), before);
+    }
+}
+
+fn membership_with_address(address: String) -> openraft::Membership<u64, openraft::BasicNode> {
+    openraft::Membership::new(
+        vec![std::collections::BTreeSet::from([NODE])],
+        BTreeMap::from([(NODE, openraft::BasicNode { addr: address })]),
+    )
+}
+
+#[nativelink_test]
+async fn incoming_snapshot_metadata_limits_cannot_be_bypassed_by_valid_checksums() {
     let directory = Directory::new();
     let mut journal = open(&directory.database()).await;
-    let oversized = Entry {
-        log_id: log_id(1),
-        payload: EntryPayload::Membership(openraft::Membership::new(
-            vec![std::collections::BTreeSet::from([NODE])],
-            BTreeMap::from([(
-                NODE,
-                openraft::BasicNode {
-                    addr: "x".repeat(MAX_BATCH_BYTES * 3),
-                },
-            )]),
-        )),
+    journal.apply([entry(1)]).await.unwrap();
+    let snapshot = journal.build_snapshot().await.unwrap();
+    let before = journal.read_applied().await.unwrap();
+    let oversized_membership = openraft::StoredMembership::new(
+        Some(log_id(1)),
+        membership_with_address("x".repeat(MAX_MEMBERSHIP_BYTES)),
+    );
+    for oversize_id in [false, true] {
+        let mut meta = snapshot.meta.clone();
+        if oversize_id {
+            // Check UTF-8 bytes, not the number of characters.
+            meta.snapshot_id = "é".repeat(MAX_SNAPSHOT_ID_BYTES / 2 + 1);
+        } else {
+            meta.last_membership = oversized_membership.clone();
+        }
+        let bytes = rewrite_payload(snapshot.snapshot.get_ref(), |payload| {
+            payload["meta"] = serde_json::to_value(&meta).unwrap();
+            payload["applied"]["membership"] = serde_json::to_value(&meta.last_membership).unwrap();
+        });
+        // Test both the caller's metadata and an otherwise valid caller whose
+        // payload metadata alone violates the bound. Digest checks still pass.
+        for supplied_meta in [&meta, &snapshot.meta] {
+            let error = journal
+                .install_snapshot(
+                    supplied_meta,
+                    Box::new(SnapshotBuffer::from_bytes(bytes.clone()).unwrap()),
+                )
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains(if oversize_id {
+                "snapshot ID exceeds byte bound"
+            } else {
+                "membership exceeds byte bound"
+            }));
+            assert_eq!(journal.read_applied().await.unwrap(), before);
+        }
+    }
+}
+
+#[nativelink_test]
+async fn maximum_membership_and_escaped_snapshot_id_round_trip() {
+    let source_dir = Directory::new();
+    let target_dir = Directory::new();
+    let mut source = open(&source_dir.database()).await;
+    let overhead = serde_json::to_vec(&membership_with_address(String::new()))
+        .unwrap()
+        .len();
+    let membership = membership_with_address("x".repeat(MAX_MEMBERSHIP_BYTES - overhead));
+    assert_eq!(
+        serde_json::to_vec(&membership).unwrap().len(),
+        MAX_MEMBERSHIP_BYTES
+    );
+    let membership_entry = Entry {
+        log_id: log_id(0),
+        payload: EntryPayload::Membership(membership),
+    };
+    source
+        .blocking_append([membership_entry.clone()])
+        .await
+        .unwrap();
+    source.apply([membership_entry, entry(1)]).await.unwrap();
+    let mut snapshot = source.build_snapshot().await.unwrap();
+    snapshot.meta.snapshot_id = "\0".repeat(MAX_SNAPSHOT_ID_BYTES);
+    let bytes = rewrite_payload(snapshot.snapshot.get_ref(), |payload| {
+        payload["meta"] = serde_json::to_value(&snapshot.meta).unwrap();
+    });
+    assert!(bytes.len() < MAX_SNAPSHOT_BYTES);
+    let mut target = open(&target_dir.database()).await;
+    target
+        .install_snapshot(
+            &snapshot.meta,
+            Box::new(SnapshotBuffer::from_bytes(bytes).unwrap()),
+        )
+        .await
+        .unwrap();
+    drop(target);
+    let mut target = open(&target_dir.database()).await;
+    assert_eq!(
+        target.get_current_snapshot().await.unwrap().unwrap().meta,
+        snapshot.meta
+    );
+    assert_eq!(
+        target.read_applied().await.unwrap(),
+        source.read_applied().await.unwrap()
+    );
+    target.apply([entry(2)]).await.unwrap();
+    assert_eq!(
+        target
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .view()
+            .operations
+            .len(),
+        2
+    );
+}
+
+#[nativelink_test]
+async fn persisted_oversized_membership_fails_closed_in_logs_and_applied_state() {
+    for mutate_log in [false, true] {
+        let directory = Directory::new();
+        let mut journal = open(&directory.database()).await;
+        journal.blocking_append([entry(0)]).await.unwrap();
+        journal.apply([entry(0)]).await.unwrap();
+        drop(journal);
+        let database = redb::Database::open(directory.database()).unwrap();
+        let tx = database.begin_write().unwrap();
+        let oversized = membership_with_address("x".repeat(MAX_MEMBERSHIP_BYTES));
+        if mutate_log {
+            let mut logs = tx
+                .open_table(redb::TableDefinition::<u64, &[u8]>::new("authority_logs"))
+                .unwrap();
+            let original = logs.remove(0).unwrap().unwrap().value().to_vec();
+            let bytes = rewrite_payload(&original, |payload| {
+                payload["payload"] =
+                    serde_json::to_value(EntryPayload::<TypeConfig>::Membership(oversized))
+                        .unwrap();
+            });
+            // This fits the earlier log-record bound; membership's separate
+            // metadata budget must reject it on recovery.
+            assert!(bytes.len() < MAX_BATCH_BYTES * 2);
+            logs.insert(0, bytes.as_slice()).unwrap();
+        } else {
+            let mut meta = tx
+                .open_table(redb::TableDefinition::<&str, &[u8]>::new("authority_meta"))
+                .unwrap();
+            let original = meta.remove("applied").unwrap().unwrap().value().to_vec();
+            let bytes = rewrite_payload(&original, |payload| {
+                payload["membership"] = serde_json::to_value(openraft::StoredMembership::new(
+                    Some(log_id(0)),
+                    oversized,
+                ))
+                .unwrap();
+            });
+            meta.insert("applied", bytes.as_slice()).unwrap();
+        }
+        tx.commit().unwrap();
+        drop(database);
+        let error = Journal::open(directory.database(), NODE, EPOCH, Limits::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("membership exceeds byte bound"));
+    }
+}
+
+#[nativelink_test]
+async fn invalid_admission_limits_do_not_create_a_journal_file() {
+    let directory = Directory::new();
+    let limits = Limits {
+        max_payload_bytes: MAX_PAYLOAD_BYTES + 1,
+        ..Limits::default()
     };
     assert!(
-        journal
-            .blocking_append([entry(0), oversized])
+        Journal::open(directory.database(), NODE, EPOCH, limits)
             .await
             .is_err()
     );
-    assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+    assert!(!directory.database().exists());
+}
+
+#[nativelink_test]
+async fn saturated_admission_can_finalize_and_snapshot_escaping_heavy_results() {
+    let directory = Directory::new();
+    let limits = Limits {
+        max_payload_bytes: MAX_PAYLOAD_BYTES,
+        ..Limits::default()
+    };
+    let node = Singleton::open(directory.database(), NODE, EPOCH, limits)
+        .await
+        .unwrap();
+    let worker = WorkerId(1);
+    let incarnation = IncarnationId(1);
+    let capacity = Resources {
+        cpu_millis: 100,
+        memory_bytes: 1024,
+        slots: 1,
+    };
+    let recorded = |event| RecordedEvent {
+        epoch: EPOCH,
+        event,
+    };
+    assert_eq!(
+        node.write(recorded(Event::Register {
+            worker,
+            incarnation,
+            session: SessionId(1),
+            properties: BTreeMap::new(),
+            capacity,
+            available: capacity,
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Applied
+    );
+    let Event::Submit { mut request, .. } = event(1).event else {
+        unreachable!()
+    };
+    request.skip_cache_lookup = true;
+    let mut admitted = 0;
+    for id in 1..=limits.max_operations as u64 {
+        let before = node.read().await.unwrap();
+        let reply = node
+            .write(recorded(Event::Submit {
+                operation: OperationId(id),
+                request: request.clone(),
+            }))
+            .await
+            .unwrap()
+            .data;
+        if reply == Reply::Rejected(Rejection::Overloaded) {
+            assert_eq!(node.read().await.unwrap(), before);
+            break;
+        }
+        assert!(matches!(reply, Reply::Submitted { .. }));
+        admitted += 1;
+    }
+    assert!(admitted > 1 && admitted < limits.max_operations);
+    assert_eq!(node.read().await.unwrap().view().executions.len(), 1);
+    // Restart while every admitted operation still owes a maximum-size result.
+    node.shutdown().await.unwrap();
+    let node = Singleton::open(directory.database(), NODE, EPOCH, limits)
+        .await
+        .unwrap();
+    let Reply::Matched { attempt, .. } = node.write(recorded(Event::Match)).await.unwrap().data
+    else {
+        panic!("admitted execution must be placeable")
+    };
+    assert_eq!(
+        node.write(recorded(Event::WorkerAccepted {
+            attempt,
+            worker,
+            incarnation
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Applied
+    );
+
+    // Synthetic normalized result deliberately exercises the worst JSON escape
+    // shape. Real REAPI capture has additional validation covered separately.
+    let mut result = ResultPayload {
+        digest: String::new(),
+        exit_code: 0,
+        error: None,
+        response: None,
+    };
+    let overhead = serde_json::to_vec(&result).unwrap().len();
+    let content = MAX_PAYLOAD_BYTES - overhead;
+    result.digest = "\\\"".repeat(content / 4);
+    result.digest.push_str(&"x".repeat(content % 4));
+    assert_eq!(
+        serde_json::to_vec(&result).unwrap().len(),
+        MAX_PAYLOAD_BYTES
+    );
+    let completion = recorded(Event::Complete {
+        attempt,
+        worker,
+        incarnation,
+        result,
+    });
+    assert!(
+        Batch::new([completion.clone()])
+            .unwrap()
+            .encoded_bytes()
+            .unwrap()
+            < MAX_BATCH_BYTES
+    );
+    assert_eq!(node.write(completion).await.unwrap().data, Reply::Applied);
+    let accepted = node.read().await.unwrap();
+    assert_eq!(accepted.view().operations.len(), admitted);
+    assert!(
+        accepted
+            .view()
+            .operations
+            .iter()
+            .all(|operation| operation.terminal.is_some())
+    );
+    let mut journal = node.journal.clone();
+    let snapshot = journal.build_snapshot().await.unwrap();
+    // This is a substantive nested-escaping test, not an almost-empty snapshot.
+    assert!(snapshot.snapshot.get_ref().len() > 40 * 1024 * 1024);
+    assert!(snapshot.snapshot.get_ref().len() <= MAX_SNAPSHOT_BYTES);
+    drop(snapshot);
     drop(journal);
-    let mut journal = open(&directory.database()).await;
-    assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+    node.shutdown().await.unwrap();
+    let node = Singleton::open(directory.database(), NODE, EPOCH, limits)
+        .await
+        .unwrap();
+    assert_eq!(node.read().await.unwrap(), accepted);
+    assert_eq!(
+        node.read()
+            .await
+            .unwrap()
+            .view()
+            .workers
+            .iter()
+            .find(|candidate| candidate.id == worker)
+            .unwrap()
+            .charged,
+        Resources::default()
+    );
+    node.shutdown().await.unwrap();
 }
 
 #[nativelink_test]

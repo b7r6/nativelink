@@ -111,6 +111,35 @@ The causal reduction regression also retains the memory-failure event that
 produced a later dispatch grant. No historical estimator, resource classifier,
 terminal absent-fleet policy, or queue-wait deadline follows from these tests.
 
+## Admission pays for future bytes
+
+The [byte headroom contract](byte-headroom.md) reserves a maximum terminal
+payload for every accepted operation, execution, and possible publication,
+along with original ingress copies, worker properties, and bounded future
+rows. The fixed pure-state ceiling is 14 MiB; the configured complete request
+or result bound cannot exceed 512 KiB. Count limits remain upper bounds: byte
+admission can refuse before all count limits are reached.
+
+The independent model sums prepaid obligations per relation, without calling
+the implementation's accounting helpers. The harness compares the real
+canonical snapshot length with that independent sum after every applied input
+and recovery. Restore checks the same future obligation, including identity,
+ownership, and payload-copy bounds; small present-day state cannot bypass the
+cost of its future terminal copies.
+
+| Fixture | Checkable claim |
+| --- | --- |
+| `byte_credit_counts_distinct_coalesced_ingress_and_prepays_complete_terminal_copies` | Distinct captured ingress with quote-heavy principal text remains separately charged for every coalesced handle. At exactly 14 MiB reserved credit, a near-maximum captured response can complete, publish, survive restart, and retire; the previously refused operation ID can then be admitted. |
+| `byte_credit_worker_replacement_refuses_atomically_and_cancellation_cleanup_stay_available` | A larger property map cannot revoke attempts before byte refusal. Stale identity retains its rejection precedence; cancellation, physical cleanup, and completion remain possible at the ceiling. |
+| `byte_credit_accepts_exact_limit_and_rejects_one_more_encoded_byte` | A property replacement costing one additional encoded byte is refused; reducing and restoring one byte reaches the exact accepted boundary. |
+| `byte_credit_limits_and_restore_cannot_admit_uncommittable_or_unpaid_state` | Oversized configured payloads, unpaid restored operations, and oversized raw snapshots fail; zero payload capacity and large count ceilings do not overflow initialization. |
+| `causal_reduction_keeps_terminal_retirement_that_funds_later_byte_admission` | Shrinking preserves the terminal transition, elapsed retention time, and retirement that free credit for a later accepted request. |
+
+These checks establish the bounded pure-model obligation. Journal membership,
+snapshot metadata, and framing require their separate envelope checks; allocator
+RSS, total log disk use, throughput, and production response-size suitability
+are outside this claim.
+
 ## Mandatory histories
 
 | Plan history | Executable fixture or remaining gap |
@@ -151,6 +180,12 @@ separately varies proposal loss, commit-before-crash, application, duplicate
 delivery, checkpoint, and recovery. Reports separate generated command counts
 from successfully applied commands, so rejected traffic is not presented as
 successful transition coverage.
+
+Every fourth generated seed uses the maximum 512 KiB complete-payload bound;
+the other seeds use 64 KiB. This varies the prepaid finalization cost even when
+the generated commands themselves are small. The report includes observed
+credit and canonical-snapshot high-water marks; the separate byte-boundary
+fixtures exercise large captured payloads.
 
 The exhaustive campaign explores a declared finite event alphabet through depth
 five using full snapshot identity for visited states. Its state and transition

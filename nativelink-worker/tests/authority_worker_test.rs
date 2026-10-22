@@ -178,6 +178,15 @@ async fn setup(single_use: bool, slots: u64, limit: usize, namespaced: bool) -> 
 
 impl Context {
     async fn dispatch(&self, attempt: u64, arguments: Vec<String>) -> AuthorityCommand {
+        self.dispatch_with_timeout(attempt, arguments, None).await
+    }
+
+    async fn dispatch_with_timeout(
+        &self,
+        attempt: u64,
+        arguments: Vec<String>,
+        timeout: Option<prost_types::Duration>,
+    ) -> AuthorityCommand {
         let mut hasher = DigestHasherFunc::Sha256.hasher();
         let command = serialize_and_upload_message(
             &Command {
@@ -200,6 +209,7 @@ impl Context {
             &Action {
                 command_digest: Some(command.into()),
                 input_root_digest: Some(root.into()),
+                timeout,
                 ..Action::default()
             },
             self.cas.as_pin(),
@@ -977,4 +987,64 @@ async fn wire_old_session_cancel_cannot_target_a_successor() {
         .await
         .unwrap();
     session_error(second_task).await;
+}
+
+#[nativelink_test]
+async fn quiet_owned_child_progress_survives_reconnect_but_keeps_execution_deadline() {
+    let context = setup(false, 1, 4, false).await;
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    let dispatch = context
+        .dispatch_with_timeout(
+            1,
+            vec!["/bin/sleep".to_owned(), "60".to_owned()],
+            Some(prost_types::Duration {
+                seconds: 12,
+                nanos: 0,
+            }),
+        )
+        .await;
+    let started = tokio::time::Instant::now();
+    context.worker.command(1, dispatch.clone()).unwrap();
+    let mut changes = context.worker.subscribe();
+    let first = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let report = context.worker.reconcile().attempts[0].clone();
+            if report.phase == AuthorityAttemptPhase::Running as i32 && report.phase_progress > 0 {
+                break report;
+            }
+            changes.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert!(first.observation_sequence > first.phase_progress);
+    context.worker.disconnect(1);
+    let replay = context
+        .worker
+        .negotiate(&negotiation(2))
+        .unwrap()
+        .attempts
+        .remove(0);
+    assert_eq!(replay.phase_progress, first.phase_progress);
+    assert_eq!(replay.observation_sequence, first.observation_sequence);
+    let repeated = context.worker.command(2, dispatch).unwrap();
+    assert_eq!(repeated.phase_progress, first.phase_progress);
+    assert_eq!(repeated.observation_sequence, first.observation_sequence);
+    let terminal = wait_result(&context.worker, 1).await;
+    let elapsed = started.elapsed();
+    assert!(elapsed >= Duration::from_secs(11));
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "liveness probes cannot extend a 12-second execution deadline"
+    );
+    match terminal.result.unwrap() {
+        authority_attempt_report::Result::ExecuteResponse(response) => {
+            assert_eq!(response.status.unwrap().code, Code::DeadlineExceeded as i32);
+        }
+        other => panic!("expected the actual timed-out process result, got {other:?}"),
+    }
+    assert_eq!(
+        terminal.phase,
+        AuthorityAttemptPhase::TerminationUncertain as i32
+    );
 }

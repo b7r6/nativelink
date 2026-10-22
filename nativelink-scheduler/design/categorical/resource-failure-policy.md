@@ -160,8 +160,9 @@ own attempt and dominate the immutable minima. Every dispatch grant must equal
 its associated original reservation. Holds and matching use the current target;
 request payload validation and compatibility continue to use the original
 request. Snapshot version and required reader capabilities must name the new
-semantics explicitly. Pure state snapshots use version 3; version 2 is rejected
-without a migration or activation claim.
+semantics explicitly. Memory targets introduced snapshot version 3; the current
+byte-admission capability uses version 4 and rejects older versions without a
+migration or activation claim.
 
 The shared DTO contract is:
 
@@ -225,13 +226,12 @@ placement. Preserve distinct diagnostics for waiting capacity, no registered
 workers, and no currently compatible registered worker. Do not turn these
 observations into global impossibility claims.
 
-The recently added bounded counting writer prevents `State::payload_fits` from
-allocating an oversized JSON copy merely to reject it. It does **not** reserve
-aggregate snapshot bytes. Per-operation original requests, execution requests,
-dispatch copies, result bytes, and nested journal JSON escaping all accumulate.
-The journal's 64 MiB receive/metadata ceiling rejects excess safely, but is not
-an admission proof that every admitted lifecycle can later snapshot/finalize.
-A subsequent byte-accounting change must reserve worst-case finalization and
-encoding headroom at admission, or choose a representation with a demonstrated
-bound. Existing synthetic budget measurements predate these new fields and do
-not qualify the changed state size or throughput.
+The authority now counts encoded payload bytes without allocating oversized
+copies and reserves aggregate finalization credit before admission. The fixed
+14 MiB pure-state cap, 512 KiB payload cap, journal metadata limits, and proof
+for the 64 MiB journal envelope are documented in
+[Bounded snapshot and finalization bytes](byte-headroom.md). Original requests,
+all operation terminal copies, and pending publication payloads are included.
+The newer byte capability uses pure-state snapshot version 4. Existing small
+synthetic budget measurements predate these fields and do not qualify the
+changed state size or throughput.

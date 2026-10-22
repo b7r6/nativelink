@@ -472,6 +472,331 @@ fn memory_result() -> ResultPayload {
     })
 }
 
+fn byte_limits() -> Limits {
+    Limits {
+        max_payload_bytes: 512 * 1024,
+        ..Limits::default()
+    }
+}
+
+/// Spend the exact remaining credit on admitted worker properties. The filler
+/// workers have zero slots and cannot change placement choices.
+fn fill_byte_credit(h: &mut Harness) {
+    let empty_properties = std::collections::BTreeMap::from([
+        ("os".to_owned(), "linux".to_owned()),
+        ("padding".to_owned(), String::new()),
+    ]);
+    let empty_size = serde_json::to_vec(&empty_properties).unwrap().len();
+    let minimum = 2 * 1024 + empty_size;
+    while h.oracle.reserved_bytes().unwrap() < super::reference::CREDIT_LIMIT {
+        let gap = super::reference::CREDIT_LIMIT - h.oracle.reserved_bytes().unwrap();
+        let mut spend = gap.min(512 * 1024 + 2 * 1024);
+        if gap > spend && gap - spend < minimum {
+            spend -= minimum - (gap - spend);
+        }
+        assert!(spend >= minimum);
+        let worker = h
+            .view()
+            .workers
+            .iter()
+            .map(|worker| worker.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let mut event = memory_worker(worker, 0, 0, 0);
+        if let Event::Register { properties, .. } = &mut event {
+            *properties = empty_properties.clone();
+            properties.insert("padding".into(), "a".repeat(spend - minimum));
+        }
+        assert_eq!(apply(h, event), Reply::Applied);
+    }
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+}
+
+fn largest_captured_success(limit: usize) -> ResultPayload {
+    let candidate = |length: usize| {
+        captured_result(&ExecuteResponse {
+            result: Some(ActionResult {
+                stdout_raw: vec![255; length].into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    };
+    let mut low = 0;
+    let mut high = 256 * 1024;
+    while high - low > 1 {
+        let middle = low + (high - low) / 2;
+        if serde_json::to_vec(&candidate(middle)).unwrap().len() <= limit {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    let result = candidate(low);
+    assert!((limit - 8..=limit).contains(&serde_json::to_vec(&result).unwrap().len()));
+    result
+}
+
+#[test]
+fn byte_credit_counts_distinct_coalesced_ingress_and_prepays_complete_terminal_copies() {
+    let mut h = Harness::new(ClusterEpoch(1), byte_limits());
+    apply(&mut h, register(1, 1, 1, 4));
+    let (mut fixture, mut original) = captured_request();
+    fixture.principal = "\"\\".repeat(32 * 1024);
+    original.execution_scope = Some(buck2_scope(&fixture.principal, "build-1"));
+    let mut accepted = Vec::new();
+    let rejected = loop {
+        let operation = accepted.len() as u64 + 1;
+        fixture.metadata.as_mut().unwrap().action_id = format!("distinct ingress {operation}");
+        fixture.queued.nanos = i32::try_from(operation).unwrap();
+        fixture.seal(&mut original);
+        let before = h.oracle.reserved_bytes().unwrap();
+        match apply(
+            &mut h,
+            Event::Submit {
+                operation: OperationId(operation),
+                request: original.clone(),
+            },
+        ) {
+            Reply::Submitted { execution, .. } => {
+                assert_eq!(execution, ExecutionId(1));
+                if !accepted.is_empty() {
+                    assert_eq!(
+                        h.oracle.reserved_bytes().unwrap() - before,
+                        serde_json::to_vec(&original).unwrap().len()
+                            + byte_limits().max_payload_bytes
+                            + 1024
+                    );
+                }
+                accepted.push(original.clone());
+                assert!(accepted.len() < 64);
+            }
+            Reply::Rejected(Rejection::Overloaded) => break operation,
+            reply => panic!("unexpected byte admission reply {reply:?}"),
+        }
+    };
+    assert!(accepted.len() > 8);
+    assert_eq!(h.view().executions.len(), 1);
+    fill_byte_credit(&mut h);
+    let unchanged = h.core.snapshot().unwrap();
+    assert_eq!(
+        apply(
+            &mut h,
+            Event::Submit {
+                operation: OperationId(rejected),
+                request: original.clone()
+            }
+        ),
+        Reply::Rejected(Rejection::Overloaded)
+    );
+    assert_eq!(h.core.snapshot().unwrap(), unchanged);
+    assert_eq!(submit(&mut h, 1, accepted[0].clone()), ExecutionId(1));
+    h.checkpoint().unwrap();
+    h.crash_restore().unwrap();
+    let attempt = assign(&mut h);
+    let result = largest_captured_success(byte_limits().max_payload_bytes);
+    assert_eq!(
+        apply(
+            &mut h,
+            Event::Complete {
+                attempt: attempt.id,
+                worker: attempt.worker,
+                incarnation: attempt.incarnation,
+                result: result.clone(),
+            }
+        ),
+        Reply::Applied
+    );
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+    assert!(
+        h.view()
+            .operations
+            .iter()
+            .all(|operation| operation.terminal == Some(TerminalResult::Completed(result.clone())))
+    );
+    h.checkpoint().unwrap();
+    h.crash_restore().unwrap();
+    let publication = h
+        .view()
+        .effects
+        .iter()
+        .find(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
+        .unwrap()
+        .id;
+    apply(
+        &mut h,
+        Event::EffectOutcome {
+            effect: publication,
+            success: true,
+        },
+    );
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+    apply(
+        &mut h,
+        Event::AdvanceTime {
+            now: TERMINAL_RETENTION,
+        },
+    );
+    apply(
+        &mut h,
+        Event::RetireExecution {
+            execution: ExecutionId(1),
+        },
+    );
+    assert!(h.oracle.reserved_bytes().unwrap() < super::reference::CREDIT_LIMIT / 2);
+    assert_eq!(submit(&mut h, rejected, original), ExecutionId(2));
+}
+
+#[test]
+fn byte_credit_worker_replacement_refuses_atomically_and_cancellation_cleanup_stay_available() {
+    let mut h = Harness::new(ClusterEpoch(1), byte_limits());
+    apply(&mut h, register(1, 1, 1, 4));
+    for operation in 1..=9 {
+        submit(&mut h, operation, request(operation));
+    }
+    let attempt = assign(&mut h);
+    fill_byte_credit(&mut h);
+    let original = h.view();
+    let mut replacement = register(1, 2, 1, 4);
+    if let Event::Register { properties, .. } = &mut replacement {
+        properties.insert("new".into(), "x".into());
+    }
+    assert_eq!(
+        apply(&mut h, replacement.clone()),
+        Reply::Rejected(Rejection::Overloaded)
+    );
+    assert_eq!(h.view(), original);
+    if let Event::Register { incarnation, .. } = &mut replacement {
+        *incarnation = IncarnationId(0);
+    }
+    assert_eq!(
+        apply(&mut h, replacement),
+        Reply::Rejected(Rejection::Stale)
+    );
+    assert_eq!(h.view(), original);
+    assert_eq!(
+        apply(
+            &mut h,
+            Event::Cancel {
+                operation: OperationId(1)
+            }
+        ),
+        Reply::Applied
+    );
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+    assert!(!h.view().reservations[0].released);
+    assert_eq!(apply(&mut h, cleanup(&attempt)), Reply::Applied);
+    assert!(h.view().reservations[0].released);
+    let another = assign(&mut h);
+    finish(&mut h, &another, 2);
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+}
+
+#[test]
+fn byte_credit_accepts_exact_limit_and_rejects_one_more_encoded_byte() {
+    let mut h = Harness::new(ClusterEpoch(1), byte_limits());
+    for operation in 1..=9 {
+        submit(&mut h, operation, request(operation));
+    }
+    fill_byte_credit(&mut h);
+    let worker = h.view().workers.last().unwrap().clone();
+    let mut properties = worker.properties.clone();
+    properties.get_mut("padding").unwrap().push('a');
+    let replacement = |properties, session| Event::Register {
+        worker: worker.id,
+        incarnation: worker.incarnation,
+        session: SessionId(session),
+        properties,
+        capacity: worker.capacity,
+        available: worker.available,
+    };
+    let before = h.core.snapshot().unwrap();
+    assert_eq!(
+        apply(&mut h, replacement(properties, 2)),
+        Reply::Rejected(Rejection::Overloaded)
+    );
+    assert_eq!(h.core.snapshot().unwrap(), before);
+    let mut smaller = worker.properties.clone();
+    assert_eq!(smaller.get_mut("padding").unwrap().pop(), Some('a'));
+    assert_eq!(apply(&mut h, replacement(smaller, 2)), Reply::Applied);
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT - 1)
+    );
+    assert_eq!(
+        apply(&mut h, replacement(worker.properties.clone(), 3)),
+        Reply::Applied
+    );
+    assert_eq!(
+        h.oracle.reserved_bytes(),
+        Some(super::reference::CREDIT_LIMIT)
+    );
+}
+
+#[test]
+fn byte_credit_limits_and_restore_cannot_admit_uncommittable_or_unpaid_state() {
+    for bound in [512 * 1024 + 1, usize::MAX] {
+        let limits = Limits {
+            max_payload_bytes: bound,
+            ..Limits::default()
+        };
+        assert!(State::new(ClusterEpoch(1), limits).is_err());
+        assert!(super::reference::Reference::new(ClusterEpoch(1), limits).is_err());
+    }
+    for bound in [0, 512 * 1024] {
+        let limits = Limits {
+            max_payload_bytes: bound,
+            max_executions: usize::MAX,
+            max_operations: usize::MAX,
+            max_workers: usize::MAX,
+            max_effects: usize::MAX,
+        };
+        assert!(State::new(ClusterEpoch(1), limits).is_ok());
+        assert!(super::reference::Reference::new(ClusterEpoch(1), limits).is_ok());
+    }
+    let mut h = Harness::new(ClusterEpoch(1), byte_limits());
+    for operation in 1..=9 {
+        submit(&mut h, operation, request(operation));
+    }
+    fill_byte_credit(&mut h);
+    let bytes = h.oracle.snapshot().unwrap();
+    let mut invalid: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    invalid[1]["limits"]["max_payload_bytes"] = serde_json::json!(usize::MAX);
+    assert!(super::reference::Reference::restore(&serde_json::to_vec(&invalid).unwrap()).is_err());
+    let mut unpaid: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut added = unpaid[1]["interests"][0].clone();
+    added["operation"] = serde_json::json!(10);
+    unpaid[1]["interests"].as_array_mut().unwrap().push(added);
+    unpaid[1]["highest_admitted_operation"] = serde_json::json!(10);
+    let error =
+        super::reference::Reference::restore(&serde_json::to_vec(&unpaid).unwrap()).unwrap_err();
+    assert!(error.contains("future byte credits"));
+    let mut oversized = bytes;
+    oversized.resize(super::reference::CREDIT_LIMIT + 1, b' ');
+    assert!(
+        super::reference::Reference::restore(&oversized)
+            .unwrap_err()
+            .contains("raw snapshot")
+    );
+    assert!(State::restore(&oversized).is_err());
+}
+
 #[test]
 fn memory_growth_preserves_accepted_request_age_join_and_each_original_grant() {
     let (_, original) = captured_request();

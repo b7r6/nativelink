@@ -246,7 +246,7 @@ fn setup_events(do_not_cache: bool) -> Vec<RecordedEvent> {
 }
 
 fn setup_state(do_not_cache: bool) -> State {
-    let mut state = State::new(EPOCH, Limits::default());
+    let mut state = State::new(EPOCH, Limits::default()).unwrap();
     for event in setup_events(do_not_cache) {
         assert!(!matches!(state.apply(event), Reply::Rejected(_)));
     }

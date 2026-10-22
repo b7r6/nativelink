@@ -3956,6 +3956,65 @@ exit 0
     }
 
     #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn authority_progress_observes_initial_action_bytes_before_creation()
+    -> Result<(), Box<dyn core::error::Error>> {
+        use nativelink_util::work_progress::{ProgressObserver, ProgressPhase};
+        let (manager, digest, store) = hung_fetch_setup(Duration::from_secs(30)).await?;
+        store.hang_all_reads.store(true, Ordering::Release);
+        let gate = Arc::new(Semaphore::new(0));
+        *store.read_progress_gate.lock().unwrap() = Some(gate.clone());
+        let mut dispatch = dispatch_with_properties(digest, &[]);
+        dispatch.queued_timestamp = Some(make_system_time(1000).into());
+        let observer = ProgressObserver::new();
+        let mut updates = observer.subscribe();
+        let creation = manager.create_and_add_authority_action_observed(
+            "authority-worker".to_owned(),
+            dispatch,
+            observer,
+        );
+        tokio::pin!(creation);
+        gate.add_permits(1);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                result = &mut creation => panic!("partial Action bytes cannot finish creation: {result:?}"),
+                update = updates.wait_for(|value| value.progress > 0) => { update.unwrap(); }
+            }
+        }).await?;
+        let first = *updates.borrow_and_update();
+        assert_eq!(first.phase, ProgressPhase::Preparing);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut creation)
+                .await
+                .is_err()
+        );
+        // The one released byte can still settle through the bounded CAS
+        // fill and decode-consumer pipelines. Once drained, chatter cannot
+        // create any additional byte observation.
+        let stalled = *updates.borrow_and_update();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut creation)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            *updates.borrow(),
+            stalled,
+            "an open but stalled read cannot advance"
+        );
+        gate.add_permits(1);
+        tokio::select! {
+            result = &mut creation => panic!("two Action bytes cannot finish creation: {result:?}"),
+            update = updates.wait_for(|value| value.progress > stalled.progress) => { update.unwrap(); }
+        }
+        gate.add_permits(1024);
+        let action = creation.await?;
+        assert_eq!(updates.borrow().phase, ProgressPhase::Preparing);
+        action.cleanup().await?;
+        Ok(())
+    }
+
+    #[cfg(target_family = "unix")]
     #[nativelink_test(start_paused = true)]
     async fn authority_input_fetch_budget_is_independent_of_execution_timeout()
     -> Result<(), Box<dyn core::error::Error>> {
@@ -4868,6 +4927,7 @@ exit 0
         hang_on: DigestInfo,
         hang_reads: AtomicBool,
         hang_all_reads: AtomicBool,
+        read_progress_gate: Mutex<Option<Arc<Semaphore>>>,
         hang_updates: AtomicBool,
     }
 
@@ -4879,6 +4939,7 @@ exit 0
                 hang_on,
                 hang_reads: AtomicBool::new(true),
                 hang_all_reads: AtomicBool::new(false),
+                read_progress_gate: Mutex::new(None),
                 hang_updates: AtomicBool::new(false),
             })
         }
@@ -4936,6 +4997,21 @@ exit 0
                 || (self.hang_reads.load(Ordering::Acquire)
                     && key == StoreKey::Digest(self.hang_on))
             {
+                let gate = self.read_progress_gate.lock().unwrap().clone();
+                if let Some(gate) = gate {
+                    // Fixture preparation is not action progress. Only each
+                    // subsequently released chunk belongs to the real read.
+                    let bytes = nativelink_util::work_progress::scope(
+                        None,
+                        self.inner.get_part_unchunked(key, offset, length),
+                    )
+                    .await?;
+                    for byte in bytes.chunks(1) {
+                        gate.acquire().await.unwrap().forget();
+                        writer.send(Bytes::copy_from_slice(byte)).await?;
+                    }
+                    return writer.send_eof();
+                }
                 future::pending::<()>().await;
             }
             self.inner

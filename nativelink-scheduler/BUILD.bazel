@@ -95,7 +95,9 @@ rust_library(
 
 rust_test(
     name = "authority_test",
-    timeout = "moderate",
+    # The full 64-seed campaign checks canonical bytes after every apply and
+    # recovery; unoptimized fastbuild runs need a longer CPU-work allowance.
+    timeout = "long",
     srcs = ["tests/authority_test.rs"],
     compile_data = [
         "//:Cargo.lock",
@@ -146,6 +148,7 @@ rust_test_suite(
         "tests/authority_raft_test.rs",
         "tests/authority_reapi_test.rs",
         "tests/authority_request_test.rs",
+        "tests/authority_volatile_test.rs",
         "tests/backpressure_test.rs",
         "tests/cache_lookup_scheduler_test.rs",
         "tests/dispatch_ack_test.rs",

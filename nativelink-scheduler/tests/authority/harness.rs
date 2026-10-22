@@ -35,13 +35,19 @@ pub(crate) struct Harness {
     applied: usize,
     checkpoint: Option<(usize, Vec<u8>, Vec<u8>)>,
     pub(crate) delivered: Vec<Effect>,
+    // Reporting only: never used to skip any state or byte invariant check.
+    last_checked_bytes: Option<(usize, usize)>,
 }
 
 impl Harness {
-    pub(crate) const fn new(epoch: ClusterEpoch, limits: Limits) -> Self {
-        Self {
-            core: State::new(epoch, limits),
-            oracle: Reference::new(epoch, limits),
+    pub(crate) fn new(epoch: ClusterEpoch, limits: Limits) -> Self {
+        Self::try_new(epoch, limits).expect("fixture limits must be valid")
+    }
+
+    fn try_new(epoch: ClusterEpoch, limits: Limits) -> Result<Self, String> {
+        Ok(Self {
+            core: State::new(epoch, limits)?,
+            oracle: Reference::new(epoch, limits)?,
             epoch,
             limits,
             proposals: BTreeMap::new(),
@@ -49,7 +55,8 @@ impl Harness {
             applied: 0,
             checkpoint: None,
             delivered: Vec::new(),
-        }
+            last_checked_bytes: None,
+        })
     }
 
     pub(crate) fn propose(&mut self, id: u64, event: RecordedEvent) -> Result<(), String> {
@@ -98,7 +105,8 @@ impl Harness {
         self.apply_next()
     }
 
-    pub(crate) fn compare(&self) -> Result<(), String> {
+    pub(crate) fn compare(&mut self) -> Result<(), String> {
+        self.last_checked_bytes = None;
         self.core
             .check_invariants()
             .map_err(|e| format!("CORE_INVARIANT: {e}"))?;
@@ -109,7 +117,24 @@ impl Harness {
                 "REFINEMENT_STATE:\nactual {actual:#?}\nexpected {expected:#?}"
             ));
         }
+        let reserved = self
+            .oracle
+            .reserved_bytes()
+            .ok_or("BYTE_CREDIT: independent reserved byte arithmetic overflow")?;
+        let canonical = self.core.snapshot()?.len();
+        if canonical > reserved || reserved > super::reference::CREDIT_LIMIT {
+            return Err(format!(
+                "BYTE_CREDIT: canonical={canonical}, reserved={reserved}, limit={}",
+                super::reference::CREDIT_LIMIT
+            ));
+        }
+        self.last_checked_bytes = Some((reserved, canonical));
         Ok(())
+    }
+
+    pub(crate) fn checked_byte_sizes(&self) -> Result<(usize, usize), String> {
+        self.last_checked_bytes
+            .ok_or_else(|| "reporting requires a successful byte invariant check".to_owned())
     }
 
     pub(crate) fn deliver(&mut self, effect: EffectId) -> Result<Effect, String> {
@@ -136,8 +161,8 @@ impl Harness {
             self.oracle = Reference::restore(oracle)?;
             self.applied = *applied;
         } else {
-            self.core = State::new(self.epoch, self.limits);
-            self.oracle = Reference::new(self.epoch, self.limits);
+            self.core = State::new(self.epoch, self.limits)?;
+            self.oracle = Reference::new(self.epoch, self.limits)?;
             self.applied = 0;
         }
         self.compare()?;
@@ -190,7 +215,7 @@ impl Scenario {
     /// Return the input consumed by each explicit Apply; Crash applies its whole
     /// durable suffix and therefore has no single input owner.
     fn schedule_inputs(&self) -> Result<Vec<Option<u64>>, String> {
-        let mut reference = Reference::new(self.epoch, self.limits);
+        let mut reference = Reference::new(self.epoch, self.limits)?;
         let mut proposed = BTreeSet::new();
         let mut committed = Vec::new();
         let mut applied = 0;
@@ -242,7 +267,7 @@ impl Scenario {
                         reference = Reference::restore(bytes)?;
                         applied = *position;
                     } else {
-                        reference = Reference::new(self.epoch, self.limits);
+                        reference = Reference::new(self.epoch, self.limits)?;
                         applied = 0;
                     }
                     while applied < committed.len() {
@@ -267,7 +292,7 @@ impl Scenario {
             }
         }
         let inputs: BTreeMap<_, _> = self.inputs.iter().map(|input| (input.id, input)).collect();
-        let mut harness = Harness::new(self.epoch, self.limits);
+        let mut harness = Harness::try_new(self.epoch, self.limits)?;
         for (index, step) in self.schedule.iter().enumerate() {
             let result = match *step {
                 Schedule::Propose(id) => inputs

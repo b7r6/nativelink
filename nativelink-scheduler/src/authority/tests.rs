@@ -26,7 +26,7 @@ fn apply(state: &mut State, event: Event) -> Reply {
 }
 
 fn charged_state() -> State {
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     let resources = Resources {
         cpu_millis: 1000,
         memory_bytes: 1024,
@@ -258,7 +258,7 @@ fn hold_register(state: &mut State, worker: u64, memory_bytes: u64) {
 }
 
 fn hold_workers(count: u64) -> State {
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     for worker in 1..=count {
         // Fill each worker before registering the next, then expose the larger
         // true ceiling. Every worker starts with two current small attempts.
@@ -717,7 +717,7 @@ fn encoded_payload_limit_counts_escaping_before_allocating_identity() {
 }
 
 fn memory_state(memory_bytes: u64, capacity: u64) -> State {
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     hold_register(&mut state, 1, capacity);
     hold_submit(&mut state, 1, memory_bytes, 0);
     assert!(matches!(
@@ -858,7 +858,7 @@ fn memory_growth_preserves_request_handles_queue_age_and_original_grants() {
 
 #[test]
 fn memory_growth_uses_one_compatible_declared_shape_despite_transient_zero_available() {
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     let properties = BTreeMap::from([("arch".into(), "x86".into())]);
     for (worker, arch, capacity) in [(1, "x86", 15), (2, "arm", 100)] {
         apply(
@@ -1161,4 +1161,628 @@ fn restored_snapshot_rejects_duplicate_accepted_result_publications() {
         assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
     }
     assert_eq!(State::restore(&state.snapshot().unwrap()).unwrap(), state);
+}
+
+fn byte_full_state() -> (State, OperationId, Request) {
+    let limits = Limits {
+        max_executions: usize::MAX,
+        max_operations: usize::MAX,
+        max_workers: usize::MAX,
+        max_effects: usize::MAX,
+        max_payload_bytes: MAX_PAYLOAD_BYTES,
+    };
+    let mut state = State::new(ClusterEpoch(1), limits).unwrap();
+    hold_register(&mut state, 1, 100);
+    let mut request = hold_request(1, 10, 0);
+    request.action.instance = "\"\\\n".repeat(2048);
+    for id in 1..100 {
+        let mut submitted = request.clone();
+        submitted.priority = i32::try_from(id).unwrap();
+        let before = state.snapshot().unwrap();
+        let reply = apply(
+            &mut state,
+            Event::Submit {
+                operation: OperationId(id),
+                request: submitted,
+            },
+        );
+        if reply == Reply::Rejected(Rejection::Overloaded) {
+            assert_eq!(before, state.snapshot().unwrap());
+            assert!(id > 10);
+            assert!(state.byte_credit().unwrap() <= MAX_STATE_BYTES);
+            assert!(MAX_STATE_BYTES - state.byte_credit().unwrap() < MAX_PAYLOAD_BYTES / 2);
+            return (state, OperationId(id), request);
+        }
+        assert!(matches!(
+            reply,
+            Reply::Submitted {
+                execution: ExecutionId(1),
+                ..
+            }
+        ));
+        if id == 1 {
+            assert!(matches!(
+                apply(&mut state, Event::Match),
+                Reply::Matched { .. }
+            ));
+        }
+    }
+    panic!("aggregate byte admission never refused an operation");
+}
+
+fn maximum_quoted_result() -> ResultPayload {
+    let mut result = ResultPayload {
+        digest: String::new(),
+        exit_code: 0,
+        error: None,
+        response: None,
+    };
+    let framing = serde_json::to_vec(&result).unwrap().len();
+    result.digest = "\"".repeat((MAX_PAYLOAD_BYTES - framing) / 2);
+    let size = serde_json::to_vec(&result).unwrap().len();
+    assert!(size <= MAX_PAYLOAD_BYTES && MAX_PAYLOAD_BYTES - size < 2);
+    result
+}
+
+#[test]
+fn byte_admission_prepays_escaped_results_for_every_handle_and_releases_on_retirement() {
+    let (mut state, refused, request) = byte_full_state();
+    let credit = state.byte_credit().unwrap();
+    let result = maximum_quoted_result();
+    let completion = Event::Complete {
+        attempt: AttemptId(1),
+        worker: WorkerId(1),
+        incarnation: IncarnationId(1),
+        result: result.clone(),
+    };
+    let batch = journal::Batch::new(vec![RecordedEvent {
+        epoch: ClusterEpoch(1),
+        event: completion.clone(),
+    }])
+    .unwrap();
+    assert!(batch.encoded_bytes().unwrap() <= MAX_PAYLOAD_BYTES + FIXED_ROW_BYTES);
+    assert_eq!(apply(&mut state, completion), Reply::Applied);
+    assert_eq!(state.byte_credit().unwrap(), credit);
+    assert!(
+        state
+            .operations
+            .values()
+            .all(|entry| entry.view.terminal == Some(TerminalResult::Completed(result.clone())))
+    );
+    let snapshot = state.snapshot().unwrap();
+    assert!(snapshot.len() > MAX_STATE_BYTES * 9 / 10);
+    assert!(snapshot.len() <= credit);
+    let mut restored = State::restore(&snapshot).unwrap();
+    assert_eq!(restored, state);
+    let publication = restored.effects.values().next().unwrap().id;
+    assert_eq!(
+        apply(
+            &mut restored,
+            Event::EffectOutcome {
+                effect: publication,
+                success: true
+            }
+        ),
+        Reply::Applied
+    );
+    apply(
+        &mut restored,
+        Event::AdvanceTime {
+            now: TERMINAL_RETENTION,
+        },
+    );
+    assert_eq!(
+        apply(
+            &mut restored,
+            Event::RetireExecution {
+                execution: ExecutionId(1)
+            }
+        ),
+        Reply::Applied
+    );
+    assert!(restored.operations.is_empty());
+    assert!(restored.byte_credit().unwrap() < 4 * FIXED_ROW_BYTES);
+    assert!(matches!(
+        apply(
+            &mut restored,
+            Event::Submit {
+                operation: refused,
+                request
+            }
+        ),
+        Reply::Submitted {
+            execution: ExecutionId(2),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn full_admission_pool_cannot_block_cancellation_cleanup_or_worker_replacement_refusal() {
+    let (mut state, _, _) = byte_full_state();
+    let before = state.snapshot().unwrap();
+    let properties = BTreeMap::from([("padding".into(), "\"".repeat(MAX_PAYLOAD_BYTES / 2 - 16))]);
+    assert!(serde_json::to_vec(&properties).unwrap().len() <= MAX_PAYLOAD_BYTES);
+    assert_eq!(
+        apply(
+            &mut state,
+            Event::Register {
+                worker: WorkerId(1),
+                incarnation: IncarnationId(2),
+                session: SessionId(2),
+                properties: properties.clone(),
+                capacity: hold_capacity(100),
+                available: hold_capacity(100)
+            }
+        ),
+        Reply::Rejected(Rejection::Overloaded)
+    );
+    assert_eq!(state.snapshot().unwrap(), before);
+    assert!(state.attempts[&AttemptId(1)].authorized);
+    assert_eq!(
+        apply(
+            &mut state,
+            Event::Register {
+                worker: WorkerId(1),
+                incarnation: IncarnationId(1),
+                session: SessionId(1),
+                properties,
+                capacity: hold_capacity(100),
+                available: hold_capacity(100)
+            }
+        ),
+        Reply::Rejected(Rejection::Stale)
+    );
+    assert_eq!(state.snapshot().unwrap(), before);
+    let credit = state.byte_credit().unwrap();
+    let operations: Vec<_> = state.operations.keys().copied().collect();
+    for operation in operations {
+        assert_eq!(
+            apply(&mut state, Event::Cancel { operation }),
+            Reply::Applied
+        );
+    }
+    assert_eq!(state.byte_credit().unwrap(), credit);
+    assert_eq!(state.view().workers[0].charged.memory_bytes, 10);
+    let mut restored = State::restore(&state.snapshot().unwrap()).unwrap();
+    assert_eq!(
+        apply(
+            &mut restored,
+            Event::Cleanup {
+                attempt: AttemptId(1),
+                worker: WorkerId(1),
+                incarnation: IncarnationId(1)
+            }
+        ),
+        Reply::Applied
+    );
+    assert_eq!(restored.view().workers[0].charged, Resources::default());
+    apply(
+        &mut restored,
+        Event::AdvanceTime {
+            now: TERMINAL_RETENTION,
+        },
+    );
+    assert_eq!(
+        apply(
+            &mut restored,
+            Event::RetireExecution {
+                execution: ExecutionId(1)
+            }
+        ),
+        Reply::Applied
+    );
+    assert!(restored.byte_credit().unwrap() < 4 * FIXED_ROW_BYTES);
+}
+
+#[test]
+fn invalid_payload_limits_and_oversized_or_unfunded_snapshots_fail_closed() {
+    for max_payload_bytes in [MAX_PAYLOAD_BYTES + 1, usize::MAX] {
+        assert!(
+            State::new(
+                ClusterEpoch(1),
+                Limits {
+                    max_payload_bytes,
+                    ..Limits::default()
+                }
+            )
+            .is_err()
+        );
+    }
+    let empty = State::new(
+        ClusterEpoch(1),
+        Limits {
+            max_payload_bytes: 0,
+            ..Limits::default()
+        },
+    )
+    .unwrap();
+    empty.check_invariants().unwrap();
+    let mut oversized = empty.snapshot().unwrap();
+    oversized.resize(MAX_STATE_BYTES + 1, b' ');
+    assert!(State::restore(&oversized).is_err());
+    let (state, _, _) = byte_full_state();
+    let original: serde_json::Value = serde_json::from_slice(&state.snapshot().unwrap()).unwrap();
+    for limit in [MAX_PAYLOAD_BYTES + 1, usize::MAX] {
+        let mut corrupt = original.clone();
+        corrupt["state"]["limits"]["max_payload_bytes"] = serde_json::json!(limit);
+        assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
+    }
+    let mut corrupt = original.clone();
+    corrupt["version"] = serde_json::json!(3);
+    assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
+    let mut corrupt = original;
+    let operations = corrupt["state"]["operations"].as_object_mut().unwrap();
+    let mut duplicate = operations["1"].clone();
+    duplicate["view"]["id"] = serde_json::json!(100);
+    operations.insert("100".into(), duplicate);
+    corrupt["state"]["operation_watermark"] = serde_json::json!(100);
+    assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
+}
+
+fn encoded_size(value: &impl Serialize) -> usize {
+    serde_json::to_vec(value).unwrap().len()
+}
+
+fn fixed_row_fits(value: &impl Serialize, paid_payload: usize) {
+    let row = BTreeMap::from([(u64::MAX, value)]);
+    // Remove outer map braces and pay one comma, even for the last row.
+    assert!(encoded_size(&row) - 1 - paid_payload <= FIXED_ROW_BYTES);
+}
+
+#[test]
+fn every_fixed_state_row_fits_the_prepaid_byte_allowance() {
+    let u = u64::MAX;
+    let resources = Resources {
+        cpu_millis: u,
+        memory_bytes: u,
+        slots: u,
+    };
+    let deadline = Deadline {
+        at: u,
+        generation: u,
+    };
+    let mut request = hold_request(u, u, i32::MIN);
+    request.resources = resources;
+    request.execution_timeout = u;
+    let result = ResultPayload {
+        digest: "result".into(),
+        exit_code: i32::MIN,
+        error: Some("failure".into()),
+        response: None,
+    };
+    let terminals = [
+        TerminalResult::Completed(result.clone()),
+        TerminalResult::ResourceFailed {
+            result: result.clone(),
+            reason: ResourceFailureReason::AttemptBudgetExhausted,
+        },
+        TerminalResult::ResourceFailed {
+            result: result.clone(),
+            reason: ResourceFailureReason::MissingGrowthEvidence,
+        },
+        TerminalResult::ResourceFailed {
+            result: result.clone(),
+            reason: ResourceFailureReason::NoLargerEligibleWorker,
+        },
+        TerminalResult::Cancelled,
+        TerminalResult::Exhausted,
+    ];
+    for terminal in terminals {
+        let terminal_bytes = match &terminal {
+            TerminalResult::Completed(result) | TerminalResult::ResourceFailed { result, .. } => {
+                encoded_size(result)
+            }
+            TerminalResult::Cancelled | TerminalResult::Exhausted => 0,
+        };
+        fixed_row_fits(
+            &Operation {
+                view: OperationView {
+                    id: OperationId(u),
+                    execution: ExecutionId(u),
+                    priority: i32::MIN,
+                    interested: false,
+                    terminal: Some(terminal.clone()),
+                    version: u,
+                    interest_deadline: deadline,
+                },
+                original_request: request.clone(),
+            },
+            encoded_size(&request) + terminal_bytes,
+        );
+        fixed_row_fits(
+            &ExecutionView {
+                id: ExecutionId(u),
+                request: request.clone(),
+                reservation_target: resources,
+                phase: Phase::Dispatching,
+                effective_priority: Some(i32::MIN),
+                enqueue_ordinal: u,
+                enqueue_at: u,
+                hold_cooldown_until: u,
+                attempt: Some(AttemptId(u)),
+                attempts_started: u32::MAX,
+                terminal: Some(terminal),
+                terminal_at: Some(u),
+            },
+            encoded_size(&request) + terminal_bytes,
+        );
+    }
+    let properties = BTreeMap::from([("key".into(), "value".into())]);
+    fixed_row_fits(
+        &WorkerView {
+            id: WorkerId(u),
+            incarnation: IncarnationId(u),
+            session: SessionId(u),
+            properties: properties.clone(),
+            capacity: resources,
+            available: resources,
+            draining: false,
+            last_heartbeat: u,
+            charged: resources,
+            quarantined: false,
+        },
+        encoded_size(&properties),
+    );
+    fixed_row_fits(
+        &AttemptView {
+            id: AttemptId(u),
+            execution: ExecutionId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            reservation: ReservationId(u),
+            authorized: false,
+            phase: Phase::Dispatching,
+            progress: u,
+            deadline,
+            running_deadline: Some(u),
+        },
+        0,
+    );
+    fixed_row_fits(
+        &ReservationView {
+            id: ReservationId(u),
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            charged: resources,
+            released: false,
+        },
+        0,
+    );
+    fixed_row_fits(
+        &HoldView {
+            execution: ExecutionId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            started_at: u,
+            until: u,
+        },
+        0,
+    );
+    let effects = [
+        EffectKind::Lookup {
+            execution: ExecutionId(u),
+            action: request.action.clone(),
+        },
+        EffectKind::Dispatch {
+            execution: ExecutionId(u),
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            reservation: ReservationId(u),
+            charged: resources,
+            request: request.clone(),
+        },
+        EffectKind::Cancel {
+            execution: ExecutionId(u),
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+        },
+        EffectKind::PublishResult {
+            execution: ExecutionId(u),
+            action: request.action,
+            result,
+        },
+    ];
+    for kind in effects {
+        let paid = match &kind {
+            EffectKind::Lookup { action, .. } => encoded_size(action),
+            EffectKind::Dispatch { request, .. } => encoded_size(request),
+            EffectKind::Cancel { .. } => 0,
+            EffectKind::PublishResult { action, result, .. } => {
+                encoded_size(action) + encoded_size(result)
+            }
+        };
+        fixed_row_fits(
+            &Effect {
+                id: EffectId(u),
+                epoch: ClusterEpoch(u),
+                kind,
+            },
+            paid,
+        );
+    }
+    let mut state = State::new(
+        ClusterEpoch(u),
+        Limits {
+            max_executions: usize::MAX,
+            max_operations: usize::MAX,
+            max_workers: usize::MAX,
+            max_effects: usize::MAX,
+            max_payload_bytes: MAX_PAYLOAD_BYTES,
+        },
+    )
+    .unwrap();
+    state.now = u;
+    state.next_execution = u;
+    state.operation_watermark = u;
+    state.next_attempt = u;
+    state.next_reservation = u;
+    state.next_effect = u;
+    assert!(
+        encoded_size(&Snapshot {
+            version: u32::MAX,
+            state
+        }) <= FIXED_ROW_BYTES
+    );
+}
+
+#[test]
+fn every_command_frame_leaves_room_for_the_maximum_accepted_payload() {
+    const _: () = assert!(MAX_PAYLOAD_BYTES + FIXED_ROW_BYTES <= journal::MAX_BATCH_BYTES);
+    let u = u64::MAX;
+    let resources = Resources {
+        cpu_millis: u,
+        memory_bytes: u,
+        slots: u,
+    };
+    let properties = BTreeMap::from([("key".into(), "value".into())]);
+    let request = hold_request(u, u, i32::MIN);
+    let result = ResultPayload {
+        digest: "result".into(),
+        exit_code: i32::MIN,
+        error: Some("failure".into()),
+        response: None,
+    };
+    let events = [
+        Event::Register {
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            session: SessionId(u),
+            properties,
+            capacity: resources,
+            available: resources,
+        },
+        Event::Capacity {
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            session: SessionId(u),
+            capacity: resources,
+            available: resources,
+            draining: false,
+        },
+        Event::Heartbeat {
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            session: SessionId(u),
+        },
+        Event::WorkerUnavailable {
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            session: SessionId(u),
+        },
+        Event::Submit {
+            operation: OperationId(u),
+            request,
+        },
+        Event::LookupResult {
+            effect: EffectId(u),
+            result: Some(result.clone()),
+        },
+        Event::LookupResult {
+            effect: EffectId(u),
+            result: None,
+        },
+        Event::Match,
+        Event::WorkerAccepted {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+        },
+        Event::Progress {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            phase: Phase::Dispatching,
+            progress: u,
+        },
+        Event::Complete {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            result: result.clone(),
+        },
+        Event::MemoryFailure {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+            charged: resources,
+            peak_memory_bytes: Some(u),
+            quiescent: false,
+            result,
+        },
+        Event::Decline {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+        },
+        Event::Cancel {
+            operation: OperationId(u),
+        },
+        Event::Observe {
+            operation: OperationId(u),
+        },
+        Event::RenewInterest {
+            operation: OperationId(u),
+        },
+        Event::AdvanceTime { now: u },
+        Event::ExpireAttempt {
+            attempt: AttemptId(u),
+            generation: u,
+        },
+        Event::ExpireExecution {
+            attempt: AttemptId(u),
+        },
+        Event::ExpireInterest {
+            operation: OperationId(u),
+            generation: u,
+        },
+        Event::Cleanup {
+            attempt: AttemptId(u),
+            worker: WorkerId(u),
+            incarnation: IncarnationId(u),
+        },
+        Event::EffectOutcome {
+            effect: EffectId(u),
+            success: false,
+        },
+        Event::RetireExecution {
+            execution: ExecutionId(u),
+        },
+    ];
+    for event in events {
+        let paid = match &event {
+            Event::Register { properties, .. } => encoded_size(properties),
+            Event::Submit { request, .. } => encoded_size(request),
+            Event::LookupResult { result, .. } => result.as_ref().map_or(0, encoded_size),
+            Event::Complete { result, .. } | Event::MemoryFailure { result, .. } => {
+                encoded_size(result)
+            }
+            Event::Capacity { .. }
+            | Event::Heartbeat { .. }
+            | Event::WorkerUnavailable { .. }
+            | Event::Match
+            | Event::WorkerAccepted { .. }
+            | Event::Progress { .. }
+            | Event::Decline { .. }
+            | Event::Cancel { .. }
+            | Event::Observe { .. }
+            | Event::RenewInterest { .. }
+            | Event::AdvanceTime { .. }
+            | Event::ExpireAttempt { .. }
+            | Event::ExpireExecution { .. }
+            | Event::ExpireInterest { .. }
+            | Event::Cleanup { .. }
+            | Event::EffectOutcome { .. }
+            | Event::RetireExecution { .. } => 0,
+        };
+        let batch = journal::Batch::new(vec![RecordedEvent {
+            epoch: ClusterEpoch(u),
+            event,
+        }])
+        .unwrap();
+        assert!(batch.encoded_bytes().unwrap() - paid <= FIXED_ROW_BYTES);
+    }
 }

@@ -620,7 +620,7 @@ fn corrupt(value: &mut serde_json::Value) {
 fn normalized_projection_cannot_be_forged_on_apply_or_restore() {
     let request = Request::from_payload(Fixture::new().capture().unwrap()).unwrap();
     assert!(request.require_payload().is_ok());
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     let mut invalid = request.clone();
     invalid.resources.cpu_millis += 1;
     assert_eq!(
@@ -652,7 +652,7 @@ fn coalescing_keeps_first_dispatch_metadata_and_each_operation_capture() {
     fixture.execute.execution_policy = Some(ExecutionPolicy { priority: -19 });
     fixture.execute.results_cache_policy = Some(ResultsCachePolicy { priority: 42 });
     let second = Request::from_payload(fixture.capture().unwrap()).unwrap();
-    let mut state = State::new(ClusterEpoch(1), Limits::default());
+    let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
     let first_reply = state.apply(record(Event::Submit {
         operation: OperationId(1),
         request: first.clone(),

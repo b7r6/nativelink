@@ -1,0 +1,178 @@
+{
+  "campaign": "bounded-exhaustive",
+  "depth": 5,
+  "alphabet_size": 14,
+  "states": 408,
+  "transitions": 2310,
+  "states_first_reached_at_depth": [
+    1,
+    5,
+    15,
+    40,
+    104,
+    243
+  ],
+  "limits": {
+    "max_executions": 2,
+    "max_operations": 2,
+    "max_workers": 1,
+    "max_effects": 16,
+    "max_payload_bytes": 65536
+  },
+  "alphabet": [
+    {
+      "Register": {
+        "worker": 1,
+        "incarnation": 1,
+        "session": 1,
+        "properties": {
+          "os": "linux"
+        },
+        "capacity": {
+          "cpu_millis": 10000,
+          "memory_bytes": 10000,
+          "slots": 1
+        },
+        "available": {
+          "cpu_millis": 10000,
+          "memory_bytes": 10000,
+          "slots": 1
+        }
+      }
+    },
+    {
+      "Submit": {
+        "operation": 1,
+        "request": {
+          "action": {
+            "instance": "test",
+            "digest_function": "sha256",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+            "digest_size_bytes": 1
+          },
+          "execution_scope": null,
+          "do_not_cache": false,
+          "skip_cache_lookup": true,
+          "priority": 0,
+          "properties": {
+            "os": "linux"
+          },
+          "resources": {
+            "cpu_millis": 100,
+            "memory_bytes": 10,
+            "slots": 1
+          },
+          "execution_timeout": 100
+        }
+      }
+    },
+    {
+      "Submit": {
+        "operation": 2,
+        "request": {
+          "action": {
+            "instance": "test",
+            "digest_function": "sha256",
+            "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+            "digest_size_bytes": 1
+          },
+          "execution_scope": null,
+          "do_not_cache": false,
+          "skip_cache_lookup": true,
+          "priority": -1,
+          "properties": {
+            "os": "linux"
+          },
+          "resources": {
+            "cpu_millis": 100,
+            "memory_bytes": 10,
+            "slots": 1
+          },
+          "execution_timeout": 100
+        }
+      }
+    },
+    "Match",
+    {
+      "WorkerAccepted": {
+        "attempt": 1,
+        "worker": 1,
+        "incarnation": 1
+      }
+    },
+    {
+      "Complete": {
+        "attempt": 1,
+        "worker": 1,
+        "incarnation": 1,
+        "result": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+          "exit_code": 0,
+          "error": null
+        }
+      }
+    },
+    {
+      "Cancel": {
+        "operation": 1
+      }
+    },
+    {
+      "AdvanceTime": {
+        "now": 10
+      }
+    },
+    {
+      "ExpireAttempt": {
+        "attempt": 1,
+        "generation": 1
+      }
+    },
+    {
+      "Cleanup": {
+        "attempt": 1,
+        "worker": 1,
+        "incarnation": 1
+      }
+    },
+    {
+      "Register": {
+        "worker": 1,
+        "incarnation": 2,
+        "session": 1,
+        "properties": {
+          "os": "linux"
+        },
+        "capacity": {
+          "cpu_millis": 10000,
+          "memory_bytes": 10000,
+          "slots": 1
+        },
+        "available": {
+          "cpu_millis": 10000,
+          "memory_bytes": 10000,
+          "slots": 1
+        }
+      }
+    },
+    {
+      "Observe": {
+        "operation": 1
+      }
+    },
+    {
+      "RenewInterest": {
+        "operation": 1
+      }
+    },
+    {
+      "EffectOutcome": {
+        "effect": 1,
+        "success": true
+      }
+    }
+  ],
+  "visited_key": "exact complete production snapshot bytes",
+  "reduction": "Only identical full states are merged at shortest BFS depth; no partial-order reduction or state-count cap.",
+  "scope": "All words through depth five over the recorded 14-event alphabet; one worker, two incarnation labels, two operation labels, one action key. No general proof or replicated fault claim."
+}

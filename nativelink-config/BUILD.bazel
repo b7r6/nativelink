@@ -79,6 +79,41 @@ rust_binary(
     ],
 )
 
+# Offline experimental refusal report; never linked into the server.
+rust_binary(
+    name = "experimental-migration-inventory",
+    srcs = [
+        "examples/experimental_migration_inventory.rs",
+        "examples/migration_inventory/mod.rs",
+    ],
+    crate_root = "examples/experimental_migration_inventory.rs",
+    tags = ["manual"],
+    deps = [
+        ":nativelink-config",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:serde_json5",
+    ],
+)
+
+rust_test(
+    name = "experimental-migration-inventory-test",
+    timeout = "short",
+    srcs = [
+        "examples/experimental_migration_inventory.rs",
+        "examples/migration_inventory/mod.rs",
+        "examples/migration_inventory/tests.rs",
+    ],
+    crate_root = "examples/experimental_migration_inventory.rs",
+    tags = ["manual"],
+    deps = [
+        ":nativelink-config",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:serde_json5",
+    ],
+)
+
 rust_test_suite(
     name = "integration",
     timeout = "short",

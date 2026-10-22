@@ -1,19 +1,19 @@
 # Bounded snapshot and finalization bytes
 
-Status: reviewed design proposal, 2026-10-22. This document does not claim the
-admission credit or journal metadata caps have been implemented. The current
-bounded payload counter and 64 MiB snapshot writer prevent individual oversized
-encodings; they do not yet reserve the bytes needed to finish admitted work.
-Implementation follows the coordinated memory-policy checkpoint.
+Status: implemented in the experimental authority and journal, 2026-10-22.
+Admission reserves finalization bytes before changing authority. Pure-state
+snapshots use version 4; journal membership and snapshot metadata have separate
+bounds. Candidate, independent-model, and real-journal boundary tests exercise
+the contract below. Production activation and throughput qualification remain
+separate requirements.
 
 ## Pure authority credits
 
-Use a fixed **14 MiB** maximum canonical pure-state snapshot and a fixed
+The authority uses a fixed **14 MiB** maximum canonical pure-state snapshot and a fixed
 **512 KiB** maximum configured complete-payload bound. The default payload
-bound remains 64 KiB. This is a byte
-bound, not a bound on allocator RSS, temporary copies, reply clones, or total
-journal disk usage. Retain the existing three-total-attempt and eight-effect
-headroom per execution. All arithmetic below is checked; overflow refuses
+bound remains 64 KiB. This is a byte bound, not a bound on allocator RSS, temporary copies, reply clones, or total
+journal disk usage. It retains three total attempts and eight effect rows
+per execution. All arithmetic below is checked; overflow refuses
 admission and cannot become a saturated usable credit.
 
 Let:
@@ -43,9 +43,9 @@ byte backpressure earlier. With one operation per execution, 64 executions and
 property maps or additional coalesced handles consume the remaining credit.
 
 Requests and property maps are counted with a bounded serialization sink;
-counting must not allocate an oversized encoded copy before rejecting it.
-Measure encoded bytes, including escaping, not Rust string lengths or raw
-protobuf lengths.
+counting does not allocate an oversized encoded copy before rejecting it.
+The counter measures encoded bytes, including escaping. Rust string lengths
+and raw protobuf lengths are not the accounting unit.
 
 The variable-payload terms cover every possible retained copy:
 
@@ -92,7 +92,8 @@ An initial compact-JSON shape audit gives these upper bounds. It substitutes
 20-digit unsigned values, the longest signed priority, present optional scalar
 values, and the longest enum encoding. Variable subtrees paid above are
 excluded; decimal map keys and a trailing comma are included. These are design
-calculations, not a substitute for the planned Rust serializer assertions.
+calculations. Rust serializer assertions independently verify that every typed
+row and current terminal/effect variant fits its 1024-byte allowance.
 
 | Fixed row | Bytes |
 | --- | ---: |
@@ -110,14 +111,14 @@ calculations, not a substitute for the planned Rust serializer assertions.
 
 ## Transition and restore obligations
 
-`Submit` must check the prospective credit before changing the operation
+`Submit` checks the prospective credit before changing the operation
 watermark, allocating an identity, joining an execution, or creating lookup
 effects. A join adds one original request, one maximum terminal payload, and
 one fixed operation row. A new execution additionally adds its execution
 credits. An individually valid request that would exceed aggregate credit is
 `Overloaded`; it leaves state unchanged.
 
-`Register` must check the prospective property-map replacement and any new
+`Register` checks the prospective property-map replacement and any new
 worker rows before revoking attempts for a new incarnation. Replacing a worker
 does not increase `W`, and replaces rather than adds its old property credit.
 Stale identity rejection still precedes this admission calculation. A refusal
@@ -132,35 +133,37 @@ an exhausted admission pool. Retiring an execution removes its retained
 operations and releases their credits. Terminal records retain their credits
 until retirement, even if their current concrete payloads are smaller.
 
-Recompute credit from durable facts instead of introducing another mutable
-counter that could drift. Restore must reject raw pure snapshots larger than
-14 MiB before parsing, then validate the same checked credit and existing
-relational invariants. Canonical snapshot serialization must fit the bound as
-a consequence of these invariants. A bounded encoder should still enforce the
-limit as defense against a future omitted field.
+Credit is recomputed from durable facts, with no additional mutable accounting
+ledger. Restore rejects raw pure snapshots larger than 14 MiB before parsing,
+then validates the same checked credit and existing relational invariants.
+Canonical snapshot serialization fits the bound as a consequence of these
+invariants. A bounded encoder also enforces the limit as defense against a
+future omitted field. Encoding borrows the state and grows its output buffer
+within the fixed limit.
 
-The proposed capability is pure-state snapshot version 4, following version 3's
+The capability is pure-state snapshot version 4, following version 3's
 memory-target semantics. This prevents an older writer from silently continuing
-admission without the new byte rule. This proposal makes no rolling-upgrade, production
-migration, or activation claim.
+admission without the new byte rule. This implementation makes no rolling
+upgrade, production migration, or activation claim.
 
 ## A completed result must fit a commit command
 
 Snapshot capacity alone is insufficient. A configured payload bound near or
 above the journal's 1 MiB batch limit could admit an operation whose later valid
 completion cannot fit even one `RecordedEvent` plus batch framing. The fixed
-512 KiB complete-payload ceiling prevents that mismatch. Reject larger
-configured values at fallible initialization and validate restored limits;
-snapshot installation cannot bypass the rule. The pure reducer must enforce
-the same admission contract. Its currently infallible constructor requires an
-explicit initialization/API decision when implementing this validation.
+512 KiB complete-payload ceiling prevents that mismatch. `State::new` returns
+`Result<State, String>` and rejects larger configured values. Zero ceilings
+remain valid and can prevent admission. Restore validates the same limit, so
+snapshot installation cannot bypass the rule. Journal initialization validates
+limits before creating a file.
 
 A compact-JSON shape audit gives these maximum singleton command frames after
 excluding the separately bounded payload value: `Complete` 193 bytes,
 `MemoryFailure` 368, `LookupResult` 131, `Submit` 129, and `Register` 422. These
 figures include batch/event wrappers and maximum-width epoch, identities,
-resources, optional peak, and version. Reserve **1024 bytes** for framing and
-guard every current payload-bearing variant using the real Rust serializer.
+resources, optional peak, and version. The contract reserves **1024 bytes** for
+framing. Tests serialize every current event variant in a real singleton batch
+and verify its unpaid frame fits that allowance.
 
 ```text
 maximum singleton command <= 512 KiB + 1024 bytes
@@ -177,13 +180,13 @@ experimental size policy, not a qualified production response envelope.
 
 ## Journal envelope proof
 
-The journal additionally needs these separately validated facts:
+The journal separately validates these facts:
 
-- Canonical serialized Raft `Membership` is at most **1 MiB**. Validate every
-  membership entry before any append/apply batch mutation and validate restored
-  applied state. Snapshot installation must not bypass this bound.
-- A snapshot ID is at most **1024 UTF-8 bytes**. Validate restored and incoming
-  snapshot metadata as well as generated snapshots.
+- Canonical serialized Raft `Membership` is at most **1 MiB**. Every membership
+  entry is validated before append/apply batch mutation, and restored applied
+  state is validated. Snapshot installation enforces the same bound.
+- A snapshot ID is at most **1024 UTF-8 bytes**. Restored, incoming, and generated
+  snapshot metadata enforce the bound.
 - Envelope version, required section, checksum, epoch, and fixed Raft metadata
   have their existing closed representations. Membership is the only variable
   node-address collection in this proof.
@@ -217,19 +220,31 @@ margin, and it does not constrain membership arriving via snapshot install.
 The 14 MiB cap plus explicit membership and snapshot-ID admission closes those
 specific gaps.
 
-## Qualification required before claiming the bound
+## Qualification and remaining limits
 
-Candidate and independent model tests must cover admission immediately below
-and above the credit limit, many distinct coalesced request payloads, maximum
-terminal copies after admission, worker replacement rejected before revocation,
-escaping-heavy strings, numeric overflow, release on retirement, and restart
-before finalization. Fixed-row tests must serialize every current variant using
-maximum-width scalars and assert its unpaid bytes fit 1024. Generated histories
-must compare actual canonical snapshot bytes to reserved credit throughout.
+The focused core fixtures fill aggregate admission with coalesced handles and
+quote-heavy requests, then accept a maximum-sized result for every handle and
+publication. The canonical state exceeds 90% of its 14 MiB bound and survives
+restore, publication acknowledgment, retirement, and reuse of the previously
+refused operation ID. A separate full-pool history proves worker replacement is
+refused before revocation and that cancellation, cleanup, and retirement still
+complete. Invalid payload ceilings, `usize::MAX`, raw oversized snapshots, and
+an added unbudgeted handle are rejected.
 
-Journal tests must cover large membership in append/apply/install paths,
-multi-entry atomic refusal, control characters in bounded snapshot IDs, and
-near-limit core state followed by result completion, snapshot creation, restore,
-and a suffix. Tests must distinguish aggregate admission refusal from an
-individual malformed/oversized payload. Previous small synthetic throughput
-measurements do not qualify the maximum-size path.
+Typed serializer guards cover every fixed state row, terminal/effect variant,
+and command variant with maximum-width scalar fields. The independent model
+uses its own credit calculation and includes an exact 14 MiB boundary fixture,
+large captured successful responses copied to all coalesced handles, and
+admission/retirement histories. Generated histories compare actual candidate
+canonical bytes to independently reserved credit.
+
+Real-journal tests cover membership append/apply/restore/install bounds,
+atomic refusal of mixed batches, a 1 MiB membership and a 1024-byte control-text
+snapshot ID, and successful finalization near the core admission bound. The
+latter builds a snapshot larger than 40 MiB after escaping and recovers the
+accepted result across two coordinator restarts.
+
+These fixtures establish the bounded experimental encoding and admission
+contract. They do not establish an allocator RSS bound, a total log-disk bound,
+production response-size suitability, or fleet activation. Previous small
+synthetic throughput measurements do not qualify the maximum-size path.

@@ -56,10 +56,57 @@ caught all 20 faults. Both baselines and all mutant logs are retained. These
 receipts qualify their named assertions, not arbitrary faults or production
 workload capacity.
 
-Remaining engineering includes aggregate serialized completion/snapshot
-headroom, meaningful long-phase transfer progress, finite recipient-ledger
+The next slice implements [aggregate byte credits](byte-headroom.md), including
+prepaid terminal copies for coalesced operations and bounded journal membership
+and snapshot metadata. A real maximum-payload fixture recovers a snapshot larger
+than 40 MiB. The [24-mutant run](evidence/byte-credit-mutations/mutations.json)
+caught every selected fault. Its initial attempt stopped on an obsolete source
+anchor; the repaired runner validates all anchors before compiling, and never
+counts compiler rejection as a detected semantic fault.
+
+[Worker progress](worker-progress.md) now observes actual transferred bytes,
+completed work, and the owned running child. Real child and 2 MiB input fixtures
+renew committed progress leases while replay and transport chatter cannot.
+Execution deadlines remain fixed. The observer's 4096-identity limit can expire
+healthy large actions; optimized cache/mount paths and supported workload bounds
+remain unqualified. A wrapper initially overflowed a worker test's stack; boxing
+the large inner future fixed it without changing thread stack limits. The full
+96-test manager suite and four worker/authority bridge tests pass.
+
+[Volatile recovery](volatile-recovery.md) uses the same journal transaction and
+validation paths with a RAM backend. Five storage tests and eight cluster tests
+cover fresh-learner recovery and refusal after quorum loss. Peer domain checks
+remain fixture transport logic. Review found and fixed an error-response path
+that skipped the final domain check; all three RPC types now check both success
+and error responses. This does not implement production identity allocation or
+authorize a same-domain disaster reset.
+
+The [format activation design](format-activation.md) identifies a prerequisite:
+the old compatible reader must already understand the base control vocabulary,
+including an activation proposal that reached disk without committing. Executable
+version alone cannot select a new writer format. Current prototype versions do
+not have that compatibility contract.
+
+The later workspace Cargo run passed 1,580 tests, with zero failures and five
+ignored tests, across 143 result summaries. It preceded the final response-fence
+fixture; the separate eight-test cluster run and strict Clippy cover that change.
+The corresponding workspace check also passed. All 136 Bazel targets now pass.
+The expanded generated-history target exceeded its old five-minute timeout in
+the build without compiler optimization; its declared timeout is now longer, with all cases and
+assertions retained. Redundant measurement serialization was removed only after
+the harness had already validated that state. [Second-checkpoint receipts](evidence/second-checkpoint/manifest.json)
+retain the timeout, final passes, focused follow-ups, and source hashes.
+
+The offline [migration inventory](../../../../nativelink-config/examples/migration_inventory/README.md)
+reports legacy construction paths and blocking decisions without opening stores
+or choosing destinations. It has 12 passing Cargo/Bazel tests and bounded input,
+traversal, and graph work. Cargo and Bazel CLI outputs match and leave the input
+unchanged. Every report refuses deployment; this is an inventory aid, not the
+final migration converter or removal of the Redis dependency.
+
+Remaining engineering includes finite recipient-ledger
 compaction, replacement-incarnation fencing, feature activation and compatible
-writers, a volatile realization, canonical ingress/listeners/effect drivers,
+writers, canonical ingress/listeners/effect drivers,
 generation-aware physical stores, actual typed closure protection, sustained
 collection, migration/cutover, and deletion of the legacy construction paths.
 The experimental snapshots explicitly reject earlier prototype versions; that
@@ -90,6 +137,20 @@ and ByteStream, while the Lean model concerns fault selection, probability, and
 replay. It does not establish execution ownership. No live soak fleet was
 contacted. No Lane B benchmark was reconstructed
 and no historical result was relabeled as a local measurement.
+
+Subsequent process-list inspection exposed a separate active legacy soak under
+`/home/b7r6/soak/nl-oss-head-2026-10-22`. Only existing archived findings and script
+text were read; no scripts, fleet controls, Redis queries, or network requests
+were executed. [Observation receipts](evidence/legacy-soak-observation/manifest.json)
+preserve the short source notes and byte hashes. The reports include Redis index
+and subscription prefix failures, a scheduler-state stall, and loss of a completed
+worker candidate after coordinator death. The summary records a 3,663-second
+recovery, but its restart timestamp conflicts with the narrative notes and the
+archived raw logs end before the final retry. These are incident reports from
+several legacy binaries, not a Lane B identification, a new benchmark, or evidence
+that this branch repaired the running fleet. Mounted reconnect, automatic
+candidate resubmission, timer reconstruction, and scheduling wakeup still need
+real runtime fixtures.
 
 The plan's pinned public commit was initially absent, then fetched by root.
 [source-map.md](source-map.md) records the observed listing/test drift against

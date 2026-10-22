@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Real replicated `OpenRaft` and durable journals with a bounded serialized
-//! in-process fault transport. This does not qualify deployed peer networking,
-//! volatile storage, or a production membership reconciler.
+//! Real replicated `OpenRaft` with a bounded serialized in-process fault
+//! transport. Durable and volatile histories use the same journal implementation.
+//! The harness supplies identity/fresh-learner procedures explicitly; it does not
+//! qualify authenticated peer networking or a production membership reconciler.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -29,14 +30,18 @@ use nativelink_scheduler::authority::{
     Request, Resources, SessionId, State, WorkerId,
 };
 use openraft::error::{
-    CheckIsLeaderError, InstallSnapshotError, RPCError, RaftError, RemoteError, Unreachable,
+    CheckIsLeaderError, Fatal, InstallSnapshotError, RPCError, RaftError, RemoteError, Unreachable,
 };
 use openraft::network::RPCOption;
 use openraft::raft::{
     AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
     VoteRequest, VoteResponse,
 };
-use openraft::{BasicNode, EntryPayload, Raft, RaftNetwork, RaftNetworkFactory, SnapshotPolicy};
+use openraft::storage::RaftLogStorage;
+use openraft::{
+    BasicNode, EntryPayload, Raft, RaftNetwork, RaftNetworkFactory, SnapshotMeta, SnapshotPolicy,
+    StoredMembership, Vote,
+};
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -56,7 +61,7 @@ fn unreachable<E: std::error::Error>(message: &str) -> RPCError<u64, BasicNode, 
 
 #[derive(Default)]
 struct Links {
-    peers: BTreeMap<u64, Raft<TypeConfig>>,
+    peers: BTreeMap<u64, Peer>,
     blocked: BTreeSet<(u64, u64)>,
     lose_append_reply: Option<(u64, u64, OperationId)>,
     lost_append_entry: Option<(u64, u64, u64)>,
@@ -68,21 +73,51 @@ struct Links {
     append_entries: usize,
     snapshot_chunks: usize,
     max_rpc_bytes: usize,
+    hold_reply: Option<(u64, u64, RpcKind)>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RpcKind {
+    Append,
+    Snapshot,
+    Vote,
+}
+
+#[derive(Clone)]
+struct Peer {
+    epoch: ClusterEpoch,
+    raft: Raft<TypeConfig>,
 }
 
 #[derive(Clone, Default)]
 struct Fabric {
     links: Arc<Mutex<Links>>,
     snapshot_interrupted: Arc<Notify>,
+    reply_held: Arc<Notify>,
+    release_reply: Arc<Notify>,
 }
 
 impl Fabric {
-    fn peer(&self, from: u64, to: u64) -> Result<Raft<TypeConfig>, &'static str> {
+    fn peer(
+        &self,
+        from: u64,
+        to: u64,
+        epoch: ClusterEpoch,
+    ) -> Result<Raft<TypeConfig>, &'static str> {
         let links = self.links.lock();
+        // This represents trusted transport identity in the fixture. OpenRaft's
+        // cluster_name is only a log label, and its votes/empty heartbeats do not
+        // carry application epoch. A deployed transport must authenticate this
+        // identity before calling any Raft API, including snapshot fragments.
+        let source = links.peers.get(&from).ok_or("sender stopped")?;
+        let target = links.peers.get(&to).ok_or("peer stopped")?;
+        if source.epoch != epoch || target.epoch != epoch {
+            return Err("foreign authority domain");
+        }
         if links.blocked.contains(&(from, to)) {
             return Err("scheduled directed partition");
         }
-        links.peers.get(&to).cloned().ok_or("peer stopped")
+        Ok(target.raft.clone())
     }
 
     fn encode<T: Serialize + DeserializeOwned>(&self, value: &T) -> T {
@@ -114,7 +149,33 @@ impl Fabric {
 struct Network {
     from: u64,
     to: u64,
+    epoch: ClusterEpoch,
     fabric: Fabric,
+}
+
+impl Network {
+    fn peer(&self) -> Result<Raft<TypeConfig>, &'static str> {
+        self.fabric.peer(self.from, self.to, self.epoch)
+    }
+
+    async fn response_boundary(&self, kind: RpcKind) -> Result<(), &'static str> {
+        let held = {
+            let mut links = self.fabric.links.lock();
+            if links.hold_reply == Some((self.from, self.to, kind)) {
+                links.hold_reply = None;
+                true
+            } else {
+                false
+            }
+        };
+        if held {
+            self.fabric.reply_held.notify_one();
+            self.fabric.release_reply.notified().await;
+        }
+        // The endpoint can change domains while either a successful response
+        // or a remote error is in flight. Check before interpreting either.
+        self.peer().map(|_| ())
+    }
 }
 
 impl RaftNetworkFactory<TypeConfig> for Network {
@@ -134,13 +195,14 @@ impl RaftNetwork<TypeConfig> for Network {
         rpc: AppendEntriesRequest<TypeConfig>,
         _option: RPCOption,
     ) -> Result<AppendEntriesResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
-        let peer = self.fabric.peer(self.from, self.to).map_err(unreachable)?;
+        let peer = self.peer().map_err(unreachable)?;
         assert!(rpc.entries.len() <= MAX_APPEND_ENTRIES);
         self.fabric.links.lock().append_entries += rpc.entries.len();
-        let response = peer
-            .append_entries(self.fabric.encode(&rpc))
+        let response = peer.append_entries(self.fabric.encode(&rpc)).await;
+        self.response_boundary(RpcKind::Append)
             .await
-            .map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
+            .map_err(unreachable)?;
+        let response = response.map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
         let mut links = self.fabric.links.lock();
         if matches!(response, AppendEntriesResponse::Success) {
             // Count only recipient-confirmed delivery, not an RPC merely
@@ -190,14 +252,15 @@ impl RaftNetwork<TypeConfig> for Network {
         InstallSnapshotResponse<u64>,
         RPCError<u64, BasicNode, RaftError<u64, InstallSnapshotError>>,
     > {
-        let peer = self.fabric.peer(self.from, self.to).map_err(unreachable)?;
+        let peer = self.peer().map_err(unreachable)?;
         assert!(rpc.data.len() <= 512);
         let partial = !rpc.done;
         self.fabric.links.lock().snapshot_chunks += 1;
-        let response = peer
-            .install_snapshot(self.fabric.encode(&rpc))
+        let response = peer.install_snapshot(self.fabric.encode(&rpc)).await;
+        self.response_boundary(RpcKind::Snapshot)
             .await
-            .map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
+            .map_err(unreachable)?;
+        let response = response.map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
         let mut links = self.fabric.links.lock();
         if partial && links.interrupt_snapshot == Some((self.from, self.to)) {
             links.interrupt_snapshot = None;
@@ -216,11 +279,12 @@ impl RaftNetwork<TypeConfig> for Network {
         rpc: VoteRequest<u64>,
         _option: RPCOption,
     ) -> Result<VoteResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
-        let peer = self.fabric.peer(self.from, self.to).map_err(unreachable)?;
-        let response = peer
-            .vote(self.fabric.encode(&rpc))
+        let peer = self.peer().map_err(unreachable)?;
+        let response = peer.vote(self.fabric.encode(&rpc)).await;
+        self.response_boundary(RpcKind::Vote)
             .await
-            .map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
+            .map_err(unreachable)?;
+        let response = response.map_err(|e| RPCError::RemoteError(RemoteError::new(self.to, e)))?;
         Ok(self.fabric.encode(&response))
     }
 }
@@ -230,14 +294,26 @@ struct Node {
     journal: Journal,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Backing {
+    Durable,
+    Volatile,
+}
+
 struct Cluster {
     directory: PathBuf,
     fabric: Fabric,
     nodes: BTreeMap<u64, Node>,
+    backing: Backing,
+    used_volatile_ids: BTreeSet<u64>,
 }
 
 impl Cluster {
     async fn new() -> Self {
+        Self::with_backing(Backing::Durable).await
+    }
+
+    async fn with_backing(backing: Backing) -> Self {
         let directory = std::env::temp_dir().join(format!(
             "nativelink-authority-cluster-{}",
             uuid::Uuid::new_v4()
@@ -247,6 +323,8 @@ impl Cluster {
             directory,
             fabric: Fabric::default(),
             nodes: BTreeMap::new(),
+            backing,
+            used_volatile_ids: BTreeSet::new(),
         };
         for id in 1..=3 {
             cluster.start(id).await;
@@ -281,14 +359,31 @@ impl Cluster {
     }
 
     async fn start(&mut self, id: u64) {
-        assert!(!self.nodes.contains_key(&id));
-        let journal = Journal::open(
-            self.directory.join(format!("node-{id}.redb")),
-            id,
-            EPOCH,
-            Limits::default(),
-        )
-        .await
+        self.try_start(id).await.unwrap();
+    }
+
+    async fn try_start(&mut self, id: u64) -> Result<(), &'static str> {
+        if self.nodes.contains_key(&id) {
+            return Err("member is already running");
+        }
+        // The test's allocator records identities outside the volatile member.
+        // This is an explicit procedure, not proof that Journal/OpenRaft can
+        // infer identity loss or authorize a full-cluster disaster reset.
+        if self.backing == Backing::Volatile && self.used_volatile_ids.contains(&id) {
+            return Err("volatile voting history was lost; a fresh member identity is required");
+        }
+        let journal = match self.backing {
+            Backing::Durable => {
+                Journal::open(
+                    self.directory.join(format!("node-{id}.redb")),
+                    id,
+                    EPOCH,
+                    Limits::default(),
+                )
+                .await
+            }
+            Backing::Volatile => Journal::fresh_volatile(id, EPOCH, Limits::default()).await,
+        }
         .unwrap();
         let config = openraft::Config {
             cluster_name: "categorical-replicated-test".to_owned(),
@@ -311,6 +406,7 @@ impl Cluster {
             Network {
                 from: id,
                 to: id,
+                epoch: EPOCH,
                 fabric: self.fabric.clone(),
             },
             journal.clone(),
@@ -318,8 +414,18 @@ impl Cluster {
         )
         .await
         .unwrap();
-        self.fabric.links.lock().peers.insert(id, raft.clone());
+        self.fabric.links.lock().peers.insert(
+            id,
+            Peer {
+                epoch: EPOCH,
+                raft: raft.clone(),
+            },
+        );
         self.nodes.insert(id, Node { raft, journal });
+        if self.backing == Backing::Volatile {
+            self.used_volatile_ids.insert(id);
+        }
+        Ok(())
     }
 
     async fn leader(&self, id: u64) {
@@ -407,6 +513,57 @@ impl Cluster {
                 expected
             );
         }
+    }
+
+    async fn compact(&self, leader: u64, index: u64) {
+        let raft = &self.nodes[&leader].raft;
+        raft.trigger().snapshot().await.unwrap();
+        raft.wait(Some(WAIT))
+            .metrics(
+                |m| m.snapshot.is_some_and(|id| id.index >= index),
+                "snapshot published",
+            )
+            .await
+            .unwrap();
+        raft.trigger().purge_log(index).await.unwrap();
+        raft.wait(Some(WAIT))
+            .metrics(
+                |m| m.purged.is_some_and(|id| id.index >= index),
+                "compacted source",
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn assert_empty_learner(&self, id: u64) {
+        let node = &self.nodes[&id];
+        assert!(
+            node.raft
+                .metrics()
+                .borrow()
+                .membership_config
+                .membership()
+                .voter_ids()
+                .next()
+                .is_none()
+        );
+        assert!(node.journal.clone().read_vote().await.unwrap().is_none());
+        let state = node.journal.read_applied().await.unwrap();
+        assert!(state.0.is_none());
+        assert!(state.1.view().operations.is_empty());
+        assert!(state.1.view().effects.is_empty());
+        assert!(state.1.view().reservations.is_empty());
+        assert!(node.raft.ensure_linearizable().await.is_err());
+        assert!(
+            tokio::time::timeout(
+                WAIT,
+                node.raft.client_write(Batch::new([submit(99)]).unwrap())
+            )
+            .await
+            .unwrap()
+            .is_err()
+        );
+        assert_eq!(node.journal.read_applied().await.unwrap().0, state.0);
     }
 
     async fn stop(&mut self, id: u64) {
@@ -722,5 +879,415 @@ async fn all_durable_members_restart_without_reinitializing_their_authority() {
     cluster.fabric.heal();
     cluster.converge(2, duplicate, &[1, 2, 3]).await;
     assert_eq!(cluster.read(2).await.snapshot().unwrap(), expected);
+    cluster.shutdown().await;
+}
+
+#[nativelink_test]
+async fn lost_volatile_voter_rejoins_as_fresh_learner_before_promotion() {
+    let mut cluster = Cluster::with_backing(Backing::Volatile).await;
+    let capacity = Resources {
+        cpu_millis: 1000,
+        memory_bytes: 4096,
+        slots: 1,
+    };
+    let mut running = submit(1);
+    let Event::Submit { request, .. } = &mut running.event else {
+        unreachable!()
+    };
+    request.skip_cache_lookup = true;
+    let accepted = cluster
+        .write(
+            1,
+            [
+                RecordedEvent {
+                    epoch: EPOCH,
+                    event: Event::Register {
+                        worker: WorkerId(1),
+                        incarnation: IncarnationId(1),
+                        session: SessionId(1),
+                        properties: BTreeMap::new(),
+                        capacity,
+                        available: capacity,
+                    },
+                },
+                running,
+                RecordedEvent {
+                    epoch: EPOCH,
+                    event: Event::Match,
+                },
+                submit(2),
+            ],
+        )
+        .await;
+    cluster.converge(1, accepted, &[1, 2, 3]).await;
+    let before = cluster.read(1).await.snapshot().unwrap();
+    cluster.stop(3).await;
+    assert_eq!(
+        cluster.try_start(3).await,
+        Err("volatile voting history was lost; a fresh member identity is required")
+    );
+    cluster.compact(1, accepted).await;
+    let suffix = cluster.write(1, [submit(3)]).await;
+
+    cluster.start(4).await;
+    cluster.assert_empty_learner(4).await;
+    cluster.nodes[&4].raft.trigger().elect().await.unwrap();
+    assert!(cluster.nodes[&4].raft.ensure_linearizable().await.is_err());
+    // The surviving quorum, not the empty member, admits a new learner. The
+    // compacted dispatch and suffix lookup must both arrive before promotion.
+    tokio::time::timeout(
+        WAIT,
+        cluster.nodes[&1]
+            .raft
+            .add_learner(4, BasicNode::default(), true),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    cluster.converge(1, suffix, &[1, 2, 4]).await;
+    {
+        let metrics = cluster.nodes[&4].raft.metrics();
+        let metrics = metrics.borrow();
+        assert!(
+            !metrics
+                .membership_config
+                .membership()
+                .voter_ids()
+                .any(|id| id == 4)
+        );
+    }
+    assert!(cluster.nodes[&4].raft.ensure_linearizable().await.is_err());
+    let restored = cluster.nodes[&4]
+        .journal
+        .read_applied()
+        .await
+        .unwrap()
+        .1
+        .view();
+    assert_eq!(restored.operations.len(), 3);
+    assert_eq!(restored.effects.len(), 3);
+    assert_eq!(restored.reservations.len(), 1);
+    assert!(!restored.reservations[0].released);
+    assert_eq!(restored.workers[0].charged.slots, 1);
+    assert_ne!(cluster.read(1).await.snapshot().unwrap(), before);
+    assert!(cluster.fabric.links.lock().snapshot_chunks > 1);
+
+    let promotion = cluster.nodes[&1]
+        .raft
+        .change_membership(BTreeSet::from([1, 2, 4]), false)
+        .await
+        .unwrap();
+    cluster
+        .converge(1, promotion.log_id.index, &[1, 2, 4])
+        .await;
+    cluster.fabric.isolate(1);
+    cluster.elect(4).await;
+    let committed = cluster.write(4, [submit(4)]).await;
+    cluster.fabric.heal();
+    cluster.converge(4, committed, &[1, 2, 4]).await;
+    let state = cluster.read(4).await.view();
+    assert_eq!(state.operations.len(), 4);
+    assert_eq!(state.effects.len(), 4);
+    assert_eq!(state.reservations.len(), 1);
+    assert!(!state.reservations[0].released);
+    assert_eq!(state.workers[0].charged.slots, 1);
+    assert!(
+        std::fs::read_dir(&cluster.directory)
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    cluster.shutdown().await;
+}
+
+#[nativelink_test]
+async fn lost_volatile_quorum_and_total_loss_do_not_bootstrap_new_authority() {
+    let mut cluster = Cluster::with_backing(Backing::Volatile).await;
+    let accepted = cluster.write(1, [submit(1)]).await;
+    cluster.converge(1, accepted, &[1, 2, 3]).await;
+    let before = cluster.nodes[&1]
+        .journal
+        .read_applied()
+        .await
+        .unwrap()
+        .1
+        .snapshot()
+        .unwrap();
+    cluster.stop(2).await;
+    cluster.stop(3).await;
+    cluster.start(4).await;
+    cluster.assert_empty_learner(4).await;
+    assert!(cluster.nodes[&1].raft.ensure_linearizable().await.is_err());
+    let mut pending = cluster.nodes[&1]
+        .raft
+        .client_write_ff(Batch::new([submit(2)]).unwrap())
+        .await
+        .unwrap();
+    cluster.nodes[&1]
+        .raft
+        .wait(Some(WAIT))
+        .log_index_at_least(Some(accepted + 1), "minority proposed entry")
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut pending)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        cluster.nodes[&1]
+            .journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .snapshot()
+            .unwrap(),
+        before
+    );
+    cluster.stop(1).await;
+    // All voting histories are now gone. Fresh IDs have no right to initialize
+    // another authority for these workers or storage. No initialize() is called.
+    cluster.start(5).await;
+    cluster.start(6).await;
+    for id in 1..=3 {
+        assert!(cluster.try_start(id).await.is_err());
+    }
+    for id in 4..=6 {
+        cluster.nodes[&id].raft.trigger().elect().await.unwrap();
+        cluster.assert_empty_learner(id).await;
+    }
+    assert!(
+        std::fs::read_dir(&cluster.directory)
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    cluster.shutdown().await;
+}
+
+async fn consensus_facts(node: &Node) -> Vec<u8> {
+    let vote = node.journal.clone().read_vote().await.unwrap();
+    let log = node.journal.clone().get_log_state().await.unwrap();
+    let applied = node.journal.read_applied().await.unwrap();
+    let metrics = node.raft.metrics().borrow().clone();
+    serde_json::to_vec(&(
+        vote,
+        log.last_purged_log_id,
+        log.last_log_id,
+        applied.0,
+        applied.1.snapshot().unwrap(),
+        metrics.current_term,
+        metrics.current_leader,
+        metrics.membership_config,
+        metrics.snapshot,
+        metrics.purged,
+    ))
+    .unwrap()
+}
+
+#[nativelink_test]
+async fn foreign_domain_votes_heartbeats_and_snapshot_fragments_cannot_change_consensus() {
+    let cluster = Cluster::new().await;
+    let accepted = cluster.write(1, [submit(1)]).await;
+    cluster.converge(1, accepted, &[1, 2, 3]).await;
+    // Represent endpoint replacement by an isolated foreign execution domain.
+    // This does not authorize resetting a real domain whose old workers exist.
+    cluster.fabric.links.lock().peers.get_mut(&3).unwrap().epoch = ClusterEpoch(EPOCH.0 + 1);
+    let original = consensus_facts(&cluster.nodes[&3]).await;
+    let mut network = Network {
+        from: 1,
+        to: 3,
+        epoch: EPOCH,
+        fabric: cluster.fabric.clone(),
+    };
+    assert!(matches!(
+        network
+            .vote(
+                VoteRequest {
+                    vote: Vote::new(100, 1),
+                    last_log_id: None
+                },
+                RPCOption::new(WAIT)
+            )
+            .await,
+        Err(RPCError::Unreachable(_))
+    ));
+    assert!(matches!(
+        network
+            .append_entries(
+                AppendEntriesRequest {
+                    vote: Vote::new_committed(100, 1),
+                    prev_log_id: None,
+                    entries: Vec::new(),
+                    leader_commit: None,
+                },
+                RPCOption::new(WAIT),
+            )
+            .await,
+        Err(RPCError::Unreachable(_))
+    ));
+    for (offset, done) in [(0, false), (1, false), (2, true)] {
+        assert!(matches!(
+            network
+                .install_snapshot(
+                    InstallSnapshotRequest {
+                        vote: Vote::new_committed(100, 1),
+                        meta: SnapshotMeta {
+                            last_log_id: None,
+                            last_membership: StoredMembership::default(),
+                            snapshot_id: "foreign-authority".to_owned(),
+                        },
+                        offset,
+                        data: vec![1],
+                        done,
+                    },
+                    RPCOption::new(WAIT),
+                )
+                .await,
+            Err(RPCError::Unreachable(_))
+        ));
+    }
+    assert_eq!(consensus_facts(&cluster.nodes[&3]).await, original);
+    assert_eq!(cluster.fabric.links.lock().snapshot_chunks, 0);
+    // The same receiver must remain usable after every rejected foreign chunk.
+    cluster.fabric.links.lock().peers.get_mut(&3).unwrap().epoch = EPOCH;
+    cluster.fabric.isolate(3);
+    let next = cluster.write(1, (2..=8).map(submit)).await;
+    cluster.compact(1, next).await;
+    cluster.fabric.heal();
+    cluster.converge(1, next, &[1, 2, 3]).await;
+    assert!(cluster.fabric.links.lock().snapshot_chunks > 1);
+    assert_eq!(cluster.read(1).await.view().effects.len(), 8);
+    cluster.shutdown().await;
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum ProbeFailure {
+    Unreachable,
+    RemoteStopped,
+}
+
+fn classify_reply<T, E: std::error::Error>(
+    reply: Result<T, RPCError<u64, BasicNode, RaftError<u64, E>>>,
+) -> Result<(), ProbeFailure> {
+    match reply {
+        Ok(_) => Ok(()),
+        Err(RPCError::Unreachable(_)) => Err(ProbeFailure::Unreachable),
+        Err(RPCError::RemoteError(error))
+            if matches!(error.source, RaftError::Fatal(Fatal::Stopped)) =>
+        {
+            Err(ProbeFailure::RemoteStopped)
+        }
+        Err(error) => panic!("unexpected probe response: {error}"),
+    }
+}
+
+async fn probe_reply(network: &mut Network, kind: RpcKind) -> Result<(), ProbeFailure> {
+    match kind {
+        RpcKind::Append => classify_reply(
+            network
+                .append_entries(
+                    AppendEntriesRequest {
+                        vote: Vote::new_committed(0, 2),
+                        prev_log_id: None,
+                        entries: Vec::new(),
+                        leader_commit: None,
+                    },
+                    RPCOption::new(WAIT),
+                )
+                .await,
+        ),
+        RpcKind::Snapshot => classify_reply(
+            network
+                .install_snapshot(
+                    InstallSnapshotRequest {
+                        vote: Vote::new_committed(0, 2),
+                        meta: SnapshotMeta {
+                            last_log_id: None,
+                            last_membership: StoredMembership::default(),
+                            snapshot_id: "delayed-response".to_owned(),
+                        },
+                        offset: 0,
+                        data: Vec::new(),
+                        done: false,
+                    },
+                    RPCOption::new(WAIT),
+                )
+                .await,
+        ),
+        RpcKind::Vote => classify_reply(
+            network
+                .vote(
+                    VoteRequest {
+                        vote: Vote::new(0, 2),
+                        last_log_id: None,
+                    },
+                    RPCOption::new(WAIT),
+                )
+                .await,
+        ),
+    }
+}
+
+#[nativelink_test]
+async fn delayed_success_and_remote_error_responses_require_both_endpoints_in_the_same_domain() {
+    let cluster = Cluster::new().await;
+    let network = Network {
+        from: 2,
+        to: 3,
+        epoch: EPOCH,
+        fabric: cluster.fabric.clone(),
+    };
+    for stopped in [false, true] {
+        if stopped {
+            // Preserve the transport endpoint so all three real Raft calls
+            // return Fatal::Stopped. This is a remote error, not a failed lookup.
+            cluster.nodes[&3].raft.shutdown().await.unwrap();
+        }
+        for kind in [RpcKind::Append, RpcKind::Snapshot, RpcKind::Vote] {
+            // Controls prove that valid same-domain responses still return,
+            // including remote errors; fencing cannot mask them unconditionally.
+            assert_eq!(
+                probe_reply(&mut network.clone(), kind).await,
+                if stopped {
+                    Err(ProbeFailure::RemoteStopped)
+                } else {
+                    Ok(())
+                },
+                "same-domain response for {kind:?}, stopped={stopped}"
+            );
+            for replaced in [2, 3] {
+                cluster.fabric.links.lock().hold_reply = Some((2, 3, kind));
+                let mut request = network.clone();
+                let response = tokio::spawn(async move { probe_reply(&mut request, kind).await });
+                tokio::time::timeout(WAIT, cluster.fabric.reply_held.notified())
+                    .await
+                    .unwrap();
+                cluster
+                    .fabric
+                    .links
+                    .lock()
+                    .peers
+                    .get_mut(&replaced)
+                    .unwrap()
+                    .epoch = ClusterEpoch(EPOCH.0 + 1);
+                cluster.fabric.release_reply.notify_one();
+                assert_eq!(
+                    tokio::time::timeout(WAIT, response).await.unwrap().unwrap(),
+                    Err(ProbeFailure::Unreachable),
+                    "stale response for {kind:?}, stopped={stopped}, changed endpoint={replaced}"
+                );
+                cluster
+                    .fabric
+                    .links
+                    .lock()
+                    .peers
+                    .get_mut(&replaced)
+                    .unwrap()
+                    .epoch = EPOCH;
+            }
+        }
+    }
     cluster.shutdown().await;
 }

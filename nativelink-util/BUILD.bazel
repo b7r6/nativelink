@@ -43,6 +43,7 @@ rust_library(
         "src/telemetry.rs",
         "src/tls_utils.rs",
         "src/wire_compression.rs",
+        "src/work_progress.rs",
     ],
     proc_macro_deps = [
         "@crates//:async-trait",

@@ -45,6 +45,11 @@ pub const PROGRESS_TIMEOUT: u64 = 30;
 pub const INTEREST_TIMEOUT: u64 = 300;
 pub const TERMINAL_RETENTION: u64 = 300;
 pub const MAX_ATTEMPTS: u32 = 3;
+/// Fixed experimental canonical state bound, including prepaid finalization.
+pub const MAX_STATE_BYTES: usize = 14 * 1024 * 1024;
+/// Complete encoded request/result/property bound. Together with the bounded
+/// command frame this fits a singleton command in the journal's 1 MiB batch.
+pub const MAX_PAYLOAD_BYTES: usize = 512 * 1024;
 /// Fixed experimental scheduling intervals, in the same virtual ticks as time.
 pub const HOLD_AFTER: u64 = 30;
 pub const HOLD_DURATION: u64 = 300;
@@ -150,7 +155,9 @@ pub struct Limits {
     pub max_workers: usize,
     /// Includes reserved finalization headroom, not merely current outbox size.
     pub max_effects: usize,
-    /// Bounds every request and result, including strings and property entries.
+    /// Bounds every encoded request, result, and property map. Initialization
+    /// rejects values above `MAX_PAYLOAD_BYTES`; count limits and this limit are
+    /// upper bounds, subject to the aggregate prepaid state byte limit.
     pub max_payload_bytes: usize,
 }
 

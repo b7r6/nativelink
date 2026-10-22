@@ -1,0 +1,131 @@
+{
+  "scope": "All 24 selected semantic faults killed after successful baseline. This is exact-source contract evidence, not performance or production qualification. Initial run stopped after six kills because the old snapshot clone mutation anchor no longer existed; repaired runner preflights every anchor before compiling. Compilation failure is never a kill. Later volatile journal changes are outside these source hashes.",
+  "runner_sha256": "d0fe936fce0339ef8093e1d4133f09d5dafbdf6ea31b1c067d6d204dbb0d3bda",
+  "logs": [
+    {
+      "file": "accept_membership_without_snapshot_headroom.txt.gz",
+      "uncompressed_sha256": "4c1f1467577e0e23fe941f2de25f6da0418c068f0e7105ff03cd88f21cb8762e",
+      "gzip_sha256": "0f41a91d4f7335f5ac2ddf4be1161762d697c9a57885b887c7d2f11a1a9546bd"
+    },
+    {
+      "file": "accept_unbounded_snapshot_identifier.txt.gz",
+      "uncompressed_sha256": "c98cfea9d4b3f74fc724f8d99d06577066b173cd9e1ef065030726bd5431083e",
+      "gzip_sha256": "a67463fe193575d2688760f3373217219dd29b2fbc854451eccdee144ed3668c"
+    },
+    {
+      "file": "accept_unvalidated_response_facts.txt.gz",
+      "uncompressed_sha256": "1e817ef1c468d84b495335f2f39dbd706b66c0e32d3064a512844cade051f8fa",
+      "gzip_sha256": "6521948fbc5d8c16d2cc5388832ff088b24ca39ac297c7b7dc0d29fd5f53eeb0"
+    },
+    {
+      "file": "acquire_into_closed_cohort.txt.gz",
+      "uncompressed_sha256": "6c79b9c8891e79571659e7635b096e87ed2e44f0e2a2f0216716ede3c62d8fcd",
+      "gzip_sha256": "dd2c8c66b4528d831598202847244f6ed79bf0602eaedf222398a9c932dfe185"
+    },
+    {
+      "file": "admit_forged_request_projection.txt.gz",
+      "uncompressed_sha256": "62ed54100d05ba68696e9e645575c8ad35fa8c8253b80bbf46993dca01ee605f",
+      "gzip_sha256": "f67f58bba02ddf77d1ecc06e244634414902fd60449645a75ef7b45aac2f6749"
+    },
+    {
+      "file": "admit_without_aggregate_completion_credit.txt.gz",
+      "uncompressed_sha256": "f318dee20ddcbbdcfd0a645d5fcf4fcc133ae0398f4a5e06fdcd19ae4bfc9f88",
+      "gzip_sha256": "6b6a429f3ad8ad08c294c8bb409f44c6d7bcefba0920ea85b4b9811e0341861d"
+    },
+    {
+      "file": "apply_uncommitted_proposal.txt.gz",
+      "uncompressed_sha256": "ef81d06fb260943c9fda2d9b0d03320d9441387b21c7b54657fb87d1fd0b55a9",
+      "gzip_sha256": "bdb607e39f220f3847a6dfd0c78664a156100326871f883ed0d6acc4547ca95f"
+    },
+    {
+      "file": "backfill_reserved_hold_capacity.txt.gz",
+      "uncompressed_sha256": "f5476c3838d5d3d4747bc92c7b7a5d86b2a55002198f8df4f97ceb9ca421596c",
+      "gzip_sha256": "c3139908829de44c82a02c2bc673f3ad909508c4b04ef24d415f7f7bbcf37dfb"
+    },
+    {
+      "file": "baseline.txt.gz",
+      "uncompressed_sha256": "0818b4ac0baaca10f5305ddc5ed8d22703dcda23e4a764e180a836fb487d3ba0",
+      "gzip_sha256": "f061ac7332b57f8a31974afce896b43f6a73b644659bf281f5f358d35cb9ef7d"
+    },
+    {
+      "file": "conflate_skip_lookup_and_cacheability.txt.gz",
+      "uncompressed_sha256": "5635dcd81a1044780e37c8d2f900b538d042670c6f7858425640b9e9a7eeb585",
+      "gzip_sha256": "035753e214811f4d47a8095c61d314ef0238e21d99510285742fe10593451d53"
+    },
+    {
+      "file": "delete_success_forgets_unresolved_writes.txt.gz",
+      "uncompressed_sha256": "3b95d29b91b1c6437eb702db8dbf2d06bac1c152258e4274dba13ccb65f691c9",
+      "gzip_sha256": "b557f9103a4f86585fa98b10316b78f07c3ab89c35e039375605b1bed61c560c"
+    },
+    {
+      "file": "expect_revoked_uncertain_charges_to_finish.txt.gz",
+      "uncompressed_sha256": "8540b661e36785c4e75f461f4b0ac00fbc5ea3b9e02549054252a3bd78e1f684",
+      "gzip_sha256": "6aef02c5e4a4185bb89f189457d0df3dae366bc049ce7c2890c5dc460705db08"
+    },
+    {
+      "file": "forget_coalesced_operation_terminal_bytes.txt.gz",
+      "uncompressed_sha256": "ed81ad2aca961bda571acfcd5030074440c7538ed7bdd3cecd8328dba490673b",
+      "gzip_sha256": "d16e44ea8648d5879dda0dee7f4526d899c00e1029d40c018c1fd26f3eb83ea5"
+    },
+    {
+      "file": "grow_memory_ignoring_immovable_cpu_and_slots.txt.gz",
+      "uncompressed_sha256": "4c19e24bfb124d20e5a91ec819814b7f89abdeddb7355c7d6d8128ef0bc149a3",
+      "gzip_sha256": "6958b7195ebb9c579ef694d3c73e09425bf4ecc8def14114655c2410d9c55126"
+    },
+    {
+      "file": "ignore_unknown_authority_section.txt.gz",
+      "uncompressed_sha256": "9426ed2a4812e28cb4ef874cdb728d59ebe0fc6240d09f5dd78a7f552cca5896",
+      "gzip_sha256": "beb82f8c8caad0a0bf5124f76d5323d7ac51675a788c52427588dd0aa2ea979b"
+    },
+    {
+      "file": "install_valid_prefix_after_failed_snapshot_stream.txt.gz",
+      "uncompressed_sha256": "1e0f871d41efa4fb6d53a7b08f63caa84865626ccdc5a1397a70699ca480173b",
+      "gzip_sha256": "b2f9c396d281f33899b61b33a661da7c339ad4b036378ddc8157da5498de12b4"
+    },
+    {
+      "file": "old_delete_ack_settles_new_orphan.txt.gz",
+      "uncompressed_sha256": "89703f1c71ed0e7f4c03e6ac421973db26ee292978bd7d3d759973cb1fc17e67",
+      "gzip_sha256": "c18c78566033c9490799b9fd650b63e77c49d5baac830a72025b3f8ef5db4ca4"
+    },
+    {
+      "file": "omit_pending_effects_from_snapshot.txt.gz",
+      "uncompressed_sha256": "08091b39072e5fe021c6dd7b0cc304d601019b2718401ad4e23fac5a49a82f31",
+      "gzip_sha256": "e952fede08656945c322a41db68494f042483ad7ea47864447816226a555cbb3"
+    },
+    {
+      "file": "refund_duplicate_cleanup_twice.txt.gz",
+      "uncompressed_sha256": "4f05b8ed0708c201a32164dd5d71316b7316872bff77ced5d25cdbb93c0d9380",
+      "gzip_sha256": "e25e6b836f9f57b52cd7d9f36b32baaace1c1fb6c5a7ad3d81fb8677863d9f0a"
+    },
+    {
+      "file": "refund_revocation_without_quiescence.txt.gz",
+      "uncompressed_sha256": "9db7224e4038e547b39e5bf103c86201bbcf7ef7f771116084d7a10bb727cd02",
+      "gzip_sha256": "c70a9cf9ed3362646fa18d53770a4edace7fef476e9dc9e78f49a95a607881c1"
+    },
+    {
+      "file": "release_erases_captured_manifest.txt.gz",
+      "uncompressed_sha256": "e7faac3ea2ca255e247972275f661fa30c7ad86bfb40c99b8d8f4a2e6dcbbbf5",
+      "gzip_sha256": "29ae56e42150907f041c59afda5798e3a0192a83ca65b6836ef3a3b1c34c06e6"
+    },
+    {
+      "file": "remove_attempt_incarnation_fence.txt.gz",
+      "uncompressed_sha256": "8cac32727412163d79e361ee8ab8336225b8d4ae6ca782cf4ac4387eb9e38cdd",
+      "gzip_sha256": "0a13caf4916527b31d6fb9de1b57f955af396f03c98f711e829ce024b1552150"
+    },
+    {
+      "file": "renew_expired_root_without_reacquisition.txt.gz",
+      "uncompressed_sha256": "0158a765f0c10609f185380cc02ba157bd96d52b94f1b0256f147851f16a7d0c",
+      "gzip_sha256": "d39dbdc40bfc89e64fc65326dea3d733a58b1ff8d918cb4119ae391c2446d666"
+    },
+    {
+      "file": "retry_memory_failure_before_quiescence.txt.gz",
+      "uncompressed_sha256": "ce191c8651504def6ea7f251d140b4d3b614e0890d84cd4c6c783603eb7a3579",
+      "gzip_sha256": "70f8d24550b6bdc441d97044f240e62f7b1d86a39dc5aed598991601c6f1d82d"
+    },
+    {
+      "file": "reverse_numeric_priority.txt.gz",
+      "uncompressed_sha256": "6abef0e9741c5e5d682e75ee0aba57c94d0607e8a347e1d82b775d7dfa6017eb",
+      "gzip_sha256": "2b2723bc6eb48e43460be6207d73804fc4b6b8eb67f308d7f4eb30dabbcd4ed5"
+    }
+  ]
+}

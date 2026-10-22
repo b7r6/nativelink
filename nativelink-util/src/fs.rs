@@ -353,10 +353,22 @@ pub async fn hard_link(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(
 pub async fn hard_link_many(
     links: Vec<(PathBuf, PathBuf)>,
 ) -> Result<Vec<Result<(), Error>>, Error> {
+    let progress = crate::work_progress::ProgressObserver::current();
     call_with_permit(move |_| {
         Ok(links
             .into_iter()
-            .map(|(src, dst)| std::fs::hard_link(src, dst).map_err(Into::<Error>::into))
+            .map(|(src, dst)| {
+                std::fs::hard_link(src, &dst).map_err(Into::<Error>::into)?;
+                if let Some(progress) = &progress {
+                    progress
+                        .object(
+                            crate::work_progress::WorkKind::Materialize,
+                            dst.as_os_str().as_encoded_bytes(),
+                        )
+                        .complete();
+                }
+                Ok(())
+            })
             .collect())
     })
     .await

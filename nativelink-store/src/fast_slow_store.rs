@@ -38,8 +38,9 @@ use nativelink_util::store_trait::{
     RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, StoreOptimizations, UploadSizeInfo,
     slow_update_store_with_file,
 };
+use nativelink_util::work_progress::{ProgressObserver, WorkKind};
 use parking_lot::Mutex;
-use tokio::sync::OnceCell;
+use tokio::sync::{OnceCell, watch};
 use tracing::{debug, info, trace, warn};
 
 use crate::filesystem_store::FilesystemStore;
@@ -47,7 +48,15 @@ use crate::filesystem_store::FilesystemStore;
 // TODO(palfrey) This store needs to be evaluated for more efficient memory usage,
 // there are many copies happening internally.
 
-type Loader = Arc<OnceCell<()>>;
+#[derive(Debug)]
+struct SharedLoader {
+    complete: OnceCell<()>,
+    // The greatest successful forwarding offset survives a replaced leader.
+    // All subscribers read one retained value, never an unbounded event queue.
+    progress: watch::Sender<u64>,
+}
+
+type Loader = Arc<SharedLoader>;
 type MaybeSize = Option<u64>;
 
 // TODO(palfrey) We should consider copying the data in the background to allow the
@@ -96,7 +105,26 @@ impl LoaderGuard<'_> {
         Fut: Future<Output = Result<(), E>>,
     {
         if let Some(loader) = &self.loader {
-            loader.get_or_try_init(f).await.map(|&()| ())
+            let load = loader.complete.get_or_try_init(f);
+            let Some(progress) = ProgressObserver::store_object(WorkKind::Populate, &self.key)
+            else {
+                return load.await.map(|&()| ());
+            };
+            let mut changed = loader.progress.subscribe();
+            tokio::pin!(load);
+            loop {
+                progress.offset(*changed.borrow_and_update());
+                tokio::select! {
+                    result = &mut load => {
+                        progress.offset(*changed.borrow());
+                        if result.is_ok() { progress.complete(); }
+                        return result.map(|&()| ());
+                    }
+                    result = changed.changed() => {
+                        if result.is_err() { return load.await.map(|&()| ()); }
+                    }
+                }
+            }
         } else {
             // This is impossible, but we do it anyway.
             f().await
@@ -258,7 +286,12 @@ impl FastSlowStore {
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                 is_leader = true;
-                vacant_entry.insert(Arc::new(OnceCell::new())).clone()
+                vacant_entry
+                    .insert(Arc::new(SharedLoader {
+                        complete: OnceCell::new(),
+                        progress: watch::channel(0).0,
+                    }))
+                    .clone()
             }
         };
         LoaderGuard {
@@ -275,6 +308,7 @@ impl FastSlowStore {
         maybe_writer: Option<&mut DropCloserWriteHalf>,
         offset: u64,
         length: Option<u64>,
+        shared_progress: Option<&watch::Sender<u64>>,
     ) -> Result<(), Error> {
         // A `NotFound` for a digest key carries the digest as typed
         // context, so the worker can report it as the missing input and the
@@ -377,6 +411,16 @@ impl FastSlowStore {
                 let (fast_tx_res, writer_res) = join!(fast_tx.send(output_buf), writer_fut);
                 fast_tx_res.err_tip(|| "Failed to write to fast store in fast_slow store")?;
                 writer_res.err_tip(|| "Failed to write result to writer in fast_slow store")?;
+                if let Some(progress) = shared_progress {
+                    progress.send_if_modified(|offset| {
+                        if bytes_received > *offset {
+                            *offset = bytes_received;
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                }
             }
         };
 
@@ -424,6 +468,9 @@ impl FastSlowStore {
             .await
             .err_tip(|| "While querying in populate_fast_store")?;
         if maybe_size_info.is_some() {
+            if let Some(progress) = ProgressObserver::store_object(WorkKind::Populate, &key) {
+                progress.complete();
+            }
             return Ok(());
         }
 
@@ -441,9 +488,16 @@ impl FastSlowStore {
             ));
         }
 
-        self.get_loader(key.borrow())
+        let loader = self.get_loader(key.borrow());
+        loader
             .get_or_try_init(|| {
-                Pin::new(self).populate_and_maybe_stream(key.borrow(), None, 0, None)
+                Pin::new(self).populate_and_maybe_stream(
+                    key.borrow(),
+                    None,
+                    0,
+                    None,
+                    loader.loader.as_ref().map(|loader| &loader.progress),
+                )
             })
             .await
             .err_tip(|| "Failed to populate()")
@@ -1008,13 +1062,25 @@ impl StoreDriver for FastSlowStore {
             if is_leader {
                 loader_guard
                     .get_or_try_init(|| {
-                        self.populate_and_maybe_stream(key.borrow(), writer.take(), offset, length)
+                        self.populate_and_maybe_stream(
+                            key.borrow(),
+                            writer.take(),
+                            offset,
+                            length,
+                            loader_guard.loader.as_ref().map(|loader| &loader.progress),
+                        )
                     })
                     .await?;
                 false
             } else {
                 let load_fut = loader_guard.get_or_try_init(|| {
-                    self.populate_and_maybe_stream(key.borrow(), None, offset, length)
+                    self.populate_and_maybe_stream(
+                        key.borrow(),
+                        None,
+                        offset,
+                        length,
+                        loader_guard.loader.as_ref().map(|loader| &loader.progress),
+                    )
                 });
                 match tokio::time::timeout(LEADER_WAIT_TIMEOUT, load_fut).await {
                     Ok(result) => {
