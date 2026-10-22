@@ -17,6 +17,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
 use std::ffi::CString;
+use std::io::Write;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -26,6 +27,7 @@ use nativelink_error::{Error, ResultExt};
 use nativelink_macro::nativelink_test;
 use nativelink_worker::namespace_utils;
 use pretty_assertions::assert_eq;
+use tokio::io::AsyncReadExt;
 
 /// Returns a path under `dir` that is unique for this test run.
 fn unique_path(dir: &Path, prefix: &str) -> PathBuf {
@@ -554,6 +556,88 @@ async fn test_maybe_namespaced_child_namespaced_natural_exit() -> Result<(), Err
     // The stub should reap the child and return its exit code.
     assert_eq!(status.code(), Some(expected_exit_code));
 
+    Ok(())
+}
+
+#[nativelink_test]
+async fn namespace_pidfd_receipt_closes_detached_descendants_after_stub_sigkill()
+-> Result<(), Error> {
+    if !namespace_utils::namespaces_supported(false, false) {
+        eprintln!("SKIP: PID/user namespaces unavailable; pidfd closure unqualified");
+        return Ok(());
+    }
+    let (receipt, sender) = namespace_utils::NamespaceQuiescenceReceipt::channel()?;
+    let setsid = which::which("setsid").unwrap();
+    let mut command = tokio::process::Command::new("/bin/sh");
+    command.args([
+        "-c",
+        &format!(
+            "'{}' /bin/sh -c 'printf x; exec /bin/sleep 30' & wait",
+            setsid.display()
+        ),
+    ]);
+    command
+        .kill_on_drop(true)
+        .stdout(Stdio::piped())
+        .process_group(0);
+    let root = CString::new("/tmp").unwrap();
+    let action = CString::new("/tmp/action").unwrap();
+    // SAFETY: preallocated strings/socket, async-signal-safe namespace setup.
+    unsafe {
+        command.pre_exec(move || {
+            namespace_utils::configure_namespace_with_quiescence_receipt(
+                false,
+                None,
+                &root,
+                &action,
+                &[],
+                Some(&sender),
+            )
+        });
+    }
+    let mut child = command.spawn()?;
+    drop(command);
+    let mut stdout = child.stdout.take().unwrap();
+    // This byte comes from the descendant after setsid; it holds stdout open
+    // until it exits, providing a physical process witness independent of PIDs.
+    let mut byte = [0u8];
+    tokio::time::timeout(Duration::from_secs(5), stdout.read_exact(&mut byte))
+        .await
+        .unwrap()?;
+    assert_eq!(byte, [b'x']);
+    child.kill().await?;
+    assert_eq!(child.wait().await?.signal(), Some(libc::SIGKILL));
+    tokio::time::timeout(Duration::from_secs(5), receipt.close_and_wait())
+        .await
+        .unwrap()?;
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), stdout.read(&mut byte))
+            .await
+            .unwrap()?,
+        0
+    );
+    Ok(())
+}
+
+#[nativelink_test]
+async fn namespace_quiescence_rejects_missing_and_malformed_receipts() -> Result<(), Error> {
+    let (receipt, sender) = namespace_utils::NamespaceQuiescenceReceipt::channel()?;
+    drop(sender);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), receipt.close_and_wait())
+            .await
+            .unwrap()
+            .is_err()
+    );
+    let (receipt, mut sender) = namespace_utils::NamespaceQuiescenceReceipt::channel()?;
+    sender.write_all(&[1])?;
+    drop(sender);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), receipt.close_and_wait())
+            .await
+            .unwrap()
+            .is_err()
+    );
     Ok(())
 }
 

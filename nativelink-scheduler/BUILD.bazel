@@ -1,5 +1,6 @@
 load(
     "@rules_rust//rust:defs.bzl",
+    "rust_binary",
     "rust_doc",
     "rust_doc_test",
     "rust_library",
@@ -7,11 +8,33 @@ load(
     "rust_test_suite",
 )
 
+rust_binary(
+    name = "authority_budget",
+    srcs = ["examples/authority_budget.rs"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "@crates//:futures",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+    ],
+)
+
 rust_library(
     name = "nativelink-scheduler",
     srcs = [
         "src/admin.rs",
         "src/api_worker_scheduler.rs",
+        "src/authority/journal.rs",
+        "src/authority/mod.rs",
+        "src/authority/reapi.rs",
+        "src/authority/request.rs",
+        "src/authority/snapshot_buffer.rs",
+        "src/authority/tests.rs",
+        "src/authority/types.rs",
         "src/awaited_action_db/awaited_action.rs",
         "src/awaited_action_db/mod.rs",
         "src/cache_lookup_scheduler.rs",
@@ -50,9 +73,13 @@ rust_library(
         "@crates//:futures",
         "@crates//:humantime",
         "@crates//:lru",
+        "@crates//:openraft",
         "@crates//:opentelemetry",
         "@crates//:opentelemetry-semantic-conventions",
         "@crates//:parking_lot",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:redb",
         "@crates//:redis",
         "@crates//:scopeguard",
         "@crates//:serde",
@@ -66,12 +93,59 @@ rust_library(
     ],
 )
 
+rust_test(
+    name = "authority_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_test.rs"],
+    compile_data = [
+        "//:Cargo.lock",
+        "src/authority/mod.rs",
+        "src/authority/reapi.rs",
+        "src/authority/request.rs",
+        "src/authority/types.rs",
+        "tests/authority/adversarial.rs",
+        "tests/authority/campaign.rs",
+        "tests/authority/fixtures/committed_lookup.json",
+        "tests/authority/harness.rs",
+        "tests/authority/recipient.rs",
+        "tests/authority/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "retention_test",
+    timeout = "moderate",
+    srcs = ["tests/retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+    ],
+    deps = [
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
 rust_test_suite(
     name = "integration",
     timeout = "short",
     srcs = [
         "tests/action_messages_test.rs",
         "tests/admin_test.rs",
+        "tests/authority_cluster_test.rs",
+        "tests/authority_raft_test.rs",
+        "tests/authority_reapi_test.rs",
+        "tests/authority_request_test.rs",
         "tests/backpressure_test.rs",
         "tests/cache_lookup_scheduler_test.rs",
         "tests/dispatch_ack_test.rs",
@@ -116,12 +190,16 @@ rust_test_suite(
         "@crates//:bytes",
         "@crates//:futures",
         "@crates//:mock_instant",
+        "@crates//:openraft",
         "@crates//:opentelemetry",
         "@crates//:opentelemetry-semantic-conventions",
         "@crates//:parking_lot",
         "@crates//:pretty_assertions",
         "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:redb",
         "@crates//:redis",
+        "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
         "@crates//:tokio-stream",

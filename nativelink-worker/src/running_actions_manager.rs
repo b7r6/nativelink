@@ -2246,6 +2246,22 @@ pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     /// Returns the action id of the action.
     fn get_operation_id(&self) -> &OperationId;
 
+    /// Experimental authority adapter: observe an actual subprocess spawn.
+    /// Installing an observer does not authorize execution. Implementations
+    /// without this seam must refuse rather than fabricate a launch receipt.
+    fn observe_launch(&self, _observer: oneshot::Sender<u32>) -> Result<(), Error> {
+        Err(make_err!(
+            Code::Unimplemented,
+            "Process launch observation is unsupported"
+        ))
+    }
+
+    /// Trusted process-domain observation, separate from directory cleanup.
+    /// Unsupported domains and ambiguous termination must retain their charge.
+    fn process_domain_quiescent(&self) -> bool {
+        false
+    }
+
     /// Anything that needs to execute before the actions is actually executed should happen here.
     fn prepare_action(self: Arc<Self>) -> impl Future<Output = Result<Arc<Self>, Error>> + Send;
 
@@ -2451,6 +2467,8 @@ struct RunningActionImplExecutionResult {
 #[derive(Debug)]
 struct RunningActionImplState {
     command_proto: Option<ProtoCommand>,
+    launch_observer: Option<oneshot::Sender<u32>>,
+    process_domain_quiescent: bool,
     // TODO(palfrey) Kill is not implemented yet, but is instrumented.
     // However, it is used if the worker disconnects to destroy current jobs.
     kill_channel_tx: Option<oneshot::Sender<()>>,
@@ -2478,6 +2496,7 @@ pub struct RunningActionImpl {
     /// `experimental_active_input_leases`; `None` leaves eviction untouched.
     input_lease: Option<Arc<ActionInputLease>>,
     timeout: Duration,
+    authority_request: bool,
     running_actions_manager: Arc<RunningActionsManagerImpl>,
     /// Set on a kill; every phase that can wait watches it, so a kill ends
     /// a fetch or an upload as surely as it ends the command.
@@ -2514,9 +2533,12 @@ impl RunningActionImpl {
             action_info,
             input_lease,
             timeout,
+            authority_request: false,
             running_actions_manager,
             state: Mutex::new(RunningActionImplState {
                 command_proto: None,
+                launch_observer: None,
+                process_domain_quiescent: true,
                 kill_channel_rx: Some(kill_channel_rx),
                 kill_channel_tx: Some(kill_channel_tx),
                 execution_result: None,
@@ -3070,7 +3092,9 @@ impl RunningActionImpl {
         let program = self
             .canonicalise_path(args[0], &command_proto.working_directory)
             .err_tip(|| format!("Canonicalisation failure. Command={args:#?}"))?;
-        let requested_timeout = if self.action_info.timeout.is_zero() {
+        let requested_timeout = if self.authority_request {
+            self.timeout
+        } else if self.action_info.timeout.is_zero() {
             self.running_actions_manager.max_action_timeout
         } else {
             self.action_info.timeout
@@ -3309,6 +3333,10 @@ impl RunningActionImpl {
             command_builder.env(name, value);
         }
 
+        #[cfg(target_family = "unix")]
+        let authority_observer = self.state.lock().launch_observer.is_some();
+        #[cfg(target_os = "linux")]
+        let mut namespace_receipt = None;
         // Sandboxing of the command if we are running on Linux, this resolves issues where
         // children can spawn children and also provides better reproducibility.
         #[cfg(target_os = "linux")]
@@ -3347,16 +3375,29 @@ impl RunningActionImpl {
                     .map(|mounts| mounts.bind_mounts())
                     .transpose()?
                     .unwrap_or_default();
+                // The authority recipient needs proof about inner PID 1 even
+                // when the outer stub is hard-killed. Legacy callers retain
+                // their existing namespace setup and signal behavior.
+                let receipt_sender = if authority_observer {
+                    let (receiver, sender) =
+                        crate::namespace_utils::NamespaceQuiescenceReceipt::channel()
+                            .err_tip(|| "Creating namespace quiescence receipt channel")?;
+                    namespace_receipt = Some(receiver);
+                    Some(sender)
+                } else {
+                    None
+                };
                 // SAFETY: This function is specifically designed to operate in a async-signal-safe
                 // environment.
                 unsafe {
                     command_builder.pre_exec(move || {
-                        crate::namespace_utils::configure_namespace_with_input_mounts(
+                        crate::namespace_utils::configure_namespace_with_quiescence_receipt(
                             mount,
                             tmp_directory.as_deref(),
                             &root_action_directory,
                             &action_directory,
                             &bind_mounts,
+                            receipt_sender.as_ref(),
                         )
                     });
                 }
@@ -3374,8 +3415,19 @@ impl RunningActionImpl {
         let mut child_process = command_builder
             .spawn()
             .err_tip(|| format!("Could not execute command {args:?}"))?;
+        // Close the parent's copy of the receipt sender held by pre_exec.
+        drop(command_builder);
         // Ours until the wait below collects it; the reaper leaves it alone.
         let _owned_child = crate::reaper::OwnedChild::new(child_process.id());
+        self.state.lock().process_domain_quiescent = false;
+        // A lost receipt leaves the authority adapter uncertain; it neither
+        // retries this launch nor assumes the child failed to start. Legacy
+        // execution installs no observer and follows the same process path.
+        if let Some(observer) = self.state.lock().launch_observer.take()
+            && let Some(pid) = child_process.id()
+        {
+            let _receipt = observer.send(pid);
+        }
         let stdout_reader = child_process
             .stdout
             .take()
@@ -3639,6 +3691,26 @@ impl RunningActionImpl {
                     drop(ScopeGuard::<_, _>::into_inner(child_process_guard));
                     drop(over_limit_keepalive.take());
                     let exit_status = maybe_exit_status.err_tip(|| "Failed to collect exit code of process")?;
+                    #[cfg(target_os = "linux")]
+                    if let Some(receipt) = namespace_receipt.take() {
+                        // Waiting for outer SIGKILL alone is insufficient.
+                        // Bound receipt delivery and actual inner-domain exit;
+                        // any failure keeps the reservation charged.
+                        match tokio::time::timeout(
+                            self.running_actions_manager.max_cleanup_wait,
+                            receipt.close_and_wait(),
+                        ).await {
+                            Ok(Ok(())) => self.state.lock().process_domain_quiescent = true,
+                            result => warn!(?result, "Namespace quiescence remains unconfirmed"),
+                        }
+                    } else if !matches!(self.running_actions_manager.use_namespaces, UseNamespaces::No)
+                        && exit_status.code().is_some_and(|code| code != 255)
+                    {
+                        // Legacy outer-stub ordinary exit follows waitpid(PID1).
+                        // A signalled stub and its wait-error sentinel (255)
+                        // cannot prove that the inner namespace has exited.
+                        self.state.lock().process_domain_quiescent = true;
+                    }
                     // TODO(palfrey) We should implement stderr/stdout streaming to client here.
                     // If we get killed before the stream is started, then these will lock up.
                     let killed_action = kill_reason.is_some();
@@ -3653,8 +3725,16 @@ impl RunningActionImpl {
                     // the action would sit here until its timeout. The
                     // sandboxes Bazel runs locally end them the same way.
                     #[cfg(target_family = "unix")]
-                    let had_stragglers = action_pgid
-                        .is_some_and(|pgid| signal_process_group(pgid, libc::SIGKILL));
+                    let had_stragglers = if authority_observer {
+                        // The authority path closes a namespace by exact pidfd.
+                        // A reaped child's numeric PGID may have been reused,
+                        // so it must never receive a late signal. Unisolated
+                        // or unconfirmed domains still bound the output drain
+                        // and retain their original reservation.
+                        !self.state.lock().process_domain_quiescent
+                    } else {
+                        action_pgid.is_some_and(|pgid| signal_process_group(pgid, libc::SIGKILL))
+                    };
                     #[cfg(not(target_family = "unix"))]
                     let had_stragglers = false;
                     // An action that exited on its own with nothing left in
@@ -4275,6 +4355,33 @@ impl RunningAction for RunningActionImpl {
         &self.operation_id
     }
 
+    fn observe_launch(&self, observer: oneshot::Sender<u32>) -> Result<(), Error> {
+        if self
+            .running_actions_manager
+            .execution_configuration
+            .persistent_workers
+            .enabled
+        {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Authority launch observation does not qualify persistent workers"
+            ));
+        }
+        let mut state = self.state.lock();
+        if state.launch_observer.is_some() || state.kill_channel_rx.is_none() {
+            return Err(make_err!(
+                Code::FailedPrecondition,
+                "Launch observation must be installed once before execution"
+            ));
+        }
+        state.launch_observer = Some(observer);
+        Ok(())
+    }
+
+    fn process_domain_quiescent(&self) -> bool {
+        self.state.lock().process_domain_quiescent
+    }
+
     async fn prepare_action(self: Arc<Self>) -> Result<Arc<Self>, Error> {
         let download_timeout = self.running_actions_manager.max_download_timeout;
         let operation_id = self.operation_id.clone();
@@ -4288,7 +4395,7 @@ impl RunningAction for RunningActionImpl {
         // fetching. A window too far out to represent leaves the retries
         // unbounded, as the timeout is.
         let action_timeout = self.action_info.timeout;
-        let retry_window = if action_timeout.is_zero() {
+        let retry_window = if self.authority_request || action_timeout.is_zero() {
             download_timeout
         } else {
             download_timeout.min(action_timeout)
@@ -4486,6 +4593,21 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
         worker_id: String,
         start_execute: StartExecute,
     ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send;
+
+    /// Authority dispatch requires complete accepted platform facts and exact
+    /// finite execution deadlines. Implementations must opt in explicitly.
+    fn create_and_add_authority_action(
+        self: &Arc<Self>,
+        _worker_id: String,
+        _start_execute: StartExecute,
+    ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
+        async {
+            Err(make_err!(
+                Code::Unimplemented,
+                "authority action creation is unsupported"
+            ))
+        }
+    }
 
     fn cache_action_result(
         &self,
@@ -5262,11 +5384,18 @@ impl RunningActionsManagerImpl {
         &self,
         start_execute: StartExecute,
         queued_timestamp: SystemTime,
-    ) -> impl Future<Output = Result<ActionInfo, Error>> + '_ {
+        authority_request: bool,
+    ) -> impl Future<Output = Result<(ActionInfo, bool), Error>> + '_ {
         self.metrics.create_action_info.wrap(async move {
-            let execute_request = start_execute
+            let mut execute_request = start_execute
                 .execute_request
                 .err_tip(|| "Expected execute_request to exist in StartExecute")?;
+            // v1 authority fixes an omitted digest function to SHA256. It must
+            // not inherit the mutable legacy process default on this seam.
+            if authority_request && execute_request.digest_function == 0 {
+                execute_request.digest_function =
+                    DigestHasherFunc::Sha256.proto_digest_func().into();
+            }
             let action_digest: DigestInfo = execute_request
                 .action_digest
                 .clone()
@@ -5278,6 +5407,17 @@ impl RunningActionsManagerImpl {
                     .await
                     .err_tip(|| "During start_action")
                     .map_err(tag_missing_input)?;
+            let explicit_timeout = action.timeout.is_some();
+            if authority_request
+                && let Some(timeout) = action.timeout
+                && (!(0..=315_576_000_000).contains(&timeout.seconds)
+                    || !(0..1_000_000_000).contains(&timeout.nanos))
+            {
+                return Err(make_err!(
+                    Code::InvalidArgument,
+                    "invalid authority Action timeout"
+                ));
+            }
             let mut action_info = ActionInfo::try_from_action_and_execute_request(
                 execute_request,
                 action,
@@ -5292,7 +5432,24 @@ impl RunningActionsManagerImpl {
             // number the ledger charged. Off, the worker keeps reading the
             // client's copy as it always did, so an upgrade changes no
             // action's environment on its own.
-            if self.execution_configuration.resource_enforcement.is_some()
+            if authority_request {
+                let platform = start_execute.platform.ok_or_else(|| {
+                    make_err!(
+                        Code::InvalidArgument,
+                        "authority dispatch requires complete platform"
+                    )
+                })?;
+                let mut properties = HashMap::new();
+                for property in platform.properties {
+                    if properties.insert(property.name, property.value).is_some() {
+                        return Err(make_err!(
+                            Code::InvalidArgument,
+                            "duplicate authority platform property"
+                        ));
+                    }
+                }
+                action_info.platform_properties = properties;
+            } else if self.execution_configuration.resource_enforcement.is_some()
                 && let Some(platform) = start_execute.platform
             {
                 for property in platform.properties {
@@ -5301,7 +5458,7 @@ impl RunningActionsManagerImpl {
                         .insert(property.name, property.value);
                 }
             }
-            Ok(action_info)
+            Ok((action_info, explicit_timeout))
         })
     }
 
@@ -5471,13 +5628,12 @@ impl RunningActionsManagerImpl {
     }
 }
 
-impl RunningActionsManager for RunningActionsManagerImpl {
-    type RunningAction = RunningActionImpl;
-
-    async fn create_and_add_action(
+impl RunningActionsManagerImpl {
+    async fn create_and_add_action_impl(
         self: &Arc<Self>,
         worker_id: String,
         start_execute: StartExecute,
+        authority_request: bool,
     ) -> Result<Arc<RunningActionImpl>, Error> {
         self.metrics
             .create_and_add_action
@@ -5487,13 +5643,28 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 let capture_digest = start_execute.execute_request.as_ref()
                     .and_then(|request| request.action_digest.as_ref())
                     .map(|digest| digest.hash.clone()).unwrap_or_default();
-                let queued_timestamp = start_execute
-                    .queued_timestamp
-                    .and_then(|time| time.try_into().ok())
-                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                let queued_timestamp = if authority_request {
+                    let queued = start_execute.queued_timestamp.ok_or_else(|| make_err!(Code::InvalidArgument, "authority dispatch requires queued timestamp"))?;
+                    if !(-62_135_596_800..=253_402_300_799).contains(&queued.seconds) || !(0..1_000_000_000).contains(&queued.nanos) {
+                        return Err(make_err!(Code::InvalidArgument, "invalid authority queued timestamp"));
+                    }
+                    SystemTime::try_from(queued).map_err(|error| make_err!(Code::InvalidArgument, "invalid queued timestamp: {error}"))?
+                } else {
+                    start_execute.queued_timestamp.and_then(|time| time.try_into().ok()).unwrap_or(SystemTime::UNIX_EPOCH)
+                };
                 let operation_id = start_execute
                     .operation_id.as_str().into();
-                let action_info = self.create_action_info(start_execute, queued_timestamp).await?;
+                let action_info_future = self.create_action_info(start_execute, queued_timestamp, authority_request);
+                let (action_info, explicit_timeout) = if authority_request {
+                    tokio::time::timeout(self.max_download_timeout, action_info_future)
+                        .await.map_err(|_| make_err!(Code::DeadlineExceeded, "authority Action fetch exceeded download timeout"))??
+                } else {
+                    action_info_future.await?
+                };
+                let exceeds_worker_limit = action_info.timeout > self.max_action_timeout;
+                if authority_request && explicit_timeout && exceeds_worker_limit {
+                    return Err(make_err!(Code::InvalidArgument, "authority Action timeout exceeds worker maximum"));
+                }
                 debug!(
                     ?action_info,
                     "Worker received action",
@@ -5513,7 +5684,9 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                     output_upload_start_timestamp: SystemTime::UNIX_EPOCH,
                     output_upload_completed_timestamp: SystemTime::UNIX_EPOCH,
                 };
-                let timeout = if action_info.timeout.is_zero() || self.timeout_handled_externally {
+                let timeout = if authority_request && explicit_timeout {
+                    action_info.timeout
+                } else if action_info.timeout.is_zero() || self.timeout_handled_externally {
                     self.max_action_timeout
                 } else {
                     action_info.timeout
@@ -5531,14 +5704,16 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 } else {
                     timeout
                 };
-                let running_action = Arc::new(RunningActionImpl::new(
+                let mut running_action = RunningActionImpl::new(
                     execution_metadata,
                     operation_id.clone(),
                     action_directory,
                     action_info,
                     timeout,
                     self.clone(),
-                ));
+                );
+                running_action.authority_request = authority_request;
+                let running_action = Arc::new(running_action);
                 {
                     let mut running_actions = self.running_actions.lock();
                     // Check if action already exists and is still alive
@@ -5578,6 +5753,28 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 }
                 Ok(running_action)
             })
+            .await
+    }
+}
+
+impl RunningActionsManager for RunningActionsManagerImpl {
+    type RunningAction = RunningActionImpl;
+
+    async fn create_and_add_action(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        self.create_and_add_action_impl(worker_id, start_execute, false)
+            .await
+    }
+
+    async fn create_and_add_authority_action(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        self.create_and_add_action_impl(worker_id, start_execute, true)
             .await
     }
 

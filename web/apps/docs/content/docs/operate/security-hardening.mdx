@@ -328,6 +328,16 @@ through, predictable paths there (`isolate_tmp: false` keeps the host's
 `noexec` included, not the host `/tmp`'s); the rest of the host filesystem
 stays visible.
 
+The outer namespace wrapper and the action's namespace-init process exit
+separately. Hard-killing the wrapper signals the inner process, but waiting for
+the wrapper alone does not confirm that namespace teardown has finished.
+Without PID namespaces, a descendant can leave the original process group;
+killing that group or removing the action directory cannot certify that every
+descendant stopped. A resource-reclamation guarantee therefore needs a receipt
+for the complete process domain, or an external container or host fence.
+
+<SourceLink file="nativelink-worker/src/namespace_utils.rs" symbol="configure_namespace" />
+
 Note what is absent from that flag list: **`CLONE_NEWNET`**. No network
 namespace is created. An action has the worker's full network access, including to port
 50061 on your scheduler, and to anything else on the worker's network.

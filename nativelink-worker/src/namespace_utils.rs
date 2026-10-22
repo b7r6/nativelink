@@ -13,8 +13,211 @@
 // limitations under the License.
 
 use std::io::Error;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd as PidFd, RawFd};
+use std::os::unix::net::UnixStream;
 
+use tokio::io::unix::AsyncFd;
 use tracing::error;
+
+/// The worker's end of a private, one-receipt channel from the namespace stub.
+/// The received pidfd identifies the actual inner PID 1, not the outer stub.
+#[derive(Debug)]
+pub struct NamespaceQuiescenceReceipt(AsyncFd<UnixStream>);
+
+impl NamespaceQuiescenceReceipt {
+    /// Allocate before `pre_exec`; the sender must remain owned by that closure.
+    pub fn channel() -> std::io::Result<(Self, UnixStream)> {
+        let (receiver, sender) = UnixStream::pair()?;
+        receiver.set_nonblocking(true)?;
+        sender.set_nonblocking(true)?;
+        Ok((Self(AsyncFd::new(receiver)?), sender))
+    }
+
+    /// Called only after the outer stub has exited. A signal through the exact
+    /// pidfd closes the race where the stub died before PID 1 set PDEATHSIG.
+    /// Readiness of PID 1 proves the namespace's other processes have exited:
+    /// Linux calls `zap_pid_ns_processes` before making PID 1 a waitable zombie.
+    /// <https://github.com/torvalds/linux/blob/v6.12/kernel/pid_namespace.c>
+    pub async fn close_and_wait(self) -> std::io::Result<()> {
+        let pidfd = loop {
+            let mut ready = self.0.readable().await?;
+            match ready.try_io(|socket| receive_pidfd(socket.get_ref().as_raw_fd())) {
+                Ok(result) => break result?,
+                Err(_would_block) => {}
+            }
+        };
+        // SAFETY: pidfd remains owned here; the syscall retains no pointer.
+        let result = unsafe {
+            libc::syscall(
+                libc::SYS_pidfd_send_signal,
+                pidfd.as_raw_fd(),
+                libc::SIGKILL,
+                core::ptr::null::<libc::siginfo_t>(),
+                0,
+            )
+        };
+        if result == -1 {
+            let err = Error::last_os_error();
+            if err.raw_os_error() != Some(libc::ESRCH) {
+                return Err(err);
+            }
+        }
+        let pidfd = AsyncFd::new(pidfd)?;
+        loop {
+            let mut ready = pidfd.readable().await?;
+            // Tokio permits spurious readiness. Only the kernel's actual
+            // pidfd state certifies exit; no read operation exists for pidfds.
+            if pidfd_exited(pidfd.get_ref().as_raw_fd())? {
+                return Ok(());
+            }
+            ready.clear_ready();
+        }
+    }
+}
+
+fn pidfd_exited(pidfd: RawFd) -> std::io::Result<bool> {
+    let mut pollfd = libc::pollfd {
+        fd: pidfd,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    loop {
+        // SAFETY: the single pollfd is initialized and owned on the stack;
+        // timeout zero never blocks an executor thread.
+        let result = unsafe { libc::poll(&raw mut pollfd, 1, 0) };
+        if result < 0 {
+            let err = Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(err);
+        }
+        if pollfd.revents & (libc::POLLERR | libc::POLLNVAL) != 0 {
+            return Err(Error::from_raw_os_error(libc::EIO));
+        }
+        return Ok(result == 1 && pollfd.revents & (libc::POLLIN | libc::POLLHUP) != 0);
+    }
+}
+
+// Linux libc variants expose ancillary lengths as either size_t or socklen_t.
+// Generic checked conversion works for either ABI without post-fork panics.
+fn ancillary_length<T, U: TryFrom<T>>(length: T) -> std::io::Result<U> {
+    U::try_from(length).map_err(|_| Error::from_raw_os_error(libc::EOVERFLOW))
+}
+
+fn receive_pidfd(socket: RawFd) -> std::io::Result<PidFd> {
+    let mut byte = [0u8];
+    let mut iov = libc::iovec {
+        iov_base: byte.as_mut_ptr().cast(),
+        iov_len: byte.len(),
+    };
+    // usize alignment meets cmsghdr's alignment on supported Linux targets.
+    let mut control = [0usize; 4];
+    // SAFETY: zero is valid for every msghdr field; pointers are set below.
+    let mut message: libc::msghdr = unsafe { core::mem::zeroed() };
+    message.msg_iov = &raw mut iov;
+    message.msg_iovlen = 1;
+    message.msg_control = control.as_mut_ptr().cast();
+    message.msg_controllen = ancillary_length(size_of_val(&control))?;
+    // SAFETY: all buffers above are initialized, writable and live for recvmsg.
+    let received = unsafe {
+        libc::recvmsg(
+            socket,
+            &raw mut message,
+            libc::MSG_CMSG_CLOEXEC | libc::MSG_DONTWAIT,
+        )
+    };
+    if received == -1 {
+        return Err(Error::last_os_error());
+    }
+    let mut descriptors = Vec::new();
+    // SAFETY: recvmsg initialized the control messages and their lengths. Own
+    // every delivered fd before validation so even rejected receipts close it.
+    unsafe {
+        let mut header = libc::CMSG_FIRSTHDR(&raw const message);
+        while !header.is_null() {
+            if (*header).cmsg_level == libc::SOL_SOCKET && (*header).cmsg_type == libc::SCM_RIGHTS {
+                let header_size: usize = ancillary_length((*header).cmsg_len)?;
+                let count = header_size
+                    .checked_sub(ancillary_length(libc::CMSG_LEN(0))?)
+                    .ok_or_else(|| Error::from_raw_os_error(libc::EPROTO))?
+                    / size_of::<RawFd>();
+                for index in 0..count {
+                    let fd = libc::CMSG_DATA(header)
+                        .cast::<RawFd>()
+                        .add(index)
+                        .read_unaligned();
+                    descriptors.push(PidFd::from_raw_fd(fd));
+                }
+            }
+            header = libc::CMSG_NXTHDR(&raw const message, header);
+        }
+    }
+    if received != 1
+        || byte != [1]
+        || message.msg_flags & libc::MSG_CTRUNC != 0
+        || descriptors.len() != 1
+    {
+        return Err(Error::from_raw_os_error(libc::EPROTO));
+    }
+    Ok(descriptors.remove(0))
+}
+
+/// Only called by the single-threaded stub, before it reaps its direct child.
+/// SIGCHLD is default and blocked, with `SA_NOCLDWAIT` cleared, so even a child
+/// that has already exited cannot have its PID reused before `pidfd_open`.
+/// <https://man7.org/linux/man-pages/man2/pidfd_open.2.html>
+fn send_pidfd(socket: RawFd, pid: libc::pid_t) {
+    let Ok(fd_size) = u32::try_from(size_of::<RawFd>()) else {
+        return;
+    };
+    // SAFETY: libc's CMSG helpers only perform integer layout calculations.
+    let (Ok(control_len), Ok(header_len)) = (unsafe {
+        (
+            ancillary_length(libc::CMSG_SPACE(fd_size)),
+            ancillary_length(libc::CMSG_LEN(fd_size)),
+        )
+    }) else {
+        return;
+    };
+    // SAFETY: direct syscall with integer arguments; no allocation or locks.
+    let pidfd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
+    let Ok(pidfd) = RawFd::try_from(pidfd) else {
+        return;
+    };
+    if pidfd < 0 {
+        return;
+    }
+    let mut byte = [1u8];
+    let mut iov = libc::iovec {
+        iov_base: byte.as_mut_ptr().cast(),
+        iov_len: byte.len(),
+    };
+    let mut control = [0usize; 4];
+    // SAFETY: all buffer pointers below remain valid through sendmsg. The
+    // ancillary buffer is aligned and large enough for one RawFd. These calls
+    // allocate no Rust state and are safe in the post-fork pre_exec context.
+    unsafe {
+        let mut message: libc::msghdr = core::mem::zeroed();
+        message.msg_iov = &raw mut iov;
+        message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast();
+        message.msg_controllen = control_len;
+        let header = libc::CMSG_FIRSTHDR(&raw const message);
+        (*header).cmsg_level = libc::SOL_SOCKET;
+        (*header).cmsg_type = libc::SCM_RIGHTS;
+        (*header).cmsg_len = header_len;
+        libc::CMSG_DATA(header)
+            .cast::<RawFd>()
+            .write_unaligned(pidfd);
+        libc::sendmsg(
+            socket,
+            &raw const message,
+            libc::MSG_NOSIGNAL | libc::MSG_DONTWAIT,
+        );
+        libc::close(pidfd);
+    }
+}
 
 /// A wrapper around a Child that may be the stub of a PID namespace. A
 /// SIGTERM to the stub is passed on to the action; a SIGKILL to the stub
@@ -58,9 +261,9 @@ impl MaybeNamespacedChild {
     }
 
     /// SIGKILL the child and wait for it. Namespaced, the child is the
-    /// stub and the init of the action's PID namespace, so its death takes
-    /// the action and everything the action spawned with it; the stub also
-    /// set `PR_SET_PDEATHSIG` on the action for the same end. Not
+    /// outer stub. Its death signals the inner namespace init through
+    /// `PR_SET_PDEATHSIG`; waiting for the stub alone does not prove that
+    /// the inner namespace has finished exiting. Not
     /// namespaced, the child is its own group leader, so the group gets the
     /// SIGKILL first: a timed-out or cancelled action used to lose only its
     /// direct child while its descendants ran on (issue #225).
@@ -703,6 +906,28 @@ pub fn configure_namespace_with_input_mounts(
     action_directory: &core::ffi::CStr,
     input_mounts: &[ReadOnlyBindMount],
 ) -> std::io::Result<()> {
+    configure_namespace_with_quiescence_receipt(
+        mount,
+        tmp_directory,
+        root_action_directory,
+        action_directory,
+        input_mounts,
+        None,
+    )
+}
+
+/// Like `configure_namespace_with_input_mounts`, optionally handing the worker
+/// a pidfd for the inner namespace init. The sender is allocated before fork,
+/// is close-on-exec, and is not exposed to the executed action. Failure to send
+/// the receipt changes no process semantics and cannot certify quiescence.
+pub fn configure_namespace_with_quiescence_receipt(
+    mount: bool,
+    tmp_directory: Option<&core::ffi::CStr>,
+    root_action_directory: &core::ffi::CStr,
+    action_directory: &core::ffi::CStr,
+    input_mounts: &[ReadOnlyBindMount],
+    receipt_sender: Option<&UnixStream>,
+) -> std::io::Result<()> {
     if !mount && !input_mounts.is_empty() {
         return Err(Error::from_raw_os_error(libc::EINVAL));
     }
@@ -767,11 +992,43 @@ pub fn configure_namespace_with_input_mounts(
         }
     }
 
+    let mut old_mask = core::mem::MaybeUninit::<libc::sigset_t>::uninit();
+    if receipt_sender.is_some() {
+        // No handler, ignored disposition, or SA_NOCLDWAIT may reap PID 1
+        // before the stub opens its pidfd. There is only this thread after
+        // fork. Restore the action's original signal mask in the inner child.
+        // SAFETY: stack-only initialized sigaction/sigset values; these APIs
+        // are async-signal-safe and retain no pointers.
+        unsafe {
+            let mut action: libc::sigaction = core::mem::zeroed();
+            action.sa_sigaction = libc::SIG_DFL;
+            libc::sigemptyset(&raw mut action.sa_mask);
+            if libc::sigaction(libc::SIGCHLD, &raw const action, core::ptr::null_mut()) != 0 {
+                return Err(Error::last_os_error());
+            }
+            let mut blocked: libc::sigset_t = core::mem::zeroed();
+            libc::sigemptyset(&raw mut blocked);
+            libc::sigaddset(&raw mut blocked, libc::SIGCHLD);
+            if libc::sigprocmask(libc::SIG_BLOCK, &raw const blocked, old_mask.as_mut_ptr()) != 0 {
+                return Err(Error::last_os_error());
+            }
+        }
+    }
+
     // Fork to enter the PID namespace.
     // SAFETY: We are already in a required async-signal-safe environment, we
     // will continue to ensure that ongoing.
     match unsafe { libc::fork() } {
         0 => {
+            if receipt_sender.is_some() {
+                // SAFETY: old_mask was initialized before the successful fork.
+                if unsafe {
+                    libc::sigprocmask(libc::SIG_SETMASK, old_mask.as_ptr(), core::ptr::null_mut())
+                } != 0
+                {
+                    exit(1);
+                }
+            }
             // SAFETY: This function is async-signal-safe and references no memory or resources.
             if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) } != 0 {
                 exit(1);
@@ -779,6 +1036,9 @@ pub fn configure_namespace_with_input_mounts(
             Ok(())
         }
         pid if pid > 0 => {
+            if let Some(sender) = receipt_sender {
+                send_pidfd(sender.as_raw_fd(), pid);
+            }
             // Ensure that any children spawned by the action are re-parented to
             // this process if their parent dies. This is effectively a sub-reaper.
             // SAFETY: prctl is async-signal-safe.
@@ -842,9 +1102,8 @@ pub fn configure_namespace_with_input_mounts(
                     // cleanup. The stub used to turn it into SIGKILL, which
                     // ended the action at once under namespaces while the
                     // same action got its grace without them. The hard kill
-                    // is a SIGKILL to the stub itself: as this PID
-                    // namespace's init, its death takes every process in
-                    // the namespace with it.
+                    // is a SIGKILL to the outer stub; PDEATHSIG then kills
+                    // the inner namespace init. These are distinct exits.
                     // SAFETY: pid is valid and we are sending a signal.
                     unsafe { libc::kill(pid, libc::SIGTERM) };
                 }

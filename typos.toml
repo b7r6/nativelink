@@ -4,6 +4,10 @@ conly = "conly"
 # in-toto attestation format used by SLSA provenance (`*.intoto.jsonl`)
 intoto = "intoto"
 
+[default.extend-identifiers]
+# POSIX ancillary-message control-buffer length; this is a libc field.
+msg_controllen = "msg_controllen"
+
 [default]
 # Old wrong spelling support
 extend-ignore-re = [
@@ -22,6 +26,8 @@ extend-exclude = [
   "web/*",
   # Contains old wrongly spelt data
   "nativelink-util/tests/data/*.json",
+  # Raw operating-system observations preserve the observed process names.
+  "nativelink-scheduler/design/categorical/evidence/*/ambient-processes.json",
   # Generated from the site, the blog and the docs corpus (all covered or
   # excluded above); regenerated, never edited.
   "llms-full.txt",

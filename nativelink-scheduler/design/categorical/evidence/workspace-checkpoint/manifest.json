@@ -1,0 +1,84 @@
+{
+  "scope": "Experimental checkpoint regression, not production qualification or performance evidence. Source hashes captured after formatter-only changes; the followup covers narrow changes after the full Bazel run. Some backend fixtures can skip when their service is unavailable. Existing five ignored Cargo tests remain ignored. Real namespaced worker bridge separately exercised on this host.",
+  "base_commit": "283ff776264fd4f7afe672d209995df088fc347d",
+  "source_sha256": {
+    "BUILD.bazel": "657eb1bd3363529c78ef7524001eacfc33891a36d43818168e6a943a7bcaf9c7",
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto": "1f1c7b40ea1c6b9e27c53412ae5f867fdfbd84306cff826a80e5dcd850bead96",
+    "nativelink-proto/genproto/com.github.trace_machina.nativelink.remote_execution.pb.rs": "f76e63031c3d94af28025c3bc60e1a374241c27b15596d636e5de6cebf5aeebb",
+    "nativelink-scheduler/BUILD.bazel": "2ba331540347cf1457ae39f66226383344b9ef7310231c3b2fe1af400caa32d8",
+    "nativelink-scheduler/Cargo.toml": "1e5f10e36f7a8ce633d9079f65180cf1aefbda07b1448db70987819ae68217fd",
+    "nativelink-scheduler/examples/authority_budget.rs": "536fffe739cfc1da8505021ae827d28b81aec55b2846d54a11ef6f9077424934",
+    "nativelink-scheduler/src/authority/journal.rs": "d8c2d9e7b5441659ff71030fbdb63f37a84c4940ba14214edc762fa743eddcd2",
+    "nativelink-scheduler/src/authority/mod.rs": "3227738f52b4ec94488a2354230f41d034a0d67d685506de5979ea93d9206f7b",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/tests.rs": "c84dc7947c1d489c471877c2934fb0955cfea57c12b3dc2f58a5a09d313a2c8c",
+    "nativelink-scheduler/src/authority/types.rs": "24c978a1e4aa19b968a2207ffff5c4d0e5beb5dfa6768b4eb2c4150e5e9d8e0c",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-scheduler/tests/authority/adversarial.rs": "f275d693525741cfe76367b2329fccd656f5e85a54fbc7cc2ae6d5c9c34c3fef",
+    "nativelink-scheduler/tests/authority/campaign.rs": "ed5348b3b93b5484a0fd37d3c079eaef336556faf8894d7fd4df5a0714e85bd6",
+    "nativelink-scheduler/tests/authority/harness.rs": "34adbde9bd86f9b9f4ae693446cf5b691ef6efae952908503e1afe44bcc4630f",
+    "nativelink-scheduler/tests/authority/recipient.rs": "77174d909714d13ea7481adf975de1211dfb9dec5a00dff0ebcccf43ac7ec0e0",
+    "nativelink-scheduler/tests/authority/reference.rs": "b2e80d119fbf245f20562c19fbf1769aba4de3fd8428dd3c92a63533c6d9c8ba",
+    "nativelink-scheduler/tests/authority_cluster_test.rs": "0c9ae21b64caa221fe3342b43b618bba222e8849247ef94ce5779fc80fb17205",
+    "nativelink-scheduler/tests/authority_raft_test.rs": "130c46e71a7e2d82d62d0eeed0279afe9fb81972b4b4cc7c8ee06edafe52a34e",
+    "nativelink-scheduler/tests/authority_reapi_test.rs": "f4edc83e0ce03cdf077b1153dbe039912175824adebcc95345d79d563ef7afdd",
+    "nativelink-scheduler/tests/authority_request_test.rs": "6474d0c180a767ad4d12acee434b26027bac3941508ac5bb4658ff74f3137d34",
+    "nativelink-scheduler/tests/authority_test.rs": "0e77d78496ce76b58f4e74fcdae49b23c12ea3022b6a242e30aa36a4475a99b2",
+    "nativelink-scheduler/tests/retention/coarse.rs": "dfbe4d3701a510421be2425cef4e24b67aadd9a77e5be0e260ac2550f80042ad",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167",
+    "nativelink-scheduler/tests/retention_test.rs": "4c152686779df5ed9a1693d94ddf6b53b5c5911420eb0563b793b8dcdde004f6",
+    "nativelink-store/tests/filesystem_store_test.rs": "07ffc2d467b041b875df56691030181d8f489d29d9b945e87d61515baba4fa96",
+    "nativelink-worker/BUILD.bazel": "733a8015da1ac1da2b84e3649b540542b84817ca09e09b940f311423e99e885f",
+    "nativelink-worker/Cargo.toml": "2f2426acc3fb57d3ee6bbb72c4addc195a9baa033ce1d9d46940416d815e670c",
+    "nativelink-worker/src/authority_worker.rs": "905e7a00aa925e9de4d783e642ee5ca85b0eaf6d4b8dd44e6dbd506746c34200",
+    "nativelink-worker/src/authority_worker_transport.rs": "cbab4a1245014d4abf2ec0e748014c677d36373f09f8913e917bf60236317248",
+    "nativelink-worker/src/lib.rs": "0eb0de9f1a0841f2f785f57167bf0a7106bcb04cecd43926a69bef538dedd6b6",
+    "nativelink-worker/src/namespace_utils.rs": "ce4ee4fe12c1d04742ac5241c3f08f52c14d0bff2ef3f7c45e8ef5c010eaf8c2",
+    "nativelink-worker/src/running_actions_manager.rs": "3c8ee558764e350484619fbd2c0422636a7d73714bdb54341fea5aa291365099",
+    "nativelink-worker/tests/authority_scheduler_test.rs": "77c11a64fd0352cbd0cc7ade70cfb07ecf8cb7feaa3d148128a2eb6057cf2d3d",
+    "nativelink-worker/tests/authority_worker_test.rs": "b260f5dd529e80e12fddbd3dc6ba9b24e8736b12e154887282a471bc550b45cf",
+    "nativelink-worker/tests/namespace_utils_test.rs": "68f0049532c75ca7e83df85d4a056ea2c41df537420e5c4db72f0c29c74dd26d",
+    "nativelink-worker/tests/running_actions_manager_test.rs": "4e4857b9fc126992ee361a407ac9a8121b03702d2d5a63d26aad8bfdd7914f08"
+  },
+  "logs": [
+    {
+      "file": "cargo-workspace-check.log.gz",
+      "command": "cargo check --locked --offline --all --profile smol -j 24",
+      "result": "Passed",
+      "uncompressed_sha256": "4e9c8889de6b012762e5dbf5820475607c5c445914a5cf7dcf4e3d988155dec3",
+      "gzip_sha256": "73056b4da84df5fe183a26c1b0f1f3c6df3d8ba8dfc9be439cf059d1ee01c2b2"
+    },
+    {
+      "file": "cargo-workspace-tests.log.gz",
+      "command": "cargo test --locked --offline --all --profile smol -j 24",
+      "result": "1546 passed, 0 failed, 5 ignored across 142 result summaries",
+      "uncompressed_sha256": "ebe2f0bbb0b270ea7e5759b10e49392271a72b2b8646b1b8ad1bc696b528e1dc",
+      "gzip_sha256": "f0ea445b6eb7448b5a5ceb6ea4f067e52c1a005beeac41c2b930c8805b3fa490"
+    },
+    {
+      "file": "bazel-workspace-regression.log.gz",
+      "command": "bazel test //... --jobs=32 --test_timeout=300 --test_output=errors",
+      "result": "135 targets passed",
+      "uncompressed_sha256": "b18b94c1483eea9086deaf4662510c1d5467480f7078770384ff1c666bd6f3eb",
+      "gzip_sha256": "f17bcbeaba2341d6f1a86f13dfeb8ed8da96dc5055108b8f574ee8c23aac4c4d"
+    },
+    {
+      "file": "bazel-checkpoint-followup.log.gz",
+      "command": "bazel test //nativelink-scheduler:unit_test //nativelink-scheduler:authority_test //nativelink-store:integration_tests/filesystem_store_test_test --jobs=24 --test_timeout=300 --test_output=errors",
+      "result": "3 targets passed after narrow restore/fixture corrections",
+      "uncompressed_sha256": "c68ffd69b59bf9f66f7160b3961c486bfb24adffecad202115618f43a00a2c7b",
+      "gzip_sha256": "a65f69f305d0372b95e4f4c4d4622043e7e9677355ef7f41d3cd071f49820709"
+    },
+    {
+      "file": "pre-commit.log.gz",
+      "command": "pre-commit run --files <all changed and added files>",
+      "result": "All applicable hooks passed; exact archived source-plan and raw observation bytes preserved by narrow source-declared exclusions. Morning-ledger validation prose added after this run is checked by the commit hook.",
+      "uncompressed_sha256": "66d282837ebb04d0bae1165f2ba3d25416bf619d93ba28ec76704144ccb703b0",
+      "gzip_sha256": "cdf088cc0dfc498337e639a5d30299e7aa6e782b1bd16adf37d47b2b3cb5f2e6"
+    }
+  ]
+}

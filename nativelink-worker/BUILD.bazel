@@ -10,6 +10,8 @@ load(
 rust_library(
     name = "nativelink-worker",
     srcs = [
+        "src/authority_worker.rs",
+        "src/authority_worker_transport.rs",
         "src/buck2_file_capture.rs",
         "src/capacity.rs",
         "src/directory_cache.rs",
@@ -70,6 +72,8 @@ rust_test_suite(
     name = "integration",
     timeout = "short",
     srcs = [
+        "tests/authority_scheduler_test.rs",
+        "tests/authority_worker_test.rs",
         "tests/capacity_test.rs",
         "tests/directory_cache_stress_test.rs",
         "tests/directory_cache_test.rs",
@@ -93,6 +97,7 @@ rust_test_suite(
         "//nativelink-error",
         "//nativelink-metric",
         "//nativelink-proto",
+        "//nativelink-scheduler",
         "//nativelink-store",
         "//nativelink-util",
         "@crates//:async-lock",
@@ -107,6 +112,7 @@ rust_test_suite(
         "@crates//:serial_test",
         "@crates//:tempfile",
         "@crates//:tokio",
+        "@crates//:tokio-stream",
         "@crates//:tonic",
         "@crates//:tonic-prost",
         "@crates//:tracing",

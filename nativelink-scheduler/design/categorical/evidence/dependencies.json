@@ -1,0 +1,74 @@
+{
+  "packages": [
+    {
+      "name": "openraft",
+      "version": "0.9.25",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "a97014fb78acb77be3a40ac2da305f6dd3a6b243f3a908ace87d29b3972eaafd",
+      "dependencies": [
+        "anyerror",
+        "byte-unit",
+        "chrono",
+        "clap",
+        "derive_more 1.0.0",
+        "futures",
+        "maplit",
+        "openraft-macros",
+        "rand 0.8.6",
+        "serde",
+        "thiserror 1.0.69",
+        "tokio",
+        "tracing",
+        "tracing-futures",
+        "validit"
+      ]
+    },
+    {
+      "name": "openraft-macros",
+      "version": "0.9.25",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "55417d79f46a787dd88c043d831d8b7a0713f7c69d1925f9de51cc42c437250f",
+      "dependencies": [
+        "chrono",
+        "proc-macro2",
+        "quote",
+        "semver",
+        "syn 2.0.117"
+      ]
+    },
+    {
+      "name": "redb",
+      "version": "4.4.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "39178e0a867f9e3eaa6292a4ab1dd3613f2519c5b564341e1e7b29b270736cc4",
+      "dependencies": [
+        "libc"
+      ]
+    }
+  ],
+  "feature_command": "cargo tree --locked -p nativelink-scheduler -e features -i openraft@0.9.25",
+  "storage_api_sources": [
+    {
+      "path": "/home/b7r6/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/openraft-0.9.25/src/storage/v2.rs",
+      "sha256": "3bca9736b1e570fa507b7aef33654e019e7405007ae344e813df51e1dd178eac"
+    }
+  ],
+  "verified_requirements": [
+    "serialized vote and log IO",
+    "vote persisted before return",
+    "LogFlushed only after append persistence",
+    "durable applied state or saved committed position for restart",
+    "ensure_linearizable then consistent applied state read"
+  ],
+  "rechaos": {
+    "repository": "https://github.com/b7r6/rechaos",
+    "revision": "7c90b91b2755d2e2fbb8804664bc0921acd4b38a",
+    "inspection_checkout": "/tmp/nativelink-rechaos-inspect",
+    "provenance": "pinned by hypermodern-nativelink commit5202fc0fe159efe9e970ea10b1de5f32d9e3d00c",
+    "lean_scope": "Lean Scheduler.lean models deterministic fault rule selection; it is not a proof of NativeLink execution ownership",
+    "qualification": "not run against canonical server; canonical RPC path does not exist yet"
+  },
+  "lane_b": {
+    "status": "original historical harness and three-host configuration not located; not reconstructed"
+  }
+}

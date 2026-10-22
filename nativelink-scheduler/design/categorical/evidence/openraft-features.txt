@@ -1,0 +1,6 @@
+openraft v0.9.25
+├── openraft feature "serde"
+│   └── nativelink-scheduler v1.8.0 (/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/nativelink-scheduler)
+│       └── nativelink-scheduler feature "default" (command-line)
+└── openraft feature "storage-v2"
+    └── nativelink-scheduler v1.8.0 (/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/nativelink-scheduler) (*)

@@ -1,0 +1,708 @@
+{
+  "scope": "bounded synthetic scheduler journal experiment; not a supported operating point",
+  "dependencies": {
+    "openraft": "0.9.25",
+    "redb": "4.4.0",
+    "durability": "redb Immediate, fsync-backed callbacks; no power-loss certification"
+  },
+  "profile_label_supplied_by_runner": "smol opt-level=z debug-assertions=true",
+  "debug_assertions": true,
+  "runtime_worker_threads": 2,
+  "topology": {
+    "authority_members": 1,
+    "physical_workers": 0,
+    "simulated_worker_advertisements": 1
+  },
+  "workload": {
+    "cycles": 3,
+    "simultaneously_admitted_executions": 16,
+    "padding_bytes_per_request": 1024,
+    "completed_executions": 48,
+    "proposal_submission": "concurrent",
+    "proposal_description": "ordered client_write_ff ingress; join_all outstanding commit/apply replies; balanced causal rounds",
+    "log_batching": "one logical command per Raft entry; actual append/apply call and entry counts recorded in journal_measurements",
+    "fsync_count": "not instrumented; proposal round count is NOT fsync count",
+    "snapshot_schedule": "one persisted snapshot per cycle while all attempts have charged reservations and pending dispatch",
+    "lookups": "recorded misses; no cache backend",
+    "publication": "recorded handoff outcome; no external execution"
+  },
+  "counts": {
+    "logical_commands": 484,
+    "client_write_proposals": 484,
+    "raft_log_entries_during_workload": 484,
+    "recorded_event_json_bytes": 110335,
+    "linearizable_reads": 10,
+    "snapshots": 3,
+    "proposal_rounds": 30,
+    "max_unawaited_response_handles": 16
+  },
+  "timing_ns": {
+    "bootstrap": 1084241148,
+    "workload_including_reads_and_snapshots": 7314867611,
+    "shutdown": 10573951,
+    "reopen_elect_and_read_barrier": 8649552
+  },
+  "observed_rates": {
+    "logical_commands_per_s": 66.16661103642768,
+    "completed_executions_per_s": 6.561977954025886
+  },
+  "latency": {
+    "write_commit_apply_reply": {
+      "count": 484,
+      "min_ns": 13051105,
+      "p50_ns": 231225332,
+      "p95_ns": 270878188,
+      "p99_ns": 275858299,
+      "max_ns": 297447733
+    },
+    "per_command": {
+      "advance_logical_time": {
+        "count": 3,
+        "min_ns": 16133437,
+        "p50_ns": 16840822,
+        "p95_ns": 19515798,
+        "p99_ns": 19515798,
+        "max_ns": 19515798
+      },
+      "complete": {
+        "count": 48,
+        "min_ns": 232780420,
+        "p50_ns": 235789856,
+        "p95_ns": 240018988,
+        "p99_ns": 242430246,
+        "max_ns": 242430246
+      },
+      "lookup_miss": {
+        "count": 48,
+        "min_ns": 202974570,
+        "p50_ns": 223751029,
+        "p95_ns": 225840354,
+        "p99_ns": 231225332,
+        "max_ns": 231225332
+      },
+      "match": {
+        "count": 48,
+        "min_ns": 214897250,
+        "p50_ns": 221858415,
+        "p95_ns": 234581963,
+        "p99_ns": 240854920,
+        "max_ns": 240854920
+      },
+      "preparing": {
+        "count": 48,
+        "min_ns": 222054585,
+        "p50_ns": 226094667,
+        "p95_ns": 246578636,
+        "p99_ns": 252906647,
+        "max_ns": 252906647
+      },
+      "publication_handoff_outcome": {
+        "count": 48,
+        "min_ns": 216299591,
+        "p50_ns": 236430941,
+        "p95_ns": 239434457,
+        "p99_ns": 246971156,
+        "max_ns": 246971156
+      },
+      "register": {
+        "count": 1,
+        "min_ns": 13051105,
+        "p50_ns": 13051105,
+        "p95_ns": 13051105,
+        "p99_ns": 13051105,
+        "max_ns": 13051105
+      },
+      "retire_terminal_execution": {
+        "count": 48,
+        "min_ns": 194703481,
+        "p50_ns": 229190804,
+        "p95_ns": 270881571,
+        "p99_ns": 274564603,
+        "max_ns": 274564603
+      },
+      "running": {
+        "count": 48,
+        "min_ns": 221510098,
+        "p50_ns": 224131786,
+        "p95_ns": 234355604,
+        "p99_ns": 242312539,
+        "max_ns": 242312539
+      },
+      "submit": {
+        "count": 48,
+        "min_ns": 213525997,
+        "p50_ns": 248494523,
+        "p95_ns": 264452758,
+        "p99_ns": 276659463,
+        "max_ns": 276659463
+      },
+      "uploading": {
+        "count": 48,
+        "min_ns": 240519314,
+        "p50_ns": 260133769,
+        "p95_ns": 266670560,
+        "p99_ns": 272772089,
+        "max_ns": 272772089
+      },
+      "worker_accepted": {
+        "count": 48,
+        "min_ns": 207518122,
+        "p50_ns": 221596697,
+        "p95_ns": 275859256,
+        "p99_ns": 297447733,
+        "max_ns": 297447733
+      }
+    },
+    "linearizable_read_including_persisted_state_decode": {
+      "count": 10,
+      "min_ns": 206232,
+      "p50_ns": 1019169,
+      "p95_ns": 1108302,
+      "p99_ns": 1108302,
+      "max_ns": 1108302
+    },
+    "read_barrier_only_singleton_no_network_quorum": {
+      "count": 10,
+      "min_ns": 36804,
+      "p50_ns": 41962,
+      "p95_ns": 53137,
+      "p99_ns": 53137,
+      "max_ns": 53137
+    },
+    "snapshot_build_and_durable_write": {
+      "count": 3,
+      "min_ns": 5556089,
+      "p50_ns": 6164724,
+      "p95_ns": 8684864,
+      "p99_ns": 8684864,
+      "max_ns": 8684864
+    },
+    "core_snapshot_serialize": {
+      "count": 3,
+      "min_ns": 362244,
+      "p50_ns": 394418,
+      "p95_ns": 413375,
+      "p99_ns": 413375,
+      "max_ns": 413375
+    }
+  },
+  "state_sizes": {
+    "peak_core_snapshot_bytes": 81903,
+    "peak_persisted_snapshot_bytes": 94783,
+    "drained_core_snapshot_bytes": 1700,
+    "redb_allocated_file_bytes_after_restart": 757760,
+    "file_size_interpretation": "allocated database file size, NOT durable write volume or replication bytes"
+  },
+  "raft_metrics": {
+    "initial": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 1,
+      "last_applied": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 1
+      },
+      "snapshot": null,
+      "purged": null,
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 1
+        }
+      }
+    },
+    "final": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 485,
+      "last_applied": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 485
+      },
+      "snapshot": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 372
+      },
+      "purged": null,
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 485
+        }
+      }
+    },
+    "reopened": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 485,
+      "last_applied": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 485
+      },
+      "snapshot": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 372
+      },
+      "purged": null,
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 485
+        }
+      }
+    }
+  },
+  "journal_measurements": {
+    "scope": "optional in-memory counters after singleton open through final read; counters are not authority state; successful Immediate commits are not individual device fsync counts",
+    "operations": {
+      "append": {
+        "calls": 484,
+        "completed_calls": 484,
+        "durable_commits": 484,
+        "batch_items": 484,
+        "max_batch_items": 1,
+        "queue_wait_ns": 9522063,
+        "io_elapsed_ns": 2002383888,
+        "commit_elapsed_ns": 1981114863
+      },
+      "apply": {
+        "calls": 484,
+        "completed_calls": 484,
+        "durable_commits": 484,
+        "batch_items": 484,
+        "max_batch_items": 1,
+        "queue_wait_ns": 1878730123,
+        "io_elapsed_ns": 3053991056,
+        "commit_elapsed_ns": 2322444430
+      },
+      "build_snapshot": {
+        "calls": 3,
+        "completed_calls": 3,
+        "durable_commits": 3,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 59415,
+        "io_elapsed_ns": 19917401,
+        "commit_elapsed_ns": 14665793
+      },
+      "get_log_state": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "install_snapshot": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "purge": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "read_applied": {
+        "calls": 13,
+        "completed_calls": 13,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 619306,
+        "io_elapsed_ns": 6582810,
+        "commit_elapsed_ns": 0
+      },
+      "read_committed": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "read_logs": {
+        "calls": 484,
+        "completed_calls": 484,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 12382430,
+        "io_elapsed_ns": 19501395,
+        "commit_elapsed_ns": 0
+      },
+      "read_snapshot": {
+        "calls": 3,
+        "completed_calls": 3,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 79289,
+        "io_elapsed_ns": 2402589,
+        "commit_elapsed_ns": 0
+      },
+      "read_vote": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "save_committed": {
+        "calls": 484,
+        "completed_calls": 484,
+        "durable_commits": 484,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 2844935876,
+        "io_elapsed_ns": 2066725398,
+        "commit_elapsed_ns": 2031364499
+      },
+      "save_vote": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      },
+      "truncate": {
+        "calls": 0,
+        "completed_calls": 0,
+        "durable_commits": 0,
+        "batch_items": 0,
+        "max_batch_items": 0,
+        "queue_wait_ns": 0,
+        "io_elapsed_ns": 0,
+        "commit_elapsed_ns": 0
+      }
+    }
+  },
+  "unmeasured": [
+    "three-member quorum/replication bytes",
+    "block-device write bytes",
+    "production RPC/workers",
+    "direct ActionCache updates",
+    "immutable publications",
+    "root/closure indexes",
+    "serving leases/renewals",
+    "retirement/GC and sustained-renewal collection",
+    "provider latency/faults",
+    "controller dynamics",
+    "representative production workload distributions",
+    "historical Lane B harness"
+  ],
+  "qualification": "M0 production representation and persistent-format freeze remain gated. The adapter persists full state each apply batch; synthetic rates do not establish shared-authority capacity.",
+  "component_probes": {
+    "scope": "separate serial probes after Raft shutdown; raw bytes omit journal envelopes and runtime scheduling",
+    "core_apply_same_recorded_workload": {
+      "count": 484,
+      "min_ns": 174,
+      "p50_ns": 1706,
+      "p95_ns": 7242,
+      "p99_ns": 9696,
+      "max_ns": 12647
+    },
+    "core_snapshot_including_validation": {
+      "count": 484,
+      "min_ns": 8662,
+      "p50_ns": 256988,
+      "p95_ns": 327026,
+      "p99_ns": 341482,
+      "max_ns": 429836
+    },
+    "core_restore_including_validation": {
+      "count": 484,
+      "min_ns": 7093,
+      "p50_ns": 277504,
+      "p95_ns": 354081,
+      "p99_ns": 369136,
+      "max_ns": 408339
+    },
+    "filesystem_and_redb": [
+      {
+        "payload_bytes": 1024,
+        "file_write_seek_sync_all": {
+          "count": 20,
+          "min_ns": 4185779,
+          "p50_ns": 4678684,
+          "p95_ns": 7181690,
+          "p99_ns": 11471382,
+          "max_ns": 11471382
+        },
+        "redb_immediate_transaction_replace": {
+          "count": 20,
+          "min_ns": 3303675,
+          "p50_ns": 5573870,
+          "p95_ns": 7688867,
+          "p99_ns": 8098579,
+          "max_ns": 8098579
+        }
+      },
+      {
+        "payload_bytes": 81903,
+        "file_write_seek_sync_all": {
+          "count": 20,
+          "min_ns": 4515399,
+          "p50_ns": 5181854,
+          "p95_ns": 6920714,
+          "p99_ns": 7358085,
+          "max_ns": 7358085
+        },
+        "redb_immediate_transaction_replace": {
+          "count": 20,
+          "min_ns": 3421853,
+          "p50_ns": 5792041,
+          "p95_ns": 9222767,
+          "p99_ns": 10850652,
+          "max_ns": 10850652
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "unix_time_seconds": 1792704496,
+    "command_arguments": [
+      "target/smol/examples/authority_budget",
+      "/tmp/nativelink-authority-budget-instrumented-concurrent16-01",
+      "3",
+      "16",
+      "1024",
+      "smol opt-level=z debug-assertions=true",
+      "concurrent"
+    ],
+    "git_head": "283ff776264fd4f7afe672d209995df088fc347d",
+    "environment": {
+      "recorded_at": "2026-10-22T20:39:00.668406+00:00",
+      "checkout": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03",
+      "baseline_head": "283ff776264fd4f7afe672d209995df088fc347d",
+      "original_branch": "main",
+      "original_worktree": "clean",
+      "implementation_branch": "categorical-elimination",
+      "plan_sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "platform": "Linux-7.2.9-x86_64-with-glibc2.42",
+      "tools": [
+        {
+          "command": [
+            "cargo",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "cargo 1.97.1 (c980f4866 2026-06-30)\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "rustc",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "rustc 1.97.1 (8bab26f4f 2026-07-14)\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "bazel",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "bazel 9.1.1\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "bun",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "1.3.13\n",
+          "stderr": ""
+        }
+      ],
+      "cpu": {
+        "command": [
+          "lscpu"
+        ],
+        "status": 0,
+        "stdout": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 57 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  64\nOn-line CPU(s) list:                     0-63\nVendor ID:                               GenuineIntel\nModel name:                              INTEL(R) XEON(R) PLATINUM 8573C\nCPU family:                              6\nModel:                                   207\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               2\nStepping:                                2\nMicrocode version:                       0xffffffff\nCPU(s) scaling MHz:                      131%\nCPU max MHz:                             2300.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                4599.99\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch tpr_shadow ept vpid fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves vnmi avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid fsrm arch_capabilities\nVirtualization:                          VT-x\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               1.5 MiB (32 instances)\nL1i cache:                               1 MiB (32 instances)\nL2 cache:                                64 MiB (32 instances)\nL3 cache:                                520 MiB (2 instances)\nNUMA node(s):                            2\nNUMA node0 CPU(s):                       0-31\nNUMA node1 CPU(s):                       32-63\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Vulnerable\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Retpoline\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Vulnerable: Clear CPU buffers attempted, no microcode; SMT Host state unknown\nVulnerability Vmscape:                   Not affected\n",
+        "stderr": ""
+      },
+      "memory": {
+        "command": [
+          "free",
+          "-b"
+        ],
+        "status": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:     270431936512 33337257984 19669864448    50524160 219462889472 237094678528\nSwap:    135215443968     2129920 135213314048\n",
+        "stderr": ""
+      },
+      "upstream_delta": {
+        "command": [
+          "git",
+          "diff",
+          "--stat",
+          "a7bb376e6f66284eb37a77b22d2f258c03ba9a7f..283ff776264fd4f7afe672d209995df088fc347d"
+        ],
+        "status": 0,
+        "stdout": " .bazelversion                                      |   2 +-\n .github/workflows/main.yaml                        |  16 +-\n .github/workflows/native-bazel.yaml                |  10 +-\n MODULE.bazel.lock                                  | 222 ++++++++++-----------\n .../src/memory_awaited_action_db.rs                | 104 ++++++----\n .../tests/simple_scheduler_state_manager_test.rs   |  45 -----\n web/apps/docs/content/docs/contribute/bazel.mdx    |   2 +-\n 7 files changed, 192 insertions(+), 209 deletions(-)\n",
+        "stderr": ""
+      }
+    },
+    "source_sha256": {
+      "../Cargo.lock": "3c1766968bad83294ec60e656e6a361bd4b1585bfb1c98f5e282d03b5c456710",
+      "examples/authority_budget.rs": "c09a1b640c86ed1f2f9a573fbf7f847dd324c1dcbadf7c04f3f9062a2e200e54",
+      "src/authority/journal.rs": "bee24e48fd58675f3976d0319d7b921413d37ce1310ad0999aecd21b7424d575",
+      "src/authority/mod.rs": "51e2694f1178b34c81e55ad4a01037e3e69d37de164050b03c840004d840941a",
+      "src/authority/types.rs": "9ed1c3677ddc50246846f8dcb9030cbc21c4cc5a3fe80fc9963e58ed41d38cdb"
+    },
+    "runtime_source_repository": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03",
+    "source_hash_interpretation": "runtime source files; runner must freeze matching build inputs during measurement",
+    "filesystem": "TARGET SOURCE    FSTYPE OPTIONS\n/      /dev/sda2 ext4   rw,relatime\n",
+    "ambient_load": "shared development host; concurrent builds/tests may run; no performance isolation"
+  }
+}

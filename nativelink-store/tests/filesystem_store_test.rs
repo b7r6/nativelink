@@ -1633,8 +1633,8 @@ async fn file_slot_taken_when_ready() -> Result<(), Error> {
 #[nativelink_test]
 async fn safe_small_safe_eviction() -> Result<(), Error> {
     let store_spec = FilesystemSpec {
-        content_path: "/tmp/nativelink/safe_fs".into(),
-        temp_path: "/tmp/nativelink/safe_fs_temp".into(),
+        content_path: make_temp_path("safe_fs"),
+        temp_path: make_temp_path("safe_fs_temp"),
         eviction_policy: Some(EvictionPolicy {
             max_bytes: 1,
             ..Default::default()

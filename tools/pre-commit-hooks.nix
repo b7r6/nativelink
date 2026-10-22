@@ -27,7 +27,7 @@ in {
   };
   end-of-file-fixer = {
     enable = true;
-    inherit excludes;
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/"];
     types = ["text"];
   };
   fix-byte-order-marker = {
@@ -58,6 +58,8 @@ in {
       "web/apps/web/public/assets/re-api-fellow-fig1-action-lifecycle.jpg"
       "web/apps/web/public/assets/re-api-fellow-fig2-protocol-never-says-compiler.jpg"
       "web/apps/web/public/assets/re-api-fellow-fig3-overlap-hiring.jpg"
+      # Immutable compressed experiment logs, accompanied by hash manifests.
+      "^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"
     ];
     name = "forbid-binary-files";
     types = ["binary"];
@@ -79,7 +81,8 @@ in {
   # Documentation
   vale = {
     enable = true;
-    inherit excludes;
+    # This is an exact archived user-supplied plan, not maintained prose.
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/source-plan\\.md$"];
     settings.configPath = ".vale.ini";
   };
 
@@ -87,6 +90,9 @@ in {
   typos = {
     enable = true;
     settings.configPath = "typos.toml";
+    # The pinned git-hooks module synthesizes an empty `default` table which
+    # overrides configPath. Keep the repository dictionary authoritative.
+    entry = "${pkgs.typos}/bin/typos --config typos.toml --force-exclude";
   };
 
   # Nix
@@ -162,6 +168,8 @@ in {
   pretty-format-json = {
     enable = true;
     args = ["--autofix" "--top-keys" "name,type"];
+    # Preserve captured observations and their recorded byte hashes.
+    excludes = ["^nativelink-scheduler/design/categorical/evidence/"];
   };
 
   # json5

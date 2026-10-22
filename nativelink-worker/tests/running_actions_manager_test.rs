@@ -3742,6 +3742,383 @@ exit 0
         Ok(())
     }
 
+    /// Run alone in a subprocess because the legacy default is a process-wide
+    /// `OnceLock`. Output CAS identity proves the authority seam used SHA256.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn authority_omitted_digest_function_ignores_legacy_default()
+    -> Result<(), Box<dyn core::error::Error>> {
+        const CHILD: &str = "NATIVELINK_AUTHORITY_DIGEST_DEFAULT_CHILD";
+        if env::var_os(CHILD).is_none() {
+            let output = tokio::process::Command::new(env::current_exe()?)
+                .args([
+                    "--exact",
+                    "tests::authority_omitted_digest_function_ignores_legacy_default",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .await?;
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return Ok(());
+        }
+        nativelink_util::digest_hasher::set_default_digest_hasher_func(DigestHasherFunc::Blake3)?;
+        let (_, _, cas, _) = setup_stores().await?;
+        let digest = upload_action(
+            &cas,
+            &Command {
+                arguments: vec![
+                    "/bin/sh".to_owned(),
+                    "-c".to_owned(),
+                    "printf fixed-authority-default".to_owned(),
+                ],
+                ..Command::default()
+            },
+        )
+        .await?;
+        let path = make_temp_path("authority_digest_default");
+        fs::create_dir_all(&path).await?;
+        let manager = enforcing_manager(&path, &cas, ExecutionConfiguration::default()).await?;
+        let mut dispatch = dispatch_with_properties(digest, &[]);
+        dispatch.queued_timestamp = Some(make_system_time(1000).into());
+        dispatch.execute_request.as_mut().unwrap().digest_function = 0;
+        let action = manager
+            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .await?;
+        let result = run_action(action).await?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(
+            result.stdout_digest,
+            compute_buf_digest(
+                b"fixed-authority-default",
+                &mut DigestHasherFunc::Sha256.hasher()
+            )
+        );
+        assert_ne!(
+            result.stdout_digest,
+            compute_buf_digest(
+                b"fixed-authority-default",
+                &mut DigestHasherFunc::Blake3.hasher()
+            )
+        );
+        Ok(())
+    }
+
+    /// Authority handoff selects the complete accepted platform even with
+    /// enforcement disabled, removing stale Action properties rather than merging.
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn authority_platform_replaces_action_with_enforcement_on_or_off()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (_, slow, cas, _) = setup_stores().await?;
+        let command = serialize_and_upload_message(
+            &Command {
+                arguments: vec![
+                    "/bin/sh".to_owned(),
+                    "-c".to_owned(),
+                    "printf '%s|%s' \"$MEM\" \"$OLD\"".to_owned(),
+                ],
+                ..Command::default()
+            },
+            cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let root = serialize_and_upload_message(
+            &Directory::default(),
+            cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let digest = serialize_and_upload_message(
+            &Action {
+                command_digest: Some(command.into()),
+                input_root_digest: Some(root.into()),
+                platform: Some(Platform {
+                    properties: vec![
+                        Property {
+                            name: "memory_kb".to_owned(),
+                            value: "1".to_owned(),
+                        },
+                        Property {
+                            name: "old".to_owned(),
+                            value: "stale".to_owned(),
+                        },
+                    ],
+                }),
+                ..Action::default()
+            },
+            cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        for enforcement in [
+            None,
+            Some(ResourceEnforcement {
+                memory: None,
+                disk_property_name: None,
+                disk_soft: false,
+                disk_headroom_percent: 20,
+            }),
+        ] {
+            let path = make_temp_path("authority_platform");
+            fs::create_dir_all(&path).await?;
+            let manager = enforcing_manager(
+                &path,
+                &cas,
+                ExecutionConfiguration {
+                    resource_enforcement: enforcement,
+                    additional_environment: Some(HashMap::from([
+                        (
+                            "MEM".to_owned(),
+                            EnvironmentSource::Property("memory_kb".to_owned()),
+                        ),
+                        (
+                            "OLD".to_owned(),
+                            EnvironmentSource::Property("old".to_owned()),
+                        ),
+                    ])),
+                    ..ExecutionConfiguration::default()
+                },
+            )
+            .await?;
+            for (properties, expected) in [
+                (vec![("memory_kb", "4096".to_owned())], "4096|"),
+                (vec![], "|"),
+            ] {
+                let mut dispatch = dispatch_with_properties(digest, &properties);
+                dispatch.queued_timestamp = Some(make_system_time(1000).into());
+                let action = manager
+                    .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                    .await?;
+                let result = run_action(action).await?;
+                assert_eq!(result.exit_code, 0);
+                assert_eq!(
+                    slow.as_ref()
+                        .get_part_unchunked(result.stdout_digest, 0, None)
+                        .await?
+                        .as_ref(),
+                    expected.as_bytes()
+                );
+            }
+            for invalid in 0..4 {
+                let mut dispatch = dispatch_with_properties(digest, &[]);
+                dispatch.queued_timestamp = Some(make_system_time(1000).into());
+                match invalid {
+                    0 => dispatch.platform = None,
+                    1 => {
+                        dispatch.platform.as_mut().unwrap().properties = vec![
+                            Property {
+                                name: "dup".to_owned(),
+                                value: "x".to_owned()
+                            };
+                            2
+                        ];
+                    }
+                    2 => dispatch.queued_timestamp = None,
+                    _ => dispatch.queued_timestamp.as_mut().unwrap().nanos = -1,
+                }
+                assert_eq!(
+                    manager
+                        .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                        .await
+                        .unwrap_err()
+                        .code,
+                    Code::InvalidArgument
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_family = "unix")]
+    #[nativelink_test(start_paused = true)]
+    async fn authority_initial_action_fetch_has_a_separate_finite_budget()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (manager, digest, store) = hung_fetch_setup(Duration::from_secs(2)).await?;
+        store.hang_all_reads.store(true, Ordering::Release);
+        let mut dispatch = dispatch_with_properties(digest, &[]);
+        dispatch.queued_timestamp = Some(make_system_time(1000).into());
+        let started = tokio::time::Instant::now();
+        let error = manager
+            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, Code::DeadlineExceeded);
+        assert_eq!(started.elapsed(), Duration::from_secs(2));
+        manager.kill_all().await;
+        Ok(())
+    }
+
+    #[cfg(target_family = "unix")]
+    #[nativelink_test(start_paused = true)]
+    async fn authority_input_fetch_budget_is_independent_of_execution_timeout()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let (manager, digest, store) = fetch_setup_tree(
+            Duration::from_secs(10),
+            Some(Duration::from_secs(1)),
+            false,
+            ExecutionConfiguration::default(),
+            |inner, digest| FlakyStore::new(inner, digest, 2, Code::Unavailable),
+        )
+        .await?;
+        let mut dispatch = dispatch_with_properties(digest, &[]);
+        dispatch.queued_timestamp = Some(make_system_time(1000).into());
+        let action = manager
+            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .await?;
+        let started = tokio::time::Instant::now();
+        let action = action.prepare_action().await?;
+        assert_eq!(store.reads(), 3);
+        assert!(started.elapsed() > Duration::from_secs(2));
+        assert_eq!(
+            std::fs::read(format!("{}/input.txt", action.get_work_directory()))?,
+            FETCH_SETUP_FILE_CONTENT
+        );
+        action.cleanup().await?;
+        Ok(())
+    }
+
+    #[cfg(target_family = "unix")]
+    #[nativelink_test]
+    async fn authority_timeout_preserves_zero_and_fractional_duration_and_rejects_over_max()
+    -> Result<(), Box<dyn core::error::Error>> {
+        static EXPECTED_NANOS: AtomicU64 = AtomicU64::new(0);
+        let (_, _, cas, _) = setup_stores().await?;
+        let command = serialize_and_upload_message(
+            &Command {
+                arguments: vec!["/bin/sleep".to_owned(), "30".to_owned()],
+                ..Command::default()
+            },
+            cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let root = serialize_and_upload_message(
+            &Directory::default(),
+            cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await?;
+        let path = make_temp_path("authority_timeout");
+        fs::create_dir_all(&path).await?;
+        let manager = Arc::new(RunningActionsManagerImpl::new_with_callbacks(
+            RunningActionsManagerArgs {
+                root_action_directory: path,
+                execution_configuration: ExecutionConfiguration::default(),
+                cas_store: cas.clone(),
+                ac_store: None,
+                historical_store: Store::new(cas.clone()),
+                upload_action_result_config: &UploadActionResultConfig {
+                    upload_ac_results_strategy: UploadCacheResultsStrategy::Never,
+                    ..UploadActionResultConfig::default()
+                },
+                max_action_timeout: Duration::from_secs(5),
+                max_upload_timeout: Duration::from_secs(10),
+                max_download_timeout: Duration::from_secs(10),
+                max_cleanup_wait: Duration::from_secs(10),
+                max_cleanup_backoff: Duration::from_millis(10),
+                // Authority must enforce finite deadlines even with this legacy flag.
+                timeout_handled_externally: true,
+                active_input_leases: false,
+                directory_cache: None,
+                #[cfg(target_os = "linux")]
+                readonly_input_mounts: Vec::new(),
+                #[cfg(target_os = "linux")]
+                use_namespaces: use_namespaces(),
+            },
+            Callbacks {
+                now_fn: SystemTime::now,
+                sleep_fn: |duration| {
+                    assert_eq!(
+                        duration.as_nanos(),
+                        u128::from(EXPECTED_NANOS.load(Ordering::SeqCst))
+                    );
+                    Box::pin(future::ready(()))
+                },
+            },
+        )?);
+        for (timeout, expected) in [
+            (
+                Some(prost_types::Duration {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                0,
+            ),
+            (
+                Some(prost_types::Duration {
+                    seconds: 1,
+                    nanos: 123_456_789,
+                }),
+                1_123_456_789,
+            ),
+            (None, 5_000_000_000),
+        ] {
+            EXPECTED_NANOS.store(expected, Ordering::SeqCst);
+            let digest = serialize_and_upload_message(
+                &Action {
+                    command_digest: Some(command.into()),
+                    input_root_digest: Some(root.into()),
+                    timeout,
+                    ..Action::default()
+                },
+                cas.as_pin(),
+                &mut DigestHasherFunc::Sha256.hasher(),
+            )
+            .await?;
+            let mut dispatch = dispatch_with_properties(digest, &[]);
+            dispatch.queued_timestamp = Some(make_system_time(1000).into());
+            let action = manager
+                .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                .await?;
+            let result = run_action(action).await?;
+            assert_eq!(result.error.as_ref().unwrap().code, Code::DeadlineExceeded);
+        }
+        for timeout in [
+            prost_types::Duration {
+                seconds: 5,
+                nanos: 1,
+            },
+            prost_types::Duration {
+                seconds: -1,
+                nanos: 0,
+            },
+            prost_types::Duration {
+                seconds: 0,
+                nanos: -1,
+            },
+        ] {
+            let digest = serialize_and_upload_message(
+                &Action {
+                    command_digest: Some(command.into()),
+                    input_root_digest: Some(root.into()),
+                    timeout: Some(timeout),
+                    ..Action::default()
+                },
+                cas.as_pin(),
+                &mut DigestHasherFunc::Sha256.hasher(),
+            )
+            .await?;
+            let mut dispatch = dispatch_with_properties(digest, &[]);
+            dispatch.queued_timestamp = Some(make_system_time(1000).into());
+            assert_eq!(
+                manager
+                    .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                    .await
+                    .unwrap_err()
+                    .code,
+                Code::InvalidArgument
+            );
+        }
+        Ok(())
+    }
+
     /// The scheduler's properties replace the client's only with enforcement
     /// on. An environment variable read from a property the client never
     /// sent sees the scheduler's value then, and nothing otherwise, so an
@@ -4490,6 +4867,7 @@ exit 0
         inner: Store,
         hang_on: DigestInfo,
         hang_reads: AtomicBool,
+        hang_all_reads: AtomicBool,
         hang_updates: AtomicBool,
     }
 
@@ -4500,6 +4878,7 @@ exit 0
                 inner: Store::new(inner),
                 hang_on,
                 hang_reads: AtomicBool::new(true),
+                hang_all_reads: AtomicBool::new(false),
                 hang_updates: AtomicBool::new(false),
             })
         }
@@ -4553,7 +4932,10 @@ exit 0
             offset: u64,
             length: Option<u64>,
         ) -> Result<(), Error> {
-            if self.hang_reads.load(Ordering::Acquire) && key == StoreKey::Digest(self.hang_on) {
+            if self.hang_all_reads.load(Ordering::Acquire)
+                || (self.hang_reads.load(Ordering::Acquire)
+                    && key == StoreKey::Digest(self.hang_on))
+            {
                 future::pending::<()>().await;
             }
             self.inner

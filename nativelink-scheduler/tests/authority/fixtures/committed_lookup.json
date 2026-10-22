@@ -1,0 +1,65 @@
+{
+  "name": "committed-lookup-survives-lost-sender",
+  "epoch": 1,
+  "inputs": [
+    {
+      "event": {
+        "epoch": 1,
+        "event": {
+          "Submit": {
+            "operation": 1,
+            "request": {
+              "action": {
+                "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+                "digest_function": "sha256",
+                "digest_size_bytes": 1,
+                "instance": "test"
+              },
+              "do_not_cache": false,
+              "execution_scope": null,
+              "execution_timeout": 100,
+              "priority": 0,
+              "properties": {
+                "os": "linux"
+              },
+              "resources": {
+                "cpu_millis": 100,
+                "memory_bytes": 10,
+                "slots": 1
+              },
+              "skip_cache_lookup": false
+            }
+          }
+        }
+      },
+      "id": 1,
+      "parents": []
+    }
+  ],
+  "limits": {
+    "max_effects": 512,
+    "max_executions": 64,
+    "max_operations": 256,
+    "max_payload_bytes": 65536,
+    "max_workers": 32
+  },
+  "schedule": [
+    {
+      "Propose": 1
+    },
+    {
+      "Commit": 1
+    },
+    "Crash",
+    "Checkpoint",
+    {
+      "Deliver": 1
+    },
+    "Crash",
+    {
+      "Deliver": 1
+    }
+  ],
+  "seed": 0,
+  "version": 1
+}

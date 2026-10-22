@@ -1,0 +1,35 @@
+{
+  "scope": "Same-binary shared-host serial/concurrent causal-round control with optional in-memory adapter counters. Immediate durable transaction counts are measured; device fsync syscall counts are not. No durability or consensus changes.",
+  "runs": [
+    {
+      "name": "concurrent16",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-instrumented-concurrent16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "concurrent"
+      ],
+      "summary": "concurrent16-summary.json",
+      "raw_samples": "concurrent16-samples.json.gz",
+      "raw_uncompressed_sha256": "034701984f5d882abdf8a027f83f0bd2a4b6ad8c826efa9a6201640f8909c179"
+    },
+    {
+      "name": "serial16",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-instrumented-serial16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "serial-rounds"
+      ],
+      "summary": "serial16-summary.json",
+      "raw_samples": "serial16-samples.json.gz",
+      "raw_uncompressed_sha256": "1f4f7ecf98f7eaa27b301eb2f83a0f9f750abd79d9c9f7b48bfc8b9f5ee5b7cc"
+    }
+  ]
+}

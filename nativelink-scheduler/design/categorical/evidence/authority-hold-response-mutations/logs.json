@@ -1,0 +1,80 @@
+[
+  {
+    "file": "accept_unvalidated_response_facts.txt.gz",
+    "raw_bytes": 1322,
+    "raw_sha256": "f9f969cd565cc1e2fef4f1c765b238de053accd597a519bed0b6f3df787389bd",
+    "gzip_sha256": "ed2642ac004216466cfc8d204aac2950ba589bf48330b02fe3bc0c2a4c1e5783"
+  },
+  {
+    "file": "apply_uncommitted_proposal.txt.gz",
+    "raw_bytes": 1130,
+    "raw_sha256": "de2a39c4c380facfb4212dbf0d0c997c1a4e49e84b35f58ba25c7463d99cbe0c",
+    "gzip_sha256": "c835b332a19ad8908751edea41d4a8530baf61bc11db2b8d7b75946bbf6a6cdd"
+  },
+  {
+    "file": "backfill_reserved_hold_capacity.txt.gz",
+    "raw_bytes": 1343,
+    "raw_sha256": "328ed5bc0e46c67420b78fbacbaaf2f89dd8a49770a48297d58eafd84bf7aef0",
+    "gzip_sha256": "d0b55cfe653e6a3aa9df0465e964f5f70dcda19c9bcf6e090914437486833ecd"
+  },
+  {
+    "file": "baseline.txt.gz",
+    "raw_bytes": 6494,
+    "raw_sha256": "58a727e69265b984834ff93af3f5a26b20ac9b1571a876e3444e66d191fc1bd3",
+    "gzip_sha256": "99292c383a6f18cf257b5fe939b5f7bd6062acb1e3677fc0b89cdb14b2637ab6"
+  },
+  {
+    "file": "conflate_skip_lookup_and_cacheability.txt.gz",
+    "raw_bytes": 10752,
+    "raw_sha256": "305d74456cf01eed11e884aa599a91f9ced941b63c76bd6ca3cf4770928be541",
+    "gzip_sha256": "56773fc9ec4d60785b27ed1041511e3bdece960655ba02da81ec097757557fab"
+  },
+  {
+    "file": "expect_revoked_uncertain_charges_to_finish.txt.gz",
+    "raw_bytes": 41308,
+    "raw_sha256": "763e53164a19f29a36b93db61a43ceb7642a0543a5bfd00c6e49ff54b69bb9f5",
+    "gzip_sha256": "3047c7928c7220b27e5fd9bfae9dd05d2fab0f94a6dbff8ae9b0c95feb10a0ae"
+  },
+  {
+    "file": "ignore_unknown_authority_section.txt.gz",
+    "raw_bytes": 1301,
+    "raw_sha256": "7f720790ee81bb71bb7006c3062b872c3e256ce00c7950f99ed7c56cd19bcc7c",
+    "gzip_sha256": "0d86f9abdc32d37760672a34e98eae763df0d95f2f85c533d7e22f208fd9ff39"
+  },
+  {
+    "file": "install_valid_prefix_after_failed_snapshot_stream.txt.gz",
+    "raw_bytes": 85949,
+    "raw_sha256": "6c68c643b0d526b7bf3d7d72c7e3b66d2789df6761caf7af18d5a27a0b097c36",
+    "gzip_sha256": "fed80423537866ab86c83c8141fe62c00dd7273e07d9eb9257887237b78b4b08"
+  },
+  {
+    "file": "omit_pending_effects_from_snapshot.txt.gz",
+    "raw_bytes": 1200,
+    "raw_sha256": "c229ad2d0bcea30d1042f9b810da952bb009651ece9769ecb71f4d62d7560150",
+    "gzip_sha256": "f1f8fc50f7b1442238a0f9a006f59963c42bd36f5c5fecf28ea573f211076a53"
+  },
+  {
+    "file": "refund_duplicate_cleanup_twice.txt.gz",
+    "raw_bytes": 1186,
+    "raw_sha256": "14ce102d03d9e8463ec98558b56ac57d06b1c280cb1d5c9a340df76dc7ad843a",
+    "gzip_sha256": "59ac652c2f5d9bb7482393ab8b84c764a05a8854485509abcb2153a59cba42ec"
+  },
+  {
+    "file": "refund_revocation_without_quiescence.txt.gz",
+    "raw_bytes": 1210,
+    "raw_sha256": "785743500757af6b4c2166d06f2a2b6eed8a278edc481a7184acee28bf606248",
+    "gzip_sha256": "25a8a88a24f26c4ef9de4cbc391d4691a612afab17d6714c7aba787643a85614"
+  },
+  {
+    "file": "remove_attempt_incarnation_fence.txt.gz",
+    "raw_bytes": 1192,
+    "raw_sha256": "8144b28dc2d17ae3d764ef1a75f04c7190fa59d164fa4334058689fb895a53b3",
+    "gzip_sha256": "180d1b3eca4d8c100895d158fba9ac70d65e147c4b243418f75fb8207f07c94f"
+  },
+  {
+    "file": "reverse_numeric_priority.txt.gz",
+    "raw_bytes": 1256,
+    "raw_sha256": "f3cd0d6f719152ec95b0fde1607ed30da3bb6a7d9e68736cee0d231dfae4b8ec",
+    "gzip_sha256": "faffd9db8958a0f988a35bc98087374d30e55c684843c9a352b42167c46072b4"
+  }
+]

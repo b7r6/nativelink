@@ -14,6 +14,7 @@
 
 pub mod admin;
 pub mod api_worker_scheduler;
+pub mod authority;
 pub mod awaited_action_db;
 pub mod cache_lookup_scheduler;
 pub mod default_scheduler_factory;

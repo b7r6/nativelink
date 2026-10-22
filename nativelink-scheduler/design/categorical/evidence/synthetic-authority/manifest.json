@@ -1,0 +1,71 @@
+{
+  "scope": "Synthetic serial single-member scheduler/journal workload; no production supported-load or shared publication/lease/GC capacity claim. Shared host not isolated; unrelated Bazel/rustc observed during width64.",
+  "build_command": "cargo build --locked -p nativelink-scheduler --profile=smol --example authority_budget",
+  "profile": "smol opt-level=z debug-assertions=true",
+  "runs": [
+    {
+      "name": "width1-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-width1-controlled-01",
+        "20",
+        "1",
+        "1024",
+        "smol opt-level=z debug-assertions=true"
+      ],
+      "summary": "width1-1k-summary.json",
+      "raw_samples": "width1-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "95e04f9bb392bd50e9b354ae253f35ace9d52923a4aa5e1e1c68d51897026619",
+      "raw_uncompressed_bytes": 114153,
+      "compressed_bytes": 7805
+    },
+    {
+      "name": "width16-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-width16-controlled-01",
+        "5",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true"
+      ],
+      "summary": "width16-1k-summary.json",
+      "raw_samples": "width16-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "dfe2b0664e8151d57cb998f298e5f66332bc00c0d5bb7365e466edd44ace13fa",
+      "raw_uncompressed_bytes": 418126,
+      "compressed_bytes": 23002
+    },
+    {
+      "name": "width64-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-width64-controlled-01",
+        "3",
+        "64",
+        "1024",
+        "smol opt-level=z debug-assertions=true"
+      ],
+      "summary": "width64-1k-summary.json",
+      "raw_samples": "width64-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "f58b0b0bca6afb20373eaa68f066093e9578ac9ffaf81546f4bacdc0c263f322",
+      "raw_uncompressed_bytes": 1000707,
+      "compressed_bytes": 51532
+    },
+    {
+      "name": "width16-16k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-payload16k-controlled-01",
+        "3",
+        "16",
+        "16384",
+        "smol opt-level=z debug-assertions=true"
+      ],
+      "summary": "width16-16k-summary.json",
+      "raw_samples": "width16-16k-samples.json.gz",
+      "raw_uncompressed_sha256": "021a2cdfad08bf477f3fa33cbb99338f30df1919e39a28b46ff5ce2262aa2805",
+      "raw_uncompressed_bytes": 1005637,
+      "compressed_bytes": 17634
+    }
+  ]
+}
