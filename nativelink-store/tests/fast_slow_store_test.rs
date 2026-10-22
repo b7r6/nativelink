@@ -21,11 +21,13 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::future::join_all;
 use nativelink_config::stores::{
-    FastSlowSpec, FilesystemSpec, MemorySpec, NoopSpec, StoreDirection, StoreSpec,
+    CompressionAlgorithm, CompressionSpec, FastSlowSpec, FilesystemSpec, Lz4Config, MemorySpec,
+    NoopSpec, StoreDirection, StoreSpec,
 };
 use nativelink_error::{Code, Error, ErrorContext, ResultExt, make_err};
 use nativelink_macro::nativelink_test;
 use nativelink_metric::MetricsComponent;
+use nativelink_store::compression_store::CompressionStore;
 use nativelink_store::fast_slow_store::FastSlowStore;
 use nativelink_store::filesystem_store::{FileEntry, FileEntryImpl, FilesystemStore};
 use nativelink_store::memory_store::MemoryStore;
@@ -2408,6 +2410,82 @@ async fn incomplete_slow_read_never_populates_memory_or_filesystem() -> Result<(
             );
             assert_eq!(fast.has(digest).await?, None);
         }
+    }
+    Ok(())
+}
+
+/// A filesystem store, which refuses a write whose length is not its declared
+/// `ExactSize`, with one-byte blocks so `has()` reports the stored length.
+async fn make_filesystem_fast_store() -> Result<(Arc<FilesystemStore>, FilesystemSpec), Error> {
+    let spec = FilesystemSpec {
+        content_path: make_temp_path("content_path"),
+        temp_path: make_temp_path("temp_path"),
+        block_size: 1,
+        ..Default::default()
+    };
+    Ok((FilesystemStore::<FileEntryImpl>::new(&spec).await?, spec))
+}
+
+/// Reads `key` through a `FastSlowStore` whose fast tier is `fast` and whose
+/// slow tier alone holds `data`, then checks the fast tier was filled with it.
+async fn check_populates_filesystem_fast_store(
+    fast: Arc<FilesystemStore>,
+    fast_spec: FilesystemSpec,
+    slow: Store,
+    key: StoreKey<'_>,
+    data: &Bytes,
+) -> Result<(), Error> {
+    let fast = Store::new(fast);
+    let store = Store::new(FastSlowStore::new(
+        &FastSlowSpec {
+            fast: StoreSpec::Filesystem(fast_spec),
+            slow: StoreSpec::Memory(MemorySpec::default()),
+            fast_direction: StoreDirection::default(),
+            slow_direction: StoreDirection::default(),
+            bypass_dedup_threshold_bytes: 0,
+        },
+        fast.clone(),
+        slow.clone(),
+    ));
+    slow.update_oneshot(key.borrow(), data.clone()).await?;
+    assert_eq!(fast.has(key.borrow()).await?, None);
+
+    assert_eq!(
+        store.get_part_unchunked(key.borrow(), 0, None).await?,
+        data,
+        "{key}"
+    );
+    assert_eq!(
+        fast.has(key.borrow()).await?,
+        Some(data.len() as u64),
+        "{key}"
+    );
+    assert_eq!(fast.get_part_unchunked(key.borrow(), 0, None).await?, data);
+    Ok(())
+}
+
+// A compression store's `has()` used to report the length of the compressed
+// stream, and the populate declared that to the fast tier as an `ExactSize`.
+// Once the filesystem store refused a write whose length disagrees with its
+// `ExactSize`, every read through a compression slow tier failed with
+// "refusing to store a partial blob", so a worker could fetch no input.
+#[nativelink_test]
+async fn populate_from_compression_slow_store_into_filesystem_fast_store() -> Result<(), Error> {
+    let data = Bytes::from(b"the uncompressed size, not the stored one. ".repeat(2048));
+    for key in [
+        StoreKey::from(DigestInfo::try_new(VALID_HASH, data.len())?),
+        StoreKey::new_str("compressible"),
+    ] {
+        let compression_spec = CompressionSpec {
+            backend: StoreSpec::Memory(MemorySpec::default()),
+            compression_algorithm: CompressionAlgorithm::Lz4(Lz4Config::default()),
+        };
+        let slow = Store::new(CompressionStore::new(
+            &compression_spec,
+            Store::new(MemoryStore::new(&MemorySpec::default())),
+        )?);
+        let (fast, fast_spec) = make_filesystem_fast_store().await?;
+        check_populates_filesystem_fast_store(fast, fast_spec, slow, key, &data).await?;
     }
     Ok(())
 }

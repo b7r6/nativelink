@@ -20,6 +20,7 @@ use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::future::FutureExt;
+use futures::stream::{FuturesUnordered, StreamExt};
 use lz4_flex::block::{compress_into, decompress_into, get_maximum_output_size};
 use nativelink_config::stores::CompressionSpec;
 use nativelink_error::{Code, Error, ResultExt, error_if, make_err};
@@ -33,6 +34,7 @@ use nativelink_util::store_trait::{
     RemoveCallback, Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo,
 };
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use wincode::{SchemaRead, SchemaWrite};
 
 use crate::cas_utils::is_zero_digest;
@@ -112,6 +114,11 @@ pub const CHUNK_FRAME_TYPE: u8 = 0;
 
 /// Number representing the footer.
 pub const FOOTER_FRAME_TYPE: u8 = 1;
+
+/// Length of the last three footer fields, `uncompressed_data_sz (u64)`,
+/// `block_size (u32)` and `version (u8)`. Every field before them has a
+/// variable length, these do not, so they always end the stream.
+const FOOTER_TAIL_SIZE: u64 = (size_of::<u64>() + size_of::<u32>() + size_of::<u8>()) as u64;
 
 /// This is a partial mirror of `nativelink_config::stores::Lz4Config`.
 /// We cannot use that natively here because it could cause our
@@ -313,6 +320,85 @@ impl CompressionStore {
         }
         Ok(())
     }
+
+    /// Turns the sizes the inner store reported for `keys`, which are the
+    /// lengths of the compressed streams, into the sizes `get()` returns.
+    ///
+    /// A digest carries its size, so that costs nothing. It is the content's
+    /// size only when the digest names the content, as in a CAS: an action
+    /// cache keys an entry by the action's digest, so a compression store
+    /// fronting one reports the action's size (`GrpcStore` reports `u64::MAX`
+    /// for those). A string key carries no size, so the footer's is read.
+    async fn uncompressed_sizes(
+        &self,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        let mut footer_reads = FuturesUnordered::new();
+        for (index, (key, result)) in keys.iter().zip(results.iter_mut()).enumerate() {
+            let Some(stored_size) = *result else {
+                continue;
+            };
+            match key {
+                StoreKey::Digest(digest) => *result = Some(digest.size_bytes()),
+                StoreKey::Str(_) => footer_reads.push(async move {
+                    (index, self.read_uncompressed_size(key, stored_size).await)
+                }),
+            }
+        }
+        while let Some((index, size)) = footer_reads.next().await {
+            results[index] = size?;
+        }
+        Ok(())
+    }
+
+    /// Reads `uncompressed_data_sz` from the footer of the stream under `key`,
+    /// which the inner store reported as `stored_size` bytes long. The field
+    /// sits at a fixed distance from the end of the stream, so this is one
+    /// ranged read of `FOOTER_TAIL_SIZE` bytes, not a read of the blocks.
+    async fn read_uncompressed_size(
+        &self,
+        key: &StoreKey<'_>,
+        stored_size: u64,
+    ) -> Result<Option<u64>, Error> {
+        let tail = match self
+            .inner_store
+            .get_part_unchunked(
+                key.borrow(),
+                stored_size.saturating_sub(FOOTER_TAIL_SIZE),
+                Some(FOOTER_TAIL_SIZE),
+            )
+            .await
+        {
+            Ok(tail) => tail,
+            // Removed since the inner store's `has()`, so it is missing now.
+            Err(err) if err.code == Code::NotFound => return Ok(None),
+            Err(err) => return Err(err).err_tip(|| "Failed to read footer in compression store"),
+        };
+        if tail.len() as u64 == FOOTER_TAIL_SIZE {
+            let uncompressed_data_size = LittleEndian::read_u64(&tail[..8]);
+            let block_size = LittleEndian::read_u32(&tail[8..12]);
+            let version = tail[12];
+            if version == CURRENT_STREAM_FORMAT_VERSION
+                && block_size != 0
+                && block_size <= self.config.max_decode_block_size
+            {
+                return Ok(Some(uncompressed_data_size));
+            }
+        }
+        // The footer is not where the reported length puts it, so the inner
+        // store reported something other than the exact length of the stream
+        // (a filesystem store reports its block-rounded footprint). Finding the
+        // footer without that length means reading the whole stream; report
+        // the stored length instead, which still says the object exists.
+        warn!(
+            %key,
+            stored_size,
+            "Compression store could not locate the footer at the inner store's \
+             reported length; has() reports the compressed length instead"
+        );
+        Ok(Some(stored_size))
+    }
 }
 
 #[async_trait]
@@ -330,16 +416,10 @@ impl StoreDriver for CompressionStore {
         self.inner_has_with_results(digests, results).await?;
         // The inner store holds the framed, compressed bytes, so the sizes it
         // reports are the compressed ones. Callers size fast-tier writes and
-        // buffers from this answer, so for a digest key report the length the
-        // digest declares, which is what a read of this store delivers. A
-        // string key declares no length and keeps the stored size; reading
-        // the uncompressed one back from the frame header is a follow-up.
-        for (key, result) in digests.iter().zip(results.iter_mut()) {
-            if let (StoreKey::Digest(digest), Some(_)) = (key.borrow(), result.as_ref()) {
-                *result = Some(digest.size_bytes());
-            }
-        }
-        Ok(())
+        // buffers from this answer, so report the length a read of this store
+        // delivers: the digest's for a digest key, and for a string key, which
+        // declares no length, the one recorded in the stream's footer.
+        self.uncompressed_sizes(digests, results).await
     }
 
     async fn update(
