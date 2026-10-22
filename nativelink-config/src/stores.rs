@@ -844,6 +844,32 @@ pub struct FilesystemSpec {
     #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
     pub max_concurrent_writes: usize,
 
+    /// Maximum number of concurrent background file-deletion operations.
+    /// When an entry leaves the store, its backing file is unlinked by a
+    /// background task. Without a bound, an eviction storm (cache wipe or a
+    /// flood of overwrites) can spawn these without limit: memory grows with the
+    /// queued task frames and disk/inode reclamation lags behind what the async
+    /// runtime can schedule. Bounding it applies backpressure the same way
+    /// `max_concurrent_writes` does — once this many deletes are in flight, a
+    /// further delete runs synchronously inline in the evicting path instead of
+    /// spawning, which throttles eviction to delete throughput and never leaks
+    /// a file.
+    ///
+    /// Bounded by default, unlike `max_concurrent_writes`: an unbounded delete
+    /// backlog is a latent memory/inode blowup, and leaving the protection off
+    /// by default just moves that risk from a high-context code review to a
+    /// 4 AM config change nobody remembers to make. The default is generous
+    /// enough that normal steady-state eviction never reaches it (so the inline
+    /// path never fires in ordinary operation); it only engages under a genuine
+    /// storm, which is exactly when the backpressure is wanted.
+    /// A value of 0 is the explicit escape hatch for unlimited.
+    /// Default: 1024.
+    #[serde(
+        default = "default_max_concurrent_deletes",
+        deserialize_with = "convert_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_deletes: usize,
+
     /// When true, advise the kernel to drop the page cache for each blob after
     /// it is written or read (`posix_fadvise` with `POSIX_FADV_DONTNEED`). On
     /// real filesystems this takes a globally serialized, all-CPU kernel path
@@ -1398,6 +1424,42 @@ pub struct CommonObjectSpec {
     )]
     pub multipart_max_concurrent_uploads: Option<usize>,
 
+    /// Target size of each part in a multipart upload, growing only as
+    /// needed to stay under the provider's 10,000-part ceiling. Parts sized
+    /// at the 5 MiB provider floor turn a multi-GiB blob into thousands of
+    /// tiny concurrent requests, which churns HTTP connection pools; a
+    /// larger part keeps the request count low. Each queued or in-flight
+    /// part is buffered in memory, so one multipart upload buffers up to
+    /// roughly `(2 * multipart_max_concurrent_uploads + 1) *
+    /// multipart_part_size`; `max_concurrent_multipart_uploads` bounds the
+    /// aggregate across uploads. Values are clamped to the provider's
+    /// 5 MiB minimum and 5 GiB maximum part sizes.
+    ///
+    /// Currently honored by the S3 and ONTAP S3 providers.
+    ///
+    /// Default: 64MB.
+    #[serde(
+        default,
+        deserialize_with = "convert_optional_data_size_with_shellexpand"
+    )]
+    pub multipart_part_size: Option<usize>,
+
+    /// Store-wide cap on the number of blobs concurrently uploaded via the
+    /// multipart path. Each multipart upload can buffer roughly
+    /// `(2 * multipart_max_concurrent_uploads + 1) * multipart_part_size`,
+    /// so this bounds the store's aggregate upload buffer (about 5 GiB at
+    /// the defaults). Uploads over the 5 MiB multipart threshold wait for a
+    /// slot; smaller blobs are unaffected.
+    ///
+    /// Currently honored by the S3 and ONTAP S3 providers.
+    ///
+    /// Default: 4.
+    #[serde(
+        default,
+        deserialize_with = "convert_optional_numeric_with_shellexpand"
+    )]
+    pub max_concurrent_multipart_uploads: Option<usize>,
+
     /// Allow unencrypted HTTP connections. Only use this for local testing.
     ///
     /// Default: false
@@ -1502,6 +1564,8 @@ impl Default for CommonObjectSpec {
             consider_expired_after_s: 0,
             max_retry_buffer_per_request: None,
             multipart_max_concurrent_uploads: None,
+            multipart_part_size: None,
+            max_concurrent_multipart_uploads: None,
             insecure_allow_http: false,
             disable_http2: false,
             throttle_retry_delay_s: default_throttle_retry_delay_s(),
@@ -1628,12 +1692,18 @@ pub struct GrpcSpec {
     #[serde(default, deserialize_with = "convert_numeric_with_shellexpand")]
     pub connections_per_endpoint: usize,
 
-    /// Maximum time (seconds) allowed for a single RPC request (e.g. a
-    /// `ByteStream.Write` call) before it is cancelled.
+    /// Maximum time (seconds) allowed for a single RPC request before it
+    /// is cancelled with `DeadlineExceeded` (retryable). This applies to
+    /// every RPC this store makes: unary calls (e.g. `FindMissingBlobs`,
+    /// `BatchReadBlobs`), `ByteStream.Write` calls, and the establishment
+    /// of read streams through their first response chunk. The body of an
+    /// established read stream is not bounded by this deadline.
     ///
     /// A value of 0 (the default) disables the per-RPC timeout. Dead
     /// connections are still detected by the HTTP/2 and TCP keepalive
-    /// mechanisms configured on each endpoint.
+    /// mechanisms configured on each endpoint, and endpoints that cannot
+    /// be connected to at all fail fast with `Unavailable` rather than
+    /// queuing requests indefinitely.
     ///
     /// For large uploads (multi-GB), either leave this at 0 or set it
     /// large enough to accommodate the full transfer time.
@@ -1795,6 +1865,14 @@ const fn default_read_batching_max_batch_bytes() -> u64 {
 
 const fn default_read_batching_dispatch_slots() -> usize {
     4
+}
+
+/// Generous enough that normal eviction never reaches it (so the synchronous
+/// inline delete path never fires in ordinary operation), low enough that the
+/// in-flight backlog stays bounded to a few MB under a storm. Tune per
+/// deployment; 0 disables the bound. See `FilesystemSpec::max_concurrent_deletes`.
+const fn default_max_concurrent_deletes() -> usize {
+    1024
 }
 
 const fn default_read_batching_max_queued_bytes() -> u64 {

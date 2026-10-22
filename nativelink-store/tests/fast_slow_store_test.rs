@@ -2411,3 +2411,263 @@ async fn incomplete_slow_read_never_populates_memory_or_filesystem() -> Result<(
     }
     Ok(())
 }
+
+/// A filesystem store, which refuses a write whose length is not its declared
+/// `ExactSize`, with one-byte blocks so `has()` reports the stored length.
+async fn make_filesystem_fast_store() -> Result<(Arc<FilesystemStore>, FilesystemSpec), Error> {
+    let spec = FilesystemSpec {
+        content_path: make_temp_path("content_path"),
+        temp_path: make_temp_path("temp_path"),
+        block_size: 1,
+        ..Default::default()
+    };
+    Ok((FilesystemStore::<FileEntryImpl>::new(&spec).await?, spec))
+}
+
+/// Reads `key` through a `FastSlowStore` whose fast tier is `fast` and whose
+/// slow tier alone holds `data`, then checks the fast tier was filled with it.
+async fn check_populates_filesystem_fast_store(
+    fast: Arc<FilesystemStore>,
+    fast_spec: FilesystemSpec,
+    slow: Store,
+    key: StoreKey<'_>,
+    data: &Bytes,
+) -> Result<(), Error> {
+    let fast = Store::new(fast);
+    let store = Store::new(FastSlowStore::new(
+        &FastSlowSpec {
+            fast: StoreSpec::Filesystem(fast_spec),
+            slow: StoreSpec::Memory(MemorySpec::default()),
+            fast_direction: StoreDirection::default(),
+            slow_direction: StoreDirection::default(),
+            bypass_dedup_threshold_bytes: 0,
+        },
+        fast.clone(),
+        slow.clone(),
+    ));
+    slow.update_oneshot(key.borrow(), data.clone()).await?;
+    assert_eq!(fast.has(key.borrow()).await?, None);
+
+    assert_eq!(
+        store.get_part_unchunked(key.borrow(), 0, None).await?,
+        data,
+        "{key}"
+    );
+    assert_eq!(
+        fast.has(key.borrow()).await?,
+        Some(data.len() as u64),
+        "{key}"
+    );
+    assert_eq!(fast.get_part_unchunked(key.borrow(), 0, None).await?, data);
+    Ok(())
+}
+
+/// A slow store whose `has()` reports `reported_size` for whatever it holds,
+/// the way a tier that reports a physical size does.
+#[derive(MetricsComponent)]
+struct MisreportingSlowStore {
+    inner: Arc<MemoryStore>,
+    reported_size: u64,
+}
+
+#[async_trait]
+impl StoreDriver for MisreportingSlowStore {
+    async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn has_with_results(
+        self: Pin<&Self>,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        Pin::new(self.inner.as_ref())
+            .has_with_results(keys, results)
+            .await?;
+        for result in results.iter_mut().filter(|result| result.is_some()) {
+            *result = Some(self.reported_size);
+        }
+        Ok(())
+    }
+
+    async fn update(
+        self: Pin<&Self>,
+        key: StoreKey<'_>,
+        reader: DropCloserReadHalf,
+        size_info: UploadSizeInfo,
+    ) -> Result<u64, Error> {
+        Pin::new(self.inner.as_ref())
+            .update(key, reader, size_info)
+            .await
+    }
+
+    async fn get_part(
+        self: Pin<&Self>,
+        key: StoreKey<'_>,
+        writer: &mut DropCloserWriteHalf,
+        offset: u64,
+        length: Option<u64>,
+    ) -> Result<(), Error> {
+        Pin::new(self.inner.as_ref())
+            .get_part(key, writer, offset, length)
+            .await
+    }
+
+    fn inner_store(&self, _digest: Option<StoreKey>) -> &'_ dyn StoreDriver {
+        self
+    }
+
+    fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
+        self
+    }
+
+    fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
+        self
+    }
+
+    fn register_remove_callback(self: Arc<Self>, _callback: RemoveCallback) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+default_health_status_indicator!(MisreportingSlowStore);
+
+// The populate cannot take a digest's size from the slow tier's `has()` on
+// trust: a tier that reports less (a compressed stream) or more (a
+// block-rounded footprint) than the blob must still fill the fast tier with
+// the blob as it is.
+#[nativelink_test]
+async fn populate_does_not_trust_slow_store_has_size_for_digest() -> Result<(), Error> {
+    let data = Bytes::from(make_random_data(3000));
+    let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
+    for reported_size in [1, 4096] {
+        let slow = Store::new(Arc::new(MisreportingSlowStore {
+            inner: MemoryStore::new(&MemorySpec::default()),
+            reported_size,
+        }));
+        let (fast, fast_spec) = make_filesystem_fast_store().await?;
+        check_populates_filesystem_fast_store(fast, fast_spec, slow, digest.into(), &data).await?;
+    }
+    Ok(())
+}
+
+// An action cache entry is keyed by the action's digest and a dedup index entry
+// by its blob's, so a digest's size is not always the size of what it names.
+// The slow tier's `has()` is right here and the digest is not, so the populate
+// must not declare the digest's size as exact either.
+#[nativelink_test]
+async fn populate_keeps_entry_whose_size_is_not_its_digests() -> Result<(), Error> {
+    let data = Bytes::from(make_random_data(3000));
+    let digest = DigestInfo::try_new(VALID_HASH, 100)?;
+    let slow = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let (fast, fast_spec) = make_filesystem_fast_store().await?;
+    check_populates_filesystem_fast_store(fast, fast_spec, slow, digest.into(), &data).await
+}
+
+// The shipped shape of the bug: a filesystem slow tier at the default 4 KiB
+// block size reports its block-rounded footprint from `has()` (4096 for a
+// 17-byte blob), and the populate declares that to the fast tier as an
+// `ExactSize`. Since the populate checks the bytes it received against that
+// size, every read that has to fill the fast tier from such a slow tier fails
+// with DataLoss unless the blob happens to be a block multiple. This is the
+// dedup index store in `nativelink-config/examples/filesystem_cas.json5` and
+// the action cache in `kubernetes/nativelink/nativelink-config.json5`.
+#[nativelink_test]
+async fn populate_from_filesystem_slow_tier_at_default_block_size() -> Result<(), Error> {
+    let slow_spec = FilesystemSpec {
+        content_path: make_temp_path("slow_content_path"),
+        temp_path: make_temp_path("slow_temp_path"),
+        ..Default::default()
+    };
+    let slow = Store::new(FilesystemStore::<FileEntryImpl>::new(&slow_spec).await?);
+    let fast = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let data = Bytes::from_static(b"seventeen bytes!!");
+    let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
+    slow.update_oneshot(digest, data.clone()).await?;
+    // Before #3006 a filesystem store's `has()` reported its block-rounded
+    // size on disk (4096 here); since then it reports the content length.
+    // Either way the populate must not refuse the 17 bytes it gets.
+    assert!(slow.has(digest).await?.is_some());
+    let store = Store::new(FastSlowStore::new(
+        &FastSlowSpec {
+            fast: StoreSpec::Memory(MemorySpec::default()),
+            slow: StoreSpec::Filesystem(slow_spec),
+            fast_direction: StoreDirection::default(),
+            slow_direction: StoreDirection::default(),
+            bypass_dedup_threshold_bytes: 0,
+        },
+        fast.clone(),
+        slow.clone(),
+    ));
+    let got = store.get_part_unchunked(digest, 0, None).await?;
+    assert_eq!(got, data);
+    assert_eq!(fast.has(digest).await?, Some(data.len() as u64));
+    Ok(())
+}
+
+// Regression test for N14: an interrupted ByteStream upload is parked for
+// resumption, keeping its FastSlowStore::update() future (and in-flight
+// slow-write registration) alive. Existence-check waiters that subscribed to
+// that in-flight write must be woken when the SAME digest is completed by a
+// DIFFERENT upload (fresh upload id), not starve until their client deadline.
+#[nativelink_test]
+async fn stalled_upload_waiter_released_by_fresh_upload_of_same_digest() -> Result<(), Error> {
+    let (fast_slow_store, _fast_store, _slow_store) = make_stores();
+    let data = make_random_data(100);
+    let digest = DigestInfo::try_new(VALID_HASH, data.len())?;
+
+    // Upload A: starts streaming, then stalls forever mid-stream (simulates a
+    // cancelled/half-closed ByteStream upload parked for resumption). We keep
+    // `stalled_tx` alive so the update() future stays pending.
+    let (mut stalled_tx, stalled_rx) = make_buf_channel_pair();
+    let store_a = fast_slow_store.clone();
+    let upload_a = tokio::spawn(async move {
+        store_a
+            .update(digest, stalled_rx, UploadSizeInfo::ExactSize(100))
+            .await
+    });
+    stalled_tx.send(Bytes::from(make_random_data(10))).await?;
+    // Let upload A register its in-flight slow write.
+    tokio::task::yield_now().await;
+
+    // Waiter: FindMissingBlobs-style existence check that parks on the
+    // in-flight write of upload A.
+    let store_w = fast_slow_store.clone();
+    let waiter = tokio::spawn(async move { store_w.has(digest).await });
+    // Let the waiter subscribe to the in-flight write.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!waiter.is_finished(), "Waiter should be parked on upload A");
+
+    // Upload B: completes the same digest under a "fresh upload id".
+    fast_slow_store
+        .update_oneshot(digest, data.clone().into())
+        .await?;
+
+    // The waiter must be released promptly by upload B's completion.
+    let result = tokio::time::timeout(Duration::from_secs(2), waiter)
+        .await
+        .map_err(|_| {
+            make_err!(
+                Code::DeadlineExceeded,
+                "Waiter hung after same digest was completed by a fresh upload"
+            )
+        })?
+        .expect("waiter task panicked")?;
+    assert_eq!(
+        result,
+        Some(100),
+        "Waiter should see the completed blob size"
+    );
+
+    // A genuinely-absent digest must still resolve promptly once its only
+    // (stalled) writer goes away.
+    drop(stalled_tx);
+    drop(upload_a.await);
+    let absent = DigestInfo::try_new(VALID_HASH, 12345)?;
+    let absent_result = tokio::time::timeout(Duration::from_secs(2), fast_slow_store.has(absent))
+        .await
+        .map_err(|_| make_err!(Code::DeadlineExceeded, "Absent digest check hung"))??;
+    assert_eq!(absent_result, None);
+
+    Ok(())
+}

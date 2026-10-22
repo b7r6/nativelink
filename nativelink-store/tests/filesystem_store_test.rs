@@ -245,11 +245,17 @@ async fn read_file_contents(file_name: &OsStr) -> Result<Vec<u8>, Error> {
 }
 
 async fn wait_for_no_open_files() -> Result<(), Error> {
+    // `get_open_files_for_test` reads a process-global open-handle counter, so
+    // this drains handles opened by *any* concurrently running test in the same
+    // binary. Under asan (and other slow-execution configs) a 1s budget is too
+    // tight and this spuriously times out even though the handles do close, so
+    // give the drain a generous ceiling — the loop still exits the instant the
+    // count reaches zero, so a healthy run pays nothing for the larger cap.
     let mut counter = 0;
     while fs::get_open_files_for_test() != 0 {
         sleep(Duration::from_millis(1)).await;
         counter += 1;
-        if counter > 1000 {
+        if counter > 10000 {
             return Err(make_err!(
                 Code::Internal,
                 "Timed out waiting all files to close"
@@ -363,6 +369,35 @@ const HASH1: &str = "0123456789abcdef000000000000000000010000000000000123456789a
 const HASH2: &str = "0123456789abcdef000000000000000000020000000000000123456789abcdef";
 const VALUE1: &str = "0123456789";
 const VALUE2: &str = "9876543210";
+
+// Longer, in `read_buffer_size: 1` chunks, than `make_buf_channel_pair`'s
+// in-flight capacity, so a reader that has taken only the first byte keeps the
+// store's `get` stalled with the file still open. Tests that need an open
+// stream on a file use these instead of `VALUE1`/`VALUE2`.
+const LONG_VALUE1: &str = concat!(
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+    "0123456789",
+);
+const LONG_VALUE2: &str = concat!(
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+    "9876543210",
+);
 const STRING_NAME: &str = "String_Filename";
 
 #[nativelink_test]
@@ -523,7 +558,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
         }
     }
 
-    let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
+    let digest1 = DigestInfo::try_new(HASH1, LONG_VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -543,7 +578,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
     );
 
     // Insert data into store.
-    store.update_oneshot(digest1, VALUE1.into()).await?;
+    store.update_oneshot(digest1, LONG_VALUE1.into()).await?;
 
     let (writer, mut reader) = make_buf_channel_pair();
     let store_clone = store.clone();
@@ -561,13 +596,13 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
             .err_tip(|| "Error reading first byte")?;
         assert_eq!(
             first_byte[0],
-            VALUE1.as_bytes()[0],
+            LONG_VALUE1.as_bytes()[0],
             "Expected first byte to match"
         );
     }
 
     // Replace content.
-    store.update_oneshot(digest1, VALUE2.into()).await?;
+    store.update_oneshot(digest1, LONG_VALUE2.into()).await?;
 
     // Ensure we let any background tasks finish.
     tokio::task::yield_now().await;
@@ -586,7 +621,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
             let data = read_file_contents(path.as_os_str()).await?;
             assert_eq!(
                 &data[..],
-                VALUE1.as_bytes(),
+                LONG_VALUE1.as_bytes(),
                 "Expected file content to match"
             );
         }
@@ -603,7 +638,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
 
     assert_eq!(
         &remaining_file_data,
-        &VALUE1.as_bytes()[1..],
+        &LONG_VALUE1.as_bytes()[1..],
         "Expected file content to match"
     );
 
@@ -631,8 +666,8 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
         }
     }
 
-    let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
-    let digest2 = DigestInfo::try_new(HASH2, VALUE2.len())?;
+    let digest1 = DigestInfo::try_new(HASH1, LONG_VALUE1.len())?;
+    let digest2 = DigestInfo::try_new(HASH2, LONG_VALUE2.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -652,7 +687,10 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
     );
 
     // Insert data into store.
-    store.update_oneshot(digest1, VALUE1.into()).await.unwrap();
+    store
+        .update_oneshot(digest1, LONG_VALUE1.into())
+        .await
+        .unwrap();
 
     let mut reader = {
         let (writer, reader) = make_buf_channel_pair();
@@ -668,7 +706,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
     assert!(reader.peek().await.is_ok(), "Could not peek into reader");
 
     // Insert new content. This will evict the old item.
-    store.update_oneshot(digest2, VALUE2.into()).await?;
+    store.update_oneshot(digest2, LONG_VALUE2.into()).await?;
 
     // Ensure we let any background tasks finish.
     tokio::task::yield_now().await;
@@ -687,7 +725,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
             let data = read_file_contents(path.as_os_str()).await?;
             assert_eq!(
                 &data[..],
-                VALUE1.as_bytes(),
+                LONG_VALUE1.as_bytes(),
                 "Expected file content to match"
             );
         }
@@ -702,7 +740,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
         .await
         .err_tip(|| "Error reading remaining bytes")?;
 
-    assert_eq!(&reader_data, VALUE1, "Expected file content to match");
+    assert_eq!(&reader_data, LONG_VALUE1, "Expected file content to match");
 
     loop {
         if DELETES_FINISHED.load(Ordering::Relaxed) == 1 {
@@ -712,6 +750,62 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
     }
 
     // Now ensure our temp file was cleaned up.
+    check_storage_dir_empty(&temp_path).await
+}
+
+// Bounding background deletes with `max_concurrent_deletes` must not change the
+// correctness of eviction: an evicted entry's backing file is still removed.
+// This exercises the bounded (semaphore) delete path — permit acquired, held
+// for the lifetime of the delete, then released. The default unbounded path is
+// covered by the rest of this suite; the inline-overflow fallback (which fires
+// only under saturation) is exercised under real load by the furnace via the
+// `inline_deletes` metric.
+#[nativelink_test]
+async fn bounded_delete_semaphore_still_removes_evicted_files() -> Result<(), Error> {
+    static DELETES_FINISHED: AtomicU32 = AtomicU32::new(0);
+    struct LocalHooks {}
+    impl FileEntryHooks for LocalHooks {
+        fn on_drop<Fe: FileEntry>(_file_entry: &Fe) {
+            DELETES_FINISHED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
+    let digest2 = DigestInfo::try_new(HASH2, VALUE2.len())?;
+    let content_path = make_temp_path("content_path");
+    let temp_path = make_temp_path("temp_path");
+
+    let store = Arc::new(
+        FilesystemStore::<TestFileEntry<LocalHooks>>::new(&FilesystemSpec {
+            content_path: content_path.clone(),
+            temp_path: temp_path.clone(),
+            eviction_policy: Some(EvictionPolicy {
+                max_count: 1,
+                ..Default::default()
+            }),
+            // The bound under test. With it set, the delete routes through the
+            // semaphore path rather than the unconditional spawn.
+            max_concurrent_deletes: 1,
+            block_size: 1,
+            read_buffer_size: 1,
+            ..Default::default()
+        })
+        .await?,
+    );
+
+    // Insert, then evict digest1 by inserting digest2 (max_count == 1).
+    store.update_oneshot(digest1, VALUE1.into()).await?;
+    store.update_oneshot(digest2, VALUE2.into()).await?;
+
+    // Wait for the eviction's background delete to finish.
+    loop {
+        if DELETES_FINISHED.load(Ordering::Relaxed) == 1 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+
+    // The evicted file must be gone from the temp staging area.
     check_storage_dir_empty(&temp_path).await
 }
 

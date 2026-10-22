@@ -48,7 +48,7 @@ use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
 use nativelink_util::instant_wrapper::MockInstantWrapped;
 use nativelink_util::operation_state_manager::{
-    ActionStateResult, ClientStateManager, MatchingEngineStateManager, OperationFilter,
+    ActionStateResult, ClientStateManager, Escalation, MatchingEngineStateManager, OperationFilter,
     OperationStageFlags, OrderDirection, UpdateOperationType, WorkerStateManager,
 };
 use nativelink_util::platform_properties::PlatformProperties;
@@ -99,12 +99,19 @@ fn make_system_time(add_time: u64) -> SystemTime {
 }
 
 fn action_info(started: SystemTime) -> ActionInfo {
+    action_info_with_properties(started, HashMap::default())
+}
+
+fn action_info_with_properties(
+    started: SystemTime,
+    platform_properties: HashMap<String, String>,
+) -> ActionInfo {
     let action_digest = DigestInfo::zero_digest();
     ActionInfo {
         command_digest: action_digest,
         input_root_digest: action_digest,
         timeout: Duration::ZERO,
-        platform_properties: HashMap::default(),
+        platform_properties,
         priority: 0,
         load_timestamp: SystemTime::UNIX_EPOCH,
         insert_timestamp: started,
@@ -600,7 +607,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
     );
 
     state_mgr
-        .assign_operation(&operation_id, Ok(&worker_id))
+        .assign_operation(&operation_id, Ok(&worker_id), None)
         .await?;
     assert!(
         state_mgr
@@ -618,6 +625,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
         .assign_operation(
             &operation_id,
             Err(make_err!(Code::DeadlineExceeded, "timed out")),
+            None,
         )
         .await?;
     assert!(
@@ -626,7 +634,7 @@ async fn is_executing_on_worker_follows_the_assignment() -> Result<(), Error> {
             .await?
     );
     state_mgr
-        .assign_operation(&operation_id, Ok(&other_worker_id))
+        .assign_operation(&operation_id, Ok(&other_worker_id), None)
         .await?;
     assert!(
         !state_mgr
@@ -1269,7 +1277,7 @@ async fn fail_queued_operation_leaves_an_executing_action_alone() -> Result<(), 
     let (operation_id, client) = queued_operation_id(state_mgr.as_ref()).await?;
     let worker_id = WorkerId::from(String::from("worker"));
     state_mgr
-        .assign_operation(&operation_id, Ok(&worker_id))
+        .assign_operation(&operation_id, Ok(&worker_id), None)
         .await?;
 
     let failed = state_mgr
@@ -1295,6 +1303,160 @@ async fn fail_queued_operation_ignores_an_unknown_action() -> Result<(), Error> 
         )
         .await?;
     assert!(!failed);
+    Ok(())
+}
+
+/// A database wrapper that shares the inner db so the test can act as a
+/// concurrent updater (e.g. a worker-event task) racing the state manager.
+struct SharedDb<T: AwaitedActionDb>(Arc<T>);
+
+impl<T: AwaitedActionDb> MetricsComponent for SharedDb<T> {
+    fn publish(
+        &self,
+        kind: MetricKind,
+        field_metadata: MetricFieldData,
+    ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+        self.0.publish(kind, field_metadata)
+    }
+}
+
+impl<T: AwaitedActionDb> AwaitedActionDb for SharedDb<T> {
+    type Subscriber = T::Subscriber;
+
+    async fn get_awaited_action_by_id(
+        &self,
+        client_operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        self.0.get_awaited_action_by_id(client_operation_id).await
+    }
+
+    async fn get_all_awaited_actions(
+        &self,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.0.get_all_awaited_actions().await
+    }
+
+    async fn get_by_operation_id(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        self.0.get_by_operation_id(operation_id).await
+    }
+
+    async fn get_range_of_actions(
+        &self,
+        state: SortedAwaitedActionState,
+        start: Bound<SortedAwaitedAction>,
+        end: Bound<SortedAwaitedAction>,
+        desc: bool,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.0.get_range_of_actions(state, start, end, desc).await
+    }
+
+    async fn update_awaited_action(&self, new_awaited_action: AwaitedAction) -> Result<(), Error> {
+        self.0.update_awaited_action(new_awaited_action).await
+    }
+
+    async fn add_action(
+        &self,
+        client_operation_id: OperationId,
+        action_info: Arc<ActionInfo>,
+        no_event_action_timeout: Duration,
+    ) -> Result<Self::Subscriber, Error> {
+        self.0
+            .add_action(client_operation_id, action_info, no_event_action_timeout)
+            .await
+    }
+}
+
+fn cacheable_action_info(started: SystemTime) -> ActionInfo {
+    let mut info = action_info(started);
+    let ActionUniqueQualifier::Uncacheable(key) = info.unique_qualifier.clone() else {
+        unreachable!();
+    };
+    info.unique_qualifier = ActionUniqueQualifier::Cacheable(key);
+    info
+}
+
+/// Repro for: `try_subscribe`'s initial keep-alive stamp can be reverted by an
+/// in-flight versioned update, letting the client-timeout sweep kill an
+/// operation right after a new client subscribed.
+///
+/// `try_subscribe` stamps the keep-alive with `send_if_modified` without
+/// bumping the version, so an updater holding a pre-stamp `borrow()` snapshot
+/// at the same version passes the version check in `update_awaited_action`
+/// and `send_replace` wholesale-reverts the keep-alive timestamp. The sweep
+/// then retires the operation even though a client just attached.
+#[nativelink_test]
+async fn a_fresh_subscribers_keepalive_survives_an_in_flight_update() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let task_change_notify = Arc::new(Notify::new());
+    let db = Arc::new(memory_awaited_action_db_factory(
+        0,
+        &task_change_notify,
+        MockInstantWrapped::default,
+    ));
+    let state_mgr = SimpleSchedulerStateManager::new(
+        5,
+        WORKER_TIMEOUT,
+        Duration::from_mins(5), // client_action_timeout
+        MAX_EXECUTING,
+        SharedDb(db.clone()),
+        MockInstantWrapped::default,
+        Some(Arc::new(WorkerRegistry::new())),
+    );
+
+    // Client 1 queues a cacheable action at t0, then goes idle: its
+    // stored client keep-alive stays at t0.
+    let client1_id = OperationId::default();
+    let _client1 = state_mgr
+        .add_action(
+            client1_id.clone(),
+            Arc::new(cacheable_action_info(make_system_time(0))),
+        )
+        .await?;
+
+    // A concurrent task (e.g. a worker-event handler) snapshots the
+    // action -- version N, keep-alive t0.
+    let subscriber = db
+        .get_awaited_action_by_id(&client1_id)
+        .await?
+        .expect("operation exists");
+    let in_flight_snapshot = subscriber.borrow().await?;
+
+    // t0+4min (within the 5min client timeout).
+    MockClock::advance(Duration::from_mins(4));
+
+    // A new client subscribes to the same cacheable action: try_subscribe
+    // stamps the keep-alive to now (t0+4min) so it is not swept before its
+    // first poll.
+    let client2_id = OperationId::default();
+    let client2 = state_mgr
+        .add_action(
+            client2_id.clone(),
+            Arc::new(cacheable_action_info(make_system_time(0))),
+        )
+        .await?;
+
+    // The in-flight updater resumes and writes its snapshot back. The
+    // keep-alive stamp never bumped the version, so this passes the
+    // version check -- and reverts the keep-alive to t0.
+    db.update_awaited_action(in_flight_snapshot).await?;
+
+    // t0+6min: client 1's keep-alive (t0) is expired, but client 2
+    // attached only 2 minutes ago, so the operation must not be retired.
+    MockClock::advance(Duration::from_mins(2));
+    let retired = state_mgr.sweep_abandoned_queued_actions().await?;
+    assert_eq!(
+        retired, 0,
+        "an operation a client subscribed to 2 minutes ago must not be swept"
+    );
+    let (state, _origin_metadata) = client2.as_state().await?;
+    assert_eq!(
+        state.stage,
+        ActionStage::Queued,
+        "the freshly-subscribed client's operation must still be alive"
+    );
     Ok(())
 }
 
@@ -1364,7 +1526,7 @@ async fn queue_and_assign_with_client<T: AwaitedActionDb>(
     let (state, _) = listed.as_state().await?;
     let operation_id = state.client_operation_id.clone();
     state_mgr
-        .assign_operation(&operation_id, Ok(worker_id))
+        .assign_operation(&operation_id, Ok(worker_id), None)
         .await?;
     Ok((operation_id, subscriber))
 }
@@ -1775,6 +1937,193 @@ async fn the_listing_reads_records_concurrently_in_the_stores_order() -> Result<
         gauge.peak.load(Ordering::SeqCst),
         LISTING_READ_CONCURRENCY,
         "the reads run this many at a time"
+    );
+    Ok(())
+}
+
+/// N3: matching and assignment must agree on the action's requirements.
+///
+/// Two schedulers (two matchers) share one action DB and memory escalation
+/// is enabled. Matcher A reads action X while it needs 4 GiB and picks a
+/// 4 GiB worker for it. Before A releases that placement, a peer runs X,
+/// hits a memory-limit kill, and requeues X escalated to 8 GiB. When A then
+/// releases its stale 4 GiB placement, the assignment must reject it: its
+/// only guard used to be double-assignment, so it accepted the queued record
+/// and flipped X to Executing while A dispatched the parked 4 GiB reservation
+/// to the worker — the DB said 8 GiB but `StartExecute` and the worker's
+/// reservation carried 4 GiB, silently bypassing the escalation. The accept
+/// now validates the placement-relevant requirements the worker was chosen
+/// for and rejects the stale proposal, leaving X queued at 8 GiB to be
+/// rematched. A fresh placement made against the current 8 GiB requirements
+/// is accepted, so stored, matched, and assigned requirements all agree.
+#[nativelink_test]
+async fn assignment_rejects_a_stale_placement_after_escalation() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let state_mgr = state_manager(Arc::new(WorkerRegistry::new()));
+
+    let four_gib = HashMap::from([("memory_kb".to_string(), "4000".to_string())]);
+    let eight_gib = HashMap::from([("memory_kb".to_string(), "8000".to_string())]);
+
+    let client = state_mgr
+        .add_action(
+            OperationId::default(),
+            Arc::new(action_info_with_properties(
+                make_system_time(0),
+                four_gib.clone(),
+            )),
+        )
+        .await?;
+
+    // Matcher A reads X and picks a 4 GiB worker. This is the snapshot it
+    // will release against later; nothing is committed yet.
+    let operation_id = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the queued operation")
+    .as_state()
+    .await?
+    .0
+    .client_operation_id
+    .clone();
+    let matcher_a_snapshot = four_gib.clone();
+    let worker_a = WorkerId::from(String::from("matcher-a-worker-4gib"));
+
+    // A peer runs X on its own worker and the action is killed for memory;
+    // the peer requeues X escalated to 8 GiB. X is Queued again, needing more.
+    let peer_worker = WorkerId::from(String::from("peer-worker"));
+    state_mgr
+        .assign_operation(&operation_id, Ok(&peer_worker), Some(&four_gib))
+        .await?;
+    state_mgr
+        .update_operation(
+            &operation_id,
+            &peer_worker,
+            UpdateOperationType::UpdateWithEscalation(Escalation {
+                property: "memory_kb".to_string(),
+                value: 8000,
+                reason: make_err!(Code::FailedPrecondition, "killed for memory"),
+                cpu: None,
+            }),
+        )
+        .await?;
+
+    // The store now records the escalated requirement.
+    let stored = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the requeued operation")
+    .as_action_info()
+    .await?
+    .0;
+    assert_eq!(
+        stored.platform_properties, eight_gib,
+        "the escalation raised the stored reservation to 8 GiB"
+    );
+
+    // Matcher A now releases its stale 4 GiB placement against its 4 GiB
+    // worker. Without the fix the assignment accepts this and flips X to
+    // Executing at 4 GiB, bypassing the escalation. It must be rejected.
+    let stale = state_mgr
+        .assign_operation(&operation_id, Ok(&worker_a), Some(&matcher_a_snapshot))
+        .await
+        .expect_err("a stale placement must be rejected, not silently accepted");
+    assert_eq!(
+        stale.code,
+        Code::Aborted,
+        "a rejected stale placement is a lost race, not a hard error: {stale}"
+    );
+    assert_eq!(
+        client.as_state().await?.0.stage,
+        ActionStage::Queued,
+        "the rejected placement leaves X queued for a rematch, not Executing"
+    );
+
+    // A fresh placement made against the current 8 GiB requirement is
+    // accepted: stored, matched, and assigned requirements all agree.
+    state_mgr
+        .assign_operation(&operation_id, Ok(&worker_a), Some(&eight_gib))
+        .await?;
+    assert_eq!(
+        client.as_state().await?.0.stage,
+        ActionStage::Executing,
+        "a placement matching the current 8 GiB requirement is accepted"
+    );
+    let assigned = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Executing,
+            ..Default::default()
+        },
+    )
+    .await?
+    .next()
+    .await
+    .expect("the assigned operation")
+    .as_action_info()
+    .await?
+    .0;
+    assert_eq!(
+        assigned.platform_properties, eight_gib,
+        "the dispatched action carries the escalated 8 GiB reservation"
+    );
+    Ok(())
+}
+
+/// The memory store's listing is read whole, under one hold of the store's
+/// lock taken when the listing is requested, and the stream then only hands
+/// out what was read. The lock must not be taken inside the stream: the
+/// filter pass reads rows 64 at a time, so while it hands rows on it keeps
+/// asking the listing for more, and a lock wait that asking starts is
+/// parked inside the stream, polled again only when the next row is asked
+/// for. Once that wait has been starved past async-lock's fairness
+/// threshold the lock is reserved for it, and when the matcher then writes
+/// for a row it was handed, on the same task, it waits for the same lock:
+/// nothing polls the parked wait, and the scheduler stops for good. Reading
+/// lazily was how that wait got into the stream; a row added after the
+/// listing was requested is therefore not in it.
+#[nativelink_test]
+async fn the_listing_is_read_whole_when_it_is_requested() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let state_mgr = state_manager(Arc::new(WorkerRegistry::new()));
+    // Kept so the clients count as waiting.
+    let _clients = add_prioritised_actions(state_mgr.as_ref(), 3).await?;
+
+    let listed = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?;
+    // Added after the listing was requested, before any of it was read.
+    let _late = state_mgr
+        .add_action(
+            OperationId::default(),
+            Arc::new(action_info(make_system_time(0))),
+        )
+        .await?;
+
+    let listed: Vec<_> = listed.collect().await;
+    assert_eq!(
+        listed.len(),
+        3,
+        "the listing holds what was there when it was requested"
     );
     Ok(())
 }
