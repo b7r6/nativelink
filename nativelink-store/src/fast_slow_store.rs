@@ -198,6 +198,25 @@ impl FastSlowStore {
         }
     }
 
+    /// The size to declare to the fast store when filling it with `key`, given
+    /// the size the slow store's `has()` reported.
+    ///
+    /// For a digest there are two answers, and when they agree the size is
+    /// exact. When they disagree this store cannot tell which is wrong: a slow
+    /// tier can report a physical size (a filesystem store reports its
+    /// block-rounded footprint), and an action cache or a dedup index keys an
+    /// entry by a digest whose size is not the entry's. Declaring either as
+    /// exact makes a fast store that checks `ExactSize`, as the filesystem
+    /// store does, refuse a correct blob, so the larger is declared as a bound.
+    fn fast_store_upload_size(key: &StoreKey<'_>, slow_size: u64) -> UploadSizeInfo {
+        match Self::digest_size_bytes(key) {
+            Some(digest_size) if digest_size != slow_size => {
+                UploadSizeInfo::MaxSize(max(digest_size, slow_size))
+            }
+            _ => UploadSizeInfo::ExactSize(slow_size),
+        }
+    }
+
     /// Whether a read should skip dedup and hit the slow store directly. A
     /// threshold of 0 disables the bypass so every read goes through dedup.
     fn should_bypass_dedup(&self, key: &StoreKey<'_>) -> bool {
@@ -301,23 +320,23 @@ impl FastSlowStore {
             );
             UploadSizeInfo::MaxSize(u64::MAX)
         } else {
-            UploadSizeInfo::ExactSize(self
-                    .slow_store
-                    .has(key.borrow())
-                    .await
-                    .err_tip(|| "Failed to run has() on slow store")?
-                    .ok_or_else(|| {
-                        name_missing_digest(
-                            make_err!(
-                                Code::NotFound,
-                                "Object {} not found in either fast or slow store. \
-                                    If using multiple workers, ensure all workers share the same CAS storage path.",
-                                key.as_str()
-                            ),
-                            &key,
-                        )
-                    })?
-            )
+            let slow_size = self
+                .slow_store
+                .has(key.borrow())
+                .await
+                .err_tip(|| "Failed to run has() on slow store")?
+                .ok_or_else(|| {
+                    name_missing_digest(
+                        make_err!(
+                            Code::NotFound,
+                            "Object {} not found in either fast or slow store. \
+                                If using multiple workers, ensure all workers share the same CAS storage path.",
+                            key.as_str()
+                        ),
+                        &key,
+                    )
+                })?;
+            Self::fast_store_upload_size(&key, slow_size)
         };
 
         let send_range = offset..length.map_or(u64::MAX, |length| length + offset);
