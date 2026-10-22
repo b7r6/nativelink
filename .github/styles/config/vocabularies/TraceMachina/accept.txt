@@ -1,3 +1,4 @@
+acquirer('s)?
 [Aa]gentic
 Ansys
 Anthropic
@@ -14,9 +15,12 @@ cgo
 clib
 codec
 colocated
+combinators?
 conformant
 cxxlib
 d_val
+Databend
+DB's
 deduplicate
 dedups
 dereference
@@ -30,6 +34,7 @@ executable's
 FIFOs
 finalizers
 greppable
+Hiqlite
 instance_name
 interop
 interoperate
@@ -38,8 +43,10 @@ keypair
 libcurl
 materializer
 misrouting
+mutexes
 narinfos
 netrc
+openraft
 preimage
 preload
 reflink
@@ -114,10 +121,13 @@ Qwik
 transcoder
 typechecks
 uncached
+uncontended
 unmanifested
 [Uu]psert
+upstream's
 Verilator
 Verilog
+wakeups?
 zot
 Zstandard
 alex

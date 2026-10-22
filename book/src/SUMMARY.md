@@ -104,6 +104,7 @@
 - [The Data Path, End to End](./contributors/04-data-path.md)
 - [Recipes](./contributors/05-recipes.md)
 - [Concurrency and Correctness](./contributors/06-concurrency-and-correctness.md)
+- [Locks, and Who Owns the State](./contributors/08-locks-and-state-ownership.md)
 - [Contributing: Getting a Change Merged](./contributors/07-contributing.md)
 
 ---
@@ -117,3 +118,4 @@
 - [E: Nix Provisioning — Design Proposal](./appendix/nix-provisioning.md)
 - [F: Standard OCI Toolchain Specification](./appendix/standard-oci-toolchain-spec.md)
 - [G: Upstream as a Subscription](./appendix/upstream-sync.md)
+- [H: Scheduler State Ownership — Design Proposal](./appendix/scheduler-ownership.md)
