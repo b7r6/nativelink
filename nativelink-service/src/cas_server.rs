@@ -173,6 +173,10 @@ impl ChunkingInstance {
 #[derive(Debug)]
 pub struct CasServer {
     stores: HashMap<InstanceName, Store>,
+    /// Per-instance per-blob deadline applied inside `BatchReadBlobs`.
+    /// Defaults to `BATCH_PER_BLOB_TIMEOUT`; configurable via
+    /// `batch_read_per_blob_timeout_s`.
+    batch_read_per_blob_timeouts: HashMap<InstanceName, Duration>,
     remote_cache_compression_instances: RemoteCacheCompressionInstances,
     chunking_instances: HashMap<InstanceName, ChunkingInstance>,
     chunking_metrics: ChunkingMetrics,
@@ -180,7 +184,9 @@ pub struct CasServer {
 
 type GetTreeStream = Pin<Box<dyn Stream<Item = Result<GetTreeResponse, Status>> + Send + 'static>>;
 
-/// Per-blob deadline applied inside `BatchReadBlobs` / `BatchUpdateBlobs`.
+/// Default per-blob deadline applied inside `BatchReadBlobs` /
+/// `BatchUpdateBlobs`. For `BatchReadBlobs` this can be overridden per
+/// instance via `batch_read_per_blob_timeout_s`.
 const BATCH_PER_BLOB_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Maximum size of a single chunk accepted in a `SpliceBlob` request.
@@ -209,11 +215,20 @@ impl CasServer {
         remote_cache_compression_instances: &RemoteCacheCompressionInstances,
     ) -> Result<Self, Error> {
         let mut stores = HashMap::with_capacity(configs.len());
+        let mut batch_read_per_blob_timeouts = HashMap::with_capacity(configs.len());
         let mut chunking_instances = HashMap::new();
         for config in configs {
             let store = store_manager.get_store(&config.cas_store).ok_or_else(|| {
                 make_input_err!("'cas_store': '{}' does not exist", config.cas_store)
             })?;
+            batch_read_per_blob_timeouts.insert(
+                config.instance_name.clone(),
+                config
+                    .batch_read_per_blob_timeout_s
+                    .map_or(BATCH_PER_BLOB_TIMEOUT, |secs| {
+                        Duration::from_secs(secs.into())
+                    }),
+            );
             if let Some(chunking_config) = &config.experimental_chunking {
                 let avg_chunk_size_bytes = chunking_config
                     .validated_avg_chunk_size_bytes()
@@ -273,6 +288,7 @@ impl CasServer {
         }
         Ok(Self {
             stores,
+            batch_read_per_blob_timeouts,
             remote_cache_compression_instances: remote_cache_compression_instances.clone(),
             chunking_instances,
             chunking_metrics: ChunkingMetrics::default(),
@@ -411,6 +427,11 @@ impl CasServer {
         }
 
         let store_ref = &store;
+        let per_blob_timeout = self
+            .batch_read_per_blob_timeouts
+            .get(instance_name)
+            .copied()
+            .unwrap_or(BATCH_PER_BLOB_TIMEOUT);
         let remote_cache_compression_enabled = self
             .remote_cache_compression_instances
             .enabled_for(instance_name);
@@ -429,7 +450,7 @@ impl CasServer {
                     // Apply a per-blob deadline so one slow read does not
                     // make the whole batch hit the client's overall deadline.
                     let result = match tokio::time::timeout(
-                        BATCH_PER_BLOB_TIMEOUT,
+                        per_blob_timeout,
                         store_ref.get_part_unchunked(digest_copy, 0, None),
                     )
                     .await
@@ -438,7 +459,7 @@ impl CasServer {
                         Err(_elapsed) => Err(make_err!(
                             Code::DeadlineExceeded,
                             "BatchReadBlobs per-blob timeout ({} s) elapsed for digest {}",
-                            BATCH_PER_BLOB_TIMEOUT.as_secs(),
+                            per_blob_timeout.as_secs(),
                             digest_copy,
                         )),
                     };
