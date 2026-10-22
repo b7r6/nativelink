@@ -21,6 +21,7 @@ cursored
 cxxlib
 [Dd]eserialised
 dedupe
+deduplicability
 deduplicable
 d_val
 Databend
@@ -33,6 +34,7 @@ diff_ids?
 discardable
 discoverability
 dylibs
+enqueued
 eval
 executable's
 FIFOs
@@ -55,6 +57,7 @@ nullable
 openraft
 preimage
 preload
+reconnectable
 reflink
 reserializing
 resumability

@@ -2,6 +2,8 @@
 
 > **Status: proposal.** Nothing here is implemented. Level 1 of the three levels below is described in [Locks, and Who Owns the State](../contributors/08-locks-and-state-ownership.md) and is a contributor-sized task today. Levels 2 and 3 are the subject of this appendix, and level 3 presumes a decision about high availability that has not been made.
 
+> **Superseded in part.** Draft 0.3 of the architecture reduction plan (October 22, 2026) takes this appendix as architectural motivation and supersedes four of its claims by name: the physical reading of I1, the equivalence between an assignment record and a worker notification in I3, the unconditional bound in I4, and the suggestion that a Raft log could be backed by Redis. All four are corrected below. The plan's own registry — AUTH, EFFECT, RES, TERM, LOOKUP, PUB, GC, REC, CFG, CTRL, LIVE — is the executable version of the table in this appendix, and where the two disagree the plan wins. "Decide this first", at the bottom, has since been decided: Configuration C is the shape of the plan's M4a and Configuration D is M4b.
+
 ## The argument
 
 The scheduler's correctness problems share a root cause, and it is not any individual lock. It is that the scheduler's state has no owner. Four trait implementations — `ClientStateManager`, `WorkerStateManager`, `MatchingEngineStateManager`, `WorkerScheduler` — mutate a queue and a worker registry from whatever task happens to call them, coordinating through locks, optimistic-concurrency retries, and generation counters. Every bug family in [chapter 6](../contributors/06-concurrency-and-correctness.md) is a different way for that coordination to be subtly wrong, and the code that exists to make it right is itself substantial:
@@ -22,17 +24,23 @@ Before asking what high availability should mean, name what a scheduler owes its
 
 | | Invariant | Statement |
 |---|---|---|
-| **I1** | At-most-one executor | An action is executing on at most one worker at a time. |
+| **I1** | At-most-one authoritative attempt | Each execution has at most one attempt authorised to produce its result. |
 | **I2** | Terminal stability | An operation that reached a terminal state never leaves it. |
-| **I3** | No ghost assignment | An action recorded as assigned to a worker is one that worker was actually told to run. |
-| **I4** | Bounded failure detection | A worker that dies has its actions requeued within a bounded, configured time. |
+| **I3** | No ghost assignment | Every dispatch a worker can act on originates in committed state and carries a stable identity. Success is never inferred from having enqueued the message. |
+| **I4** | Bounded failure detection | *Under stated assumptions* — reachable quorum, eventual delivery, advancing timers, responsive storage — a worker that dies has its actions requeued within a bounded, configured time. |
 | **I5** | Capacity accounting | Reservations on a worker never exceed its slots, and completion refunds exactly what dispatch charged. |
 | **I6** | Placement validity | An action dispatched to a worker satisfies that worker's platform properties *as evaluated at dispatch*, not as evaluated when it was queued. |
 | **I7** | Client resumability | A client that disconnects can resume by operation id and observe the operation's current state. |
 | **I8** | Submission durability | An accepted operation survives a scheduler restart. |
 | **I9** | Progress | A queued action with a capable, idle, reachable worker is eventually dispatched. |
 
-Two notes on reading these. **I1 is weaker than it looks, and deliberately so**: for a cacheable, hermetic action, duplicate execution writes identical content-addressed blobs, so a violation costs CPU rather than correctness. That is a property of the workload, not a licence — it does not extend to result selection or capacity accounting, which is why I3 and I5 are separate. And **I4 is the invariant that distinguishes the configurations below.** Everything else is roughly equal across them; failure detection is where they diverge sharply.
+Three notes on reading these, and the first two are corrections to an earlier draft of this appendix.
+
+**I1 is about authority, not physics.** An earlier version of this table said "an action is executing on at most one worker at a time", which is not a property any scheduler can enforce. Revoking an attempt's authority does not establish that its process stopped; a replacement attempt may run while the old one is still physically alive, and no clock proves otherwise. What is enforceable is that exactly one attempt is *authorised to produce the result*, which is what the plan calls AUTH 1. The consolation for cacheable hermetic actions still applies — duplicate execution writes identical content-addressed blobs, so the physical overlap costs CPU rather than correctness — but it is a property of the workload, not a licence, and it does not extend to result selection or capacity accounting. That is why I3 and I5 are separate.
+
+**I3 is about committed intent, not delivery.** The earlier wording — "one that worker was actually told to run" — asks for knowledge the scheduler cannot have. The achievable property is that the intent was committed before it was sent and carries an identity stable across retries, so a duplicate or delayed delivery is harmless. The current tree already concedes the distinction: `PendingActionInfoData.accepted` exists because dispatching and being acknowledged are different facts (`worker.rs:68`).
+
+**I4 is conditional, and it is the invariant that distinguishes the configurations below.** Everything else is roughly equal across them; failure detection is where they diverge sharply. But no bound on it holds unconditionally — safety never depends on a clock proving a remote process stopped, and liveness is owed only under reachable quorum, eventual delivery and advancing timers. A bound stated without its assumptions is a bound that will be wrong during a partition.
 
 ## The configurations that exist today
 
@@ -150,7 +158,7 @@ This also delivers the property that would have caught #3001 in CI: a core that 
 | -------- | -------------------- |
 | `RaftTypeConfig` | `NodeId` is a scheduler instance; `D` is the event enum; `R` is the reply (operation id, assignment outcome) |
 | `RaftStateMachine::apply` | the owner. Applies events in log order to the queue `BTreeMap`s and the worker registry, driven by one task, in order — that *is* the single-writer guarantee. `MemoryAwaitedActionDb` minus its lock goes here |
-| `RaftLogStorage`, `RaftLogReader`, `RaftSnapshotBuilder` | the log: in-memory for fast restart, RocksDB or Redis streams for durable. A snapshot is the applied state, so a new leader starts hot |
+| `RaftLogStorage`, `RaftLogReader`, `RaftSnapshotBuilder` | the log: in-memory for fast restart, an embedded durable journal otherwise. A snapshot is the applied state, so a new leader starts hot. **Not Redis** — an earlier draft offered Redis streams here, and the reduction plan removes Redis permanently, journal included. Note also that in 0.9.25 returning from append is not itself the durable acknowledgement; `LogFlushed` is, and the chosen journal has to be qualified against that |
 | `RaftNetworkFactory`, `RaftNetwork` | append-entries and vote over tonic, which the binary already serves |
 | `AsyncRuntime` (`TokioRuntime`) | the existing runtime; the state machine never touches it |
 | `Raft::client_write` | what `Execute`, the worker API and the sweep call instead of taking a lock |
@@ -161,7 +169,7 @@ This also delivers the property that would have caught #3001 in CI: a core that 
 
 **Matcher decisions are state transitions, so they go through the log.** The leader proposes `Assign(action, worker)`; it applies when committed; the worker is told after commit. Reservation holds and parked placements stop being shared state and become leader-local heuristics that *feed* proposals. What that costs per deployment shape is the next section.
 
-**What today's code becomes.** `MemoryAwaitedActionDb` is applied state. `StoreAwaitedActionDb`'s versioned CAS writes disappear as a concurrency mechanism and come back as log transport, if Redis stays in the picture at all. `api_worker_scheduler`'s 29 lock sites become "worker events in, assignment events out". The trait surface survives as the client side of the owner.
+**What today's code becomes.** `MemoryAwaitedActionDb` is applied state. `StoreAwaitedActionDb`'s versioned CAS writes disappear as a concurrency mechanism and do not come back: the log replaces them, and Redis leaves entirely. `api_worker_scheduler`'s 29 lock sites become "worker events in, assignment events out". The trait surface survives as the client side of the owner.
 
 ## The configurations level 3 would offer
 
@@ -179,13 +187,15 @@ What it does not survive is the machine. A one-member cluster is a single point 
 
 Three or five members, one leader by Raft election, the leader runs the matcher. Followers apply the committed log and hold identical resident state.
 
-The invariant this buys that nothing else does is **I4 restored across the whole fleet**. Failure detection stops depending on which process a worker happens to be connected to, because the registry is replicated state rather than per-process state. A worker's heartbeats are log entries; every member sees them; any member can judge any worker. `Unknown` stops existing as a liveness verdict, and with it the one-hour ceiling.
+The invariant this buys that nothing else does is **I4 restored across the whole fleet, under I4's stated assumptions**. Failure detection stops depending on which process a worker happens to be connected to, because the registry is replicated state rather than per-process state. A worker's heartbeats are log entries; every member sees them; any member can judge any worker. `Unknown` stops existing as a liveness verdict, and with it the one-hour ceiling.
+
+The qualifier matters. What the replicated registry removes is the *structural* reason the bound was an hour — that no process could distinguish a peer's healthy worker from an abandoned one. It does not remove the need for a quorum to be reachable and timers to be advancing before any bound applies at all. During a partition the minority has no bound because it has no authority, which is the correct answer and not a loophole.
 
 The costs are real and should be stated:
 
 - **One commit round trip on the dispatch path.** The leader proposes `Assign(action, worker)` and tells the worker only after commit. Sub-millisecond on a LAN; zero on Configuration C.
 - **Workers and clients still connect to one process.** Raft replicates the scheduler's state, not its gRPC sessions. On a leader change, workers reconnect and reconcile ([#2925](https://github.com/TraceMachina/nativelink/pull/2925)'s running-operations-on-keepalive is that mechanism), and clients resume with `WaitExecution` by operation id — which REAPI already requires of them, so this is not new protocol surface. **I7 is the invariant that makes failover tolerable, and it is the one REAPI hands us for free.**
-- **A minority partition stops scheduling.** This is the correct behaviour and worth saying out loud, because Configuration B does the opposite: a partitioned replica in Configuration B keeps dispatching to its own workers from a queue it can no longer safely reason about. Raft trades that availability for the ability to state I1 and I4 without qualification.
+- **A minority partition stops scheduling.** This is the correct behaviour and worth saying out loud, because Configuration B does the opposite: a partitioned replica in Configuration B keeps dispatching to its own workers from a queue it can no longer safely reason about. Raft trades that availability for authority that is never ambiguous: in the minority there is nothing to be wrong about. The invariants are still conditional — they are simply conditioned on something checkable (a quorum) rather than on a guess about a peer.
 
 ### Configuration E: sharded
 
@@ -223,3 +233,13 @@ The three levels are not a roadmap to walk end to end.
 Those are three different systems. The current Redis-backed model quietly promises the third, is reached for to get the first, and delivers the second badly — any process that can reach Redis is a scheduler, coordination is optimistic concurrency on individual records, there is no membership and no leader, and the price of that honesty about peers is the one-hour ceiling on I4.
 
 So the question to put to whoever owns the product, in one sentence: **when a scheduler dies, what is the longest a running action may sit unreaped — and are you willing to pay a commit round trip per dispatch to make that number small?** Everything above follows from the answer, and nothing above should be built before it.
+
+### The answer, as of Draft 0.3
+
+That question has been answered, and the answer is *both, in order*. The reduction plan takes sentence 1 and sentence 2 as sequential qualification stages of one implementation rather than as alternative deployments: M4a delivers singleton-durable authority — Configuration C — and M4b qualifies the identical code path with replicated authority, which is Configuration D. Sentence 3 is not in the program. "Desired node count" is the only remaining scheduler topology choice, and it drives one membership reconciler rather than selecting an algorithm.
+
+Two things in the plan are sharper than this appendix managed, and both are worth carrying back.
+
+**The singleton is not a special case.** This appendix treated Configuration C as the cheap option and D as the upgrade. The plan forbids a singleton bypass outright: volatile and durable authority implement the same interface and the same logical rules, differing only in a declared recovery envelope, and the one-member deployment uses the same proposal, commit, apply and effect path as a five-member one. That is a stronger statement than "same binary", which is all this appendix claimed, and it is what makes M4b a qualification rather than a port.
+
+**Failure detection was the wrong thing to lead with.** This appendix organised everything around I4, because I4 is where the shipped configurations diverge most visibly. The plan organises around *effects*: every externally actionable intent originates in committed state with a stable identity, and uncertain delivery is retried without inferring success. Read that way, the one-hour ceiling is a symptom rather than the disease — it is what you get when liveness is inferred from a timestamp instead of from an owned, committed intent. The plan's instruction not to use timestamps as fencing tokens is the general form of the bug this appendix found one instance of.

@@ -4,6 +4,8 @@ The previous chapter argued about who should own the scheduler's state. This one
 
 The short version: the scheduler's entire durable state is **one struct, one per operation**, and everything else it knows — every worker, every connection, every reservation — lives only in the memory of one process and is never written down anywhere.
 
+Two sections below describe behaviour that is a known defect rather than a design to preserve — the `skip_cache_lookup` mapping and the identities the record lacks. Both are flagged where they appear.
+
 ## The record
 
 `AwaitedAction`, in `nativelink-scheduler/src/awaited_action_db/awaited_action.rs:54`. Twelve fields. That is the whole of it.
@@ -101,7 +103,50 @@ let maybe_unique_qualifier = match &unique_qualifier {
 };
 ```
 
-An uncacheable action — `skip_cache_lookup` on the `ExecuteRequest` — gets no `unique_qualifier` index field in Redis and, by the same check at `memory_awaited_action_db.rs:775`, no entry in the memory backend's hash-key map, so nothing can ever be joined to it. One `ExecuteRequest` boolean decides whether a submission is deduplicable for its whole life.
+An uncacheable action gets no `unique_qualifier` index field in Redis and, by the same check at `memory_awaited_action_db.rs:775`, no entry in the memory backend's hash-key map, so nothing can ever be joined to it.
+
+### Which makes it worth asking what sets that qualifier
+
+`ActionInfo::try_from_action_and_execute_request` (`action_messages.rs:344`):
+
+```rust
+let unique_qualifier = if execute_request.skip_cache_lookup {
+    ActionUniqueQualifier::Uncacheable(unique_key)
+} else {
+    ActionUniqueQualifier::Cacheable(unique_key)
+};
+```
+
+That is the wrong field, and the right one is never read. REAPI has two independent fields here and this tree uses neither as specified.
+
+`skip_cache_lookup`, on the `ExecuteRequest`, is a **lookup policy**: do not serve me a cached result. The spec is explicit that it says nothing about cacheability, and in fact says the opposite — "actions from execution requests setting this field set are still eligible to be entered into the action cache upon completion, and services SHOULD overwrite any existing entries", precisely so that `skip_cache_lookup` can be used "as a mechanism for replacing action cache entries that reference outputs no longer available or that are poisoned in any way" (`remote_execution.proto:1487`). So the documented purpose of the field is to *repair* the cache. Mapping it to `Uncacheable` guarantees the repair can never be written.
+
+`Action.do_not_cache` is the **cacheability** field, and the one that does mean what `Uncacheable` implements: "the `Action`'s result cannot be cached, and in-flight requests for the same `Action` may not be merged" (`:641`). It is on the `Action` rather than the request because it is a property of the work, not of one client's wishes. In this tree it is read nowhere at all:
+
+```console
+$ git grep -n 'do_not_cache' -- '*.rs' | grep -v nativelink-proto
+$
+```
+
+So the behaviour is inverted in both directions. A client asking to bypass and refresh a poisoned entry gets an execution that is forbidden from refreshing it; an action declaring that it must not be cached or merged is cached and merged freely. One `ExecuteRequest` boolean decides deduplicability for a submission's whole life, and it is not the boolean that should.
+
+Draft 0.3 of the reduction plan makes separating these a fixed objective — `skip_cache_lookup` never becoming `do_not_cache` is invariant LOOKUP 1, with a three-row request matrix and a mutation test that fails if the conflation returns. Worth knowing before touching anything in this area: the current mapping is not a design decision to preserve.
+
+### The identities that are not there
+
+Three names is what the record has. The reduction plan's identity table asks for eleven, and the gap is the more useful thing to look at, because each missing one is a fact the tree currently derives from something that cannot bear the weight.
+
+| Missing identity | What stands in for it today |
+| ---------------- | --------------------------- |
+| **Attempt ID** — one attempt within an execution | nothing. `attempts` is a *count*, so a late result from attempt 1 is indistinguishable from attempt 2's, and `worker_id` is the only discriminator |
+| **Worker incarnation** — one process lifetime of a logical worker | nothing. `WorkerId` is a bare `String` (`action_messages.rs:138`), so a restarted worker that reconnects with the same id inherits its predecessor's identity, including any capacity the scheduler still believes is charged |
+| **Transport session** — a reconnectable channel | conflated with the worker itself. The `Worker` struct *is* the connection: it holds the `tx` sender, and losing the stream means losing the registry entry |
+| **Effect ID** — a stable identity for an external intent | nothing. A dispatch is a channel send; a retry is a fresh send |
+| **Reservation ID** — the originally charged resource vector | the reservation is implied by `platform_properties` reduction on the live `Worker`, so a refund is recomputed from current advertisements rather than from what was charged |
+
+The record's own fencing story is the clearest instance. `last_worker_updated_timestamp` is what the executing sweep consults to decide whether a worker has gone quiet — a timestamp doing a fencing token's job. Timestamps do not fence: they cannot distinguish "this attempt is stale" from "this clock moved", which is why `liveness_clock_step_test.rs` exists and why the plan states flatly that timestamps are not fencing tokens. A generation or attempt counter compares correctly without assuming anything about clocks; a `SystemTime` on a record written by another process does not.
+
+None of this is a defect in the fields that *are* there. It is the cost of a record designed as "the last known state of an action" rather than as "the authoritative history of an execution", and it is why the plan's first package is an identity schema rather than a refactor.
 
 ## Two sort keys, and why
 
