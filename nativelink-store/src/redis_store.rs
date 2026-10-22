@@ -2184,6 +2184,31 @@ impl SchedulerSubscriptionManager for RedisSubscriptionManager {
     }
 }
 
+impl<C, M> RedisStore<C, M>
+where
+    C: ConnectionLike + Clone + Send + Sync,
+    M: RedisManager<C> + Send + Sync,
+{
+    /// The keys the search index for `K` covers: the schema's prefix behind
+    /// this store's `key_prefix`, because that is where every key this store
+    /// writes lands. An index over the bare schema prefix matches nothing when
+    /// a `key_prefix` is set, and a scheduler on it never sees a queued action.
+    fn index_key_prefix<K: SchedulerIndexProvider>(&self) -> String {
+        format!("{}{}", self.key_prefix, K::KEY_PREFIX)
+    }
+
+    /// The search index's name, under this store's `key_prefix` for the same
+    /// reason: two stores with different prefixes on one Redis must not share
+    /// an index whose PREFIX only one of them wrote.
+    fn index_name<K: SchedulerIndexProvider>(&self) -> String {
+        format!(
+            "{}{}",
+            self.key_prefix,
+            get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY)
+        )
+    }
+}
+
 impl<C, M> SchedulerStore for RedisStore<C, M>
 where
     C: Clone + ConnectionLike + Sync + Send + 'static,
@@ -2374,13 +2399,11 @@ where
             .err_tip(|| {
                 format!("In RedisStore::search_by_index_prefix::try_sanitize - {index_value:?}")
             })?;
+        let index_name = self.index_name::<K>();
         let run_ft_aggregate = |connection_manager: C| async {
             ft_aggregate(
                 connection_manager,
-                format!(
-                    "{}",
-                    get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY)
-                ),
+                index_name.clone(),
                 if index_value.is_empty() {
                     "*".to_string()
                 } else {
@@ -2410,7 +2433,7 @@ where
                 });
             }
             let create_options = FtCreateOptions {
-                prefixes: vec![K::KEY_PREFIX.into()],
+                prefixes: vec![self.index_key_prefix::<K>()],
                 nohl: true,
                 nofields: true,
                 nofreqs: true,
@@ -2427,10 +2450,7 @@ where
                 // dropped (`FT.DROPINDEX`, without DD); this code recreates it.
                 temporary: None,
             };
-            let index = format!(
-                "{}",
-                get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY)
-            );
+            let index = index_name.clone();
             ft_create(connection_manager, index, create_options, schema).await
         };
 
@@ -2446,10 +2466,7 @@ where
                 let (connection_manager, _connect_id) =
                     self.connection_manager.reconnect(connect_id).await?;
                 run_ft_aggregate(connection_manager).await.err_tip(|| {
-                    format!(
-                        "Error with reconnected ft_aggregate in RedisStore::search_by_index_prefix({})",
-                        get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY),
-                    )
+                    format!("Error with reconnected ft_aggregate in RedisStore::search_by_index_prefix({index_name})")
                 })
             }
             Err(_) => {
@@ -2478,10 +2495,7 @@ where
                         Ok(())
                     } else {
                         Err(e).err_tip(|| {
-                            format!(
-                                "Error with ft_create in RedisStore::search_by_index_prefix({})",
-                                get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY),
-                            )
+                            format!("Error with ft_create in RedisStore::search_by_index_prefix({index_name})")
                         })
                     }
                 });
@@ -2494,21 +2508,11 @@ where
                 // is bounded; past it the aggregate runs anyway and the next
                 // pass re-reads.
                 if create_result.is_ok() {
-                    wait_for_index_ready(
-                        connection_manager.clone(),
-                        &format!(
-                            "{}",
-                            get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY)
-                        ),
-                    )
-                    .await;
+                    wait_for_index_ready(connection_manager.clone(), &index_name.clone()).await;
                 }
 
                 let run_result = run_ft_aggregate(connection_manager).await.err_tip(|| {
-                    format!(
-                        "Error with second ft_aggregate in RedisStore::search_by_index_prefix({})",
-                        get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY),
-                    )
+                    format!("Error with second ft_aggregate in RedisStore::search_by_index_prefix({index_name})")
                 });
 
                 // Creating the index will race which is ok. If it fails to create, we only
@@ -2616,10 +2620,7 @@ where
             .err_tip(|| {
                 format!("In RedisStore::count_by_index_prefix::try_sanitize - {index_value:?}")
             })?;
-        let index_name = format!(
-            "{}",
-            get_index_name!(K::KEY_PREFIX, K::INDEX_NAME, K::MAYBE_SORT_KEY)
-        );
+        let index_name = self.index_name::<K>();
         let query = if index_value.is_empty() {
             "*".to_string()
         } else {

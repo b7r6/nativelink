@@ -1485,6 +1485,100 @@ fn test_search_by_index() -> Result<(), Error> {
     Ok(())
 }
 
+// A store with a `key_prefix` writes every key behind it, so the index it
+// creates has to cover `<key_prefix><schema prefix>` and be named under the
+// prefix too. Indexing the bare schema prefix matched nothing: a scheduler on
+// such a store queued every action and dispatched none (railgun, 2026-10-22).
+#[nativelink_test]
+fn test_search_by_index_covers_the_store_key_prefix() -> Result<(), Error> {
+    const INDEX: &str = "sched:test:_content_prefix_sort_key_3e762c15";
+    fn make_ft_aggregate(result: Result<Value, RedisError>) -> MockCmd {
+        MockCmd::new(
+            redis::cmd("FT.AGGREGATE")
+                .arg(INDEX)
+                .arg("@content_prefix:{ Searchable }")
+                .arg("TIMEOUT")
+                .arg(10000_u64)
+                .arg("LOAD")
+                .arg(2)
+                .arg("data")
+                .arg("version")
+                .arg("WITHCURSOR")
+                .arg("COUNT")
+                .arg(1500)
+                .arg("MAXIDLE")
+                .arg(30000)
+                .arg("SORTBY")
+                .arg(2usize)
+                .arg("@sort_key")
+                .arg("ASC")
+                .arg("MAX")
+                .arg(1_000_000_u64),
+            result,
+        )
+    }
+
+    let commands = vec![
+        // A fresh Redis: the first read finds no index …
+        make_ft_aggregate(Err(make_extension_error(
+            "No".to_string(),
+            Some(format!("such index {INDEX}")),
+        ))),
+        // … so the store creates one, over the keys it actually writes.
+        MockCmd::new(
+            redis::cmd("FT.CREATE")
+                .arg(INDEX)
+                .arg("ON")
+                .arg("HASH")
+                .arg("NOHL")
+                .arg("NOFIELDS")
+                .arg("NOFREQS")
+                .arg("NOOFFSETS")
+                .arg("PREFIX")
+                .arg(1)
+                .arg("sched:test:")
+                .arg("SCHEMA")
+                .arg("content_prefix")
+                .arg("TAG")
+                .arg("sort_key")
+                .arg("TAG")
+                .arg("SORTABLE"),
+            Ok(Value::Okay),
+        ),
+        make_ft_info(INDEX, 0),
+        make_ft_aggregate(Ok(Value::Array(vec![
+            Value::Array(vec![
+                Value::Int(1),
+                Value::Array(vec![
+                    Value::BulkString(b"data".to_vec()),
+                    Value::BulkString(b"1234".to_vec()),
+                    Value::BulkString(b"version".to_vec()),
+                    Value::BulkString(b"1".to_vec()),
+                ]),
+            ]),
+            Value::Int(0),
+        ]))),
+    ];
+    let store = make_mock_store_with_prefix(commands, "sched:".to_string()).await;
+
+    let search_results: Vec<TestSchedulerDataUnversioned> = store
+        .search_by_index_prefix(SearchByContentPrefix {
+            prefix: "Searchable".to_string(),
+        })
+        .await
+        .err_tip(|| "Failed to search by index")?
+        .try_collect()
+        .await?;
+
+    assert_eq!(
+        search_results.len(),
+        1,
+        "the row behind the prefix is found"
+    );
+    assert_eq!(search_results[0].content, "1234");
+    Ok(())
+}
+
 /// A provider that reads its index descending, the way the scheduler's
 /// awaited-action index does.
 struct SearchByContentPrefixDesc {
