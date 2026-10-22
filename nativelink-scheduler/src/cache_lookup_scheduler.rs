@@ -315,10 +315,10 @@ impl CacheLookupScheduler {
                 }
                 Err(err) => {
                     // A NotFound just means we need to execute the action. Any
-                    // other lookup failure (an unavailable AC backend, a decode
-                    // fault) degrades to execution too: a cache fault must never
-                    // fail the request, only cost a redundant execution. The
-                    // error itself still reaches operators via the log.
+                    // other lookup failure (an unavailable AC backend, a timeout)
+                    // degrades to execution too: a cache fault must never fail
+                    // the request, only cost a redundant execution. The error
+                    // itself still reaches operators via the log.
                     if err.code != Code::NotFound {
                         warn!(?err, "Cache lookup failed; falling through to execution");
                     }
