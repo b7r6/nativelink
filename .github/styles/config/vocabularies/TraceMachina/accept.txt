@@ -17,7 +17,11 @@ codec
 colocated
 combinators?
 conformant
+cursored
 cxxlib
+[Dd]eserialised
+dedupe
+deduplicable
 d_val
 Databend
 DB's
@@ -41,11 +45,13 @@ interoperate
 [Kk]eyless
 keypair
 libcurl
+Lua
 materializer
 misrouting
 mutexes
 narinfos
 netrc
+nullable
 openraft
 preimage
 preload
@@ -126,6 +132,8 @@ uncached
 uncontended
 unmanifested
 unreaped
+[Uu]ncacheable
+[Uu]nsatisfiability
 [Uu]psert
 upstream's
 Verilator

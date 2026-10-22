@@ -105,6 +105,7 @@
 - [Recipes](./contributors/05-recipes.md)
 - [Concurrency and Correctness](./contributors/06-concurrency-and-correctness.md)
 - [Locks, and Who Owns the State](./contributors/08-locks-and-state-ownership.md)
+- [What the Scheduler Stores](./contributors/09-what-the-scheduler-stores.md)
 - [Contributing: Getting a Change Merged](./contributors/07-contributing.md)
 
 ---

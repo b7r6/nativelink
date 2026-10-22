@@ -96,3 +96,5 @@ Three levels of fix exist for what this chapter describes. Levels 2 and 3 are st
 5. **Write the lock order down.** Three locks, one order, one module doc. It took one paragraph above; it has never been in the repository.
 
 What level 1 does not fix: `api_worker_scheduler`'s 29 acquisitions of a mutex held across calls that reach the state manager. That is the next wedge, and no amount of discipline makes a 3,000-line critical section safe. Which is the argument for level 2, and the subject of the appendix.
+
+Before the appendix, though, read [What the Scheduler Stores](./09-what-the-scheduler-stores.md). Every lock in this chapter guards something, and that chapter says what — which of it is written down, which of it exists only in one process's memory, and which structures hold the same fact twice and are kept equal by hand. The argument for a single owner is much easier to have once the inventory is on the table.

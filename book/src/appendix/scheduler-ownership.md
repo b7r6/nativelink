@@ -36,6 +36,8 @@ Two notes on reading these. **I1 is weaker than it looks, and deliberately so**:
 
 ## The configurations that exist today
 
+Both are measured against the inventory in [What the Scheduler Stores](../contributors/09-what-the-scheduler-stores.md), which is the premise this whole appendix rests on: the shared record is twelve fields, and its entire knowledge of the worker fleet is one nullable string, `worker_id: Option<WorkerId>`. Everything else a scheduler knows about a worker — its liveness, its reservations, what it was told and when it acknowledged — lives in one process's memory and is not `Serialize`.
+
 Exactly two, selected by one config field — `experimental_backend` on `SimpleSpec` (`nativelink-config/src/schedulers.rs`). The word *experimental* is load-bearing and should be read as written.
 
 ### Configuration A: one scheduler, memory backend
@@ -88,6 +90,8 @@ WorkerLiveness::Unknown => {
 `max_action_executing_timeout_s` has no runtime default — `#[serde(default)]` leaves it 0, and 0 means disabled. **So in the shipped default, when a scheduler replica dies, every action its workers were executing stays `Executing` for one hour before anything reaps it.** I4's bound is one hour, per action, and it is one hour precisely because the honest alternative is worse: reaping earlier would kill live work on healthy peers' workers. The comment at `worker_registry.rs:24-27` says exactly this — "heartbeats never reach the shared state, so a healthy hour-long action and an abandoned one look identical from here, and acting early costs live work."
 
 Setting `max_action_executing_timeout_s` tightens the bound at the cost of capping how long any action may legitimately run. That is the trade-off the configuration forces, and there is no setting that gets both.
+
+It is worth noting what the configuration *does* get right, because it shows the gap is mechanical rather than conceptual. The one piece of fleet state that is shared — `fc_<scheduler_id>`, each scheduler's worker *shapes* — is republished every five seconds under a fifteen-second TTL, and a peer that dies drops out of the index on its own. A working TTL-based membership protocol is already running in this configuration. It carries shapes and not identities, so it can say that nothing in the fleet can run a given platform property set, but not that worker `w-7` is gone. The distance from fifteen seconds to one hour is the distance between those two facts.
 
 **Where I9 goes.** Redis searches are eventually consistent with respect to the notification that triggered them, so a re-queued operation can be invisible to the matching pass its own notification woke. `fallback_match_interval_s` (default 5s) exists for that: an unconditional matching pass on a timer, described in its own doc comment as "a safety net for missed notifications and for scheduler backends with eventually consistent searches." I9 therefore holds with a latency bound of about five seconds rather than promptly, and holds *only because* that timer is on. Similarly, the subscription manager is explicitly allowed to be unreliable, with polling as the fallback (`store_awaited_action_db.rs:103-104`) — which is what keeps I7 true.
 
