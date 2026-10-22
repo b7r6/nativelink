@@ -15,6 +15,8 @@
 use core::fmt::Write;
 use core::hash::BuildHasher;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nativelink_util::background_spawn;
 use redis::Value;
@@ -291,4 +293,52 @@ pub async fn make_fake_redis_with_responses<B: BuildHasher + Clone + Send + 'sta
     responses: HashMap<String, String, B>,
 ) -> u16 {
     make_fake_redis_with_multiple_responses(vec![responses]).await
+}
+
+/// Like [`make_fake_redis_with_responses`], except that the first request
+/// matching a key of `first_responses` gets that key's response instead, once.
+/// Every later request gets its normal response. Use this to test that a
+/// caller retries after a transient error.
+pub async fn make_fake_redis_with_first_responses<
+    B: BuildHasher + Clone + Send + 'static + Sync,
+>(
+    responses: HashMap<String, String, B>,
+    first_responses: HashMap<String, String, B>,
+) -> u16 {
+    let first_responses: Vec<(String, String, Arc<AtomicBool>)> = first_responses
+        .into_iter()
+        .map(|(key, value)| (key, value, Arc::new(AtomicBool::new(false))))
+        .collect();
+    let handler = move |buf: &[u8]| -> String {
+        let str_buf = String::from_utf8_lossy(buf).into_owned();
+        for (key, value, used) in &first_responses {
+            if str_buf.starts_with(key) && !used.swap(true, Ordering::SeqCst) {
+                info!("Responding once to {}", str_buf.replace("\r\n", "\\r\\n"));
+                return value.clone();
+            }
+        }
+        for (key, value) in &responses {
+            if str_buf.starts_with(key) {
+                info!("Responding to {}", str_buf.replace("\r\n", "\\r\\n"));
+                return value.clone();
+            }
+        }
+        warn!(
+            "Unknown command: {}",
+            str_buf.chars().take(1000).collect::<String>()
+        );
+        String::new()
+    };
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (listener_ready_tx, listener_ready_rx) = oneshot::channel::<()>();
+    background_spawn!("listener", async move {
+        fake_redis_internal(listener, listener_ready_tx, vec![handler]).await;
+    });
+    listener_ready_rx
+        .await
+        .expect("Expected successful listener boot");
+    info!(port, "Fake redis booted");
+    port
 }
