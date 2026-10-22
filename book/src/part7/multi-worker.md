@@ -32,13 +32,15 @@ scaled `worker` service. The tested, production-shaped files — which split the
 CAS onto its own server and give each worker a named data volume — live in the
 deployment-examples directory and are what you should copy from.
 
-**Source:** [`deployment-examples/docker-compose/`](https://github.com/TraceMachina/nativelink/tree/main/deployment-examples/docker-compose) (`scheduler-multi-worker.json5`, `worker-shared-cas.json5`, `docker-compose-multi-worker.yml`)
+**Source:** [`deployment-examples/docker-compose/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/deployment-examples/docker-compose) (`scheduler-multi-worker.json5`, `worker-shared-cas.json5`, `docker-compose-multi-worker.yml`)
 
 ```yaml
 # docker-compose.yml (simplified; see the tested files linked above)
 services:
   scheduler:
-    image: ghcr.io/tracemachina/nativelink:latest
+    # Built from this fork's Dockerfile — the OCI hook and nix_cache service
+    # are fork additions not present in the upstream image.
+    image: nativelink:latest
     command: nativelink /config/scheduler.json5
     ports:
       - "50051:50051"   # Client-facing (CAS, AC, Execution, Fetch)
@@ -126,10 +128,17 @@ Both config files are validated offline before anything binds a socket — see
         }],
         bytestream: [{ instance_name: "main", cas_store: "CAS_STORE" }],
 
-        // Remote Asset API: resolves external URIs into CAS content.
+        // OCI → CAS bridge: a FetchDirectory on an oci:// or docker:// URI
+        // projects the image into CAS_STORE as an REAPI Directory tree, so
+        // toolchains become data the workers fetch on demand.
         fetch: [{
           instance_name: "main",
-          fetch_store: "CAS_STORE"
+          fetch_store: "CAS_STORE",
+          oci: {
+            cas_store: "CAS_STORE",
+            dedup_check: true,
+            digest_function: "BLAKE3"
+          }
         }]
       }
     },
@@ -146,10 +155,16 @@ Both config files are validated offline before anything binds a socket — see
 }
 ```
 
-The `fetch` block enables the Remote Asset API, which resolves external URIs into
-CAS content backed by `CAS_STORE`. It runs on the scheduler/CAS process; drop the
-block if you do not need remote-asset resolution — everything else in the
-deployment is unaffected.
+The `fetch` block wires the [OCI → CAS bridge](../part9/oci-cas-bridge.md): a
+`FetchDirectory` request whose URI begins with `oci://` or `docker://` pulls the
+image, projects its layers into a `Directory` tree, uploads the blobs to
+`CAS_STORE`, and returns the root digest for a client to fold into an action's
+input root. The bridge runs only on the scheduler/CAS process; workers then read
+the projected tree from CAS like any other input, so no worker change is needed.
+The projection `digest_function` is fixed by this config (the request's own field
+is ignored) and **must match what your execution clients request** — so a
+`BLAKE3` hook pairs with `BLAKE3` clients. Drop the `fetch` block if you do not
+import toolchains this way; everything else in the deployment is unaffected.
 
 ## Worker Config (Multi-Worker)
 
@@ -227,17 +242,26 @@ Key points:
 
 With `deny_unknown_fields` on every config struct, a stale or misspelled field —
 a `grpc` store missing its `store_type`, an `ac_store` pointing at a name no
-store declares — is a hard load error, not a silent no-op. NativeLink parses the
-config and resolves every store and scheduler reference at startup, so a bad file
-fails fast: the process names the exact offending path
-(`workers[0].local.upload_action_result.ac_store` and the like) and exits
-non-zero before it serves traffic.
+store declares — is a hard load error, not a silent no-op. Catch these before a
+container starts by running the offline check on each file:
 
-The cheapest way to catch these before a container reaches production is to boot
-the process against each config in CI — on a bad field or dangling reference it
-exits immediately with the error, so the build fails before the config ever rolls
-out. See [Appendix A: Configuration Reference](../appendix/config-reference.md)
-for the field-name cautions that most often trip a config load.
+```bash
+nativelink --check scheduler.json5
+nativelink --check worker.json5
+```
+
+`--check` parses the config and resolves every store and scheduler reference,
+then exits **without** binding a socket, connecting to a backend, or creating a
+store directory. Each file passes with a one-line summary:
+
+```
+OK: scheduler.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+OK: worker.json5 — 2 stores, 0 schedulers, 0 servers, all references resolve
+```
+
+A bad reference names the exact offending path (`workers[0].local.upload_action_result.ac_store`
+and the like) and exits non-zero, so this is a clean continuous-integration gate:
+fail the build before the config ever reaches a node. See [Appendix A: Configuration Reference](../appendix/config-reference.md) for the field-name cautions that most often trip `--check`.
 
 ## Scaling Workers
 

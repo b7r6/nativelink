@@ -12,7 +12,7 @@ Nix is a package manager where every package is identified by a store path deriv
 /nix/store/h590aa9zij6n1kimlnj9fyh038rmj396-clang-wrapper-22.1.8/bin/clang
 ```
 
-That path is a hash of: the Clang source, the build flags, the compiler used to compile Clang, the libc, and all transitive dependencies. If any of these change, the hash changes, and you get a different path. (The exact hashes and versions above are the ones the current LRE C++ toolchain reports — Clang `22.1.8`, glibc `2.42`, libc++ `22.1.8` — recorded in [`local-remote-execution/generated-cc/cc/builtin_include_directory_paths`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/generated-cc/cc/builtin_include_directory_paths#L7).)
+That path is a hash of: the Clang source, the build flags, the compiler used to compile Clang, the libc, and all transitive dependencies. If any of these change, the hash changes, and you get a different path. (The exact hashes and versions above are the ones the current LRE C++ toolchain reports — Clang `22.1.8`, glibc `2.42`, libc++ `22.1.8` — recorded in [`local-remote-execution/generated-cc/cc/builtin_include_directory_paths`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/generated-cc/cc/builtin_include_directory_paths#L7).)
 
 This means:
 - Same source + same nixpkgs revision = same store path = same binary, everywhere
@@ -46,7 +46,7 @@ The flow:
 
 ## Setting Up LRE
 
-**Source:** [`local-remote-execution/`](https://github.com/TraceMachina/nativelink/tree/main/local-remote-execution)
+**Source:** [`local-remote-execution/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/local-remote-execution)
 
 ### Step 1: Flake Inputs
 
@@ -61,14 +61,16 @@ Your project's `flake.nix` imports NativeLink's flake and follows its nixpkgs:
       # CRITICAL: follows nativelink's nixpkgs so store paths match
       follows = "nativelink/nixpkgs";
     };
-    nativelink.url = "github:TraceMachina/nativelink/<commit>";
+    nativelink.url = "github:straylight-prelude/straylight-nativelink/<commit>";
   };
 }
 ```
 
+(Upstream LRE originates in [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink); the `straylight/straylight-nativelink` fork tracks it and layers the CAS-backed Nix substituter and OCI bridge described below.)
+
 The `follows` is essential. If your local nixpkgs and the worker's nixpkgs differ, Nix store paths will differ (even for the same package version), and you'll get cache misses.
 
-**Source:** [`local-remote-execution/README.md`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/README.md)
+**Source:** [`local-remote-execution/README.md`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/README.md)
 
 ### Step 2: LRE Flake Module
 
@@ -102,7 +104,7 @@ build --platforms=@local-remote-execution//rust/platforms:x86_64-unknown-linux-m
 
 The Rust toolchains and platforms are emitted for every supported host; the C++ block (`--extra_toolchains=...generated-cc/config:cc-toolchain` and the `generated-cc/config:platform` execution platform) is added only on Linux, because `lre-cc` is `x86_64-linux`-only. Setting `lre.prefix` gates the whole set behind `--config=<prefix>` instead of enabling it by default.
 
-**Source:** [`local-remote-execution/flake-module.nix:139-191`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/flake-module.nix#L139-L191)
+**Source:** [`local-remote-execution/flake-module.nix:139-191`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/flake-module.nix#L139-L191)
 
 ### Step 3: Generated Toolchain Configuration
 
@@ -125,7 +127,7 @@ platform(
 )
 ```
 
-**Source:** [`local-remote-execution/generated-cc/config/BUILD:35-47`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/generated-cc/config/BUILD#L35-L47)
+**Source:** [`local-remote-execution/generated-cc/config/BUILD:35-47`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/generated-cc/config/BUILD#L35-L47)
 
 This is where the C++ toolchain identity actually lives: the `container-image` exec property. Its tag includes the Nix hash of the `lre-cc` closure — if the toolchain derivation changes, the tag changes, the platform changes, and every action hash that runs on it changes. Cache correctness is structural. Note that no store path appears here; the paths are sealed inside the image the tag names.
 
@@ -133,9 +135,11 @@ This is where the C++ toolchain identity actually lives: the `container-image` e
 
 The LRE container image is built from the Nix closure:
 
-**Source:** [`local-remote-execution/overlays/lre-cc.nix`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/overlays/lre-cc.nix)
+**Source:** [`local-remote-execution/overlays/lre-cc.nix`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/overlays/lre-cc.nix)
 
 This produces a minimal OCI image containing only the Nix store paths needed by the toolchain — no full OS, no package manager, only the toolchain binaries and libraries the build requires.
+
+> **Fork note — closures without Nix on every worker.** Upstream LRE assumes each worker either runs the `lre-cc` image or has the closure realized in a local `/nix/store`. The `straylight/straylight-nativelink` fork removes that assumption two ways, both anchored in the same content addressing. The [OCI → CAS Bridge](../part9/oci-cas-bridge.md) projects the `lre-cc` image's layers into REAPI `Directory` trees in the CAS, so a worker materializes the toolchain from the same store it already fetches inputs from — the `container-image` tag becomes a CAS fetch key rather than a registry pull. Complementarily, the [Nix Substituter Facade](../part10/nix-substituter.md) serves `/nix/store` closures straight out of the CAS over Nix's HTTP binary-cache protocol, so a developer's `nix develop` and the workers pull byte-identical paths from one CAS-backed substituter. Both keep the LRE guarantee — identical closure in, identical bytes out — while dropping the requirement that every machine pre-install Nix or pre-pull an image.
 
 ### Step 5: Worker Configuration
 
@@ -167,13 +171,13 @@ supported_platform_properties: {
 }
 ```
 
-The classifier is defined in [`nativelink-config/src/schedulers.rs:43-65`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/schedulers.rs#L43-L65):
+The classifier is defined in [`nativelink-config/src/schedulers.rs:43-65`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/schedulers.rs#L43-L65):
 
 - `minimum` — numeric floor; the worker must report at least the requested value (`cpu_count`).
 - `exact` — string equality; the worker's value must match the job's exactly (`ISA`).
 - `priority` — **does not restrict** matching. The value is passed to the worker as an informational field (and, in future, will bias worker preference). Both `container-image` and `lre-rs` are `priority`.
 
-The toolchain tag therefore never acts as a hard filter — the worker running the matching `lre-cc` image *is* the correct executor, and the tag rides through as content-addressed identity that folds into the action hash. `ISA: "exact"` and `cpu_count: "minimum"` do the actual filtering. This is why the empty-string worker values are harmless: `priority` properties are informational, not constraints.
+So the toolchain tag never acts as a hard filter — the worker running the matching `lre-cc` image *is* the correct executor, and the tag rides through as content-addressed identity that folds into the action hash. `ISA: "exact"` and `cpu_count: "minimum"` do the actual filtering. This is why the empty-string worker values are harmless: `priority` properties are informational, not constraints.
 
 ## Why This Works
 
@@ -190,16 +194,16 @@ If the toolchain changes at step 1, everything downstream changes. If it doesn't
 
 LRE includes pre-built Rust toolchain configurations:
 
-**Source:** [`local-remote-execution/rust/BUILD.bazel`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/rust/BUILD.bazel)
+**Source:** [`local-remote-execution/rust/BUILD.bazel`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/rust/BUILD.bazel)
 
 These define `rust_toolchain` targets pointing at Nix store paths for `rustc`, `cargo`, `clippy`, `rustfmt`, and the standard library. Same principle: paths are content-addressed, identity is structural.
 
-Unlike `lre-cc`, the Rust toolchains (`lre-rs`) are multi-platform: the flake module emits `rust`/`rustfmt` toolchains and `rust/platforms` targets for `aarch64-linux`, `x86_64-linux`, `aarch64-darwin`, and `x86_64-darwin` ([`flake-module.nix:98-120,177-191`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/flake-module.nix#L98-L120)). C++ is the laggard here, not Rust.
+Unlike `lre-cc`, the Rust toolchains (`lre-rs`) are multi-platform: the flake module emits `rust`/`rustfmt` toolchains and `rust/platforms` targets for `aarch64-linux`, `x86_64-linux`, `aarch64-darwin`, and `x86_64-darwin` ([`flake-module.nix:98-120,177-191`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/flake-module.nix#L98-L120)). C++ is the laggard here, not Rust.
 
 ## Limitations
 
 1. **`lre-cc` is `x86_64-linux` only.** The C++ execution platform and `cc-toolchain` are emitted only on Linux, and only for `x86_64` (`flake-module.nix:164-175`; the `TODO` there tracks broadening it). Rust (`lre-rs`) already spans `aarch64`/`x86_64` on Linux and macOS — so a mixed repo can get portable Rust LRE today while C++ stays x86_64-linux.
-2. **Requires Nix on the toolchain path.** Building the closures and the `lre-cc` image needs Nix; every worker also needs Nix or the pre-pulled image. Authoring the toolchain is a Nix task.
+2. **Requires Nix on the toolchain path.** Building the closures and the `lre-cc` image needs Nix; historically every worker also needed Nix or the pre-pulled image. The fork's [OCI → CAS Bridge](../part9/oci-cas-bridge.md) and [Nix Substituter Facade](../part10/nix-substituter.md) relax the *worker-side* requirement by serving both images and `/nix/store` closures from the CAS, but authoring the toolchain is still a Nix task.
 3. **nixpkgs alignment is critical.** If local and remote nixpkgs diverge, store paths diverge, and you lose cache sharing. The `follows` in flake.nix is not optional.
 4. **First-time setup is complex.** The Nix ecosystem has a steep learning curve. Once set up, maintenance is low (update the flake input, regenerate).
 5. **Bazel-focused.** LRE's toolchain generation currently targets Bazel. Buck2 integration requires manual platform configuration (see Part VI).

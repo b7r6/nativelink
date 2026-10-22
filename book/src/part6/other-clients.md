@@ -8,7 +8,7 @@ Google's Chromium project uses Goma (deprecated) and its successor Reclient for 
 
 NativeLink has been validated with Chromium builds:
 
-**Source:** [`deploy/chromium-example/`](https://github.com/TraceMachina/nativelink/tree/main/deploy/chromium-example)
+**Source:** [`deploy/chromium-example/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/deploy/chromium-example)
 
 Reclient configuration:
 ```
@@ -57,7 +57,7 @@ Pants' process execution layer translates internal "Process" objects to REAPI Ex
 
 ## BuildStream
 
-BuildStream is a full REAPI client, not a maybe. It drives the whole remote-execution triple — execution, action cache, and CAS (storage) — over REAPI, and it also keeps a CAS-backed artifact cache. NativeLink ships a working end-to-end integration test: [`integration_tests/buildstream/`](https://github.com/TraceMachina/nativelink/tree/main/integration_tests/buildstream) starts a live NativeLink from `buildstream_cas.json5`, builds the `hello.bst` element against it, and fails the run unless BuildStream prints `SUCCESS Build` and NativeLink logs no `ERROR` (`buildstream-with-nativelink-test.nix:15-40`).
+BuildStream is a full REAPI client, not a maybe. It drives the whole remote-execution triple — execution, action cache, and CAS (storage) — over REAPI, and it also keeps a CAS-backed artifact cache. This fork ships a working end-to-end integration test: [`integration_tests/buildstream/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/integration_tests/buildstream) starts a live NativeLink from `buildstream_cas.json5`, builds the `hello.bst` element against it, and fails the run unless BuildStream prints `SUCCESS Build` and NativeLink logs no `ERROR` (`buildstream-with-nativelink-test.nix:15-40`).
 
 The client config wires every REAPI surface to one NativeLink endpoint (`buildstream.conf`):
 
@@ -130,9 +130,17 @@ All instance names can point to the same underlying stores. They're just routing
 
 Instance names route requests; they do **not** pin a digest function. A single NativeLink instance advertises both SHA256 and BLAKE3 and serves whichever a client asks for (`capabilities_server.rs:116-127`), and its advertised *default* is SHA256 (`default_digest_hasher_func()` returns `DigestHasherFunc::Sha256`, `digest_hasher.rs:55-57`). That default is a trap for a mixed fleet.
 
-The failure mode: a client that hashes with **BLAKE3** but omits the `digest_function` field sends it as the protobuf zero value (`UNKNOWN`). NativeLink treats zero as "unset" and falls back to `default_digest_hash_function` — SHA256 — so those BLAKE3 blobs are addressed as if they were SHA256. Output `Directory` trees end up hashed under the wrong algorithm, and the corruption is silent.
+The failure mode: a client that hashes with **BLAKE3** but omits the `digest_function` field sends it as the protobuf zero value (`UNKNOWN`). By default NativeLink treats zero as "unset" and falls back to `default_digest_hash_function` — SHA256 — so those BLAKE3 blobs are addressed as if they were SHA256. Output `Directory` trees end up hashed under the wrong algorithm, and the corruption is silent.
 
-The defense is on the client side: pin the digest function explicitly on every client (Bazel's `--digest_function=blake3` startup flag, and the equivalent for other REAPI clients) so no request ever rides on the server's default. Keep the function uniform across the whole fleet, and never mix a BLAKE3 client that omits the field with a SHA256 default.
+This fork closes that hole with `global.require_explicit_digest_function`. Set it `true` and NativeLink rejects any request that leaves the digest function unset — both the structured RPCs (`digest_function == 0`, `digest_hasher.rs:211-238`) and the ByteStream path (a resource name with no `{digest_function}` segment, `digest_hasher.rs:98-128`) — instead of guessing (`cas_server.rs:1328-1341`). It is off by default for backwards compatibility; turn it on for any fleet that mixes SHA256 and BLAKE3 clients:
+
+```json5
+global: {
+  require_explicit_digest_function: true,  // reject an unset (UNKNOWN/0) digest_function
+}
+```
+
+See [the config reference](../appendix/config-reference.md#globalconfig) for the full `global` block.
 
 ## Client Feature Matrix
 

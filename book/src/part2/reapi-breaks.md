@@ -11,7 +11,12 @@ This creates real problems:
 - A client sets `container-image: docker://my-toolchain:latest`. Does the server interpret this? Pull the image? Use it as an opaque match key? The protocol doesn't say.
 - A worker advertises `cpu_count: 8`. A client requests `cpu_count: 4`. Is the worker eligible? Is `cpu_count` a minimum, an exact match, or informational? The protocol doesn't say.
 
-The `container-image` question is worth pinning down now. As a platform-property value, `container-image: docker://…` is an *opaque match key*: the scheduler compares it as a string; the server never parses or pulls it. Whether a container is pulled at all is up to the worker, not the protocol (Part V, [Container-Based Toolchains](../part5/containers.md)). The protocol itself has no notion of resolving that URI into content — "does the server pull the image?" is not a question REAPI answers.
+The `container-image` question is worth pinning down now, because this book uses `docker://` in two unrelated senses:
+
+- **As a platform-property value** — `container-image: docker://…` is an *opaque match key*. The scheduler compares it as a string; the server never parses or pulls it. Whether a container is pulled at all is up to the worker, not the protocol (Part V, [Container-Based Toolchains](../part5/containers.md)).
+- **As a `FetchDirectory` URI** — a `docker://…` or `oci://…` URI handed to the Remote Asset API's `Fetch` service is an *import trigger*. Here the server *does* pull the image, project its layers into CAS, and return a `Directory` digest ([`fetch_server.rs:192`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs)). That path is this fork's OCI → CAS bridge — see Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
+
+So "does the server pull the image?" has two answers, and which one applies depends entirely on where the URI appears. Part IX is the half of the story where the answer is yes.
 
 NativeLink resolves the untyped-property side with typed property matching in the scheduler config:
 
@@ -25,9 +30,9 @@ supported_platform_properties: {
 }
 ```
 
-See [`nativelink-config/src/schedulers.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/schedulers.rs) for the `PropertyType` enum: `Minimum`, `Exact`, `Priority`, `Ignore`.
+See [`nativelink-config/src/schedulers.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/schedulers.rs) for the `PropertyType` enum: `Minimum`, `Exact`, `Priority`, `Ignore`.
 
-But this is NativeLink's interpretation. Buildbarn does something different. EngFlow does something different. No interoperability guarantee covers platform semantics.
+But this is NativeLink's interpretation. Buildbarn does something different. EngFlow does something different. There is no interoperability guarantee on platform semantics.
 
 ## Gap 2: No Toolchain Identity
 
@@ -41,11 +46,11 @@ The protocol cannot detect or prevent this. The only solutions are:
 2. **Pin the toolchain in the action inputs** (include the compiler binary in the input tree)
 3. **Use Nix** (where the toolchain's store path is content-addressed by construction)
 
-Part V of this book is entirely about these approaches.
+Part V of this book is entirely about these approaches. This fork adds a fourth: fetch the toolchain image *as* an action input via the OCI → CAS bridge, so its content digest lands inside the action hash the same way a pinned input tree does — see Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
 
 ## Gap 3: No Cache Invalidation
 
-No `InvalidateActionResult` RPC exists. `UpdateActionResult` can overwrite an entry (last-writer-wins), but a client that gets a cache hit never re-executes the action to produce a fresh result — so in practice a stale result stays until evicted by LRU/TTL or the entire cache is cleared.
+There is no `InvalidateActionResult` RPC. `UpdateActionResult` can overwrite an entry (last-writer-wins), but a client that gets a cache hit never re-executes the action to produce a fresh result — so in practice a stale result stays until evicted by LRU/TTL or the entire cache is cleared.
 
 In practice, you need invalidation when:
 - A toolchain bug produced incorrect outputs

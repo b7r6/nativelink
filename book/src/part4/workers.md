@@ -2,7 +2,7 @@
 
 Workers are the execution engines. They receive dispatched actions from the scheduler, fetch inputs from CAS, run commands, upload outputs, and report results. They are stateless and disposable — scale them up, kill them, replace them.
 
-Everything here is upstream NativeLink behaviour (credit to [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink)); this chapter documents the shipped code, not an aspiration. Every config field is checked against `nativelink-config/src/cas_server.rs`, and every worker config block below is accepted by the config loader.
+Everything here is upstream NativeLink behaviour (credit to [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink)); this chapter documents the shipped code, not an aspiration. Every config field is checked against `nativelink-config/src/cas_server.rs`, and every worker config block below round-trips through `nativelink --check`.
 
 ## Lifecycle of an Action
 
@@ -16,7 +16,7 @@ The worker's run loop is one long-lived task per worker (`nativelink-worker/src/
 6. **Cleanup.** Tear down the sandbox (`cleanup`), which runs even if a prior step failed (`local_worker.rs:357-363`).
 7. **Report result.** Send `ExecuteResult` back to the scheduler carrying the `ExecuteResponse` and worker-observed `ActionResourceUsage` (`local_worker.rs:393`).
 
-**Source:** [`nativelink-worker/src/running_actions_manager.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-worker/src/running_actions_manager.rs), [`nativelink-worker/src/local_worker.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-worker/src/local_worker.rs)
+**Source:** [`nativelink-worker/src/running_actions_manager.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-worker/src/running_actions_manager.rs), [`nativelink-worker/src/local_worker.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-worker/src/local_worker.rs)
 
 ## The Worker API
 
@@ -50,15 +50,15 @@ The two directions are `oneof` envelopes. **Worker → scheduler** (`UpdateForSc
 | `disconnect` | The worker has been removed from the pool; it may discard outstanding work. |
 | `kill_operation_request` | Kill one running operation by operation ID. |
 
-No `ExecutionResponse` message exists anywhere in the protocol — the real result variant is `ExecuteResult` (`worker_api.proto:81-106`). On the Rust side, `WorkerApiClientWrapper` exposes convenience methods named `keep_alive`, `going_away`, `execution_response`, and `execution_complete`, but each one just pushes an `UpdateForScheduler` message onto the *same* `ConnectWorker` stream via `send_update` (`worker_api_client_wrapper.rs:121-135`). They are ergonomics, not wire RPCs.
+There is no `ExecutionResponse` message anywhere in the protocol — the real result variant is `ExecuteResult` (`worker_api.proto:81-106`). On the Rust side, `WorkerApiClientWrapper` exposes convenience methods named `keep_alive`, `going_away`, `execution_response`, and `execution_complete`, but each one just pushes an `UpdateForScheduler` message onto the *same* `ConnectWorker` stream via `send_update` (`worker_api_client_wrapper.rs:121-135`). They are ergonomics, not wire RPCs.
 
 The worker API endpoint is configured separately from client-facing services and **must be served on its own listener** — workers hold a different permission set than cache/execution clients, so co-hosting them is a security risk (`cas_server.rs:754-760`).
 
-**Source:** [`worker_api.proto`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto), [`nativelink-service/src/worker_api_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/worker_api_server.rs)
+**Source:** [`worker_api.proto`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto), [`nativelink-service/src/worker_api_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/worker_api_server.rs)
 
 ## Configuration
 
-A worker is a `WorkerConfig` — a tagged enum whose only variant is `local` (`LocalWorkerConfig`, `cas_server.rs:1104`). This block is lifted from `nativelink-config/examples/basic_cas.json5` and augmented with the optional fields; it loads cleanly as part of a full config:
+A worker is a `WorkerConfig` — a tagged enum whose only variant is `local` (`LocalWorkerConfig`, `cas_server.rs:1104`). This block is lifted from `nativelink-config/examples/basic_cas.json5` and augmented with the optional fields; it passes `nativelink --check` as part of a full config:
 
 ```json5
 workers: [
@@ -117,7 +117,7 @@ workers: [
 
 `max_inflight_tasks` caps how many actions this worker runs concurrently; it is sent to the scheduler in the `ConnectWorkerRequest` (`worker_api.proto:74-76`, wired through `local_worker.rs:804`). The default of `0` means unlimited — the worker accepts whatever the scheduler dispatches.
 
-**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/cas_server.rs) — `LocalWorkerConfig`
+**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/cas_server.rs) — `LocalWorkerConfig`
 
 ## Publishing Results: `upload_action_result`
 
@@ -160,7 +160,7 @@ The entrypoint sees the action's environment, including any variables you declar
 | `"side_channel_file"` | `SideChannelFile` | Path to a file the action may write to signal an out-of-band failure such as `"timeout"` |
 | `"action_directory"` | `ActionDirectory` | A scratch directory purged after the action completes |
 
-The container-based entrypoint below works only because `ACTION_DIRECTORY` and `CONTAINER_IMAGE` are wired through `additional_environment` (the latter as a `Property` reading the `container-image` platform property):
+So the container-based entrypoint below works only because `ACTION_DIRECTORY` and `CONTAINER_IMAGE` are wired through `additional_environment` (the latter as a `Property` reading the `container-image` platform property):
 
 ```bash
 #!/bin/bash
@@ -184,7 +184,7 @@ The entrypoint can launch the command inside a container, set up cgroups or extr
 
 Workers need fast access to action inputs and a place to stage outputs before uploading. `cas_fast_slow_store` **must** be a `FastSlowStore` whose `fast` tier is a `FileSystemStore` — the worker hardlinks input files out of the fast store's `content_path` instead of copying them, so the fast store and `work_directory` must sit on the same filesystem (`cas_server.rs:1196-1215`).
 
-This store block is lifted verbatim from `nativelink-config/examples/basic_cas.json5` and loads cleanly:
+This store block is lifted verbatim from `nativelink-config/examples/basic_cas.json5` and passes `nativelink --check`:
 
 ```json5
 stores: [
@@ -249,7 +249,7 @@ directory_cache: {
 }
 ```
 
-The three fields are `max_entries`, `max_size_bytes`, and `cache_root`. **No** `experimental_directory_cache` block exists, and **no** `max_bytes` / `max_directories` fields — those names fail `deny_unknown_fields` at parse time. `cache_root` is managed by the worker and must be on the same filesystem as `work_directory` so the hardlinks resolve. If `directory_cache` is omitted the cache is disabled (`cas_server.rs:1229-1233`).
+The three fields are `max_entries`, `max_size_bytes`, and `cache_root`. There is **no** `experimental_directory_cache` block and **no** `max_bytes` / `max_directories` fields — those names fail `deny_unknown_fields` at parse time. `cache_root` is managed by the worker and must be on the same filesystem as `work_directory` so the hardlinks resolve. If `directory_cache` is omitted the cache is disabled (`cas_server.rs:1229-1233`).
 
 ## Precondition Script
 
@@ -267,7 +267,7 @@ If the script exits non-zero, the worker pauses — it stops pulling from the qu
 
 ## Draining and Shutdown
 
-**No** `graceful_shutdown_timeout` config field exists — it is absent, and adding one fails `deny_unknown_fields`. Draining is signal-driven and the drain wait is unbounded, not clamped by a config timeout.
+There is **no** `graceful_shutdown_timeout` config field — it does not exist, and adding one fails `deny_unknown_fields`. Draining is signal-driven and the drain wait is unbounded, not clamped by a config timeout.
 
 The main binary installs the signal handlers (`src/bin/nativelink.rs:935-962`):
 
@@ -280,7 +280,7 @@ On receiving that broadcast, the worker's run loop (`local_worker.rs:493-516`) d
 2. **Send `GoingAwayRequest`** — *after* the drain, not before (`local_worker.rs:507`). By the time it is sent there should be no jobs left, as the code comment notes.
 3. **Drop the `ShutdownGuard` clone**, which releases the main handler's wait and lets the process exit `143`.
 
-The true sequence is *drain, then announce, then exit* — the reverse of the intuitive "announce, then drain." A worker under SIGTERM keeps its stream open and finishes its current actions before telling the scheduler it is leaving. This lets Kubernetes rolling updates complete outstanding actions instead of failing them, provided the pod's `terminationGracePeriodSeconds` exceeds your longest `max_action_timeout_s`; otherwise Kubernetes escalates to SIGKILL and the in-flight actions die.
+So the true sequence is *drain, then announce, then exit* — the reverse of the intuitive "announce, then drain." A worker under SIGTERM keeps its stream open and finishes its current actions before telling the scheduler it is leaving. This lets Kubernetes rolling updates complete outstanding actions instead of failing them, provided the pod's `terminationGracePeriodSeconds` exceeds your longest `max_action_timeout_s`; otherwise Kubernetes escalates to SIGKILL and the in-flight actions die.
 
 ## Worker Telemetry
 

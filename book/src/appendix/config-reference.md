@@ -4,7 +4,7 @@ NativeLink uses JSON5 configuration. Most string values support shell expansion 
 
 Every struct in the config is annotated `#[serde(deny_unknown_fields)]` (with a handful of documented exceptions), so a misspelled or stale field name is a hard load error rather than a silently-ignored key. Field names below are copied verbatim from the source.
 
-**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/cas_server.rs)
+**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/cas_server.rs)
 
 ## Top-Level Structure
 
@@ -34,11 +34,13 @@ The root object deserializes into `CasConfig` (`cas_server.rs:1350`):
 global: {
   max_open_files: 24576,                    // best-effort fd ceiling; must be > 10. Default: 24576
   default_digest_hash_function: "sha256",   // "sha256" (default) or "blake3"
-  default_digest_size_health_check: 1048576 // health-check blob size. Default: 1 MiB
+  default_digest_size_health_check: 1048576,// health-check blob size. Default: 1 MiB
+  require_explicit_digest_function: false   // reject requests with an unset (0/UNKNOWN) digest
+                                            // function instead of defaulting. Default: false
 }
 ```
 
-`default_digest_hash_function` accepts only `"sha256"` or `"blake3"` (`ConfigDigestHashFunction`, `stores.rs`). A request that omits the digest function falls through to `default_digest_hash_function` — so a BLAKE3 client that forgets to set the field has its blobs hashed as SHA256. Make sure the default matches your fleet's dominant client.
+`default_digest_hash_function` accepts only `"sha256"` or `"blake3"` (`ConfigDigestHashFunction`, `stores.rs`). When `require_explicit_digest_function` is `false` (the default), a request that omits the digest function falls through to `default_digest_hash_function`; when `true`, such a request is rejected — this guards against a BLAKE3 client that omits the field being hashed as SHA256.
 
 ## ServerConfig
 
@@ -93,7 +95,7 @@ Notes:
 
 ### ServicesConfig
 
-`ServicesConfig` (`cas_server.rs:686`). Each of `cas`, `ac`, `capabilities`, `execution`, `bytestream`, `fetch` and `push` is a list keyed by `instance_name`; `worker_api`, `experimental_bep`, `admin` and `health` are single objects.
+`ServicesConfig` (`cas_server.rs:686`). Each of `cas`, `ac`, `capabilities`, `execution`, `bytestream`, `fetch`, `push` and `nix_cache` is a list keyed by `instance_name`; `worker_api`, `experimental_bep`, `admin` and `health` are single objects.
 
 ```json5
 services: {
@@ -123,12 +125,19 @@ services: {
   }],
   fetch: [{                            // Remote Asset API (Fetch)
     instance_name: "main",
-    fetch_store: "STORE_NAME"
+    fetch_store: "STORE_NAME",
+    oci: { /* OciFetchConfig — see below; optional */ }
   }],
   push: [{                             // Remote Asset API (Push)
     instance_name: "main",
     push_store: "STORE_NAME",
     read_only: false                   // Default: false
+  }],
+  nix_cache: [{                        // Nix binary-cache (fork); see NixCacheConfig below
+    instance_name: "main",
+    cas_store: "NIX_NAR_STORE",
+    path_info_store: "NIX_PATH_INFO_STORE",
+    alias_store: "NIX_ALIAS_STORE"
   }],
   worker_api: {                        // single object; serve on a separate, non-public port
     scheduler: "SCHEDULER_NAME"
@@ -149,6 +158,131 @@ Field-name cautions (all of these were wrong in earlier drafts and fail under `d
 - `bytestream` uses `persist_stream_on_disconnect_timeout_s` (seconds, alias `persist_stream_on_disconnect_timeout`), not a boolean `persist_stream_on_disconnect`.
 
 `worker_api` should be the only service on its listener: workers hold a different permission set than cache/execution clients, so co-hosting them is a security risk (`cas_server.rs:754`).
+
+### OciFetchConfig (fetch → oci)
+
+`OciFetchConfig` (`cas_server.rs:189`). When the `fetch` service has an `oci` block, a `FetchDirectory` request whose URI begins with `oci://` or `docker://` (`fetch_server.rs:192`) pulls the referenced image, projects its layers into an REAPI `Directory` tree, uploads the blobs to CAS, and returns the root `Directory` digest. Without this block, such a request fails with `Unimplemented` ("OCI toolchain support not configured for this instance").
+
+```json5
+oci: {
+  cas_store: "STORE_NAME",   // where projected blobs + Directory protos are uploaded.
+                             //   Optional; defaults to the service's fetch_store.
+  dedup_check: true,         // check for existing blobs before uploading. Default: true
+  digest_function: "BLAKE3", // "BLAKE3" (default) or "SHA256"; validated at startup
+  registries: [{             // per-registry connection + credentials. Optional; a host
+                             //   with no entry is anonymous HTTPS (the prior behavior).
+    host: "registry.s4.gl",  //   matched exactly against the image ref's registry. Required.
+    scheme: "https",         //   "https" (default) or "http" (internal plain-HTTP registry)
+    root_certificates: "${REGISTRY_CA}",   // inline PEM or path — trust a private CA. Optional
+    insecure_skip_verify: false,           // skip TLS verification (self-signed). DANGEROUS
+    username: "${REGISTRY_USER}",          // Basic-auth user; requires password. Optional
+    password: "${REGISTRY_PASSWORD}"       //   secrets via shell-expansion, never committed
+    // bearer_token: "${REGISTRY_TOKEN}"   // pre-issued token, verbatim; excludes user/pass
+  }]
+}
+```
+
+Notes:
+
+- `digest_function` is validated case-insensitively at service construction and accepts only `BLAKE3` or `SHA256`/`SHA-256`; any other value is a startup error (`fetch_server.rs:77`).
+- The projection digest function comes from this config, not from the request: the incoming request's `digest_function` is ignored for OCI fetches (`fetch_server.rs:250`).
+- `registries` **fully specifies** how to reach and authenticate to each registry. An entry is matched by exact `host` against the pulled image reference's registry component; the scheme, TLS trust, and credentials are applied to manifest and blob requests. Credential fields are shell-expanded, so tokens/passwords come from the environment rather than committed config.
+- Authentication follows the OCI Distribution v2 `WWW-Authenticate` challenge: a `Bearer` challenge is satisfied by fetching a token from the registry's realm (using `username`/`password` as HTTP Basic against the realm when set); a `Basic` challenge uses the same credentials directly; a configured `bearer_token` is sent verbatim and skips the challenge. `username` requires `password`, and `bearer_token` is mutually exclusive with `username`/`password` — violations are a startup error (`fetch_server.rs`).
+
+### NixCacheConfig (`nix_cache`)
+
+`NixCacheConfig` (`cas_server.rs:246`) is a fork addition. Each entry mounts a Nix HTTP binary-cache endpoint (`nix-cache-info`, `*.narinfo`, `nar/*`) on the same listener as the gRPC services, so a Nix client can list this deployment in its `substituters`.
+
+```json5
+nix_cache: [{
+  instance_name: "main",
+
+  // Required stores.
+  cas_store: "NIX_NAR_STORE",             // uncompressed NAR blobs, keyed by
+                                          //   DigestInfo(sha256(nar), nar_size). Any CAS store works;
+                                          //   wrapping in `verify` (size + hash) is strongly advised.
+  path_info_store: "NIX_PATH_INFO_STORE", // one record per store path, string-keyed by the 32-char
+                                          //   nixbase32 store-path hash. Do NOT wrap in existence_cache,
+                                          //   verify, or size_partitioning; completeness_checking is advised.
+  alias_store: "NIX_ALIAS_STORE",         // string-keyed map from client NAR URL name to (digest, size).
+
+  // Advertised nix-cache-info fields.
+  path: "/nix/main",                      // mount prefix. Default: "/nix/<instance_name>"
+  store_dir: "/nix/store",                // must match clients' store dir. Default: "/nix/store"
+  priority: 40,                           // lower sorts earlier. Default: 40
+  want_mass_query: true,                  // Default: true
+
+  // Signing.
+  signing_key_files: [                    // `nix key generate-secret` files; multiple enables rotation.
+    "/etc/nix/keys/cache.example.org-1.key"
+  ],                                      // Default: [] (unsigned narinfo)
+
+  // Upload spooling + limits.
+  spool_path: "/var/spool/nativelink-nix",// staging dir for decompressing NAR uploads.
+                                          //   Default: <system temp>/nativelink-nix-spool/<instance_name>
+  read_only: false,                       // if true, PUT returns 405. Default: false
+  read_token_files: [],                   // one token per file; non-empty makes reads require a read OR write token. Default: []
+  write_token_files: [],                  // one token per file. Once ANY token is configured, a PUT requires a WRITE
+                                          //   token — a read token alone cannot write (fail closed). Default: []
+
+  // Serving compression.
+  serve_compression: "zstd",              // unset/"none" serves uncompressed; "zstd" transcodes. Default: unset
+  compression_level: 3,                   // zstd level 1..=22 when serve_compression is "zstd"; `nativelink --check`
+                                          //   rejects out-of-range values. Default: 3
+  preserve_upload_compression: true,      // store + serve a compressed upload's original bytes verbatim. Default: true
+
+  // Hardening (defaults are deliberately generous).
+  max_nar_size_bytes: "32gb",             // reject NARs over this size. Default: 34359738368 (32 GiB)
+  max_concurrent_nar_streams: 256,        // concurrent NAR GET bodies (must be >= 1); over-limit gets 503. Default: 256
+  max_concurrent_transcodes: 8,           // concurrent zstd transcodes (must be >= 1). Default: 8
+  nar_upload_idle_timeout_s: 60,          // abort an idle upload with 408 after this many seconds. Default: 60
+
+  // Read-through (optional): on a local miss, fetch + verify + cache a path from
+  // an upstream binary cache. Omit `upstream_caches` to disable. Full example in
+  // nativelink-config/examples/nix_cache_readthrough.json5.
+  upstream_caches: [{
+    url: "https://cache.nixos.org",       // upstream binary-cache base URL.
+    trusted_public_keys: [                // MUST be non-empty: a fetched narinfo is cached only when it carries
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="  // a valid signature from one of these keys.
+    ]
+  }],
+  upstream_negative_ttl_s: 60,            // remember a proven-absent path this long; transient upstream failures
+                                          //   (5xx/timeout/NAR mismatch) are NOT negative-cached. Default: 60
+  upstream_timeout_s: 30                  // per-upstream narinfo-probe timeout, seconds. Default: 30
+}]
+```
+
+Only `cas_store`, `path_info_store` and `alias_store` are required; every other field defaults as noted. Read-through (`upstream_caches`) is optional — omit it for a purely local cache. `cas_store` may reuse the same content-addressed store as the gRPC CAS, but `path_info_store` and `alias_store` are string-keyed and must be separate stores. See `nativelink-config/examples/basic_cas_with_nix.json5` for a combined deployment and `nix_cache_readthrough.json5` for read-through.
+
+### CasWitnessConfig (`cas_witness`)
+
+`CasWitnessConfig` (`cas_server.rs:604`) is a fork addition and a `services.cas_witness` entry. It runs a TLS-intercepting, caching **forward proxy** for the raw network fetches a build makes (`fetchurl` tarballs, release archives) — the bytes a fixed-output derivation downloads before any store path exists. Unlike the gRPC services and `nix_cache`, it speaks the `CONNECT` proxy protocol and so **owns its entire listener**: put it on a listener of its own, with no other services. See [The CAS Witness](../part10/cas-witness.md).
+
+```json5
+cas_witness: {
+  // Required stores.
+  cas_store: "FETCH_CAS",                 // fetched bodies, keyed by DigestInfo(sha256(body), size). Any CAS
+                                          //   works and may be shared with the gRPC CAS; `verify` recommended.
+  alias_store: "FETCH_ALIAS",             // string-keyed map: fetched URL -> (digest, size, content-type).
+                                          //   A separate string-keyed store (do NOT wrap in verify).
+
+  // TLS-intercepting CA (both files generated together if either is missing).
+  ca_cert_file: "/var/lib/nativelink/cas-witness/ca.crt", // clients must trust this (nix: NIX_SSL_CERT_FILE).
+  ca_key_file: "/var/lib/nativelink/cas-witness/ca.key",  // can impersonate any host — keep private (0600).
+
+  // Witnessing (optional): sign a DSSE/in-toto attestation for every cached fetch.
+  witness_key_file: "/var/lib/nativelink/cas-witness/witness.key", // ed25519 32-byte seed, base64; generated if
+                                          //   absent. When set, each cached fetch gets a signed attestation in the
+                                          //   CAS plus X-Straylight-Witness{,-Receipt} response headers.
+                                          //   Unset = plain caching proxy. Default: unset
+
+  // Limits.
+  max_fetch_size_bytes: "2gb",            // bodies over this stream through to the client but are NOT cached. Default: 2 GiB
+  fetch_timeout_s: 300                    // origin fetch timeout on a miss, seconds. Default: 300
+}
+```
+
+`cas_store`, `alias_store`, `ca_cert_file` and `ca_key_file` are required; `witness_key_file` is optional (omit to disable attestations). The proxy is trusted only for **availability**, never integrity — Nix verifies every fixed-output derivation against its declared hash regardless of what the proxy serves. `nativelink-config/examples/cas_witness.json5` is a full runnable example.
 
 ## WorkerConfig
 
@@ -208,7 +342,7 @@ Field-name cautions:
 
 - The action-timeout field is `max_action_timeout_s` (plain seconds, alias `max_action_timeout`), not a `{ secs, nanos }` object.
 - The directory cache field is `directory_cache` with `max_entries` / `max_size_bytes` / `cache_root` — not `experimental_directory_cache` with `max_bytes` / `max_directories`.
-- No `graceful_shutdown_timeout` field exists.
+- There is no `graceful_shutdown_timeout` field.
 
 ## StoreSpec Variants
 
@@ -241,7 +375,7 @@ See [Appendix B: Scheduler Catalog](./scheduler-catalog.md) for the field-by-fie
 
 | Variant | Config Key | Description |
 |---------|-----------|-------------|
-| `simple` | `simple` | Primary scheduler with property matching |
+| Simple | `simple` | Primary scheduler with property matching |
 | gRPC | `grpc` | Forwarding proxy to a remote scheduler |
 | CacheLookup | `cache_lookup` | AC check before dispatch |
 | PropertyModifier | `property_modifier` | Transform properties before nesting |
@@ -275,4 +409,4 @@ supported_platform_properties: {
 
 ## Configuration Examples
 
-See [`nativelink-config/examples/`](https://github.com/TraceMachina/nativelink/tree/main/nativelink-config/examples) for working configuration files covering various deployment patterns.
+See [`nativelink-config/examples/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/nativelink-config/examples) for working configuration files covering various deployment patterns, including `basic_cas_with_nix.json5` for a combined remote-execution and Nix binary-cache deployment.

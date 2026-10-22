@@ -28,7 +28,7 @@ async fn get_part(self: Pin<&Self>, key: StoreKey<'_>,
 
 That's it. `has`, `update`, `get_part`. Every store — from in-memory hash maps to S3 buckets to compression wrappers — implements these three operations.
 
-**Source:** [`nativelink-util/src/store_trait.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/store_trait.rs)
+**Source:** [`nativelink-util/src/store_trait.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/store_trait.rs)
 
 ## Two-Phase Initialization
 
@@ -88,7 +88,7 @@ Notice that `update` takes a `DropCloserReadHalf` (a streaming reader) and `get_
 
 This is critical for large artifacts. A 2GB compiled binary flows through CAS → compression → S3 as a stream, never fully materialized in memory. The `buf_channel` utility provides backpressure-aware channels that connect these streaming layers.
 
-**Source:** [`nativelink-util/src/buf_channel.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/buf_channel.rs)
+**Source:** [`nativelink-util/src/buf_channel.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/buf_channel.rs)
 
 ## Batch Operations
 
@@ -149,9 +149,9 @@ The other hints matter for topology. `NoopUpdates` and `NoopDownloads` describe 
 
 ## Zero-Length and Missing Files: Filesystem Store Hardening
 
-The whole-file path meets the real filesystem in `FilesystemStore`, where two edge cases the streaming abstraction papers over become correctness bugs if handled naively.
+The whole-file path meets the real filesystem in `FilesystemStore`, where two edge cases the streaming abstraction papers over become correctness bugs if handled naively. This fork hardens both.
 
-**Zero-length blobs are never persisted.** By REAPI convention the empty digest is assumed to exist, so the store treats it as present without writing a file: `update` short-circuits with `Ok(0)`, and `has_with_results` synthesizes a `Some(0)` result for any zero digest it is asked about (`nativelink-store/src/filesystem_store.rs:1320-1323,1292-1310`). The trap is on the read side. If `get_file_entry_for_digest` handed back a synthetic `FileEntry` whose `content_path` did not exist, a worker would `hard_link` from that path and silently produce a missing or empty output file in its execution directory. It returns `NotFound` for zero digests instead, forcing callers onto the explicit empty-file path (`fs::create_file`) rather than a hardlink that cannot work (`nativelink-store/src/filesystem_store.rs:1061-1075`).
+**Zero-length blobs are never persisted.** By REAPI convention the empty digest is assumed to exist, so the store treats it as present without writing a file: `update` short-circuits with `Ok(0)`, and `has_with_results` synthesizes a `Some(0)` result for any zero digest it is asked about (`nativelink-store/src/filesystem_store.rs:1320-1323,1292-1310`). The trap is on the read side. `get_file_entry_for_digest` used to hand back a synthetic `FileEntry` whose `content_path` did not exist; a worker would then `hard_link` from that path and silently produce a missing or empty output file in its execution directory. The fork returns `NotFound` for zero digests instead, forcing callers onto the explicit empty-file path (`fs::create_file`) rather than a hardlink that cannot work (`nativelink-store/src/filesystem_store.rs:1061-1075`).
 
 **A map hit followed by an `open()` ENOENT is a race, not a miss.** Under concurrent same-key writes, an evicted generation's `unref()` renames the shared content path away while a fresh generation is still landing, so the entry the eviction map just handed a reader can momentarily have no file on disk. Treating that as a miss would surface spurious `NotFound` errors under load. `get_part` instead retries a bounded number of times, re-fetching the newer entry each pass so the transient race self-heals; only once the miss persists past the retries does it treat the divergence as genuine, remove the stale entry (so a `FastSlowStore` caller re-populates from the slow store), and surface the error (`nativelink-store/src/filesystem_store.rs:1447-1509`).
 

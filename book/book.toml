@@ -1,9 +1,9 @@
 [book]
-authors = ["NativeLink contributors"]
+authors = ["straylight"]
 description = "The documentation that should have existed from day one."
 language = "en"
 src = "src"
-title = "NativeLink: The Operator & Contributor Guide"
+title = "NativeLink: The Missing Guide"
 
 [build]
 build-dir = "out"
@@ -11,8 +11,8 @@ create-missing = false
 
 [output.html]
 default-theme = "ayu"
-edit-url-template = "https://github.com/TraceMachina/nativelink/edit/main/book/{path}"
-git-repository-url = "https://github.com/TraceMachina/nativelink"
+edit-url-template = "https://github.com/straylight-prelude/straylight-nativelink/edit/main/book/{path}"
+git-repository-url = "https://github.com/straylight-prelude/straylight-nativelink"
 no-section-label = false
 preferred-dark-theme = "ayu"
 

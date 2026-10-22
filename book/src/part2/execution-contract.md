@@ -1,6 +1,6 @@
 # The Execution Contract
 
-Remote execution works because client and server agree on a contract. The contract is implicit in the protocol but never spelled out in the official spec. Here it is.
+Remote execution works because client and server agree on a contract. The contract is implicit in the protocol but never clearly stated in the official spec. Here it is.
 
 ## What the Client Promises
 
@@ -14,7 +14,7 @@ Remote execution works because client and server agree on a contract. The contra
 
 ## What the Server Guarantees
 
-1. **Content integrity.** Blobs retrieved from CAS by digest are byte-for-byte identical to what was uploaded — if they weren't, the hash wouldn't match. That reasoning hides one premise: client and server must agree on *which* hash function the digest names. REAPI lets a client leave `digest_function` unset (0/`UNKNOWN`); a server that then defaults to the wrong algorithm — a BLAKE3 client against a SHA256 default — voids the guarantee, because the bytes are stored under a digest computed the wrong way and a `VerifyStore` re-hash can't catch it (it re-hashes with the same wrong default). The defense is to name the digest function explicitly on every request rather than relying on a server-side default.
+1. **Content integrity.** Blobs retrieved from CAS by digest are byte-for-byte identical to what was uploaded — if they weren't, the hash wouldn't match. That reasoning hides one premise: client and server must agree on *which* hash function the digest names. REAPI lets a client leave `digest_function` unset (0/`UNKNOWN`); a server that then defaults to the wrong algorithm — a BLAKE3 client against a SHA256 default — voids the guarantee, because the bytes are stored under a digest computed the wrong way and a `VerifyStore` re-hash can't catch it (it re-hashes with the same wrong default, `verify_store.rs:186`). This fork's `require_explicit_digest_function` shuts the hole by *rejecting* any request that leaves the digest function unset rather than guessing (`cas_server.rs:1341`, `digest_hasher.rs:217`); see the [configuration reference](../appendix/config-reference.md).
 
 2. **Execution isolation.** Each action runs in its own sandbox. Actions cannot observe each other's state. (The strength of this guarantee varies — NativeLink supports Linux namespaces for PID/IPC/mount isolation.)
 
@@ -30,7 +30,7 @@ Here's where it gets interesting — the things the protocol explicitly does **n
 
 ### No toolchain identity
 
-The platform properties are key-value string pairs. No standard says what they mean. `OSFamily: Linux` and `container-image: docker://ubuntu:22.04` are both valid, but neither actually specifies the toolchain. Two workers with identical platform properties can have different compilers, different libc versions, different everything.
+The platform properties are key-value string pairs. There is no standard for what they mean. `OSFamily: Linux` and `container-image: docker://ubuntu:22.04` are both valid, but neither actually specifies the toolchain. Two workers with identical platform properties can have different compilers, different libc versions, different everything.
 
 This is the fundamental gap in REAPI, and it's why toolchain management is an entire part of this book.
 
@@ -40,9 +40,9 @@ Actions are independent. The protocol provides no mechanism for expressing "acti
 
 ### No output determinism verification
 
-The server trusts the worker. Two runs of the same non-deterministic action hash to *different* CAS output digests, so both land in the store as valid uploads under different keys; nothing compares them. No built-in mechanism detects or prevents this.
+The server trusts the worker. Two runs of the same non-deterministic action hash to *different* CAS output digests, so both land in the store as valid uploads under different keys; nothing compares them. There is no built-in mechanism to detect or prevent this.
 
-`VerifyStore` does not close this gap, and it is worth being precise about its scope. Wrapping a **CAS** store, it re-hashes each blob *on the write path* as the upload streams in and rejects any blob whose bytes don't match the digest the client claimed (`verify_store.rs:162`); reads pass straight through unverified (`verify_store.rs:222`). That catches corruption and lying clients at ingest — never non-determinism, since two differing-but-correctly-hashed outputs are both honest uploads. It also guards the CAS, not the AC: `verify_size`/`verify_hash` are meant to be off for the action cache and on for CAS stores (`stores.rs:960`).
+`VerifyStore` does not close this gap, and it is worth being precise about its scope. Wrapping a **CAS** store, it re-hashes each blob *on the write path* as the upload streams in and rejects any blob whose bytes don't match the digest the client claimed (`verify_store.rs:162`); reads pass straight through unverified (`verify_store.rs:222`). So it catches corruption and lying clients at ingest — never non-determinism, since two differing-but-correctly-hashed outputs are both honest uploads. It also guards the CAS, not the AC: `verify_size`/`verify_hash` are meant to be off for the action cache and on for CAS stores (`stores.rs:960`).
 
 ### No cache invalidation
 
@@ -63,4 +63,4 @@ In practice, builds exist on a spectrum of hermeticity:
 
 NativeLink doesn't enforce any particular level. It's a server — it does what the client asks. But your cache hit rate and your cache correctness are entirely determined by where you sit on this spectrum.
 
-The toolchain chapters (Part V) explain how to get to each level. Structural correctness — the toolchain's identity living *inside* the action hash by content-addressing rather than by convention — is reachable more than one way. A digest-pinned container image gets there (the `Container + digest` row above): the digest is content, and it's part of the platform, so it's part of the action hash. What Nix/LRE adds *on top* is bit-for-bit reproducibility — not merely a stable identity for the toolchain, but the ability to rebuild that exact toolchain from source anywhere. That extra guarantee is why the Nix chapters get the most attention, but it is not the only route to a correctness that is structural rather than conventional.
+The toolchain chapters (Part V) explain how to get to each level. Structural correctness — the toolchain's identity living *inside* the action hash by content-addressing rather than by convention — is reachable more than one way. A digest-pinned container image gets there (the `Container + digest` row above): the digest is content, and it's part of the platform, so it's part of the action hash. This fork's OCI → CAS bridge gets there too, by projecting a registry image into a content-addressed REAPI input tree so the toolchain digest sits in `input_root_digest` (Part IX). What Nix/LRE adds *on top* is bit-for-bit reproducibility — not merely a stable identity for the toolchain, but the ability to rebuild that exact toolchain from source anywhere. That extra guarantee is why the Nix chapters get the most attention, but it is not the only route to a correctness that is structural rather than conventional. See [Part IX](../part9/standard-oci-toolchain.md) for how the OCI bridge makes a container toolchain a first-class action input.

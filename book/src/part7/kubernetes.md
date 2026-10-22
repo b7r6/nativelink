@@ -1,10 +1,10 @@
 # Kubernetes Production
 
-For production deployments — autoscaling, high availability, rolling updates, observability — NativeLink runs on Kubernetes. This chapter grounds every claim in the manifests that actually ship in the repository, not in a generic "here is how you might do it" sketch.
+For production deployments — autoscaling, high availability, rolling updates, observability — NativeLink runs on Kubernetes. This chapter grounds every claim in the manifests that actually ship in this fork, not in a generic "here is how you might do it" sketch.
 
-One correction up front, because the rest of the chapter depends on it: **the `kubernetes/` tree in this repository is Kustomize plus Flux, not a Helm chart.** NativeLink also publishes a Helm chart on Artifact Hub, and the in-repo `README.md` points at it, but nothing under `kubernetes/` is a chart — there is no `Chart.yaml`, no `values.yaml`, no `templates/`. What is there is a set of Kustomize components and resources that Flux reconciles from Git.
+One correction up front, because the rest of the chapter depends on it: **the `kubernetes/` tree in this repository is Kustomize plus Flux, not a Helm chart.** Upstream publishes a Helm chart on Artifact Hub, and the in-repo `README.md` still points at it, but nothing under `kubernetes/` is a chart — there is no `Chart.yaml`, no `values.yaml`, no `templates/`. What is there is a set of Kustomize components and resources that Flux reconciles from Git. If you `helm install` anything, you are pulling upstream images that lack this fork's additions (the OCI bridge, the `nix_cache` substituter, and strict digest-function safety). Build and push the fork's image instead — see [Runnable images and flakes](#runnable-images-and-flakes) below.
 
-**Source:** [`kubernetes/`](https://github.com/TraceMachina/nativelink/tree/main/kubernetes)
+**Source:** [`kubernetes/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/kubernetes)
 
 ## What Is Actually in `kubernetes/`
 
@@ -20,7 +20,7 @@ The tree is Kustomize overlays reconciled by Flux:
 | `kubernetes/workers/` | Concrete worker overlays (`lre-cc`, `lre-rs`, `siso-chromium`) |
 | `kubernetes/vendor/` | Pinned third-party operators (OLM, Tekton, telemetry) |
 
-The two workloads you care about are `nativelink/nativelink.yaml` (the server) and `components/worker/worker.yaml` (the workers). Everything else is scaffolding for CI/CD.
+The two workloads you care about are `nativelink/nativelink.yaml` (the server) and `components/worker/worker.yaml` (the workers). Everything else is scaffolding for the fork's own CI/CD.
 
 ## Architecture
 
@@ -102,27 +102,27 @@ containers:
 
 ## Validate Before You Apply
 
-Because every NativeLink struct is `#[serde(deny_unknown_fields)]`, a stale or misspelled key is a hard load error, not a warning. Catch it before Flux rolls it out. On startup NativeLink parses the JSON5 and resolves every store and scheduler reference before it binds a socket (`validate_references` at `cas_server.rs:1450`), so a bad config fails fast rather than silently.
+Because every NativeLink struct is `#[serde(deny_unknown_fields)]`, a stale or misspelled key is a hard load error, not a warning. Catch it before Flux rolls it out. `nativelink --check` is fully offline: it parses the JSON5, resolves every store and scheduler reference, and exits without binding a socket, connecting to a backend, or creating a store directory (`nativelink.rs:844-877`, `validate_references` at `cas_server.rs:1450`).
 
-Extract the `ConfigMap` payload and boot the binary against it in CI before the manifest is ever reconciled:
+Extract the `ConfigMap` payload and check it in CI before the manifest is ever reconciled:
 
 ```bash
-# Pull the config out of the kustomization and load it.
+# Pull the config out of the kustomization and validate it offline.
 kubectl kustomize kubernetes/nativelink \
   | yq 'select(.kind == "ConfigMap") | .data["nativelink-config.json5"]' \
   > /tmp/nativelink-config.json5
 
-# A mistyped field or dangling reference exits non-zero at load.
-nativelink /tmp/nativelink-config.json5
+nativelink --check /tmp/nativelink-config.json5
+# OK: /tmp/nativelink-config.json5 — 2 stores, 1 schedulers, 3 servers, all references resolve
 ```
 
-Wire the non-zero exit into a pre-merge gate and a mistyped `cas_store` or `scheduler` name fails the pipeline instead of crash-looping a pod.
+That is the exact output for the shipped `kubernetes/nativelink/nativelink-config.json5`. Wire the non-zero exit into a pre-merge gate and a mistyped `cas_store` or `scheduler` name fails the pipeline instead of crash-looping a pod.
 
 ## High Availability with a Redis-Backed Scheduler
 
 To run more than one scheduler replica, the schedulers must share state. NativeLink does this by pointing the `simple` scheduler's backend at a Redis **store**. The mechanism is `SimpleSpec.experimental_backend` (`schedulers.rs:160`), whose `redis` variant takes a single `redis_store` reference (`schedulers.rs:175-189`) that must resolve to a `redis_store` in your `stores` list.
 
-No `experimental_redis_scheduler_state` block exists, and the Redis connection details (`addresses`, `key_prefix`, pool size) live on the **store**, not on the scheduler:
+There is no `experimental_redis_scheduler_state` block, and the Redis connection details (`addresses`, `key_prefix`, pool size) live on the **store**, not on the scheduler:
 
 ```json5
 {
@@ -166,28 +166,30 @@ The `experimental_pub_sub_channel` is what lets replicas react to each other's w
 - Actions queued on one replica are visible to the others.
 - A replica can be restarted independently; its state lives in Redis, not in process memory.
 
-`nativelink-config/examples/worker_with_redis_scheduler.json5` is a complete, checked-in example of this exact wiring. Load the full HA config to confirm it parses and every reference resolves:
+`nativelink-config/examples/worker_with_redis_scheduler.json5` is a complete, checked-in example of this exact wiring. The full HA config above validates:
 
 ```bash
-nativelink /tmp/k8s-ha.json5
+nativelink --check /tmp/k8s-ha.json5
+# OK: /tmp/k8s-ha.json5 — 3 stores, 1 schedulers, 2 servers, all references resolve
 ```
 
-## The `global` Block in the Cluster
+## Strict Digests and the Nix Substituter in the Cluster
 
-The `ConfigMap` carries the full server JSON5, including the `global` block. Pick a
-digest function with `default_digest_hash_function` and set it consistently across
-every client and worker in the fleet — a mixed fleet of BLAKE3 Bazel clients next
-to SHA256 tooling is where a client that omits the field gets its output tree
-hashed under the wrong algorithm. Note that `global` requires `max_open_files`; it
-has no `serde` default (`cas_server.rs:1310`), so a `global` block that omits it
-fails to load with `missing field max_open_files`.
+Two of this fork's differentiators are cluster-relevant, and both are configured in the same JSON5 the `ConfigMap` carries.
+
+**Strict digest-function safety.** Set `require_explicit_digest_function: true` in the `global` block to reject any request that arrives with an unset digest function instead of silently defaulting it (`cas_server.rs:1341`). In a mixed fleet — BLAKE3 Bazel clients next to SHA256 tooling — this is what stops a client that omits the field from having its output tree hashed under the wrong algorithm. Note that `global` requires `max_open_files`; it has no `serde` default (`cas_server.rs:1310`), so a `global` block that omits it fails `--check` with `missing field max_open_files`.
 
 ```json5
 global: {
   max_open_files: 24576,
   default_digest_hash_function: "blake3",
+  require_explicit_digest_function: true,
 }
 ```
+
+**Serving as a Nix binary cache.** Adding a `nix_cache` service to the public listener turns the same deployment into a Nix HTTP substituter, so cluster nodes can list it in their `substituters` and pull store paths straight out of the CAS. It needs three stores (a digest-keyed NAR store plus string-keyed `path_info_store` and `alias_store`) and is not a one-line add, so the full recipe lives with the substituter chapter rather than here. See [The Nix Substituter Facade](../part10/nix-substituter.md) and the field-by-field breakdown in [Appendix A: Configuration Reference](../appendix/config-reference.md#nixcacheconfig-nix_cache).
+
+Both features exist only in this fork. That is the concrete reason the [runnable images](#runnable-images-and-flakes) must be the fork's — an upstream Helm image simply will not deserialize a config that uses them.
 
 ## Worker Autoscaling
 
@@ -220,7 +222,7 @@ spec:
 
 Queue-depth scaling is more responsive, but be honest about where the numbers come from. NativeLink does **not** expose a Prometheus scrape endpoint. It exports metrics, traces, and logs over **OTLP** to a collector (`telemetry.rs:180-193`); the shipped manifests wire that with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-collector.default.svc:4317`. The `9090` port in `nativelink.yaml` is declared but the process never binds it.
 
-No fixed `nativelink_*` metric name therefore exists to hardcode into an HPA or a KEDA `ScaledObject`. The instrument names are derived from NativeLink's internal metrics-component tree and then transformed again by whatever your OpenTelemetry collector exports them as (VictoriaMetrics, Prometheus remote-write, and so on). If you want to scale on queued actions:
+So there is no fixed `nativelink_*` metric name to hardcode into an HPA or a KEDA `ScaledObject`. The instrument names are derived from NativeLink's internal metrics-component tree and then transformed again by whatever your OpenTelemetry collector exports them as (VictoriaMetrics, Prometheus remote-write, and so on). If you want to scale on queued actions:
 
 1. Route the collector's output into a Prometheus-compatible store.
 2. Inspect that store to find the **actual** series name your pipeline produced for the scheduler's queued-operations gauge — do not guess it.
@@ -315,7 +317,7 @@ spec:
 
 NativeLink handles `SIGTERM` for graceful shutdown, and it is worth knowing exactly what that does because it dictates your grace period. On `SIGTERM` the process broadcasts a shutdown signal (`nativelink.rs:947-962`) and then waits for a priority barrier before exiting with code `143`. Inside the worker, that signal drives a drain loop: **the worker blocks until its in-flight action count reaches zero**, sends a `GoingAway` message, and only then releases the shutdown guard (`local_worker.rs:493-515`).
 
-**No `graceful_shutdown_timeout` field** exists anywhere in the config — earlier drafts of this chapter invented one. The drain is unbounded; it is capped only by how long the longest in-flight action can run, which is `max_action_timeout_s` (default `1200`, i.e. 20 minutes; `cas_server.rs:1124`). Size the pod's grace period to that ceiling so Kubernetes does not `SIGKILL` a worker mid-action:
+There is **no `graceful_shutdown_timeout` field** anywhere in the config — earlier drafts of this chapter invented one. The drain is unbounded; it is capped only by how long the longest in-flight action can run, which is `max_action_timeout_s` (default `1200`, i.e. 20 minutes; `cas_server.rs:1124`). Size the pod's grace period to that ceiling so Kubernetes does not `SIGKILL` a worker mid-action:
 
 ```yaml
 spec:
@@ -384,27 +386,32 @@ Each region runs its own scheduler and workers; CAS blobs replicate between regi
 }
 ```
 
-The `grpc` store requires `store_type` (`"cas"` or `"ac"`); it is not optional.
+The `grpc` store requires `store_type` (`"cas"` or `"ac"`); it is not optional. This block validates:
+
+```bash
+nativelink --check /tmp/k8s-region.json5
+# OK: /tmp/k8s-region.json5 — 1 stores, 0 schedulers, 1 servers, all references resolve
+```
 
 ## Runnable Images and Flakes
 
-The flake builds a runnable server image:
+Because the fork's config surface (OCI bridge, `nix_cache`, strict digests) does not exist upstream, run the fork's own image. The flake builds it:
 
 ```bash
-# Build and load the server image.
-nix run github:TraceMachina/nativelink#nativelink-image.copyToDockerDaemon
+# Build and load the server image from the fork.
+nix run github:straylight-prelude/straylight-nativelink#nativelink-image.copyToDockerDaemon
 
 # Or run the binary directly against a local config.
-nix run github:TraceMachina/nativelink -- nativelink-config.json5
+nix run github:straylight-prelude/straylight-nativelink -- nativelink-config.json5
 ```
 
-Push that image to your registry and set it as the Kustomize image override (`images:` in `kubernetes/nativelink/kustomization.yaml` and `kubernetes/components/worker/kustomization.yaml`), or use the published `ghcr.io/tracemachina/nativelink` image directly.
+Push that image to your registry and set it as the Kustomize image override (`images:` in `kubernetes/nativelink/kustomization.yaml` and `kubernetes/components/worker/kustomization.yaml`). Do not substitute `ghcr.io/tracemachina/nativelink` — an upstream image will reject a config that uses any of this fork's fields.
 
 ## Health Checks (the correct probe)
 
 NativeLink has **no gRPC health service**; there is no `grpc.health.v1.Health` to probe. Health is a plain HTTP route that returns a JSON per-component report — `200 OK` when everything is healthy, `503 Service Unavailable` when any component reports `Failed` or `Timeout` (`health_server.rs:61-104`). It is mounted only where a `services` block declares `health: {}` — in the shipped config, the `worker_api` listener on **port 50061**, at the default path `/status` (`HealthConfig`, `cas_server.rs:623`).
 
-The probe is therefore an `httpGet` against `/status` on the health port, not a gRPC probe:
+So the probe is an `httpGet` against `/status` on the health port, not a gRPC probe:
 
 ```yaml
 # nativelink server pod
@@ -420,4 +427,4 @@ The route ignores the request method and body, so a bare `GET` is enough. Worker
 
 ## Troubleshooting
 
-Most Kubernetes-surface failures reduce to a config that did not deserialize, a store reference that did not resolve, or a probe pointed at the wrong port. Load the config to catch the first two at startup; then work through [Appendix C: Troubleshooting](../appendix/troubleshooting.md) for the runtime symptoms (`"Store 'NAME' not found"` at startup, `"Connection refused"`, action-queued-forever with no workers). For the meaning of every field referenced above, see [Appendix A: Configuration Reference](../appendix/config-reference.md).
+Most Kubernetes-surface failures reduce to a config that did not deserialize, a store reference that did not resolve, or a probe pointed at the wrong port. Run `nativelink --check` first; then work through [Appendix C: Troubleshooting](../appendix/troubleshooting.md) for the runtime symptoms (`"Store 'NAME' not found"` at startup, `"Connection refused"`, action-queued-forever with no workers). For the meaning of every field referenced above, see [Appendix A: Configuration Reference](../appendix/config-reference.md).

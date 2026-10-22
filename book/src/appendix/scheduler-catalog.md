@@ -7,7 +7,7 @@ how matching, timeouts, retries, and the Redis backend actually behave — see
 surface (stores, servers, workers) see
 [Appendix A: Configuration Reference](./config-reference.md).
 
-**Source:** [`nativelink-config/src/schedulers.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/schedulers.rs)
+**Source:** [`nativelink-config/src/schedulers.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/schedulers.rs)
 
 ## The five variants
 
@@ -110,7 +110,7 @@ the capability index that matches actions to workers (`SimpleSpec`,
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 0 stores, 1 schedulers, 0 servers, all references resolve`.
 
 ### The experimental Redis backend
 
@@ -148,7 +148,7 @@ point `experimental_backend` at a declared Redis store
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 1 stores, 1 schedulers, 0 servers, all references resolve`.
 
 The backend is a **store reference**, not an inline connection block.
 `experimental_backend.redis.redis_store` is a `StoreRefName` and it must
@@ -157,13 +157,13 @@ resolve to a `RedisSpec` store declared in `stores`
 connection knob — addresses, pool size, pub/sub channel, timeouts — lives on
 that store, not on the scheduler. The two variants are `memory` (the default
 when the key is omitted; accepted as the bare string `"memory"` or as
-`{ memory: {} }`) and `redis`. No `experimental_redis_scheduler_state`
-field exists — that name fails to load with
+`{ memory: {} }`) and `redis`. There is no `experimental_redis_scheduler_state`
+field — that name fails `--check` with
 `unknown field 'experimental_redis_scheduler_state'`. A worked HA deployment
 lives in
-[`nativelink-config/examples/worker_with_redis_scheduler.json5`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/examples/worker_with_redis_scheduler.json5).
+[`nativelink-config/examples/worker_with_redis_scheduler.json5`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/examples/worker_with_redis_scheduler.json5).
 
-**Source:** [`nativelink-scheduler/src/simple_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/simple_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/simple_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/simple_scheduler.rs)
 
 ## GrpcScheduler (`grpc`)
 
@@ -203,7 +203,7 @@ at the upstream scheduler directly is usually more efficient.
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 0 stores, 1 schedulers, 0 servers, all references resolve`.
 
 `endpoint` is a `GrpcEndpoint` (`stores.rs:1273-1308`): only `address` is
 required; the four timeout knobs each default as noted, and `tls_config` is
@@ -211,7 +211,7 @@ required only for `grpcs://` targets. `GrpcScheduler` does not match on
 platform properties and cannot nest another scheduler — it is a terminal
 forwarder.
 
-**Source:** [`nativelink-scheduler/src/grpc_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/grpc_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/grpc_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/grpc_scheduler.rs)
 
 ## CacheLookupScheduler (`cache_lookup`)
 
@@ -246,7 +246,7 @@ the cached result without involving a worker (`CacheLookupSpec`,
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 2 stores, 1 schedulers, 0 servers, all references resolve`.
 
 `ac_store` is a `StoreRefName` and must resolve to a store declared in
 `stores`. The config docs recommend it be a `CompletenessCheckingSpec` so a
@@ -255,7 +255,7 @@ fields are required. Use this when clients do not check the AC themselves, or
 for server-side deduplication of identical in-flight actions; most build
 systems check the AC client-side, so it is mainly for custom clients.
 
-**Source:** [`nativelink-scheduler/src/cache_lookup_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/cache_lookup_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/cache_lookup_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/cache_lookup_scheduler.rs)
 
 ## PropertyModifierScheduler (`property_modifier`)
 
@@ -285,7 +285,7 @@ and overwriting an existing one is fine.
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 0 stores, 1 schedulers, 0 servers, all references resolve`.
 
 The three modification variants (`PropertyModification`,
 `schedulers.rs:259-269`):
@@ -301,19 +301,19 @@ The three modification variants (`PropertyModification`,
     when the current value equals it; if unset, any value matches. It is *not*
     the new value.
   - `new_name` — the property name to write. **Required.** To keep the same
-    key, repeat it. Its absence fails to load with `missing field 'new_name'`.
+    key, repeat it. Its absence fails `--check` with `missing field 'new_name'`.
   - `new_value` — optional; if omitted, the matched property keeps its existing
     value under `new_name` (a pure rename).
 
-A `replace` with only `{ name, value }` is therefore invalid — that shorthand was a
+So a `replace` with only `{ name, value }` is invalid — that shorthand was a
 fabrication in earlier drafts. Applied in
 `property_modifier_scheduler.rs:111-131`.
 
-**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
 
 ## HistoricalResourceScheduler (`historical_resource`)
 
-A scheduler wrapper that injects **minimum** CPU and memory platform
+A fork-added wrapper that injects **minimum** CPU and memory platform
 properties from a hints file before delegating to a nested scheduler, so
 oversized actions land on workers large enough to run them without the client
 annotating every target (`HistoricalResourceSpec`, `schedulers.rs:298-344`).
@@ -348,7 +348,7 @@ annotating every target (`HistoricalResourceSpec`, `schedulers.rs:298-344`).
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 0 stores, 1 schedulers, 0 servers, all references resolve`.
 
 Behavior (`historical_resource_scheduler.rs`):
 
@@ -375,7 +375,7 @@ Behavior (`historical_resource_scheduler.rs`):
   `minimum` for the floor to filter workers — the wrapper writes the property,
   the `simple` scheduler enforces it.
 
-**Source:** [`nativelink-scheduler/src/historical_resource_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/historical_resource_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/historical_resource_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/historical_resource_scheduler.rs)
 
 ## Scheduler Composition
 
@@ -417,7 +417,7 @@ ending in a `simple` leaf. A full production stack:
 }
 ```
 
-Loads cleanly: the config parses and every store/scheduler reference resolves at startup.
+`--check`: `OK — 3 stores, 1 schedulers, 0 servers, all references resolve`.
 
 Reading top to bottom: AC deduplication, then property normalization, then
 size hints, then the Redis-backed `simple` scheduler that owns matching and the
@@ -435,19 +435,19 @@ CacheLookupScheduler (local AC)      HistoricalResourceScheduler
 
 Scheduler blocks are `#[serde(deny_unknown_fields)]`, so a typo or a stale
 field name is a hard error. Extract the scheduler block into a config with the
-stores it references and boot the binary against it in CI (build it with
+stores it references and run the offline checker (build it with
 `cargo build -p nativelink --profile=smol` if the binary is missing):
 
 ```console
-$ nativelink my-config.json5
+$ nativelink --check my-config.json5
+OK: my-config.json5 — 3 stores, 1 schedulers, 0 servers, all references resolve
 ```
 
-On a bad config the process exits non-zero before it serves a request. Startup
-parses every block, enforces `deny_unknown_fields`, and resolves
+`--check` parses every block, enforces `deny_unknown_fields`, and resolves
 store references, so it catches both the retired
 `experimental_redis_scheduler_state` (as `unknown field ...`) and a `replace`
 missing its required `new_name` (as `missing field 'new_name'`) before a worker
-ever connects. Every config in this appendix loads cleanly.
+ever connects. Every config in this appendix passes it.
 
 For the matching vocabulary these schedulers filter on, see
 [Platform Properties](../part4/platform-properties.md); for the full config

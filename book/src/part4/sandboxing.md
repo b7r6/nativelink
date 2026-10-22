@@ -33,7 +33,7 @@ local: {
 }
 ```
 
-**Source:** [`nativelink-worker/src/namespace_utils.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-worker/src/namespace_utils.rs)
+**Source:** [`nativelink-worker/src/namespace_utils.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-worker/src/namespace_utils.rs)
 
 When enabled, the worker calls `unshare()` (`configure_namespace`, `namespace_utils.rs:399`) with:
 - `CLONE_NEWPID` — isolated PID namespace. The action becomes **PID 1** of a fresh namespace and sees only its own process tree.
@@ -42,7 +42,7 @@ When enabled, the worker calls `unshare()` (`configure_namespace`, `namespace_ut
 - `CLONE_NEWUTS` — UTS namespace; the hostname is pinned to `nativelink` for reproducibility (`namespace_utils.rs:448-452`).
 - `CLONE_NEWNS` (only if `use_mount_namespace`) — mount namespace, described below.
 
-Deliberately **no** `CLONE_NEWNET` is set: actions in a namespace share the host network. Network isolation only comes from a container entrypoint (below).
+There is deliberately **no** `CLONE_NEWNET`: actions in a namespace share the host network. Network isolation only comes from a container entrypoint (below).
 
 ### What the mount namespace actually does
 
@@ -119,7 +119,16 @@ This gives you:
 - Resource limits (cgroups via Docker)
 - Hermetic toolchain (inside the container image)
 
-The tradeoff is startup latency. Container creation adds 100-500ms per action. For builds with thousands of small actions (e.g., C++ compilation), this overhead is significant. For builds with fewer, longer actions (e.g., integration tests), it's negligible. Reach for a runtime container when you need the OS-level isolation a container boundary provides — untrusted code, a hard network cutoff, or per-action resource caps.
+The tradeoff is startup latency. Container creation adds 100-500ms per action. For builds with thousands of small actions (e.g., C++ compilation), this overhead is significant. For builds with fewer, longer actions (e.g., integration tests), it's negligible.
+
+### Container images two ways
+
+The `container-image` platform property that selects the image above (declared as a `priority` property on the worker) is the same property the fork's [OCI → CAS bridge](../part9/oci-cas-bridge.md) revolves around. That gives you two ways to deliver a hermetic toolchain image, with very different cost:
+
+- **Runtime container (this section).** The entrypoint runs `docker run <container-image>` per action. You get a full container boundary — its own root filesystem, `--network=none`, `cgroup` limits — at the cost of container startup latency on every action.
+- **Project the image into CAS (the bridge).** A `FetchDirectory` on an `oci://`/`docker://` URI pulls the image, projects its layers into an REAPI `Directory` tree, and uploads the blobs to CAS. The worker then materializes that toolchain as ordinary **read-only hardlinked inputs** (`0o444`/`0o555`) and isolates it with the namespaces above — no per-action `docker run`, no daemon, no image pull on the worker. The toolchain becomes content-addressed data rather than a runtime dependency.
+
+The bridge is the fork's preferred answer when the goal is a hermetic, reproducible toolchain rather than a security sandbox: same image identity, none of the container startup tax, and the same read-only-hardlink and namespace isolation every other input already gets. Reach for a runtime container when you additionally need the OS-level isolation a container boundary provides — untrusted code, a hard network cutoff, or per-action resource caps.
 
 ## The Tradeoff Spectrum
 

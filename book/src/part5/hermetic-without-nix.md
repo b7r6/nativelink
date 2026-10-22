@@ -16,7 +16,7 @@ ActionHash = hash(Command, InputRoot, Platform)
 
 NativeLink's `toolchain-examples/` directory demonstrates several:
 
-**Source:** [`toolchain-examples/MODULE.bazel`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/MODULE.bazel)
+**Source:** [`toolchain-examples/MODULE.bazel`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/MODULE.bazel)
 
 ### zig-cc (Hermetic C/C++ via Zig)
 
@@ -33,7 +33,7 @@ use_repo(zig, "zig_sdk")
 build:zig-cc --extra_toolchains @zig_sdk//toolchain:linux_amd64_gnu.2.28
 ```
 
-**Source:** [`toolchain-examples/.bazelrc`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/.bazelrc)
+**Source:** [`toolchain-examples/.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/.bazelrc)
 
 Properties:
 - **Hermetic:** Yes. Zig is a single statically-linked binary. No host dependencies.
@@ -41,7 +41,7 @@ Properties:
 - **Performance:** Optimized for binary size, not compilation speed. Slower than native LLVM.
 - **Download size:** Small (~100MB).
 
-zig-cc is the gold standard for hermetic C/C++ compilation without containers or Nix. The example [`.bazelrc`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/.bazelrc) registers toolchains spanning Linux (glibc 2.28/2.31 and musl, on amd64 and arm64), Windows (amd64/arm64), macOS (amd64/arm64), and `wasip1` WebAssembly — every common host and target from a single statically-linked SDK.
+zig-cc is the gold standard for hermetic C/C++ compilation without containers or Nix. The example [`.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/.bazelrc) registers toolchains spanning Linux (glibc 2.28/2.31 and musl, on amd64 and arm64), Windows (amd64/arm64), macOS (amd64/arm64), and `wasip1` WebAssembly — every common host and target from a single statically-linked SDK.
 
 ### toolchains_llvm (Non-Hermetic LLVM)
 
@@ -76,7 +76,7 @@ Use this only when all workers are known-identical (same OS image, same packages
 
 ### rules_rs
 
-NativeLink provisions Rust through `rules_rs`, not mainstream `rules_rust`. `rules_rs` wraps `rules_rust` and drives toolchain download through its own module extension, fetching `rustc`, `cargo`, and the standard library by hash.
+The fork provisions Rust through `rules_rs`, not mainstream `rules_rust`. `rules_rs` wraps `rules_rust` and drives toolchain download through its own module extension, fetching `rustc`, `cargo`, and the standard library by hash.
 
 ```python
 # MODULE.bazel
@@ -101,7 +101,7 @@ build:java --java_runtime_version=remotejdk_21
 build:java --tool_java_runtime_version=remotejdk_21
 ```
 
-**Source:** [`toolchain-examples/.bazelrc`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/.bazelrc)
+**Source:** [`toolchain-examples/.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/.bazelrc)
 
 Java's `remotejdk` runtime versions download a JDK by hash and use it for all Java actions. This is fully hermetic (the JDK is in the input tree) and works well with remote execution.
 
@@ -109,7 +109,7 @@ Java's `remotejdk` runtime versions download a JDK by hash and use it for all Ja
 
 The repository includes a comprehensive test that builds against each toolchain variant:
 
-**Source:** [`toolchain-examples/rbe-toolchain-test.nix`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/rbe-toolchain-test.nix)
+**Source:** [`toolchain-examples/rbe-toolchain-test.nix`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/rbe-toolchain-test.nix)
 
 This test:
 1. Starts a NativeLink instance with the toolchain-examples config
@@ -119,7 +119,7 @@ This test:
 
 The NativeLink config for these tests:
 
-**Source:** [`toolchain-examples/nativelink-config.json5`](https://github.com/TraceMachina/nativelink/blob/main/toolchain-examples/nativelink-config.json5)
+**Source:** [`toolchain-examples/nativelink-config.json5`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/toolchain-examples/nativelink-config.json5)
 
 ## The Hermeticity Spectrum for Downloaded Toolchains
 
@@ -145,6 +145,8 @@ These approaches aren't mutually exclusive. A common production setup:
 - **Container** for integration tests (need specific system services)
 
 Each language/action type uses whichever approach gives the best correctness/complexity tradeoff.
+
+The fork adds a fourth content-addressed toolchain path: the [OCI → CAS bridge](../part9/oci-cas-bridge.md) projects OCI toolchain images into REAPI `Directory` trees in the CAS, so a hermetic cross-compiler can ship as content-addressed image layers that workers fetch on demand — the same Merkle-hashed-input principle as zig-cc, applied to whole container-packaged toolchains.
 
 ## Buck2 Considerations
 

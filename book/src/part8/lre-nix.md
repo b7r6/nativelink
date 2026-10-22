@@ -2,7 +2,7 @@
 
 This is the advanced setup: Nix-based toolchains that are bit-for-bit identical between your laptop, CI, and remote workers. Near-perfect cache hit rates. Structural correctness. The full LRE experience.
 
-Local Remote Execution is upstream NativeLink work ([TraceMachina/nativelink](https://github.com/TraceMachina/nativelink)). It is the mechanism that makes a Nix-defined toolchain the same content-addressed data on your laptop, in CI, and on remote workers.
+Local Remote Execution originates upstream in [TraceMachina/nativelink](https://github.com/TraceMachina/nativelink); this fork carries it forward and connects it to two CAS-facing services described in Parts 9 and 10. The same Nix toolchain closure LRE pins can be served straight out of the CAS by the [Nix substituter facade](../part10/nix-substituter.md), and the [OCI → CAS bridge](../part9/oci-cas-bridge.md) is the non-Nix on-ramp to the same destination. See [Serving the toolchain closure back out of CAS](#serving-the-toolchain-closure-back-out-of-cas) below.
 
 ## Prerequisites
 
@@ -24,7 +24,9 @@ Create `flake.nix` in your project root:
       follows = "nativelink/nixpkgs";
     };
     nativelink = {
-      url = "github:TraceMachina/nativelink";
+      # LRE is upstream TraceMachina work; this fork adds the nix_cache
+      # substituter and the OCI bridge on top. Point at whichever you deploy.
+      url = "github:straylight-prelude/straylight-nativelink";
     };
     flake-parts.url = "github:hercules-ci/flake-parts";
   };
@@ -162,7 +164,7 @@ nix run .#nativelink-worker-lre-cc.copyTo \
 
 The image tag is the Nix derivation hash. Change the toolchain (new Clang version, different flags) and the hash changes, the tag changes, and — because the generated platform config embeds the same hash — the `container-image` platform property changes with it.
 
-**One subtlety that trips people up.** The `container-image` *platform property* the scheduler matches on is **not** the name of the image you deployed. `rbe_configs_gen` writes the generator container name into `generated-cc/config/BUILD`, then a `sed` rewrites it to `lre-cc:<tag>` (`local-remote-execution/overlays/lre-cc.nix:41`). As a result, the property value is `docker://lre-cc:<tag>` even though the container you actually run is `nativelink-worker-lre-cc:<tag>` — a separate extension of the `lre-cc` base image. The property is an opaque string the scheduler matches; the deployed image is chosen independently (`kubernetes/workers/lre-cc/worker-lre-cc.yaml:17-28`).
+**One subtlety that trips people up.** The `container-image` *platform property* the scheduler matches on is **not** the name of the image you deployed. `rbe_configs_gen` writes the generator container name into `generated-cc/config/BUILD`, then a `sed` rewrites it to `lre-cc:<tag>` (`local-remote-execution/overlays/lre-cc.nix:41`). So the property value is `docker://lre-cc:<tag>` even though the container you actually run is `nativelink-worker-lre-cc:<tag>` — a separate extension of the `lre-cc` base image. The property is an opaque string the scheduler matches; the deployed image is chosen independently (`kubernetes/workers/lre-cc/worker-lre-cc.yaml:17-28`).
 
 ## Step 5: Configure NativeLink Workers
 
@@ -188,17 +190,24 @@ workers: [{
       CONTAINER_IMAGE: { property: "container-image" },
       // A per-action scratch dir NativeLink purges afterward. This is a
       // UNIT enum variant, so it is a BARE STRING. `{ action_directory: {} }`
-      // is NOT valid: deny_unknown_fields rejects it at load time.
+      // is NOT valid: deny_unknown_fields rejects it at --check time.
       ACTION_DIRECTORY: "action_directory",
     },
   },
 }]
 ```
 
+Wrapped in a config that declares `WORKER_CAS`, this passes offline validation:
+
+```
+$ nativelink --check worker.json5
+OK: worker.json5 — 1 stores, 0 schedulers, 0 servers, all references resolve
+```
+
 The `additional_environment` values are `EnvironmentSource` variants (`nativelink-config/src/cas_server.rs:992`). Two shapes exist, and mixing them up is a common copy-paste failure:
 
 - **Data-carrying variants take a nested object:** `{ property: "container-image" }` (`Property`) and `{ value: "literal" }` (`Value`).
-- **Unit variants are bare strings:** `"from_environment"`, `"timeout_millis"`, `"side_channel_file"`, `"action_directory"`. Writing `{ action_directory: {} }` fails with `invalid type: map, expected unit` — the runnable examples under `nativelink-config/examples/` use the bare-string form.
+- **Unit variants are bare strings:** `"from_environment"`, `"timeout_millis"`, `"side_channel_file"`, `"action_directory"`. Writing `{ action_directory: {} }` fails with `invalid type: map, expected unit` — the runnable examples use the bare-string form (`nativelink-config/examples/basic_cas_with_nix.json5:153-161`).
 
 `cpu_count: { query_cmd: "nproc" }` runs `nproc` on the worker and reports the result (`WorkerProperty::QueryCmd`, `cas_server.rs:951`); `{ values: [...] }` is a static list (`WorkerProperty::Values`, `cas_server.rs:947`).
 
@@ -212,7 +221,7 @@ In production the `container-image` value is injected through an environment var
 
 The deployment sets `NATIVELINK_WORKER_PLATFORM=docker://lre-cc:$(nix eval --raw .#nativelink-worker-lre-cc.imageTag)` before launching the worker. You can also run the worker directly inside the LRE container with no entrypoint script, since the Nix store paths are already present in the image's filesystem.
 
-> The scheduler must also declare `container-image` (and `lre-rs`, if you run the Rust worker) in its `supported_platform_properties`, or actions requesting those properties never match. Set both to `priority` in the `simple` scheduler.
+> The scheduler must also declare `container-image` (and `lre-rs`, if you run the Rust worker) in its `supported_platform_properties`, or actions requesting those properties never match. The `simple` scheduler in `nativelink-config/examples/basic_cas_with_nix.json5:114-140` shows both set to `priority`.
 
 ## Step 6: Build
 
@@ -258,14 +267,23 @@ exit && nix develop
 
 LRE ships two toolchains, and they do **not** cover the same platforms:
 
-- **C/C++ — `lre-cc`** (Clang from Nix). **`x86_64-linux` only** (`local-remote-execution/flake-module.nix:164`). Only one `lre-cc` image and one `generated-cc` platform exist.
+- **C/C++ — `lre-cc`** (Clang from Nix). **`x86_64-linux` only** (`local-remote-execution/flake-module.nix:164`). There is one `lre-cc` image and one `generated-cc` platform.
 - **Rust — `lre-rs`** (rustc from Nix). **Multi-platform**: `aarch64`/`x86_64` × `linux-gnu`/`linux-musl`, plus `aarch64`/`x86_64` Darwin (`local-remote-execution/overlays/lre-rs.nix:150-206`). The Darwin targets have *no* container image — they map to a theoretical worker-image tag so bare-metal macOS workers can still advertise exact `exec_properties` (`lre-rs.nix:145-148`).
 
 Because C++ has no Darwin toolchain yet, the flake's `lre.Env` uses only `lre-rs` on Darwin and both toolchains on Linux (`flake.nix:568-571`). A macOS developer gets Rust LRE; C++ actions need a Linux worker.
 
 Each toolchain has its own image and platform property (`container-image` for `lre-cc`, `lre-rs` for the Rust worker). Layer them into one worker or run one worker per language, matched by separate properties.
 
-**Source:** [`local-remote-execution/rust/BUILD.bazel`](https://github.com/TraceMachina/nativelink/blob/main/local-remote-execution/rust/BUILD.bazel)
+**Source:** [`local-remote-execution/rust/BUILD.bazel`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/local-remote-execution/rust/BUILD.bazel)
+
+## Serving the toolchain closure back out of CAS
+
+LRE and the fork's two CAS-facing services are the same idea pointed in different directions: **toolchains as content-addressed data, not pre-installed infrastructure.**
+
+- **[The Nix Substituter Facade](../part10/nix-substituter.md)** — the `nix_cache` service fronts the Nix HTTP binary-cache protocol directly over the CAS. The Nix store paths LRE pins (the `PATH`/`CC`/`RUST` lines in `lre.bazelrc`) are exactly the closure a `nix_cache` substituter can serve: each NAR is a CAS blob keyed by `sha256`, coexisting with Bazel's `blake3` blobs in one store because a digest is an algorithm-blind 32 bytes keyed by `(hash, size)`. Point `nix develop` at a `nix_cache` substituter and every developer and CI runner realizes the identical toolchain closure from the cluster instead of rebuilding it — the same "same store paths = cache hits" logic, one layer down.
+- **[The OCI → CAS Bridge](../part9/oci-cas-bridge.md)** — the complement for teams not on Nix. Rather than a Nix closure, an OCI toolchain image is projected into a REAPI `Directory` tree in CAS and fetched on demand. Same destination (a toolchain living in CAS keyed by digest), different on-ramp.
+
+> **Fork note.** `nix_cache` and the OCI bridge are additions in this fork (`straylight-prelude/straylight-nativelink`), not upstream NativeLink. LRE itself is upstream TraceMachina work that this fork builds on.
 
 ## Limitations and Workarounds
 
@@ -274,7 +292,7 @@ Each toolchain has its own image and platform property (`container-image` for `l
 | C++ (`lre-cc`) is `x86_64-linux` only | Use `lre-rs` for other platforms, or bare-metal/cross workers |
 | No C++ toolchain on Darwin | macOS gets Rust LRE; route C++ actions to a Linux worker |
 | Requires Nix | No workaround (Nix is foundational to LRE) |
-| nixpkgs must align | Use `follows` in flake.nix religiously, or pin a shared nixpkgs revision |
+| nixpkgs must align | Use `follows` in flake.nix religiously, or share a `nix_cache` substituter |
 | Complex initial setup | Follow this guide; once working, maintenance is low |
 | Bazel-focused | Buck2 can use the same images but needs manual platform config |
 

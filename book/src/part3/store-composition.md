@@ -55,22 +55,22 @@ stores: [
 ]
 ```
 
-Every JSON5 block in this chapter is accepted by the config loader (it parses
-and resolves its references at startup). `deny_unknown_fields` means a stray
+Every JSON5 block in this chapter round-trips through `nativelink --check`
+(the offline config validation pass). `deny_unknown_fields` means a stray
 or misspelled key is a hard error, so copy-paste actually works.
 
 ## FastSlowStore: The Tier Pattern
 
 The most common composition. A fast local cache in front of a slow durable backend.
 
-**Source:** [`nativelink-store/src/fast_slow_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/fast_slow_store.rs)
+**Source:** [`nativelink-store/src/fast_slow_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/fast_slow_store.rs)
 
 Semantics (`FastSlowStore` in `fast_slow_store.rs`):
 - **`has`** → queries the **slow** store *only*. It deliberately never
   consults the fast store: a blob that lives only in fast (its slow write
   is still in flight, or previously failed) must still be re-uploaded to
   slow, so reporting it present would be wrong for remote execution, where
-  workers require the blob in the durable tier. It also consults an
+  workers require the blob in the durable tier. The fork also consults an
   in-flight-slow-writes map (`in_flight_slow_writes`), so a concurrent
   upload that has not yet landed in slow is still visible to a concurrent
   existence check — this prevents redundant duplicate uploads of the same
@@ -106,16 +106,22 @@ fast_slow: {
 
 Wraps any store and compresses content on write, decompresses on read. The caller sees uncompressed bytes; the backend stores compressed bytes.
 
-**Source:** [`nativelink-store/src/compression_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/compression_store.rs)
+**Source:** [`nativelink-store/src/compression_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/compression_store.rs)
 
-`CompressionAlgorithm` has exactly one variant: `lz4` (`stores.rs`). No
-ZSTD option exists on this store — a `compression_algorithm: { zstd: {} }`
-fails to load with `unknown variant zstd, expected lz4`. LZ4 is extremely
+`CompressionAlgorithm` has exactly one variant: `lz4` (`stores.rs`). There
+is no ZSTD option on this store — a `compression_algorithm: { zstd: {} }`
+fails `--check` with `unknown variant zstd, expected lz4`. LZ4 is extremely
 fast in both directions and aborts early on incompressible input, which
 suits build artifacts. `Lz4Config` exposes `block_size` (default 64 KiB)
 and `max_decode_block_size`. Compression uses a custom framed format — the
 blob is split into independently-compressed blocks with a footer index —
 so partial reads don't require decompressing the whole blob.
+
+Do not confuse this CAS-internal LZ4 with the *layer* compression an OCI
+image carries. The OCI → CAS bridge handles gzip layers and does not yet
+decompress `zstd` layers (see [Part IX](../part9/oci-cas-bridge.md)); the
+Nix substituter's `serve_compression: "zstd"` is a separate, service-level
+re-encoding, not this store (see [the Nix substituter](../part10/nix-substituter.md)).
 
 ```json5
 compression: {
@@ -130,7 +136,7 @@ compression: {
 
 Splits blobs into content-defined chunks (using FastCDC), stores each chunk separately, and stores an index mapping the original digest to its chunk sequence.
 
-**Source:** [`nativelink-store/src/dedup_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/dedup_store.rs)
+**Source:** [`nativelink-store/src/dedup_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/dedup_store.rs)
 
 Two inner stores:
 - `index_store` — maps original digest → list of chunk digests
@@ -141,7 +147,7 @@ If two blobs share byte sequences (e.g., two slightly different binaries), the s
 Note the `has` asymmetry: a `has` on a dedup store checks only that the
 *index* exists in `index_store`; it does not verify that every chunk still
 exists in `content_store`. Keep this in mind when a dedup store sits under
-a completeness check: a completeness check over a dedup store amplifies one metadata request into per-chunk existence probes.
+a completeness check — see the warning in [the Nix substituter](../part10/nix-substituter.md#configuration) about amplifying one metadata request into per-chunk probes.
 
 ```json5
 dedup: {
@@ -173,7 +179,7 @@ reads are **not** re-hashed. The trust boundary is the client that uploads,
 not the backend that stores; once verified in, content is served back at
 full speed.
 
-**Source:** [`nativelink-store/src/verify_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/verify_store.rs)
+**Source:** [`nativelink-store/src/verify_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/verify_store.rs)
 
 ```json5
 verify: {
@@ -195,7 +201,7 @@ wrap a string-keyed store (path-info, alias) in `verify`.
 
 Caches the results of `has` calls in memory. Useful when the backend `has` is expensive (e.g., S3 HEAD request with network latency).
 
-**Source:** [`nativelink-store/src/existence_cache_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/existence_cache_store.rs)
+**Source:** [`nativelink-store/src/existence_cache_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/existence_cache_store.rs)
 
 ```json5
 existence_cache: {
@@ -210,7 +216,7 @@ Intended for CAS stores only. This is pure optimization — it never changes cor
 
 Sends small blobs to one store and large blobs to another. Useful for optimizing I/O patterns: small blobs to a low-latency store (memory, Redis), large blobs to a high-throughput store (S3).
 
-**Source:** [`nativelink-store/src/size_partitioning_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/size_partitioning_store.rs)
+**Source:** [`nativelink-store/src/size_partitioning_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/size_partitioning_store.rs)
 
 ```json5
 size_partitioning: {
@@ -233,12 +239,12 @@ content size, so use it on CAS stores only, never on AC stores.
 
 Distributes blobs across multiple stores by hashing the key. Each shard handles a fraction of the keyspace.
 
-**Source:** [`nativelink-store/src/shard_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/shard_store.rs)
+**Source:** [`nativelink-store/src/shard_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/shard_store.rs)
 
 A `grpc` store needs `endpoints` (a list of `{ address }` objects, not a
 single `endpoint` string) and a `store_type` of `cas` or `ac` — the latter
-tells the store which upstream RPCs to make. Both are enforced at config
-load; the older single-`endpoint` shorthand is not a real field.
+tells the store which upstream RPCs to make. Both are enforced by
+`--check`; the older single-`endpoint` shorthand is not a real field.
 
 ```json5
 shard: {
@@ -259,7 +265,7 @@ store. If any referent is gone (evicted, never uploaded), the action reads
 as a miss. This keeps the action cache coherent with the CAS: a cache hit
 is only served when its outputs can actually be fetched.
 
-**Source:** [`nativelink-store/src/completeness_checking_store.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/completeness_checking_store.rs)
+**Source:** [`nativelink-store/src/completeness_checking_store.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/completeness_checking_store.rs)
 
 ```json5
 completeness_checking: {
@@ -269,10 +275,45 @@ completeness_checking: {
 ```
 
 Use it on AC stores only. `cas_store` is typically a `ref_store` pointing
-at the shared CAS so both wrappers see the same content. This is how
-eviction turns into garbage collection: once the CAS evicts an action's
-outputs, the completeness check makes the AC record read as absent, so a
-stale result is never served against bytes that are gone.
+at the shared CAS so both wrappers see the same content. This is exactly
+how the Nix substituter turns eviction into garbage collection — an evicted
+NAR makes its `.narinfo` read as absent — described in
+[the Nix substituter](../part10/nix-substituter.md).
+
+## Fork Hardening
+
+An adversarial torture sweep of the `nix_cache` substituter surfaced three
+store-level bugs, all fixed on this fork (commit `b2994285`) and all worth
+sending upstream:
+
+- **`completeness_checking` now distinguishes absence from failure.**
+  Previously a genuine backend read/decode failure and a genuinely-absent
+  (or evicted) record both surfaced as `NotFound`, so a service mapping
+  `NotFound → 404` served a real I/O fault as a clean cache miss —
+  poisoning the client's negative cache. `NotFound` is now returned *only*
+  for true absence or a genuinely-missing referent (the intended
+  eviction-coherence 404); any other error code propagates unchanged so
+  callers can answer 500 rather than lie about a miss
+  (`completeness_checking_store.rs`).
+
+- **`filesystem` no longer panics on zero-length blobs.** The duplicate-file
+  comparison computed the byte range `0..file_length - 1`, which triggered
+  a subtract-overflow panic when two zero-length files compared equal
+  (reachable by re-uploading an empty build log). It now uses the half-open
+  range `0..file_length`, which is correctly empty for a 0-byte file
+  (`filesystem_store.rs`).
+
+- **`filesystem` `get_part` tolerates the concurrent-write race.** A `has`
+  hit followed by an `open()` ENOENT — which happens transiently when an
+  evicted generation's file is renamed away while a fresh generation is
+  still landing — no longer surfaces a spurious 404. `get_part` retries a
+  bounded number of times (re-fetching the newer entry each pass) and only
+  treats a persistent miss as a genuine map/disk divergence. The benign
+  "already a temp file" log was also demoted from `warn` to `debug`.
+
+These are the kind of edge cases you only hit under real concurrency —
+which is the point of fronting a demanding client like `nix` over the same
+store algebra everything else uses.
 
 ## The Factory
 
@@ -304,7 +345,7 @@ pub fn store_factory<'a>(
 }
 ```
 
-**Source:** [`nativelink-store/src/default_store_factory.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-store/src/default_store_factory.rs)
+**Source:** [`nativelink-store/src/default_store_factory.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-store/src/default_store_factory.rs)
 
 The factory is recursive: composite stores call `store_factory` on their children, building the tree from leaves to root. After all named stores are constructed, a `post_init` pass resolves `RefStore` cross-references (stores that point to other named stores by name).
 
@@ -328,13 +369,16 @@ FastSlow(
 )
 ```
 
-**The hardened-CAS pattern:**
-```
-Verify → ExistenceCache → FastSlow(Memory, S3)
-```
-`verify` checks hash and size on upload so corrupt bytes never land; the
-existence cache spares the slow tier a `has` on every write. Note that
-`verify` and `completeness_checking` both reject non-digest keys, so a
-string-keyed store must sit outside them.
+**The Nix substituter — the book's fullest real composition.** The
+`nix_cache` service is the best worked example of this algebra doing real
+work: a `verify`-wrapped fast/slow filesystem store holds NAR blobs (hash
+and size checked on upload), a `completeness_checking`-wrapped store holds
+path-info records so an evicted NAR turns its `.narinfo` into a clean 404,
+and a plain string-keyed store holds URL aliases (deliberately *outside*
+`verify` and `completeness_checking`, which both reject non-digest keys).
+It also documents the sharp edges — which wrappers reject string keys, why
+`dedup` under a completeness check amplifies existence probes — that this
+chapter only sketches. Read [the Nix substituter](../part10/nix-substituter.md);
+the runnable config is `nativelink-config/examples/nix_cache.json5`.
 
 The algebra is small. The compositions are infinite.

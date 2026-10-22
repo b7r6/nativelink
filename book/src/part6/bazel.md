@@ -44,6 +44,32 @@ services: {
 
 If you omit `--remote_instance_name`, the NativeLink config should use `instance_name: ""` (empty string).
 
+## Validate the Config First
+
+Before you point Bazel at a server, validate the server config offline. The fork
+adds a `--check` flag that loads and validates the config, then exits without
+binding a socket, connecting to a backend, or creating any store directories
+(`src/bin/nativelink.rs:844-867`):
+
+```bash
+nativelink --check /etc/nativelink/config.json5
+# OK: /etc/nativelink/config.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+```
+
+`--check` catches two classes of error and exits non-zero on either:
+
+- **Schema errors.** Every config struct is `deny_unknown_fields`, so a misspelled
+  or removed key fails at load time instead of being silently ignored. A stray
+  `client_auth_optional` in a `tls` block, for example, aborts with
+  `unknown field 'client_auth_optional', expected one of 'cert_file', 'key_file',
+  'client_ca_file', 'client_crl_file'`.
+- **Dangling references.** `validate_references` (`src/bin/nativelink.rs:851`)
+  rejects a service that names a `cas_store`, `ac_store`, or `scheduler` that no
+  store or scheduler block defines.
+
+Run it in CI on every config change. The full field reference is in the
+[Configuration Reference](../appendix/config-reference.md).
+
 ## Platform Configuration
 
 For remote execution, you need to tell Bazel what platform the remote workers provide:
@@ -74,7 +100,7 @@ The `exec_properties` map becomes the action's platform properties in the `Execu
 
 ## Digest Function
 
-Select the content hash with Bazel's `--digest_function` startup flag:
+The fork's own `.bazelrc` selects BLAKE3 as the content hash (`.bazelrc:16`):
 
 ```bash
 startup --digest_function=blake3
@@ -84,16 +110,34 @@ startup --digest_function=blake3
 the Bazel server addresses every blob, so it has to be set before that server
 starts. NativeLink's Capabilities service advertises both SHA256 and BLAKE3
 (`capabilities_server.rs:116-127`), so either works; BLAKE3 is much faster than the
-SHA256 default. Pick one and set it consistently across every client and worker:
-if a client omits the digest function, REAPI carries it as the proto default `0`
-(`UNKNOWN`), and mixing SHA256 and BLAKE3 clients against one deployment without
-pinning the function invites cross-hashing surprises.
+SHA256 default.
+
+The catch: if a client omits the digest function, REAPI carries it as the proto
+default `0` (`UNKNOWN`), and a server that silently defaults can hash a BLAKE3
+client's Directory trees as SHA256 — corrupting results with no error. The fork
+closes this hole with `require_explicit_digest_function` on the global config
+(`cas_server.rs:1328-1341`), the server-side counterpart to the client's explicit
+`--digest_function=blake3`:
+
+```json5
+global: {
+  require_explicit_digest_function: true
+}
+```
+
+With it set, the server rejects any request that leaves `digest_function` unset
+(`digest_hasher.rs:214-224`), including ByteStream resource names that omit the
+`{digest_function}` path segment (`digest_hasher.rs:98-113`). The Execute RPC
+enforces this regardless — `ExecuteRequest.digest_function` must be explicitly set
+(`execution_server.rs:336`). Turn it on for any deployment that runs BLAKE3
+clients; it defaults to `false` for backwards compatibility. See the
+[Configuration Reference](../appendix/config-reference.md) for the global block.
 
 ## NativeLink Integration Tests
 
 The repository includes a complete test of Bazel remote execution and caching:
 
-**Source:** [`integration_tests/simple_remote_execution_test.sh`](https://github.com/TraceMachina/nativelink/blob/main/integration_tests/simple_remote_execution_test.sh)
+**Source:** [`integration_tests/simple_remote_execution_test.sh`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/integration_tests/simple_remote_execution_test.sh)
 
 The relevant `.bazelrc` flags:
 
@@ -104,7 +148,7 @@ build:self_execute --remote_executor=grpc://127.0.0.1:50052
 build:self_execute --remote_default_exec_properties=cpu_count=1
 ```
 
-**Source:** [`.bazelrc`](https://github.com/TraceMachina/nativelink/blob/main/.bazelrc)
+**Source:** [`.bazelrc`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/.bazelrc)
 
 ## Toolchain Integration
 
@@ -155,7 +199,7 @@ build --config=llvm
 build --remote_executor=grpc://nativelink:50051
 ```
 
-See the [toolchain-examples](https://github.com/TraceMachina/nativelink/tree/main/toolchain-examples) directory for complete working configurations of each approach.
+See the [toolchain-examples](https://github.com/straylight-prelude/straylight-nativelink/tree/main/toolchain-examples) directory for complete working configurations of each approach.
 
 ## Optimization Flags
 
@@ -203,7 +247,7 @@ build --bes_results_url=https://your-dashboard.example.com/invocation/
 
 NativeLink's experimental BEP server can ingest build events for monitoring and debugging.
 
-**Source:** [`nativelink-service/src/bep_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/bep_server.rs)
+**Source:** [`nativelink-service/src/bep_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/bep_server.rs)
 
 ## TLS Configuration
 
@@ -234,11 +278,10 @@ listener: {
 
 `TlsConfig` is `deny_unknown_fields` and has exactly four keys — `cert_file`,
 `key_file`, `client_ca_file`, and `client_crl_file` (`cas_server.rs:778-796`).
-No `client_auth_optional` toggle exists: mTLS is on whenever `client_ca_file`
+There is **no** `client_auth_optional` toggle: mTLS is on whenever `client_ca_file`
 is set and off otherwise, and `client_crl_file` names an optional certificate
 revocation list. Any other key is a hard startup error — `client_auth_optional:
-false` aborts loading — so the process fails fast on a bad `tls` block rather than
-starting with it silently ignored.
+false` aborts loading — so run `nativelink --check` after editing.
 
 ## Common Issues
 

@@ -4,10 +4,9 @@
 
 ---
 
-# Part I: For Operators
+# Part I: What This Is
 
-# What This Is
-
+- [Why This Fork](./part1/why-this-fork.md)
 - [The 30-Second Model](./part1/thirty-seconds.md)
 - [NativeLink vs. Everything Else](./part1/vs-everything.md)
 - [Mental Model](./part1/mental-model.md)
@@ -15,7 +14,7 @@
 
 ---
 
-# The Protocol
+# Part II: The Protocol
 
 - [REAPI from First Principles](./part2/reapi.md)
 - [The Execution Contract](./part2/execution-contract.md)
@@ -24,7 +23,7 @@
 
 ---
 
-# Stores
+# Part III: Stores
 
 - [The Store Trait](./part3/store-trait.md)
 - [Store Composition](./part3/store-composition.md)
@@ -33,7 +32,7 @@
 
 ---
 
-# Scheduling and Execution
+# Part IV: Scheduling and Execution
 
 - [The Scheduler](./part4/scheduler.md)
 - [Platform Properties](./part4/platform-properties.md)
@@ -42,7 +41,7 @@
 
 ---
 
-# Toolchains
+# Part V: Toolchains
 
 - [The Toolchain Problem](./part5/toolchain-problem.md)
 - [Nix and LRE](./part5/nix-lre.md)
@@ -52,7 +51,7 @@
 
 ---
 
-# Client Integration
+# Part VI: Client Integration
 
 - [Bazel](./part6/bazel.md)
 - [Buck2](./part6/buck2.md)
@@ -61,7 +60,7 @@
 
 ---
 
-# Deployment
+# Part VII: Deployment
 
 - [Single Node](./part7/single-node.md)
 - [Multi-Worker](./part7/multi-worker.md)
@@ -70,7 +69,7 @@
 
 ---
 
-# Worked Examples
+# Part VIII: Worked Examples
 
 - [From Scratch: Bazel + NativeLink](./part8/bazel-from-scratch.md)
 - [From Scratch: Buck2 + NativeLink](./part8/buck2-from-scratch.md)
@@ -79,16 +78,20 @@
 
 ---
 
-# Part II: For Contributors
+# Part IX: The Standard OCI Toolchain
 
-- [Part II: For Contributors](./contributors/00-contributors-intro.md)
-- [Orientation: The Shape of the Codebase](./contributors/01-orientation.md)
-- [Building and Testing](./contributors/02-building-and-testing.md)
-- [The Core Abstractions](./contributors/03-core-abstractions.md)
-- [The Data Path, End to End](./contributors/04-data-path.md)
-- [Recipes](./contributors/05-recipes.md)
-- [Concurrency and Correctness](./contributors/06-concurrency-and-correctness.md)
-- [Contributing: Getting a Change Merged](./contributors/07-contributing.md)
+- [The Standard OCI Toolchain](./part9/standard-oci-toolchain.md)
+- [The OCI → CAS Bridge](./part9/oci-cas-bridge.md)
+- [The CAS-Backed Registry](./part9/cas-registry.md)
+
+---
+
+# Part X: Nix on NativeLink
+
+- [Nix on NativeLink](./part10/overview.md)
+- [The Nix Substituter Facade](./part10/nix-substituter.md)
+- [The Nix Cache Client](./part10/nix-cache-client.md)
+- [The CAS Witness](./part10/cas-witness.md)
 
 ---
 
@@ -98,3 +101,6 @@
 - [B: Scheduler Catalog](./appendix/scheduler-catalog.md)
 - [C: Troubleshooting](./appendix/troubleshooting.md)
 - [D: Glossary](./appendix/glossary.md)
+- [E: Nix Provisioning — Design Proposal](./appendix/nix-provisioning.md)
+- [F: Standard OCI Toolchain Specification](./appendix/standard-oci-toolchain-spec.md)
+- [G: Upstream as a Subscription](./appendix/upstream-sync.md)

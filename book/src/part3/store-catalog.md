@@ -2,14 +2,13 @@
 
 Every store type in NativeLink, what it does, and when to use it.
 
-**Source:** [`nativelink-config/src/stores.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/stores.rs)
+**Source:** [`nativelink-config/src/stores.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/stores.rs)
 
 Config keys are the `snake_case` form of each `StoreSpec` variant (`stores.rs:52`).
 Every spec struct is `#[serde(deny_unknown_fields)]`, so a misspelled or extra key
-is a hard error at config load — booting `nativelink <config>` surfaces it before
-the server serves a request.
+is a hard error at load time — run `nativelink --check <config>` to catch it offline.
 Each entry below lists its fields as **required** (no default; omitting it fails
-to load) or **optional** (with the default the code applies when omitted).
+`--check`) or **optional** (with the default the code applies when omitted).
 
 ## Leaf Stores (Terminal — No Children)
 
@@ -108,7 +107,7 @@ ontap_s3_existence_cache: {
   from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_DEFAULT_REGION`.
 
 **Use when:** ONTAP S3 is your durable tier and `has` latency dominates (typically the
-fast side of a `fast_slow`, as in [`examples/ontap_backend.json5`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/examples/ontap_backend.json5)).
+fast side of a `fast_slow`, as in [`examples/ontap_backend.json5`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/examples/ontap_backend.json5)).
 
 ### `redis_store`
 
@@ -195,7 +194,7 @@ grpc: {
 - `endpoints` — **required**. Non-empty list; each entry needs an `address`
   (`grpc://` or `grpcs://`).
 - `store_type` — **required**. `"cas"` or `"ac"`; it selects which upstream RPCs are
-  issued. Omitting it fails to load with `missing field 'store_type'`
+  issued. Omitting it fails `--check` with `missing field 'store_type'`
   (`GrpcSpec`, `stores.rs:1322`).
 - `instance_name` — optional (default: empty). Outgoing calls are rewritten to this
   instance name.
@@ -271,7 +270,7 @@ compression: {
 - `backend` — **required**.
 - `compression_algorithm` — **required**. The only variant is `lz4`
   (`CompressionAlgorithm`, `stores.rs:1012`); there is no `zstd` option, and naming one
-  fails to load with `unknown variant 'zstd', expected 'lz4'`. `lz4` accepts
+  fails `--check` with `unknown variant 'zstd', expected 'lz4'`. `lz4` accepts
   `block_size` (optional, default `65536`) and `max_decode_block_size` (optional,
   default: the `block_size` value).
 
@@ -325,10 +324,13 @@ verify: {
 **Digest safety.** `verify_hash` does not name a hash function: it uses the digest
 function the client declared on the request, falling back to the global
 `default_digest_hash_function` when the request leaves the field unset
-(`VerifySpec`, `stores.rs:964`). Mind the silent fallback — a BLAKE3 client that omits
-the digest-function field gets verified (and stored) under the configured default (e.g.
-SHA256), so `verify_hash` is only a genuine corruption backstop when clients and the
-`default_digest_hash_function` agree on the algorithm.
+(`VerifySpec`, `stores.rs:964`). That silent fallback is the exact hazard this fork
+hardens against — a BLAKE3 client that omits the field gets verified (and stored) under
+SHA256. Set `require_explicit_digest_function: true` in `GlobalConfig`
+(`cas_server.rs:1341`) so unset-function requests are rejected at the front door instead
+of being hashed under the wrong algorithm; then `verify_hash` on the CAS is a genuine
+corruption backstop rather than a rubber stamp. See
+[Why This Fork](../part1/why-this-fork.md) for the full digest-safety story.
 
 ### `existence_cache`
 
@@ -405,7 +407,7 @@ completeness_checking: {
 - `backend` — **required**. The AC store whose results are validated.
 - `cas_store` — **required**, and it is a full `StoreSpec`, not a store name. Reference
   the shared CAS with `{ ref_store: { name: "…" } }` (`CompletenessCheckingSpec`,
-  `stores.rs:976`). Passing a bare string fails to load with
+  `stores.rs:976`). Passing a bare string fails `--check` with
   `unknown variant 'CAS_MAIN_STORE'`, because the value is parsed as an inline store.
 
 **Use when:** Wrapping an AC store, so cached results can never reference CAS blobs that
@@ -426,7 +428,7 @@ cache_metrics: {
 **Fields:**
 
 - `cache_type` — **required**. The metric label, e.g. `"cas"` or `"ac"`. Omitting it
-  fails to load with `missing field 'cache_type'` (`CacheMetricsSpec`,
+  fails `--check` with `missing field 'cache_type'` (`CacheMetricsSpec`,
   `stores.rs:622`).
 - `backend` — **required**. The store to instrument.
 
@@ -445,8 +447,8 @@ ref_store: {
 **Fields:**
 
 - `name` — **required**. Must match a store `name` under the root `stores` list.
-  References are resolved after all stores are constructed, and the server
-  fails to start if a name does not resolve.
+  References are resolved after all stores are constructed, and `nativelink --check`
+  fails if a name does not resolve.
 
 **Use when:** Multiple services (or nested stores) need to share one physical store
 without duplicating its config.

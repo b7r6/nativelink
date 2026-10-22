@@ -100,10 +100,11 @@ cargo run --release --bin nativelink -- nativelink-config.json5
 
 ### From Nix
 
-Run the flake directly:
+Run the fork's flake directly — this is the build that has `--check`, the
+OCI → CAS bridge, and the `nix_cache` substituter:
 
 ```bash
-nix run github:TraceMachina/nativelink -- nativelink-config.json5
+nix run github:straylight-prelude/straylight-nativelink -- nativelink-config.json5
 ```
 
 ### From Docker
@@ -114,7 +115,24 @@ docker run -v $(pwd)/nativelink-config.json5:/config.json5 \
   ghcr.io/tracemachina/nativelink:latest /config.json5
 ```
 
+The upstream `ghcr.io/tracemachina/nativelink` image is the vanilla server; it
+predates the fork's additions, so `--check`, the OCI → CAS bridge, and
+`nix_cache` are absent. For those, build the fork's own image with
+`nix build github:straylight-prelude/straylight-nativelink#nativelink-image` or
+run from source or Nix as above.
+
 ### Verify It's Running
+
+Validate the config *before* you start anything. `nativelink --check` is fully
+offline: it parses the file, resolves every store and scheduler reference —
+catching a mistyped `cas_store` or `scheduler` name — then exits without binding
+a socket, connecting to a backend, or creating any store directory. Run it first,
+and wire it into CI (it exits non-zero on failure):
+
+```bash
+nativelink --check nativelink-config.json5
+# OK: nativelink-config.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+```
 
 Once the process is up, hit the health endpoint. NativeLink has **no gRPC health
 service** — there is no `grpc.health.v1.Health`. Health is a plain HTTP route that
@@ -157,6 +175,16 @@ cas_address = 127.0.0.1:50051
 tls = false
 instance_name = main
 ```
+
+### As a Nix Binary Cache
+
+Because the CAS is content-addressed, this same single-node process can also
+serve as a Nix binary cache: add a `nix_cache` service to the public listener and
+Nix fetches store paths straight out of the CAS over HTTP. It is not a one-line
+add — the substituter needs three stores (a digest-keyed NAR store plus
+string-keyed `path_info_store` and `alias_store`), and the NAR store should sit
+behind `verify` — so the full recipe lives in its own chapter. See
+[The Nix Substituter Facade](../part10/nix-substituter.md).
 
 ## When to Use This
 

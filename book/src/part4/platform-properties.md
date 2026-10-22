@@ -2,7 +2,7 @@
 
 Platform properties are how actions find workers. An action declares what it needs (`OSFamily: Linux`, `cpu_count: 4`). A worker declares what it has (`OSFamily: Linux`, `cpu_count: 8`). The scheduler matches them.
 
-This sounds straightforward. In practice, it's where most deployments go wrong.
+This sounds simple. In practice, it's where most deployments go wrong.
 
 ## The Matching Model
 
@@ -20,7 +20,7 @@ pub enum PropertyType {
 }
 ```
 
-**Source:** [`nativelink-config/src/schedulers.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/schedulers.rs) (the `PropertyType` enum). The matcher that acts on these types lives in [`nativelink-util/src/platform_properties.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/platform_properties.rs) — `PlatformProperties::is_satisfied_by`.
+**Source:** [`nativelink-config/src/schedulers.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/schedulers.rs) (the `PropertyType` enum). The matcher that acts on these types lives in [`nativelink-util/src/platform_properties.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/platform_properties.rs) — `PlatformProperties::is_satisfied_by`.
 
 You declare these types in the scheduler config:
 
@@ -94,7 +94,7 @@ Matching runs in two stages, for speed and for correctness.
 
 **Stage one — the capability index.** The `WorkerCapabilityIndex` is an inverted index that narrows thousands of workers to a candidate set without scanning them all:
 
-**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs)
+**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs)
 
 ```text
 For an action with properties [ISA=x86-64 (exact), cpu_count=4 (minimum),
@@ -137,7 +137,7 @@ platform_properties: {
 
 The worker's entrypoint script reads `container-image` from the action's environment (via `EnvironmentSource::Property`, covered below) and launches the action inside that container.
 
-This pattern pulls the image *on the worker*, at execution time.
+This pattern pulls the image *on the worker*, at execution time. The alternative — projecting the image into the `CAS` as a content-addressed action input, so its digest lands in `input_root_digest` instead of a platform property — is this fork's OCI → CAS bridge. See Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
 
 ### The Pool Pattern
 
@@ -190,7 +190,9 @@ The correctness guarantee here comes from the **action digest**, not from the ma
 The match type controls *routing*, which is a separate decision:
 
 - Declare the toolchain property **`exact`** (as with `lre-cc` above) when you run mixed pools and want scheduling to refuse a worker that lacks the exact path. A stale action then gets "no matching worker" rather than running on the wrong toolchain.
-- Declare it **`priority`** when the toolchain is baked into every worker (for example an LRE Nix closure) and the pool is uniform. Value-based routing buys nothing there, so the property is informational and the workers advertise it with an empty value.
+- Declare it **`priority`** (as the shipped Nix example does for `lre-rs`, `nativelink-config/examples/basic_cas_with_nix.json5:135`) when the toolchain is baked into every worker's Nix closure and the pool is uniform. Value-based routing buys nothing there, so the property is informational and the workers advertise it with an empty value.
+
+For the route where the LRE toolchain *image* becomes a first-class action input — projected into the `CAS` so its digest sits in `input_root_digest` — see Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md).
 
 ## Environment Injection
 
@@ -208,7 +210,7 @@ additional_environment: {
 }
 ```
 
-**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/cas_server.rs) — the `EnvironmentSource` enum (`cas_server.rs:992-1038`).
+**Source:** [`nativelink-config/src/cas_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/cas_server.rs) — the `EnvironmentSource` enum (`cas_server.rs:992-1038`).
 
 Watch the two shapes. `Property` and `Value` carry a string, so they are written as a single-key map: `{ property: "container-image" }`, `{ value: "something" }`. The other four variants — `FromEnvironment`, `TimeoutMillis`, `SideChannelFile`, `ActionDirectory` — carry no data, so under `#[serde(rename_all = "snake_case")]` they are **bare strings**: `"from_environment"`, `"timeout_millis"`, `"side_channel_file"`, `"action_directory"`. Writing one of them as `{ timeout_millis: {} }` fails validation with `invalid type: map, expected unit`; the config is rejected because `additional_environment` uses `deny_unknown_fields` semantics for the whole tree. The shipped `nativelink-config/examples/basic_cas.json5:79-87` uses exactly these bare-string forms.
 

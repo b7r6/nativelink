@@ -37,11 +37,11 @@ ENV CXX=/usr/bin/clang++-17
 
 ## NativeLink Worker Image Builder
 
-Two distinct models exist here, and the shipped tooling implements only one of them. The first bakes the toolchain *into* the worker image, so the worker's own root filesystem **is** the toolchain — there is no nested container per action. The second (the [`container-image` property](#worker-configuration) below) keeps a generic worker and runs each action inside a container the entrypoint launches. NativeLink ships the first; the second is yours to wire up.
+There are two distinct models here, and the shipped tooling implements only one of them. The first bakes the toolchain *into* the worker image, so the worker's own root filesystem **is** the toolchain — there is no nested container per action. The second (the [`container-image` property](#worker-configuration) below) keeps a generic worker and runs each action inside a container the entrypoint launches. NativeLink ships the first; the second is yours to wire up.
 
 NativeLink provides a Nix function that packages a set of toolchain derivations together with worker scaffolding into an OCI image:
 
-**Source:** [`tools/create-worker-experimental.nix`](https://github.com/TraceMachina/nativelink/blob/main/tools/create-worker-experimental.nix)
+**Source:** [`tools/create-worker-experimental.nix`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/tools/create-worker-experimental.nix)
 
 Given `packagesForImage` (the toolchain), it produces an image containing:
 - The toolchain derivations, flattened to `/` via `buildEnv` (`create-worker-experimental.nix:82-88`)
@@ -54,7 +54,7 @@ Two caveats keep this honest. It is **experimental** — the filename says so, a
 
 For Buck2, NativeLink provides a complete toolchain image builder:
 
-**Source:** [`tools/toolchain-buck2/toolchain-buck2.sh`](https://github.com/TraceMachina/nativelink/blob/main/tools/toolchain-buck2/toolchain-buck2.sh)
+**Source:** [`tools/toolchain-buck2/toolchain-buck2.sh`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/tools/toolchain-buck2/toolchain-buck2.sh)
 
 This script:
 1. `docker buildx build --push` builds the base Buck2 toolchain image and pins its `RepoDigest` into `flake.nix` (`toolchain-buck2.sh:41-59`)
@@ -65,7 +65,7 @@ The output is again the baked model: a worker whose filesystem carries the Buck2
 
 ## Worker Configuration
 
-The second model keeps a generic worker and runs each action inside a container the worker's `entrypoint` launches. **NativeLink ships no `docker run` wrapper for this.** The worker's execution path builds the action command directly — `process::Command::new(program)` (`running_actions_manager.rs:1373`), where `program` is the action's own arguments, optionally prefixed by the configured `entrypoint` (`running_actions_manager.rs:1232-1242`). No `container-run.sh` exists in the tree; the worker never invokes `docker` on its own. To containerize each action you write that entrypoint script yourself and point `entrypoint` at it.
+The second model keeps a generic worker and runs each action inside a container the worker's `entrypoint` launches. **NativeLink ships no `docker run` wrapper for this.** The worker's execution path builds the action command directly — `process::Command::new(program)` (`running_actions_manager.rs:1373`), where `program` is the action's own arguments, optionally prefixed by the configured `entrypoint` (`running_actions_manager.rs:1232-1242`). There is no `container-run.sh` in the tree; the worker never invokes `docker` on its own. To containerize each action you write that entrypoint script yourself and point `entrypoint` at it.
 
 The worker advertises a `container-image` platform property and passes the requested image to your entrypoint through the environment:
 
@@ -88,7 +88,7 @@ workers: [{
 }]
 ```
 
-The `additional_environment` values follow the `EnvironmentSource` enum (`cas_server.rs:992-1037`). Only the two data-carrying variants take a map: `Property` → `{ property: "…" }` and `Value` → `{ value: "…" }`. The unit variants are **bare strings**: `"from_environment"`, `"timeout_millis"`, `"side_channel_file"`, `"action_directory"` (the `snake_case` rename of each variant). Writing `{ action_directory: {} }` for a unit variant fails config load with `invalid type: map, expected unit`. This mirrors the shipped `nativelink-config/examples/basic_cas.json5:79-86`.
+The `additional_environment` values follow the `EnvironmentSource` enum (`cas_server.rs:992-1037`). Only the two data-carrying variants take a map: `Property` → `{ property: "…" }` and `Value` → `{ value: "…" }`. The unit variants are **bare strings**: `"from_environment"`, `"timeout_millis"`, `"side_channel_file"`, `"action_directory"` (the `snake_case` rename of each variant). Writing `{ action_directory: {} }` for a unit variant fails `nativelink --check` with `invalid type: map, expected unit`. This mirrors the shipped `nativelink-config/examples/basic_cas.json5:79-86`.
 
 The scheduler classifies `container-image` as a `priority` property (`basic_cas.json5:60`). Priority does not compare the *value* — any worker value satisfies any requested value (`platform_properties.rs:150`) — **but the worker must still advertise the key**. `PlatformProperties::is_satisfied_by` returns `false` for a requested property the worker does not declare at all (`platform_properties.rs:70-75`), and the enum's own doc comment is explicit: "the worker must have the associated key present to be matched" (`platform_properties.rs:115-117`). That is why the worker config above lists `"container-image": { values: [""] }` — the empty value is irrelevant, but the key's *presence* is what makes the match succeed. If you want a key jobs may request that workers need not declare, that is the separate `ignore` type (`schedulers.rs:62-64`), not `priority`.
 
@@ -111,7 +111,7 @@ exec timeout "${TIMEOUT_S}" docker run --rm \
   "${IMAGE}" "$@"
 ```
 
-Config load parses every block under `deny_unknown_fields`, enforces the `EnvironmentSource` variant shapes above, and resolves store references before the process binds a socket — so a bad variant shape fails fast at startup rather than silently.
+Validate the config before shipping it: `nativelink --check <config>` parses every block under `deny_unknown_fields`, enforces the `EnvironmentSource` variant shapes above, and resolves store references — all offline, without binding a socket or starting a worker (`src/bin/nativelink.rs:177-179,850-877`).
 
 ## Client Configuration
 
@@ -189,6 +189,14 @@ For builds with thousands of sub-second actions (e.g., individual C++ compilatio
 - **Larger action granularity** — compile multiple files per action
 - **Local execution for fast actions** — only use remote execution for slow actions (tests, links)
 - **Pre-pulled images** — ensure workers have the image cached before accepting actions
+
+## The Content-Addressed Alternative: OCI → CAS
+
+Every option above accepts the per-action container boundary and tries to amortize it. This fork offers a way to avoid it: instead of shipping the toolchain *as a container the worker runs*, ship it *as content the worker fetches*. A `FetchDirectory` on an `oci://…` or `docker://…` URI pulls the image, projects its layers into an REAPI `Directory` tree, and uploads the blobs to CAS. The worker then materializes that toolchain the same way it materializes any other action input — read-only hardlinked files (`0o444`/`0o555`) isolated with the same namespaces every action already gets — with no per-action `docker run`, no daemon on the worker, and no image pull at execution time.
+
+The trade is what you give up. A CAS-projected toolchain is *content*, not a *runtime boundary*: you get hermeticity and cache-correct identity (the toolchain's root digest folds into `input_root_digest`), but not the OS-level isolation — `--network=none`, `cgroup` caps, a separate root — that a live container gives untrusted code. Reach for the baked or per-action container models when you need that boundary; reach for the bridge when the goal is a reproducible toolchain rather than a security sandbox.
+
+This is the fork's preferred answer to the startup tax, and it is documented end to end in Part IX, [The OCI → CAS Bridge](../part9/oci-cas-bridge.md). One sharp edge worth flagging here: the projection decompresses `gzip` layers only and rejects `zstd`, so an image built with `zstd`-compressed layers will not project.
 
 ## Multi-Language, Multi-Image
 

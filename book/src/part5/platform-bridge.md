@@ -65,7 +65,7 @@ exec_properties = {
 
 **Why it works:** the tag *is* the Nix closure hash (`imageTag`). Change any toolchain derivation and the closure hash changes, the tag changes, the `container-image` value changes, and the action hash changes. Identity is structural, not conventional — the same guarantee as Pattern 1, sourced from a Nix closure instead of a registry digest. See [Nix and LRE](./nix-lre.md) for how the tag is generated.
 
-**What `lre-cc` / `lre-rs` actually are:** they are Nix package and worker-image names, and — separately — optional scheduler *pool markers*. A scheduler may declare `"lre-rs": "priority"` and workers advertise the key with an empty value to route Rust actions to Rust-capable workers (`deployment-examples/docker-compose/scheduler-multi-worker.json5:40`; `integration_tests/buildstream/buildstream_cas.json5:59,107`). They carry **no** toolchain identity; the toolchain digest lives in `container-image`. No `lre-cc = /nix/store/…clang` platform property exists anywhere in the codebase.
+**What `lre-cc` / `lre-rs` actually are:** they are Nix package and worker-image names, and — separately — optional scheduler *pool markers*. A scheduler may declare `"lre-rs": "priority"` and workers advertise the key with an empty value to route Rust actions to Rust-capable workers (`deployment-examples/docker-compose/scheduler-multi-worker.json5:40`; `integration_tests/buildstream/buildstream_cas.json5:59,107`). They carry **no** toolchain identity; the toolchain digest lives in `container-image`. There is no `lre-cc = /nix/store/…clang` platform property anywhere in the codebase.
 
 ### Pattern 3: Version String (Hermetic Downloads)
 
@@ -101,6 +101,18 @@ cpu_count = 4
 
 **Why it works:** Actions land on workers in the specified pool. Pools are configured identically. But identity is still by convention — there's no structural guarantee that all workers in a pool have the same toolchain.
 
+## Structural Identity: Toolchain in the Input Root
+
+Every pattern above expresses toolchain identity as a **platform property** — a string in the `Platform` proto that rides alongside the action. Even the content-addressed ones (Patterns 1 and 2) only *assert* which toolchain to use; the worker must independently already have that image or Nix closure. The property changes the cache key, but the last mile of correctness still rests on the worker actually running the toolchain the string names.
+
+The fork's OCI → CAS bridge closes that gap by making the toolchain part of the action's **inputs** rather than a claim about them. It projects an OCI toolchain image into CAS as a REAPI `Directory` tree and returns the tree's root digest; the caller merges that digest into the action's `input_root_digest`. The toolchain's exact bytes become nodes in the input Merkle DAG:
+
+- The action hash depends on the toolchain content **structurally** — the toolchain is hashed into the input root, not asserted beside it.
+- The worker materializes the toolchain from CAS like any other input; there is no "does this worker already have the right image installed?" trust gap.
+- Deduplication is automatic — identical toolchain blobs are shared across every action that references them.
+
+Platform properties still route the action to a capable worker; the input root guarantees the worker executes against the exact toolchain bytes the cache key was computed from. [The OCI → CAS Bridge](../part9/oci-cas-bridge.md) in Part IX covers the projection algorithm and the `input_root_digest` merge in full.
+
 ## Composing Properties
 
 Properties compose additively. An action can set multiple properties that together define the execution environment:
@@ -119,7 +131,7 @@ The action hash includes all of these. Change any one, and you get a different c
 
 Sometimes you need to normalize, add, or strip properties before matching. The `PropertyModifierScheduler` wraps another scheduler and transforms properties:
 
-**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
 
 ```json5
 schedulers: [{
@@ -152,7 +164,7 @@ Read the `replace` fields carefully — they are not what the names suggest (`sc
 - `new_name` — **required.** The key to insert. To keep the same key, repeat it here.
 - `new_value` — optional. The value to insert; if omitted, the existing value carries over.
 
-In short, `replace` is a *rename-and-optionally-rewrite* operation gated on an optional value match (`property_modifier_scheduler.rs:111-131`). A bare `{ replace: { name, value } }` — a replacement without `new_name` — does not parse: config load rejects it with a missing-field error naming `new_name`.
+So `replace` is a *rename-and-optionally-rewrite* operation gated on an optional value match (`property_modifier_scheduler.rs:111-131`). A bare `{ replace: { name, value } }` — a replacement without `new_name` — does not parse: `nativelink --check` rejects the config with a missing-field error naming `new_name`.
 
 Use cases:
 - **Default injection:** Clients that don't set `ISA` get it added automatically.
@@ -165,7 +177,7 @@ One caution the names invite: modifications run in the scheduler, *after* the cl
 
 When the scheduler receives an action with platform properties, matching proceeds as follows:
 
-**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs) (`find_matching_workers`, lines 151-214) and [`nativelink-util/src/platform_properties.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/platform_properties.rs) (`is_satisfied_by`, lines 47-78)
+**Source:** [`nativelink-scheduler/src/worker_capability_index.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/worker_capability_index.rs) (`find_matching_workers`, lines 151-214) and [`nativelink-util/src/platform_properties.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/platform_properties.rs) (`is_satisfied_by`, lines 47-78)
 
 ```
 For each property the action requests:

@@ -15,7 +15,7 @@ map. It is a `#[serde(tag = "provider")]` enum: every block MUST carry a
 belongs to one provider is rejected on another, because every variant is
 `#[serde(deny_unknown_fields)]`.
 
-**Source:** [`ExperimentalCloudObjectSpec`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/src/stores.rs) — `nativelink-config/src/stores.rs:1070-1080`
+**Source:** [`ExperimentalCloudObjectSpec`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/src/stores.rs) — `nativelink-config/src/stores.rs:1070-1080`
 
 ```rust
 #[serde(tag = "provider", rename_all = "snake_case")]
@@ -30,7 +30,7 @@ pub enum ExperimentalCloudObjectSpec {
 ```
 
 The `provider` values are the `snake_case` variant names: `"aws"`, `"gcs"`,
-`"azure"`, `"ontap"`, `"r2"`, `"oci"`. No default provider exists in
+`"azure"`, `"ontap"`, `"r2"`, `"oci"`. There is no default provider in
 practice — omit `provider` and the config fails to parse. (The Rust `Default`
 impl picks AWS, but that path is only reached by internal code that never round
 trips through JSON5; `stores.rs:1082-1086`.)
@@ -53,7 +53,7 @@ distinct implementation (`nativelink-store/src/default_store_factory.rs:65-84`):
 | `gcs` | hand-rolled `gcs_client` over `reqwest` | Not the S3 SDK; native GCS JSON API. |
 | `azure` | `azure_storage_blobs` SDK | Blob containers, not S3 buckets. |
 
-No Apache Arrow `object_store` layer exists, and no `additional_config`
+There is no Apache Arrow `object_store` layer and no `additional_config`
 pass-through map. `r2`, `oci`, and `ontap` are config adapters that construct an
 S3 SDK client pointed at a non-AWS endpoint and hand it to `S3Store`
 (`r2_store.rs:28`, `oci_store.rs:29`, `ontap_s3_store.rs`), so they inherit S3's
@@ -107,7 +107,7 @@ times the part size. A store-wide semaphore (`MAX_CONCURRENT_MULTIPART_UPLOADS`,
 so a burst of concurrent large writes can't multiply the per-upload footprint
 into an out-of-memory on a cache node. The store-wide permit is admission
 control — held for the whole upload, never per part — so it can't deadlock the
-inner part loop; a fifth concurrent large upload waits for a slot.
+inner part loop; a fifth concurrent large upload simply waits for a slot.
 
 ## AWS S3 (`provider: "aws"`)
 
@@ -129,13 +129,14 @@ on top of the common fields.
 ```
 
 Authentication uses the standard AWS credential chain (environment variables,
-instance profile, ECS task role, IMDS). No credential field exists in the
+instance profile, ECS task role, IMDS). There is no credential field in the
 spec — put nothing secret in the config.
 
 ## Cloudflare R2 (`provider: "r2"`)
 
-R2 has a first-class adapter (`r2_store.rs`) so you do not have to hand-assemble
-the generic S3 endpoint. R2 is S3-compatible with no egress fees, which is
+R2 is a fork-relevant addition (`r2_store.rs`): the upstream project ships the
+generic S3 path, and the fork adds a first-class R2 adapter so you do not have
+to hand-assemble the endpoint. R2 is S3-compatible with no egress fees, which is
 compelling for remote caching — the dominant cost of a cache is downloading
 artifacts on a hit, and R2 charges nothing for that.
 
@@ -218,16 +219,22 @@ spec (`stores.rs:1141-1166`) speaks Azure's vocabulary: `account_name` and
 }
 ```
 
-Azure credentials come from the environment, not the config file. No
-access-key field exists in the spec.
+Azure credentials come from the environment, not the config file. There is no
+access-key field in the spec.
 
 ## Oracle OCI Object Storage (`provider: "oci"`)
 
 > **Namesake warning — two unrelated meanings of OCI.** Here `provider: "oci"` means
 > *Oracle Cloud Infrastructure* Object Storage: a cloud **store backend** that
 > holds CAS/AC blobs. It is not the *Open Container Initiative* image format.
+> The fork also ships an OCI-**image** → CAS bridge (the `nativelink-oci`
+> crate) that pulls container images and projects them into REAPI `Directory`
+> trees for remote execution — a completely different feature. If you came here
+> to turn a toolchain image into CAS data, see
+> [The OCI → CAS Bridge](../part9/oci-cas-bridge.md) and
+> `examples/oci_toolchain_fetch.json5`, not this section.
 
-Oracle Object Storage has its own adapter (`oci_store.rs`). It
+Oracle Object Storage is another fork-relevant adapter (`oci_store.rs`). It
 talks to OCI's Amazon S3 Compatibility API through `aws_sdk_s3`, using path-style
 addressing: the namespace is the host prefix and the bucket is the first path
 segment,
@@ -260,7 +267,7 @@ keys falls back to the `AWS_*` credential chain.
 
 ## NetApp ONTAP S3 (`provider: "ontap"`)
 
-ONTAP S3 is the on-premises object-storage adapter
+ONTAP S3 is the fork's on-premises object-storage adapter
 (`ontap_s3_store.rs`), aimed at teams running `NetApp` ONTAP behind the
 firewall. `ExperimentalOntapS3Spec` (`stores.rs:704-721`) takes an explicit
 `endpoint`, the `vserver_name`, a `bucket`, and optional `root_certificates` for

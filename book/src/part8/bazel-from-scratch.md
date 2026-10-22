@@ -94,10 +94,28 @@ Create `nativelink.json5`:
 
 Note: `instance_name: ""` (empty string) matches Bazel's default.
 
-One invariant to watch: the worker requires its CAS to be a `FastSlowStore`
-(`cas_server.rs:1197`), enforced when the worker starts (`local_worker.rs:556`),
-which is exactly why `CAS_STORE` above is wrapped in `fast_slow` and not a bare
-`filesystem`. A plain `filesystem` CAS aborts the worker at Step 1.
+### Validate the config before you start it
+
+`nativelink --check` parses the config and resolves every store and scheduler
+reference offline — it binds no socket, touches no backend, and creates no
+store directory. Run it against the file before you hand it to a container:
+
+```bash
+docker run --rm -v $(pwd)/nativelink.json5:/config.json5 \
+  ghcr.io/tracemachina/nativelink:latest --check /config.json5
+# OK: /config.json5 — 2 stores, 1 schedulers, 2 servers, all references resolve
+```
+
+Fork note: `--check` is a straylight-fork addition; upstream NativeLink has no
+offline config validation.
+
+`--check` catches the common breakage — a mistyped `cas_store` or `scheduler`
+name that would otherwise only surface at boot. It does **not** exercise the
+worker's runtime requirement that its CAS be a `FastSlowStore`
+(`cas_server.rs:1197`): that invariant is enforced when the worker starts
+(`local_worker.rs:556`), which is exactly why `CAS_STORE` above is wrapped in
+`fast_slow` and not a bare `filesystem`. A plain `filesystem` CAS passes
+`--check` and then aborts the worker at Step 1.
 
 ### Start it
 

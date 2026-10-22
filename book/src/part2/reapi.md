@@ -1,6 +1,6 @@
 # REAPI from First Principles
 
-The Remote Execution API (REAPI) is a gRPC protocol defined by the Bazel team and adopted by the industry. Its core is five services. Every remote cache and remote execution system — NativeLink, Buildbarn, EngFlow, BuildBuddy — implements these same five. A companion protocol from the same `remote-apis` repository, the Remote Asset API, adds two more (`Fetch` and `Push`); NativeLink serves it too.
+The Remote Execution API (REAPI) is a gRPC protocol defined by the Bazel team and adopted by the industry. Its core is five services. Every remote cache and remote execution system — NativeLink, Buildbarn, EngFlow, BuildBuddy — implements these same five. A companion protocol from the same `remote-apis` repository, the Remote Asset API, adds two more (`Fetch` and `Push`); NativeLink serves it too, and this fork's OCI → CAS bridge (Part IX) rides on it.
 
 Understanding REAPI is not optional. If you don't understand the protocol, you cannot debug cache misses, you cannot reason about performance, and you cannot configure NativeLink correctly.
 
@@ -21,7 +21,7 @@ CAS is the content-addressed blob store. You put bytes in (keyed by their digest
 
 In NativeLink, CAS is backed by a store — any store. Memory, filesystem, S3, a composition of all three. The CAS service is a thin gRPC adapter over the store trait.
 
-**Source:** [`nativelink-service/src/cas_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/cas_server.rs)
+**Source:** [`nativelink-service/src/cas_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/cas_server.rs)
 
 ### 2. ActionCache (AC)
 
@@ -36,7 +36,7 @@ AC maps action digests to action results. This is where cache hits come from. Th
 
 `UpdateActionResult` is called after successful execution to store the result for future lookups. Some deployments disable client-side AC updates (only the server writes to AC after execution) to prevent cache poisoning.
 
-**Source:** [`nativelink-service/src/ac_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/ac_server.rs)
+**Source:** [`nativelink-service/src/ac_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/ac_server.rs)
 
 ### 3. ByteStream
 
@@ -55,9 +55,9 @@ The resource name encodes the digest, with a `{digest_function}` segment sitting
 - Read: `{instance_name}/blobs/{digest_function}/{hash}/{size}`
 - Write: `{instance_name}/uploads/{uuid}/blobs/{digest_function}/{hash}/{size}`
 
-That `{digest_function}` segment (`blake3`, `sha256`, …) is how ByteStream carries the hash algorithm: the stream has no proto field for it, unlike the structured RPCs. REAPI treats the segment as optional and NativeLink falls back to the server's configured hash when it is absent — which is exactly the silent-corruption hazard discussed in [The Digest](#the-digest), and the reason clients should name the digest function explicitly. The parser also accepts a compressed form, `.../compressed-blobs/{compressor}/{digest_function}/{hash}/{size}` (`resource_info.rs:46-80`), though NativeLink's Capabilities advertises no compressors, so clients never use it.
+That `{digest_function}` segment (`blake3`, `sha256`, …) is how ByteStream carries the hash algorithm: the stream has no proto field for it, unlike the structured RPCs. Stock REAPI treats the segment as optional and NativeLink falls back to the server's configured hash when it is absent — which is exactly the silent-corruption hazard the fork's strict digest-function safety guards against (see [The Digest](#the-digest)). The parser also accepts a compressed form, `.../compressed-blobs/{compressor}/{digest_function}/{hash}/{size}` (`resource_info.rs:46-80`), though NativeLink's Capabilities advertises no compressors, so clients never use it.
 
-**Source:** [`nativelink-service/src/bytestream_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/bytestream_server.rs)
+**Source:** [`nativelink-service/src/bytestream_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/bytestream_server.rs)
 
 ### 4. Execution
 
@@ -72,7 +72,7 @@ This is remote execution. The client sends an `ExecuteRequest` containing the ac
 
 NativeLink's execution service forwards the request to the scheduler, which dispatches to a matching worker. The operation stream is held open (long-polling) until the worker completes.
 
-**Source:** [`nativelink-service/src/execution_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/execution_server.rs)
+**Source:** [`nativelink-service/src/execution_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/execution_server.rs)
 
 ### 5. Capabilities
 
@@ -86,7 +86,7 @@ Feature negotiation. The client asks "what do you support?" and the server respo
 
 NativeLink's `GetCapabilities` returns a fixed, honest set (`capabilities_server.rs:95-152`):
 
-- **`digest_functions`**: `[SHA256, BLAKE3]` — advertised in both `cache_capabilities` and, when execution is configured, `execution_capabilities` (`capabilities_server.rs:116-119,124-127`). These are the only two `DigestHasherFunc` implements.
+- **`digest_functions`**: `[SHA256, BLAKE3]` — advertised in both `cache_capabilities` and, when execution is configured, `execution_capabilities` (`capabilities_server.rs:116-119,124-127`). These are the only two the fork's `DigestHasherFunc` implements.
 - **`max_batch_total_size_bytes`**: 64 KiB (`capabilities_server.rs:132`).
 - **`supported_compressors`** and **`supported_batch_update_compressors`**: both empty — NativeLink advertises **no** compressor (`capabilities_server.rs:134-135`). Blobs move uncompressed.
 - **`action_cache_update_capabilities.update_enabled`**: `true` (`capabilities_server.rs:128-130`) — clients may write to the ActionCache.
@@ -94,7 +94,7 @@ NativeLink's `GetCapabilities` returns a fixed, honest set (`capabilities_server
 - **API version range**: low `2.0.0`, high `2.3.0`, no deprecated version (`capabilities_server.rs:138-150`).
 - **`execution_capabilities`** is present only for instances wired to a scheduler; when present it advertises `exec_enabled: true` and a priority range of `0..=i32::MAX` (`capabilities_server.rs:105-120`). Its scalar `digest_function` is the server's configured default (SHA256 unless overridden).
 
-**Source:** [`nativelink-service/src/capabilities_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/capabilities_server.rs)
+**Source:** [`nativelink-service/src/capabilities_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/capabilities_server.rs)
 
 ## The Remote Asset API (companion protocol)
 
@@ -112,9 +112,11 @@ service Push {
 }
 ```
 
-`Fetch` resolves a URI — an `http(s)://` tarball, for instance — into CAS and returns a blob digest that a client can drop straight into an action's `input_root_digest`. `Push` records the reverse mapping, associating a URI with content already in CAS so a later `Fetch` can find it. NativeLink serves `FetchBlob` through `FetchServer` and `PushBlob` through `PushServer`; `FetchDirectory` ([`fetch_server.rs:164`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/fetch_server.rs)) and `PushDirectory` ([`push_server.rs:157`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/push_server.rs)) are currently unimplemented. In config they appear as the `fetch` and `push` service entries (`FetchConfig.fetch_store`, `PushConfig.push_store`).
+`Fetch` resolves a URI — an `http(s)://` tarball, an `oci://` image — into CAS and returns a blob digest or a root `Directory` digest that a client can drop straight into an action's `input_root_digest`. `Push` records the reverse mapping, associating a URI with content already in CAS so a later `Fetch` can find it. NativeLink serves both: `FetchServer` handles `FetchBlob` and `FetchDirectory`; `PushServer` handles `PushBlob` (its `PushDirectory` is currently unimplemented, [`push_server.rs:157`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/push_server.rs)). In config they appear as the `fetch` and `push` service entries (`FetchConfig.fetch_store`, `PushConfig.push_store`).
 
-**Source:** [`nativelink-service/src/fetch_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/fetch_server.rs), [`nativelink-service/src/push_server.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-service/src/push_server.rs)
+This is where this fork's OCI → CAS bridge lives. A `FetchDirectory` request whose URI starts with `oci://` or `docker://` ([`fetch_server.rs:192`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs)) pulls the image, projects its layers into an REAPI `Directory` Merkle tree, uploads the blobs, and returns the root digest — turning a registry image into an action input. Any other URI falls back to a plain remote-asset lookup in the fetch store. Part IX covers the bridge end to end.
+
+**Source:** [`nativelink-service/src/fetch_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/fetch_server.rs), [`nativelink-service/src/push_server.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-service/src/push_server.rs)
 
 ## Instance Names
 
@@ -135,13 +137,27 @@ message Digest {
 
 Hash function is negotiated via Capabilities (`SHA256` is standard, `BLAKE3` is supported by NativeLink). The size is part of the identity — it lets the server pre-allocate and detect corruption without reading the full blob.
 
-### A sharp edge: the unset digest function
+### Strict digest-function safety (fork addition)
 
-REAPI has a sharp edge here worth internalizing. On the structured RPCs the digest function is a proto enum field, and an unset field decodes as `UNKNOWN` — the protobuf default. On ByteStream it is the optional resource-name segment described above, and an omitted segment is the exact same "unset" signal. The server resolves both cases by falling back to its configured default hash. If a `BLAKE3` client forgets to declare its digest function and the server defaults to `SHA256`, the server hashes the client's bytes — including output `Directory` Merkle trees — with the wrong algorithm. Nothing errors; the cache just fills with entries under mismatched keys. That is silent corruption.
+REAPI has a sharp edge here. On the structured RPCs the digest function is a proto enum field, and an unset field decodes as `UNKNOWN` — the protobuf default. On ByteStream it is the optional resource-name segment described above, and an omitted segment is the exact same "unset" signal. Stock NativeLink resolves both cases by silently falling back to the server's configured default hash. If a `BLAKE3` client forgets to declare its digest function and the server defaults to `SHA256`, the server hashes the client's bytes — including output `Directory` Merkle trees — with the wrong algorithm. Nothing errors; the cache just fills with entries under mismatched keys. That is silent corruption.
 
-The defense is on the client: name the digest function explicitly on every request — both the structured RPCs and the ByteStream resource name — so the server never has to guess. Anything that speaks `BLAKE3` should be especially careful here, since the fallback default is `SHA256`.
+This fork closes the gap with a global switch, `require_explicit_digest_function` (`GlobalConfig`, `cas_server.rs:1341`):
 
-**Source:** [`nativelink-util/src/digest_hasher.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/digest_hasher.rs)
+```json5
+global: {
+  max_open_files: 24576,
+  require_explicit_digest_function: true, // reject an unset (UNKNOWN) digest function
+}
+```
+
+When `true`, every path that would have defaulted instead returns an `InvalidArgument` error:
+
+- The proto path — `TryFrom<i32> for DigestHasherFunc` rejects the `UNKNOWN` value (`digest_hasher.rs:211-249`).
+- The ByteStream path — `digest_hasher_from_resource_name_segment` rejects a resource name that omits the `{digest_function}` segment (`digest_hasher.rs:98-128`), wired in at `bytestream_server.rs:1024,1112`.
+
+When `false` (the default, for backwards compatibility) both paths fall through to `default_digest_hash_function` but emit a one-time warning so operators can spot the hazard before it bites. New deployments — especially anything that speaks `BLAKE3` — should set it to `true`. The switch is loaded once at startup (`nativelink.rs:923`); the full field reference lives in the [config appendix](../appendix/config-reference.md).
+
+**Source:** [`nativelink-util/src/digest_hasher.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/digest_hasher.rs)
 
 ## How It All Fits Together
 

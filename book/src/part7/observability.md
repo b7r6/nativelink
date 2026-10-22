@@ -40,20 +40,20 @@ When `NL_OTEL_ENDPOINT` is unset, `maybe_load_balanced_channel()` returns `None`
 (`telemetry.rs:245`) and each exporter is built with a plain `tonic` channel. In
 that case the exporter falls back to the standard OpenTelemetry SDK environment
 variables — it honors `OTEL_EXPORTER_OTLP_ENDPOINT` and defaults to
-`http://localhost:4317`. Both paths work; `NL_OTEL_ENDPOINT` is the one you want in
-production.
+`http://localhost:4317`. Both paths work; `NL_OTEL_ENDPOINT` is the one the fork
+adds and the one you want in production.
 
 Because `init_tracing()` runs unconditionally, NativeLink *always* attempts to
-push OTLP. With no collector listening on `:4317`, the batch exporter just logs
-periodic export failures and the server otherwise runs normally. No
-"metrics off" switch exists short of pointing the endpoint at a sink.
+push OTLP. With no collector listening on `:4317`, the batch exporter simply logs
+periodic export failures and the server otherwise runs normally. There is no
+"metrics off" switch short of pointing the endpoint at a sink.
 
-**Source:** [`nativelink-util/src/telemetry.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-util/src/telemetry.rs)
+**Source:** [`nativelink-util/src/telemetry.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-util/src/telemetry.rs)
 
 ## The Metrics Pipeline
 
 The repository ships a complete reference stack under
-[`deployment-examples/metrics/`](https://github.com/TraceMachina/nativelink/tree/main/deployment-examples/metrics)
+[`deployment-examples/metrics/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/deployment-examples/metrics)
 (Docker Compose and Kubernetes manifests, a collector config, recording rules, a
 Grafana dashboard, and alert-routing config):
 
@@ -78,7 +78,7 @@ different, and three transforms are responsible:
    `nativelink_execution_completed_count_total`. Histograms expose
    `_bucket` / `_sum` / `_count` series.
 
-The code's `execution.completed.count` counter is therefore queried in PromQL as
+So the code's `execution.completed.count` counter is queried in PromQL as
 `nativelink_execution_completed_count_total`. Every recording rule and dashboard
 panel in the repo assumes exactly this scheme; the recording-rules file says so
 in its header comment (`prometheus-recording-rules.yml:3-6`).
@@ -143,7 +143,7 @@ sum(increase(nativelink_execution_completed_count_total{execution_result="succes
   / sum(increase(nativelink_execution_completed_count_total[5m])) * 100
 ```
 
-**No direct "connected workers" gauge** exists. Worker liveness is inferred:
+There is **no direct "connected workers" gauge**. Worker liveness is inferred:
 the recording rule `nativelink:worker_utilization` counts workers with an
 executing action against workers seen at all, and `nativelink:actions_per_worker`
 groups `execution.active.count` by `execution_worker_id`
@@ -154,7 +154,7 @@ metric stream.
 ## Cache Metrics (Opt-In)
 
 Cache hit/miss and throughput metrics are **not** emitted by default. They exist
-only for stores you explicitly wrap with the `cache_metrics` store
+only for stores you explicitly wrap with the fork's `cache_metrics` store
 (`nativelink-store/src/cache_metrics_store.rs`). Configuring OTLP does not turn
 them on; wrapping a store does. If a store isn't wrapped, NativeLink builds the
 same store graph as before and adds no timer, attribute allocation, or recording
@@ -232,6 +232,24 @@ boundaries are milliseconds; against `nativelink_execution_queue_time_bucket`
 they are seconds. Mixing the two units is the most common way to write a cache
 latency alert that never fires.
 
+## Nix Cache Client Metrics (When the Client Runs)
+
+The [`nl-nix` and `nl-watch-store`](../part10/nix-cache-client.md) tools push metrics through this same OTLP pipeline — they call the same `init_tracing()` at startup, so `NL_OTEL_ENDPOINT` points them at the collector exactly as it does the server. Their instruments are named `nl.nix.*` under a meter scope of `nl-nix` or `nl-watch-store`, and they reach Prometheus through the same three transforms (dots to underscores, a `nativelink_` prefix, `_total` on counters):
+
+| Prometheus series | Type | Unit | Emitted by |
+|---|---|---|---|
+| `nativelink_nl_nix_paths_pushed_total` | Counter | paths | successful push |
+| `nativelink_nl_nix_paths_deduped_total` | Counter | paths | `HEAD` dedup skip |
+| `nativelink_nl_nix_push_errors_total` | Counter | pushes | failed push |
+| `nativelink_nl_nix_nar_bytes_total` | Counter | bytes | uncompressed NAR bytes pushed |
+| `nativelink_nl_nix_wire_bytes_total` | Counter | bytes | compressed bytes on the wire |
+| `nativelink_nl_nix_push_seconds_bucket` | Histogram | seconds | wall-clock per push |
+| `nativelink_nl_nix_paths_pulled_total` | Counter | paths | successful pull |
+| `nativelink_nl_nix_pull_errors_total` | Counter | pulls | failed pull |
+| `nativelink_nl_nix_pulled_bytes_total` | Counter | bytes | uncompressed NAR bytes pulled |
+
+These series exist only while a client or daemon is running and pushing to a collector; they are not part of the server's metric surface. The wire-vs-NAR ratio (`nl_nix_wire_bytes_total / nl_nix_nar_bytes_total`) is the achieved compression, and `push_seconds` is in **seconds**, matching the `execution.*` histograms and unlike the millisecond `cache.operation.duration` above.
+
 ## Recording Rules and Dashboards (Shipped)
 
 Rather than reproduce query text, use what the repo ships and query the recorded
@@ -286,8 +304,8 @@ The filter force-disables a handful of noisy upstream crates regardless of
 
 ## Health Endpoint
 
-NativeLink's health check is **HTTP, not gRPC.** No
-`grpc.health.v1.Health` service exists anywhere in the binary. The health service is a
+NativeLink's health check is **HTTP, not gRPC.** There is no
+`grpc.health.v1.Health` service anywhere in the binary. The health service is a
 plain HTTP handler (`nativelink-service/src/health_server.rs`) mounted with
 `route_service` onto the `axum` router of whichever server block declares it
 (`src/bin/nativelink.rs:433-439`). It answers on that server's listener port and
@@ -310,7 +328,7 @@ Because the handler mounts on the same `axum` router as the block's other
 services, it shares that block's port. In the shipped examples the health
 service lives on the private worker-facing server — for instance
 `0.0.0.0:50061` in
-[`basic_cas.json5`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-config/examples/basic_cas.json5)
+[`basic_cas.json5`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-config/examples/basic_cas.json5)
 — so the check is reachable at `http://localhost:50061/status`.
 
 A `GET` returns a JSON array of per-component `HealthStatusDescription` objects.
@@ -345,7 +363,7 @@ probe against a service that does not exist.
 
 The repository ships alert *rules* (as opposed to the recording rules) in the
 Kubernetes bundle
-([`kubernetes/prometheus.yaml:113-178`](https://github.com/TraceMachina/nativelink/blob/main/deployment-examples/metrics/kubernetes/prometheus.yaml)),
+([`kubernetes/prometheus.yaml:113-178`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/deployment-examples/metrics/kubernetes/prometheus.yaml)),
 plus severity-based *routing* in `alertmanager-config.yml` (routes only, no
 rules of its own). The shipped alerts, grounded in the real metric names:
 
@@ -404,7 +422,7 @@ Requires the `cache_metrics` wrapper on the CAS/AC store.
   full `cache_metrics` and `health` config surfaces.
 - [Appendix C: Troubleshooting](../appendix/troubleshooting.md) — cache-miss
   diagnosis, action-digest comparison, and health-check failures.
-- [`deployment-examples/metrics/`](https://github.com/TraceMachina/nativelink/tree/main/deployment-examples/metrics)
+- [`deployment-examples/metrics/`](https://github.com/straylight-prelude/straylight-nativelink/tree/main/deployment-examples/metrics)
   — the collector config, recording rules, dashboard, and alert rules referenced
   throughout this chapter.
 

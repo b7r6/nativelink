@@ -8,7 +8,7 @@ Every scheduler type is a variant of `SchedulerSpec` (`nativelink-config/src/sch
 
 The primary scheduler implementation. Despite the name, it handles production workloads.
 
-**Source:** [`nativelink-scheduler/src/simple_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/simple_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/simple_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/simple_scheduler.rs)
 
 The SimpleScheduler maintains:
 - A **queue** of pending actions (sorted by priority and insertion time)
@@ -189,13 +189,13 @@ The `replace` modification is the one people get wrong, because its field names 
 - `new_name` — **required.** The property name to write. To keep the same key, repeat it (as above). This is the field the fabricated `{ replace: { name, value } }` form was missing, and its absence is a hard config error.
 - `new_value` — optional; if omitted, the matched property keeps its existing value under `new_name` (a pure rename).
 
-The example above rewrites `container-image` (any value) to a resolved digest. To rename a key while preserving its value, drop `new_value`: `{ replace: { name: "old-arch", new_name: "ISA" } }`.
+So the example above rewrites `container-image` (any value) to a resolved digest. To rename a key while preserving its value, drop `new_value`: `{ replace: { name: "old-arch", new_name: "ISA" } }`.
 
-**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/TraceMachina/nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
+**Source:** [`nativelink-scheduler/src/property_modifier_scheduler.rs`](https://github.com/straylight-prelude/straylight-nativelink/blob/main/nativelink-scheduler/src/property_modifier_scheduler.rs)
 
 ## HistoricalResourceScheduler
 
-A scheduler wrapper that injects **minimum** `cpu_count` / `memory_kb` platform properties from a historical hints file, so oversized actions land on workers big enough to run them without the client having to annotate every target.
+A fork-added wrapper that injects **minimum** `cpu_count` / `memory_kb` platform properties from a historical hints file, so oversized actions land on workers big enough to run them without the client having to annotate every target.
 
 ```json5
 {
@@ -269,12 +269,13 @@ The scheduler handles several failure modes, each governed by a `SimpleSpec` fie
 
 ## Validate before you ship
 
-Scheduler blocks use `deny_unknown_fields`, so a typo or a stale field name is a hard error, not a silent no-op. Boot the binary against any config in CI before deploying it:
+Scheduler blocks use `deny_unknown_fields`, so a typo or a stale field name is a hard error, not a silent no-op. Run the offline checker on any config before deploying it:
 
 ```console
-$ nativelink my-config.json5
+$ nativelink --check my-config.json5
+OK: my-config.json5 — 1 stores, 1 schedulers, 0 servers, all references resolve
 ```
 
-On a bad config the process exits non-zero before it serves a request. Startup parses every block, enforces `deny_unknown_fields`, and resolves store references — so it catches both the misspelled Redis backend (`unknown field 'experimental_redis_scheduler_state'`) and a `replace` missing its required `new_name` (`missing field 'new_name'`) before a worker ever connects. Every config in this chapter loads cleanly.
+`--check` parses every block, enforces `deny_unknown_fields`, and resolves store references — so it catches both the misspelled Redis backend (`unknown field 'experimental_redis_scheduler_state'`) and a `replace` missing its required `new_name` (`missing field 'new_name'`) before a worker ever connects. Every config in this chapter passes it.
 
 For the full field-by-field reference of each scheduler variant, see [Appendix B: Scheduler Catalog](../appendix/scheduler-catalog.md). With scheduling settled, the next chapter takes up [platform properties](./platform-properties.md) — the `minimum` / `exact` / `priority` matching vocabulary these schedulers filter workers on.
