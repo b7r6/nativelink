@@ -38,7 +38,7 @@ The crates fall into three tiers: **foundations** (no NativeLink dependencies, o
 
 ### `nativelink-test` is not a crate
 
-`nativelink-test/` holds exactly one thing: a `fuzz/` subdirectory (`nativelink-test/fuzz`), which is a standalone `cargo-fuzz` package named `nativelink-fuzz` and is *excluded* from the workspace (`Cargo.toml:3-7`). No `nativelink-test` library exists. **Unit and integration tests live inside each crate**, under `<crate>/tests/` and in `#[cfg(test)]` modules — e.g. `nativelink-store/tests/`. The fuzzer is covered in Chapter 2.
+`nativelink-test/` holds exactly one thing: a `fuzz/` subdirectory (`nativelink-test/fuzz`), which is a standalone `cargo-fuzz` package named `nativelink-fuzz` and is *excluded* from the workspace (`Cargo.toml:3-7`). No `nativelink-test` library exists. **Unit and integration tests live inside each crate**, under `<crate>/tests/` and in `#[cfg(test)]` modules — e.g. `nativelink-store/tests/`. Fuzzing is covered in Chapter 2.
 
 > One caveat on this checkout: the branch (`pr/keeper-ffi`) adds `nativelink-keeper` and `nativelink-redis-tester` directories that are not part of upstream `main`. Ignore them — nothing in this chapter depends on them, and the eight crates above are the ones that match upstream.
 

@@ -103,23 +103,23 @@ bazel build //nativelink:nativelink                # the server binary
 
 The CI remote lanes live in `ci.bazelrc`. The `nl-rbe` config is the remote-execution matrix: it pins the execution platform and host platform to the hermetic LLVM glibc 2.28 platform, registers all rust toolchains, and tunes remote retries and eviction behavior (`ci.bazelrc:51-65`). A companion `nl-cache` config drives the remote-cache-only lanes (`ci.bazelrc:25-44`). The nightly channel for the aspects is selected by `build:nightly` (`.bazelrc:195`). You rarely invoke these by hand; know they exist so a red CI lane named `nl-rbe` or `nl-cache` tells you *where* the failure is.
 
-## The DST Fuzzer
+## Fuzzing
 
-`nativelink-test/fuzz/` is a standalone `cargo-fuzz` package (`nativelink-fuzz`), excluded from the workspace (`Cargo.toml:3-7`). It defines two targets (`nativelink-test/fuzz/Cargo.toml:30-43`):
+`nativelink-test/fuzz/` is a standalone `cargo-fuzz` package (`nativelink-fuzz`), excluded from the workspace (`Cargo.toml:3-7`). It defines exactly one target:
 
-- **`cas_config`** — feeds arbitrary bytes to the `CasConfig` JSON5 parser, hunting for parser panics.
-- **`scheduler_race`** — the deterministic simulation ("DST") fuzzer for the scheduler. It drives concurrent scheduler operations under a controlled, replayable schedule to shake out race conditions, calling into `nativelink_fuzz::scheduler_race::run(data)` (`nativelink-test/fuzz/fuzz_targets/scheduler_race.rs`).
+- **`cas_config`** — feeds arbitrary bytes to the `CasConfig` JSON5 parser, hunting for parser panics (`nativelink-test/fuzz/fuzz_targets/cas_config.rs`).
 
 Run a smoke campaign with `cargo-fuzz` installed:
 
 ```bash
 cargo install cargo-fuzz   # once
 cd nativelink-test/fuzz
-cargo fuzz run scheduler_race -- -max_total_time=60   # 60s smoke
-cargo fuzz run cas_config    -- -max_total_time=60
+cargo fuzz run cas_config -- -max_total_time=60
 ```
 
-A short campaign is a cheap pre-push sanity check if you touched the scheduler or the config parser; the fuzzer is a corpus-driven search, so longer runs find deeper bugs. The *why* behind `scheduler_race` — determinism as a tool for reproducing concurrency bugs — belongs to the concurrency chapter; this is the operational "how to run it."
+A short campaign is a cheap pre-push sanity check if you touched the config parser.
+
+**There is no scheduler fuzzer in this tree, and the fuzz package could not host one as it stands** — it depends on `nativelink-config` alone. A deterministic-simulation target for `SimpleScheduler`, driving concurrent operations under a replayable schedule, is prototyped on the fork (PR #2831) and is the single highest-value piece of test infrastructure NativeLink does not have; [chapter 6](./06-concurrency-and-correctness.md) explains which bug families it would reach that the current harness cannot. Until it lands, "run the fuzzer before touching the scheduler" is advice with nothing behind it: the real pre-push check for a scheduler change is the interleaving tests under `nativelink-scheduler/tests/` plus a fails-without-the-fix regression.
 
 ## Trap 3: The PR-Template CI Gate
 

@@ -7,7 +7,7 @@ That is a different skill, and this codebase does not surrender it by osmosis. I
 This part is that map, in the order you actually need it:
 
 - **[Orientation](./01-orientation.md)** — the crate map and the "where do I go to change X" table. Start here; it turns a wall of `nativelink-*` directories into a system you can navigate.
-- **[Building and testing](./02-building-and-testing.md)** — the Bazel/Cargo duality and the specific traps (the pinned nightly rustfmt, the deny-level clippy aspect, the MSRV, the DST fuzzer) that `cargo test` passing will not save you from.
+- **[Building and testing](./02-building-and-testing.md)** — the Bazel/Cargo duality and the specific traps (the pinned nightly rustfmt, the deny-level clippy aspect, the MSRV, the sanitizer lanes) that `cargo test` passing will not save you from.
 - **[Core abstractions](./03-core-abstractions.md)** — the traits and idioms you will touch in every change: the Store trait from the implementor's side, the scheduler and worker traits, the service layer, and the cross-cutting patterns (the error type, the buf-channel, `background_spawn!`, the config system).
 - **[The data path](./04-data-path.md)** — one request traced end to end, with file-and-line waypoints, so you can follow *any* request by analogy. This is the chapter that makes the rest navigable.
 - **[How-to recipes](./05-recipes.md)** — concrete, copy-from-the-real-exemplar steps for the common changes: add a store, a scheduler backend, a worker property, a gRPC surface, a config option, a test, a metric.
