@@ -1,6 +1,6 @@
-# Part II: NativeLink for Contributors
+# NativeLink for Contributors
 
-Part I taught you to *operate* NativeLink — to reason about REAPI, compose stores, deploy a fleet, and chase a cache miss. This part teaches you to *change* it.
+The parts above taught you to *operate* NativeLink — to reason about REAPI, compose stores, deploy a fleet, and chase a cache miss. This part teaches you to *change* it.
 
 That is a different skill, and this codebase does not surrender it by osmosis. It is a genuinely well-built Rust system — a store trait clean enough to compose storage topologies in config instead of code, a scheduling model that holds up at billions of requests a month — but "well-built" and "quick to navigate on day one" are not the same thing. The abstractions are sharp, the indirection is real (type erasure, two-phase wiring, trait objects behind `Pin<&Self>`), and the hardest correctness properties live in seams that are invisible until you've been bitten. A new contributor can spend a week just building a mental map that this part hands you in an afternoon.
 

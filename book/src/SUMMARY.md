@@ -95,6 +95,19 @@
 
 ---
 
+# For Contributors
+
+- [NativeLink for Contributors](./contributors/00-contributors-intro.md)
+- [Orientation: The Shape of the Codebase](./contributors/01-orientation.md)
+- [Building and Testing](./contributors/02-building-and-testing.md)
+- [The Core Abstractions](./contributors/03-core-abstractions.md)
+- [The Data Path, End to End](./contributors/04-data-path.md)
+- [Recipes](./contributors/05-recipes.md)
+- [Concurrency and Correctness](./contributors/06-concurrency-and-correctness.md)
+- [Contributing: Getting a Change Merged](./contributors/07-contributing.md)
+
+---
+
 # Appendices
 
 - [A: Configuration Reference](./appendix/config-reference.md)
