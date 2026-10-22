@@ -16,6 +16,99 @@ The scheduler's correctness problems share a root cause, and it is not any indiv
 
 None of that code is wrong. All of it is the cost of not having a single writer. The proposal is to pay for a single writer instead, and delete the rest.
 
+## The invariants
+
+Before asking what high availability should mean, name what a scheduler owes its clients. These nine are the properties the rest of this appendix is measured against. They are not aspirational: each one is either enforced somewhere in the tree today, enforced conditionally, or not enforced at all, and the next two sections say which.
+
+| | Invariant | Statement |
+|---|---|---|
+| **I1** | At-most-one executor | An action is executing on at most one worker at a time. |
+| **I2** | Terminal stability | An operation that reached a terminal state never leaves it. |
+| **I3** | No ghost assignment | An action recorded as assigned to a worker is one that worker was actually told to run. |
+| **I4** | Bounded failure detection | A worker that dies has its actions requeued within a bounded, configured time. |
+| **I5** | Capacity accounting | Reservations on a worker never exceed its slots, and completion refunds exactly what dispatch charged. |
+| **I6** | Placement validity | An action dispatched to a worker satisfies that worker's platform properties *as evaluated at dispatch*, not as evaluated when it was queued. |
+| **I7** | Client resumability | A client that disconnects can resume by operation id and observe the operation's current state. |
+| **I8** | Submission durability | An accepted operation survives a scheduler restart. |
+| **I9** | Progress | A queued action with a capable, idle, reachable worker is eventually dispatched. |
+
+Two notes on reading these. **I1 is weaker than it looks, and deliberately so**: for a cacheable, hermetic action, duplicate execution writes identical content-addressed blobs, so a violation costs CPU rather than correctness. That is a property of the workload, not a licence — it does not extend to result selection or capacity accounting, which is why I3 and I5 are separate. And **I4 is the invariant that distinguishes the configurations below.** Everything else is roughly equal across them; failure detection is where they diverge sharply.
+
+## The configurations that exist today
+
+Exactly two, selected by one config field — `experimental_backend` on `SimpleSpec` (`nativelink-config/src/schedulers.rs`). The word *experimental* is load-bearing and should be read as written.
+
+### Configuration A: one scheduler, memory backend
+
+```json5
+{ "simple": { "experimental_backend": "memory" } }   // also the default when omitted
+```
+
+All state is `MemoryAwaitedActionDb` — a `BTreeMap` and a `HashMap` behind one mutex — plus the per-process worker registry. One process, one writer by virtue of that lock, every worker connected here, every client served here.
+
+**Holds: I1–I7 and I9.** Not because the code is careful (though it is) but because there is exactly one of everything. The mutex serialises writers, the registry knows every worker, and `worker_timeout_s` (default 10s) is a real failure detector over workers this process is talking to directly.
+
+**Fails: I8, totally.** A restart loses the queue. Clients receive a stream error and must resubmit; in-flight work on workers is orphaned until those workers reconnect and reconcile. This is the only invariant Configuration A misses, and it is the entire reason anyone reaches for Configuration B.
+
+### Configuration B: N schedulers, Redis backend
+
+```json5
+{ "simple": { "experimental_backend": { "redis": { "redis_store": "SCHEDULER_REDIS_STORE" } } } }
+```
+
+Shipped as `nativelink-config/examples/worker_with_redis_scheduler.json5`. The awaited-action records move to Redis as versioned keys, so the *queue* is shared and survives restart. What does **not** move is the thing that matters most:
+
+> **The queue is shared. The worker registry is not.**
+>
+> "A worker only appears in the registry of the instance holding its `connect_worker` stream" — `nativelink-scheduler/src/worker_registry.rs:32`.
+
+That one sentence is the whole shape of Configuration B, and it is worth being blunt about what follows from it. N schedulers sharing Redis are **not** N interchangeable replicas. They are one shared queue in front of **N disjoint worker pools**, with no failure detector spanning them. There is no leader, no lease, no quorum, and no membership — `git grep -niE 'leader|election|lease|quorum|membership'` over `nativelink-scheduler/src` returns nothing but lock releases and `Ordering::Release`. Any process that can reach Redis is a scheduler, and no process knows how many peers exist or whether any of them is alive.
+
+The code is scrupulous about this; the registry models it in the type:
+
+```rust
+// worker_registry.rs:36 — WorkerLiveness
+Alive,    // registered here, heartbeat within the timeout
+Stale,    // registered here, not heard from within the timeout
+Unknown,  // not registered here at all — "not mine to judge", NOT "dead"
+```
+
+**What still holds.** I1, I2 and I3 survive on optimistic concurrency: records carry a version, assignment is a compare-and-set, and a losing replica gets `Aborted` and retries (`simple_scheduler_state_manager.rs:96,106` and the retry loops at `:384`, `:816`, `:985`). I5 holds *per replica* and trivially so, because a replica can only dispatch to workers it owns. I6 holds because assignment revalidates placement-relevant requirements rather than merely checking that the record is assignable — that fix is the N3 bug in [chapter 6](../contributors/06-concurrency-and-correctness.md), family 4. I7 holds through the shared store plus a subscription manager, with the caveat below. I8 is the point of the configuration and it holds.
+
+**Where I4 goes.** A replica that sees an action assigned to a worker it does not know returns `Unknown`, and `Unknown` must not mean dead — a peer's healthy worker looks exactly like an abandoned one from here. So `worker_timeout_s` cannot apply, and the fallback is:
+
+```rust
+// simple_scheduler_state_manager.rs:942
+WorkerLiveness::Unknown => {
+    if self.max_executing_timeout > Duration::ZERO { silent_for(self.max_executing_timeout) }
+    else { silent_for(ORPHANED_ACTION_TIMEOUT) }   // = 1 hour (worker_registry.rs:28)
+}
+```
+
+`max_action_executing_timeout_s` has no runtime default — `#[serde(default)]` leaves it 0, and 0 means disabled. **So in the shipped default, when a scheduler replica dies, every action its workers were executing stays `Executing` for one hour before anything reaps it.** I4's bound is one hour, per action, and it is one hour precisely because the honest alternative is worse: reaping earlier would kill live work on healthy peers' workers. The comment at `worker_registry.rs:24-27` says exactly this — "heartbeats never reach the shared state, so a healthy hour-long action and an abandoned one look identical from here, and acting early costs live work."
+
+Setting `max_action_executing_timeout_s` tightens the bound at the cost of capping how long any action may legitimately run. That is the trade-off the configuration forces, and there is no setting that gets both.
+
+**Where I9 goes.** Redis searches are eventually consistent with respect to the notification that triggered them, so a re-queued operation can be invisible to the matching pass its own notification woke. `fallback_match_interval_s` (default 5s) exists for that: an unconditional matching pass on a timer, described in its own doc comment as "a safety net for missed notifications and for scheduler backends with eventually consistent searches." I9 therefore holds with a latency bound of about five seconds rather than promptly, and holds *only because* that timer is on. Similarly, the subscription manager is explicitly allowed to be unreliable, with polling as the fallback (`store_awaited_action_db.rs:103-104`) — which is what keeps I7 true.
+
+### The matrix
+
+| | A: one scheduler, memory | B: N schedulers, Redis |
+|---|---|---|
+| I1 at-most-one executor | by single writer | by versioned CAS |
+| I2 terminal stability | yes | yes |
+| I3 no ghost assignment | yes | yes |
+| I4 bounded failure detection | **`worker_timeout_s`, default 10s** | **1 hour** for a peer's workers, or `max_action_executing_timeout_s` if set |
+| I5 capacity accounting | yes | per replica |
+| I6 placement validity | yes | yes |
+| I7 client resumability | yes | via store + subscription, polling fallback |
+| I8 submission durability | **no** | yes |
+| I9 progress | prompt | ~5s, and only with `fallback_match_interval_s` on |
+
+Read across the I4 row and the I8 row together, because that is the actual choice on offer today: **a ten-second failure detector and no durability, or durability and a one-hour failure detector.** Neither is high availability. Configuration A is a single point of failure that fails fast and cleanly. Configuration B survives a restart and degrades, on the death of a replica, into an hour of actions that no surviving process is willing to touch.
+
+Which is why the question below is not academic, and why answering it is a prerequisite for level 3 rather than an output of it.
+
 ## Level 2: one owner task
 
 Make one task per scheduler process the sole owner of the queue and the worker registry. The four trait implementations become message senders with oneshot replies; the matcher pass becomes a message like any other. No shared mutable state, therefore no locks, therefore none of Family 1, 4, or 7 by construction.
@@ -62,19 +155,67 @@ This also delivers the property that would have caught #3001 in CI: a core that 
 
 ### Where the model pushes back
 
-**Matcher decisions are state transitions, so they go through the log.** The leader proposes `Assign(action, worker)`; it applies when committed; the worker is told after commit. That adds one commit round trip to the dispatch path — sub-millisecond on a LAN, nothing at all on a one-member cluster. Reservation holds and parked placements stop being shared state and become leader-local heuristics that *feed* proposals.
-
-**Workers and clients still connect to one process.** On a lease change they reconnect. [#2925](https://github.com/TraceMachina/nativelink/pull/2925)'s running-operations-on-keepalive is the reconciliation mechanism, and `WaitExecution` by operation id is how clients resume — which REAPI already requires of them, so this is not new protocol surface.
+**Matcher decisions are state transitions, so they go through the log.** The leader proposes `Assign(action, worker)`; it applies when committed; the worker is told after commit. Reservation holds and parked placements stop being shared state and become leader-local heuristics that *feed* proposals. What that costs per deployment shape is the next section.
 
 **What today's code becomes.** `MemoryAwaitedActionDb` is applied state. `StoreAwaitedActionDb`'s versioned CAS writes disappear as a concurrency mechanism and come back as log transport, if Redis stays in the picture at all. `api_worker_scheduler`'s 29 lock sites become "worker events in, assignment events out". The trait surface survives as the client side of the owner.
 
+## The configurations level 3 would offer
+
+Level 3 does not add high availability as a feature; it makes the single owner the unit of replication, and the deployment shapes fall out of the membership you configure. Three shapes, one binary, and the distinction between them is the cluster size and whether the action space is partitioned.
+
+### Configuration C: one-member cluster
+
+A single scheduler whose owner applies a durable log before acknowledging. `change_membership` has one node; no network, no election, no commit round trip beyond the local append.
+
+This is Configuration A **plus I8**, and that is the entire point. The thing Configuration B is reached for — "my scheduler restarted and the build should continue" — is delivered here with a ten-second failure detector intact, because there is exactly one registry and it knows every worker. Recovery is "replay the log from the last snapshot", and because a snapshot *is* the applied state, the restarted process starts hot rather than rebuilding from Redis.
+
+What it does not survive is the machine. A one-member cluster is a single point of failure; it is a single point of failure that no longer loses work.
+
+### Configuration D: multi-member, one leader
+
+Three or five members, one leader by Raft election, the leader runs the matcher. Followers apply the committed log and hold identical resident state.
+
+The invariant this buys that nothing else does is **I4 restored across the whole fleet**. Failure detection stops depending on which process a worker happens to be connected to, because the registry is replicated state rather than per-process state. A worker's heartbeats are log entries; every member sees them; any member can judge any worker. `Unknown` stops existing as a liveness verdict, and with it the one-hour ceiling.
+
+The costs are real and should be stated:
+
+- **One commit round trip on the dispatch path.** The leader proposes `Assign(action, worker)` and tells the worker only after commit. Sub-millisecond on a LAN; zero on Configuration C.
+- **Workers and clients still connect to one process.** Raft replicates the scheduler's state, not its gRPC sessions. On a leader change, workers reconnect and reconcile ([#2925](https://github.com/TraceMachina/nativelink/pull/2925)'s running-operations-on-keepalive is that mechanism), and clients resume with `WaitExecution` by operation id — which REAPI already requires of them, so this is not new protocol surface. **I7 is the invariant that makes failover tolerable, and it is the one REAPI hands us for free.**
+- **A minority partition stops scheduling.** This is the correct behaviour and worth saying out loud, because Configuration B does the opposite: a partitioned replica in Configuration B keeps dispatching to its own workers from a queue it can no longer safely reason about. Raft trades that availability for the ability to state I1 and I4 without qualification.
+
+### Configuration E: sharded
+
+Partition the action space, one log and one leader group per shard. This is the only shape that scales decision-making horizontally, and it is strictly more machinery than D: a shard map, a routing layer, and a rebalancing story.
+
+Nothing in NativeLink needs it today. The matcher's pass is already serialised by the locks it takes, and at the fleet sizes in question — thousands of actions, tens of workers, decisions in microseconds — the scheduler is not the bottleneck. Sharding is the answer if that ever changes, and naming it here is mostly to keep it from being confused with D, because "two schedulers sharing load" describes E while almost everyone who says it means D.
+
+### The matrix, extended
+
+| | A: memory | B: N + Redis | C: 1-member | D: multi-member | E: sharded |
+|---|---|---|---|---|---|
+| I4 failure detection | 10s | **1 hour** (peers) | 10s | 10s, fleet-wide | 10s, per shard |
+| I8 durability | **no** | yes | yes | yes | yes |
+| I9 progress | prompt | ~5s | prompt | prompt | prompt |
+| Survives process restart | no | yes | yes | yes | yes |
+| Survives machine loss | no | partially, badly | no | yes | yes |
+| Scales decisions | — | no (shared queue) | — | no | yes |
+| Partition behaviour | — | keeps dispatching, unsafely | — | minority stops | minority stops per shard |
+| Dispatch latency cost | none | Redis round trips | log append | one commit | one commit |
+
 ## Decide this first
 
-The three levels are not a roadmap to walk end to end. Level 1 is unambiguously worth doing and costs days. Level 2 is worth doing on its own merits — it deletes more code than it adds and makes the scheduler's tests deterministic — and it does not commit anyone to Raft.
+The three levels are not a roadmap to walk end to end.
 
-Level 3 requires a decision nobody has made: **what high availability is supposed to mean here.**
+**Level 1 is unambiguously worth doing** and costs days. It removes family 7 for the state DB and does not commit anyone to anything.
 
-- "The scheduler restarts and the build continues" is a single leader — a one-member cluster, or a lease — and level 3 delivers it directly.
-- "Two schedulers share the load" is a different system. It needs partitioning on top: shard the action space, one log per shard.
+**Level 2 is worth doing on its own merits.** It deletes more code than it adds, makes the scheduler's interleaving tests deterministic, and is a strictly local change behind a trait seam the service crate already uses from one place. It does not commit anyone to Raft. If nothing else in this appendix is ever built, level 2 still pays.
 
-The current Redis-backed model quietly promises the second and delivers neither cleanly: any process that can reach Redis is a scheduler, coordination is by optimistic concurrency on individual records, and there is no membership, no leader, and no bound on how stale a participant's view may be. Choosing between those two meanings is the prerequisite for level 3, and it is a product decision, not an engineering one.
+**Level 3 requires a decision nobody has made**, and the decision is not "should we have HA" — it is which of these sentences is the requirement:
+
+1. *"A scheduler process can restart and the build continues."* → **Configuration C.** One member, a durable log, no election, no round trip. This is what most people mean, it is the cheapest thing on this list that is honestly HA-adjacent, and it is strictly better than Configuration B at the thing Configuration B is for.
+2. *"A scheduler machine can die and the build continues."* → **Configuration D.** Accept the commit round trip and that a minority partition stops scheduling.
+3. *"Scheduling throughput scales with more schedulers."* → **Configuration E**, and first produce the measurement showing the matcher is the bottleneck, because nothing in the current fleet suggests it is.
+
+Those are three different systems. The current Redis-backed model quietly promises the third, is reached for to get the first, and delivers the second badly — any process that can reach Redis is a scheduler, coordination is optimistic concurrency on individual records, there is no membership and no leader, and the price of that honesty about peers is the one-hour ceiling on I4.
+
+So the question to put to whoever owns the product, in one sentence: **when a scheduler dies, what is the longest a running action may sit unreaped — and are you willing to pay a commit round trip per dispatch to make that number small?** Everything above follows from the answer, and nothing above should be built before it.

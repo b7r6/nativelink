@@ -51,6 +51,8 @@ preimage
 preload
 reflink
 reserializing
+resumability
+revalidates
 rootfs('s)?
 serializers
 Sigstore
@@ -123,6 +125,7 @@ typechecks
 uncached
 uncontended
 unmanifested
+unreaped
 [Uu]psert
 upstream's
 Verilator
