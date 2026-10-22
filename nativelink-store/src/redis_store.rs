@@ -541,8 +541,8 @@ pub fn decode_key<'a>(
 
 impl<C, M> RedisStore<C, M>
 where
-    C: ConnectionLike + Clone + Sync,
-    M: RedisManager<C> + Sync,
+    C: ConnectionLike + Clone + Send + Sync,
+    M: RedisManager<C> + Send + Sync,
 {
     /// Used for testing when determinism is required.
     #[expect(clippy::too_many_arguments)]
