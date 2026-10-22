@@ -2106,6 +2106,19 @@ impl RedisSubscriptionManager {
                                     }
                                 }
                             };
+                            // The notice carries the key as Redis holds it, behind
+                            // this store's `key_prefix`; subscriptions are kept under
+                            // the bare store key. A notice from outside the prefix is
+                            // another store's, sharing the channel, and wakes nothing.
+                            let Some(key) =
+                                key.strip_prefix(key_prefix.as_str()).map(str::to_owned)
+                            else {
+                                trace!(
+                                    key,
+                                    "Published key is not under this store's prefix; ignored"
+                                );
+                                continue;
+                            };
                             trace!(key, "New subscription manager key");
                             let Some(subscribed_keys) = subscribed_keys_weak.upgrade() else {
                                 warn!(

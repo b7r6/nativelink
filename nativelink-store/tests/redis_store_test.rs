@@ -2459,6 +2459,46 @@ async fn no_items_from_none_subscription_channel() -> Result<(), Error> {
     Ok(())
 }
 
+// A store with a `key_prefix` publishes the key as Redis holds it, behind
+// the prefix, while a subscriber registers the bare store key. The manager
+// has to take the prefix off before it looks the subscriber up, or no notice
+// ever wakes anyone and every state change waits for the subscriber's own
+// timeout re-read (a Redis-backed scheduler ran a build 2.2x slower that way).
+#[nativelink_test]
+async fn a_notice_behind_the_store_prefix_wakes_the_bare_key_subscriber() -> Result<(), Error> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let subscription_manager = RedisSubscriptionManager::new(
+        rx,
+        Arc::new(async_lock::Mutex::new(vec![])),
+        "sched:".to_string(),
+    );
+    let mut subscription = subscription_manager.subscribe(TestSchedulerDataUnversioned {
+        key: "aa_demo".to_string(),
+        content: String::new(),
+        version: 0,
+    })?;
+    // A fresh subscription reports one change so its owner reads the key
+    // once; take that, so the wake below can only come from the notice.
+    subscription.changed().await?;
+
+    tx.send(PushInfo {
+        kind: redis::PushKind::PMessage,
+        data: vec![
+            Value::BulkString("scheduler_key_change".into()),
+            Value::BulkString("scheduler_key_change".into()),
+            Value::BulkString("sched:aa_demo".into()),
+        ],
+    })
+    .unwrap();
+
+    timeout(Duration::from_secs(5), subscription.changed())
+        .await
+        .err_tip(|| "the prefixed notice did not wake the subscriber")??;
+    assert!(!logs_contain("ERROR"));
+    drop(subscription_manager);
+    Ok(())
+}
+
 #[nativelink_test]
 async fn send_messages_to_subscription_channel() -> Result<(), Error> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
