@@ -526,7 +526,7 @@ fn selected(name: &str) -> bool {
     let selected = std::env::var("NL_FIXED_DIGEST_CASE").ok();
     let run = selected.as_deref().is_none_or(|selected| selected == name);
     if run {
-        println!("digest phase: {name}");
+        eprintln!("digest phase: {name}");
     }
     run
 }
