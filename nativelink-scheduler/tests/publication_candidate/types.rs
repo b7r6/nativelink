@@ -20,6 +20,10 @@ use nativelink_scheduler::authority as a;
 use nativelink_store::physical_filesystem::{Algorithm, ObjectId};
 use serde::{Deserialize, Serialize};
 
+#[path = "real_request.rs"]
+mod real_request;
+pub(crate) use real_request::{ActionBinding, RealBindings, TrustedContext};
+
 pub(crate) const MAX_STAGES: usize = 8;
 pub(crate) const MAX_OPERATIONS: usize = 16;
 pub(crate) const MAX_PHYSICAL: usize = 64;
@@ -92,7 +96,7 @@ pub(crate) enum Publisher {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Candidate {
-    /// Opaque complete qualified key, including every principal/configuration field.
+    /// Registered action label; real mode resolves its explicit qualified binding.
     pub(crate) action: String,
     pub(crate) publisher: Publisher,
     pub(crate) result: Object,

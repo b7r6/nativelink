@@ -22,8 +22,8 @@ use nativelink_scheduler::authority::accepted_history::{
     AcceptedHistory, HistoryAlgorithm, HistoryStatus,
 };
 use nativelink_scheduler::authority::{
-    ActionKey, EffectKind, ExecutionId, ObservableState, Request, ResourceFailureReason,
-    ResultPayload, State, TerminalResult,
+    ActionKey, EffectKind, ExecutionId, ObservableState, OperationId, Request,
+    ResourceFailureReason, ResultPayload, State, TerminalResult,
 };
 use nativelink_store::physical_closure::{self, Binding, Preparation, VerifiedReader};
 use nativelink_store::physical_filesystem::{Algorithm, ObjectId, PhysicalKey};
@@ -37,6 +37,7 @@ type Result<T> = std::result::Result<T, String>;
 pub(crate) struct SourceInventory {
     pub(crate) snapshot: Vec<u8>,
     pub(crate) view: ObservableState,
+    pub(crate) operation_requests: BTreeMap<OperationId, Request>,
     pub(crate) history: Option<AcceptedHistory>,
     pub(crate) history_bytes: BTreeMap<u64, Vec<u8>>,
 }
@@ -44,6 +45,18 @@ pub(crate) struct SourceInventory {
 impl SourceInventory {
     pub(crate) fn capture(state: &State) -> Result<Self> {
         let snapshot = state.snapshot()?;
+        let view = state.view();
+        let operation_requests = view
+            .operations
+            .iter()
+            .map(|operation| {
+                state
+                    .operation_request(operation.id)
+                    .cloned()
+                    .map(|request| (operation.id, request))
+                    .ok_or_else(|| "retained operation lost its original request".to_owned())
+            })
+            .collect::<Result<_>>()?;
         let history = state.accepted_history().cloned();
         let history_bytes = history
             .as_ref()
@@ -62,7 +75,8 @@ impl SourceInventory {
             .unwrap_or_default();
         Ok(Self {
             snapshot,
-            view: state.view(),
+            view,
+            operation_requests,
             history,
             history_bytes,
         })
@@ -416,8 +430,15 @@ pub(crate) fn project<R: VerifiedReader>(
         let execution = executions
             .get(&operation.execution)
             .ok_or("retained operation lost execution request")?;
-        context.action(operation.execution, &execution.request)?;
-        let value = terminal(value, algorithm(&execution.request)?)?;
+        let original = source
+            .operation_requests
+            .get(&operation.id)
+            .ok_or("retained operation lost its original request")?;
+        let action = context.action(operation.execution, &execution.request)?;
+        if context.action(operation.execution, original)? != action {
+            return Err("operation original request differs from its qualified execution".into());
+        }
+        let value = terminal(value, algorithm(original)?)?;
         if let Some(graph) = value.result() {
             append_root(
                 &mut legacy,

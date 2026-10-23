@@ -25,6 +25,9 @@ use super::coarse::Coarse;
 use super::protocol as r;
 use super::types::*;
 
+#[path = "binding.rs"]
+mod binding;
+
 #[path = "validation.rs"]
 mod validation;
 
@@ -62,6 +65,8 @@ struct Metadata {
     next_root: u64,
     next_write: u64,
     actions: BTreeMap<String, bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    real: Option<RealBindings>,
     credits: BTreeMap<u64, Credit>,
     clients: BTreeSet<u64>,
     namespaces: Vec<NamespaceBinding>,
@@ -125,6 +130,7 @@ impl PublicationAuthority {
                 next_root: 1,
                 next_write: 1,
                 actions,
+                real: None,
                 credits: BTreeMap::new(),
                 clients: BTreeSet::new(),
                 namespaces: Vec::new(),
@@ -348,6 +354,9 @@ impl PublicationAuthority {
         })
     }
     pub(crate) fn authorize_client(&mut self, principal: u64) -> Result<(), Error> {
+        if self.metadata.real.is_some() {
+            return Err(Error::Unauthorized);
+        }
         self.transaction(|next| {
             if principal == 0 || next.metadata.clients.len() >= MAX_STAGES {
                 return Err(Error::Bounds);
@@ -487,15 +496,44 @@ impl PublicationAuthority {
         skip_lookup: bool,
         until: u64,
     ) -> Result<a::ExecutionId, Error> {
+        if self.metadata.real.is_some() {
+            return Err(Error::Unauthorized);
+        }
+        let do_not_cache = *self.metadata.actions.get(&action).ok_or(Error::Invalid)?;
+        let request = a::Request {
+            action: a::ActionKey {
+                instance: action.clone(),
+                digest_function: "sha256".into(),
+                digest: "00".repeat(32),
+                digest_size_bytes: 0,
+            },
+            execution_scope: None,
+            do_not_cache,
+            skip_cache_lookup: skip_lookup,
+            priority: 0,
+            properties: BTreeMap::new(),
+            resources: a::Resources {
+                cpu_millis: 1,
+                memory_bytes: 1,
+                slots: 1,
+            },
+            execution_timeout: 100,
+            payload: None,
+        };
+        self.admit_bound(operation, action, request, until)
+    }
+
+    fn admit_bound(
+        &mut self,
+        operation: u64,
+        action: String,
+        request: a::Request,
+        until: u64,
+    ) -> Result<a::ExecutionId, Error> {
         self.transaction(|next| {
-            let do_not_cache = *next.metadata.actions.get(&action).ok_or(Error::Invalid)?;
+            if !next.request_matches_action(&action, &request) { return Err(Error::Unauthorized); }
             if next.metadata.operations.len() >= MAX_OPERATIONS || !next.valid_until(until, LEASE_TICKS) { return Err(Error::Bounds); }
             if next.metadata.operations.contains_key(&operation) { return Err(Error::Conflict); }
-            let request = a::Request {
-                action: a::ActionKey { instance: action.clone(), digest_function: "sha256".into(), digest: "00".repeat(32), digest_size_bytes: 0 },
-                execution_scope: None, do_not_cache, skip_cache_lookup: skip_lookup, priority: 0,
-                properties: BTreeMap::new(), resources: a::Resources { cpu_millis: 1, memory_bytes: 1, slots: 1 }, execution_timeout: 100, payload: None,
-            };
             let a::Reply::Submitted { execution, .. } = next.scheduler_apply(a::Event::Submit { operation: a::OperationId(operation), request })? else { return Err(Error::Conflict); };
             next.metadata.operations.insert(operation, Operation { execution, action, until, publication: None, root: None, cached: false, payload: None });
             let lookup = next.scheduler.view().effects.iter().find_map(|effect| matches!(effect.kind, a::EffectKind::Lookup { execution: id, .. } if id == execution).then_some(effect.id));
@@ -573,6 +611,18 @@ impl PublicationAuthority {
         {
             return Err(Error::Bounds);
         }
+        if let Some(real) = &self.metadata.real {
+            let algorithm = real.actions[&candidate.action].result_algorithm();
+            if candidate.result.algorithm != algorithm
+                || candidate
+                    .closure
+                    .iter()
+                    .any(|member| member.object.algorithm != algorithm)
+                || matches!(candidate.publisher, Publisher::Client { .. })
+            {
+                return Err(Error::Unauthorized);
+            }
+        }
         let payload = candidate
             .response
             .require_response()
@@ -637,7 +687,7 @@ impl PublicationAuthority {
                 .find(|row| row.id == execution)
                 .ok_or(Error::Unauthorized)?
                 .request;
-            if request.action.instance != candidate.action {
+            if !self.request_matches_action(&candidate.action, request) {
                 return Err(Error::Unauthorized);
             }
         }
@@ -959,7 +1009,7 @@ impl PublicationAuthority {
                     let actual_attempt = before.attempts.iter().find(|row| row.id == attempt).ok_or(Error::Unauthorized)?;
                     if actual_attempt.execution != execution { return Err(Error::Unauthorized); }
                     let request = &before.executions.iter().find(|row| row.id == execution).ok_or(Error::Unauthorized)?.request;
-                    if request.action.instance != stage.candidate.action { return Err(Error::Unauthorized); }
+                    if !next.request_matches_action(&stage.candidate.action, request) { return Err(Error::Unauthorized); }
                     let eligible = !request.do_not_cache && stage.candidate.response.exit_code == 0 && stage.candidate.response.error.is_none();
                     next.scheduler_apply(a::Event::Complete { attempt, worker, incarnation, result: stage.candidate.response.clone() })?;
                     next.metadata.credits.get_mut(&execution.0).ok_or(Error::Corrupt)?.physical_remaining = 0;
@@ -1065,7 +1115,7 @@ impl PublicationAuthority {
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, Error> {
         self.validate()?;
         let snapshot = Snapshot {
-            version: 1,
+            version: if self.metadata.real.is_some() { 2 } else { 1 },
             scheduler: self.scheduler.snapshot().map_err(|_| Error::Corrupt)?,
             retention: self.retention.snapshot().map_err(|_| Error::Corrupt)?,
             metadata: self.metadata.clone(),
@@ -1081,7 +1131,12 @@ impl PublicationAuthority {
             return Err(Error::Bounds);
         }
         let snapshot: Snapshot = serde_json::from_slice(bytes).map_err(|_| Error::Corrupt)?;
-        if snapshot.version != 1
+        if snapshot.version
+            != if snapshot.metadata.real.is_some() {
+                2
+            } else {
+                1
+            }
             || serde_json::to_vec(&snapshot).map_err(|_| Error::Corrupt)? != bytes
         {
             return Err(Error::Corrupt);

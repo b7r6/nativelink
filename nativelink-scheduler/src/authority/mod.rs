@@ -1533,6 +1533,16 @@ impl State {
         self.limits.max_payload_bytes
     }
 
+    /// Original request retained for an operation, including a joined caller's
+    /// payload. Outer authorities must validate their own trusted context against
+    /// each request rather than only the execution's representative request.
+    #[must_use]
+    pub fn operation_request(&self, operation: OperationId) -> Option<&Request> {
+        self.operations
+            .get(&operation)
+            .map(|row| &row.original_request)
+    }
+
     /// Recover the original dispatch identity even after its outbox was consumed.
     /// The association lasts until the entire execution can be safely retired.
     #[must_use]

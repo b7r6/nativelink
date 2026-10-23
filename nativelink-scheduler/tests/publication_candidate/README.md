@@ -89,3 +89,9 @@ actual authority check at acceptance. This stricter Stage admission follows from
 the candidate's per-execution row credit; it does not claim equivalence to the
 reference's entire Stage alphabet with a global stage budget. Preview cloning and
 snapshot serialization costs are test-only; production performance is unqualified.
+
+The additive [real-request constructor](../../design/categorical/publication-real-request.md)
+retains the captured REAPI request and full trusted action binding without
+changing these frozen synthetic scenarios. Each joined operation is checked
+through its own original request. Real-mode direct publication is currently
+refused; provider readiness remains separately qualified.

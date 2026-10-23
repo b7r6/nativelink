@@ -50,9 +50,12 @@ and recovery are compared under that explicit equality. Broader lease policies
 are not established by these cases.
 
 Both digest variants qualify immutable object hashing and physical identity.
-The composition currently puts the opaque qualified action string into a fixed
-SHA256 placeholder scheduler request. This is not real BLAKE3 request
-normalization or a proof that wire requests bind every qualified-key component.
+The frozen comparison puts its opaque qualified action string into a fixed
+SHA256 placeholder scheduler request. The separately qualified
+[real-request extension](publication-real-request.md) preserves the original
+REAPI payload and complete action binding in that same scheduler State. Its
+explicit trusted principal/configuration context also checks each joined
+operation's original request. These are distinct test alphabets.
 Physical readiness and complete typed closure are trusted fixture observations
 in this adapter. No provider calls or materialization path are implied.
 
@@ -69,16 +72,20 @@ Neither establishes a real M4-to-M6 activation boundary.
 
 The [retained inventory adapter](../../tests/activation_inventory/README.md) now
 reads actual State, retains its exact snapshot and captured bytes, and validates
-that its projected public fields still match that source. Sixteen Cargo/Bazel
-cases cover distinct operation terminals, accepted history, explicit identity
+that its projected public fields still match that source. The original sixteen cases
+cover distinct operation terminals, accepted history, explicit identity
 bindings, physical preparation, and snapshot/suffix cuts; twelve compiled faults
-are detected. Result and history roles in one physical CAS cannot acquire
+are detected. An additive eighteen-case correction also captures each operation's
+original request and refuses a joined caller outside the trusted execution
+context. Its three new compiled faults are detected. Result and history roles in one physical CAS cannot acquire
 different namespace identities, and an external principal cannot contradict the
 captured request. [Receipts](evidence/activation-inventory/manifest.json) retain
-the original sources, failures and exact limits. This inventories retained owners;
+the original sources, failures and exact limits; the
+[operation-binding correction](evidence/activation-inventory-operation-binding/manifest.json)
+retains its own reproduced failure and receipts. This inventories retained owners;
 it does not execute a durable activation or convert unfinished executions.
 
-Remaining promotion work includes actual request normalization, active accepted
+Remaining promotion work includes production request routing, active accepted
 history, terminals without an ActionResult, resource failures, cancellation and expiry,
 renewed protection, physical collection, durable publication sections and suffix
 replay, and production role construction. Conservative finite admission still

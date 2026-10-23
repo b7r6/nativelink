@@ -85,3 +85,19 @@ APIs, accepted-history read methods, and the production physical-closure reader.
 The memory-failure transition was inspected after a fixture with a nonzero grant
 correctly retried instead of becoming final; the fixture was corrected to express
 missing growth evidence. This candidate makes no new independent-reference claim.
+
+## Original requests on joined operations
+
+The lossless source now includes each operation's own original request, obtained
+through the read-only State query. The snapshot correspondence check covers this
+map as well. Projection checks that original request's captured principal and
+complete qualified action against the execution's explicit authority binding.
+A representative execution request cannot supply another caller's principal.
+
+The experimental State compatibility predicate can join requests from different
+captured principals when there is no invocation scope. External domain routing
+belongs to the outer authority. A regression drives that valid State directly,
+retains both original requests, and refuses the foreign operation's projection.
+A positive case preserves different priority, queue time and lookup policy on
+joined requests without changing their shared action identity. The original
+16-case evidence archive remains unchanged; this correction has separate evidence.

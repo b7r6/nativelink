@@ -423,6 +423,13 @@ and new real-request adapter must also validate each joined operation's original
 request. That correction and a real-to-synthetic snapshot-mode refusal are being
 qualified separately; these workspace totals do not include those later changes.
 
+The [real-request correction](publication-real-request.md) now passes its
+integrated Bazel checks: 30 candidate, nine physical, six independent-comparison,
+18 corrected inventory, and 11 request cases. Every joined operation retains its
+own captured request and trusted principal binding; removing real bindings cannot
+downgrade captured requests into synthetic mode. The original failing snapshots
+and independent review are preserved with the separate correction receipts.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

@@ -22,6 +22,7 @@ impl PublicationAuthority {
             .check_invariants()
             .map_err(|_| Error::Corrupt)?;
         self.retention.snapshot().map_err(|_| Error::Corrupt)?;
+        self.validate_bindings().map_err(|_| Error::Corrupt)?;
         let scheduler = self.scheduler.view();
         let retention = self.retention.view();
         let meta = &self.metadata;
@@ -125,11 +126,12 @@ impl PublicationAuthority {
             }
         }
         for execution in &scheduler.executions {
-            if !meta
+            if meta
                 .actions
-                .contains_key(&execution.request.action.instance)
-                || execution.request.do_not_cache
-                    != meta.actions[&execution.request.action.instance]
+                .keys()
+                .filter(|label| self.request_matches_action(label, &execution.request))
+                .count()
+                != 1
                 || (execution.terminal.is_none() && !meta.credits.contains_key(&execution.id.0))
             {
                 return Err(Error::Corrupt);
@@ -325,7 +327,7 @@ impl PublicationAuthority {
                         .iter()
                         .find(|row| row.id == attempt)
                         .ok_or(Error::Corrupt)?;
-                    if entry.request.action.instance != candidate.action
+                    if !self.request_matches_action(&candidate.action, &entry.request)
                         || entry.terminal.as_ref()
                             != Some(&a::TerminalResult::Completed(candidate.response.clone()))
                         || receipt.execution != execution
@@ -418,7 +420,11 @@ impl PublicationAuthority {
                 .ok_or(Error::Corrupt)?;
             if actual.execution != operation.execution
                 || operation.until.saturating_sub(scheduler.now) > LEASE_TICKS
-                || execution.request.action.instance != operation.action
+                || !self.request_matches_action(&operation.action, &execution.request)
+                || self
+                    .scheduler
+                    .operation_request(a::OperationId(*id))
+                    .is_none_or(|request| !self.request_matches_action(&operation.action, request))
             {
                 return Err(Error::Corrupt);
             }

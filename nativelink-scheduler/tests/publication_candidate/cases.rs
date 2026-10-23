@@ -748,3 +748,6 @@ fn snapshot_rejects_preparation_without_bounded_fences_and_sufficient_interval()
 
 #[path = "capacity.rs"]
 mod capacity;
+
+#[path = "real_request_tests.rs"]
+mod real_request_tests;

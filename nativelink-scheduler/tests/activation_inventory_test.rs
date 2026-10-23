@@ -30,7 +30,7 @@ use adapter::{
 };
 use nativelink_proto::build::bazel::remote::execution::v2::{
     Action, ActionResult, Command, Digest, Directory, DirectoryNode, ExecuteRequest,
-    ExecuteResponse, FileNode, OutputDirectory, OutputFile, Tree,
+    ExecuteResponse, ExecutionPolicy, FileNode, OutputDirectory, OutputFile, Tree,
 };
 use nativelink_proto::google::rpc::Status;
 use nativelink_scheduler::authority::accepted_history::HistoryOutcome;
@@ -1215,7 +1215,7 @@ fn projection_rejects_changed_inventory_fields_against_the_real_state_snapshot()
     h.complete(&assets.response);
     let source = SourceInventory::capture(&h.state).unwrap();
     let (context, reads) = inputs(&source, &assets);
-    for mutation in 0..4 {
+    for mutation in 0..5 {
         let mut changed = source.clone();
         match mutation {
             0 => changed.view.operations[0].version += 1,
@@ -1225,6 +1225,9 @@ fn projection_rejects_changed_inventory_fields_against_the_real_state_snapshot()
             }
             3 => {
                 changed.view.effects.clear();
+            }
+            4 => {
+                changed.operation_requests.clear();
             }
             _ => unreachable!(),
         }
@@ -1351,4 +1354,111 @@ fn captured_request_principal_cannot_be_overridden_by_external_domain_binding() 
             .contains("captured principal")
     );
     assert_eq!(source.snapshot, h.state.snapshot().unwrap());
+}
+
+fn captured_request(principal: &str) -> Request {
+    let algorithm = Algorithm::Sha256;
+    let command = Command {
+        arguments: vec!["/bin/true".into()],
+        ..Command::default()
+    }
+    .encode_to_vec();
+    let action = Action {
+        command_digest: Some(digest(id(&command, algorithm))),
+        input_root_digest: Some(digest(id(&[], algorithm))),
+        ..Action::default()
+    }
+    .encode_to_vec();
+    let execute = ExecuteRequest {
+        instance_name: "joined/original/request".into(),
+        action_digest: Some(digest(id(&action, algorithm))),
+        digest_function: 1,
+        skip_cache_lookup: true,
+        ..ExecuteRequest::default()
+    };
+    Request::from_payload(
+        RequestPayload::capture(
+            &execute,
+            None,
+            &Timestamp::default(),
+            principal,
+            &action,
+            &command,
+            64 * 1024,
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn joined_operation_original_principal_cannot_inherit_execution_authority() {
+    let assets = Assets::new(Algorithm::Sha256, false);
+    let original = captured_request("explicit authenticated principal/domain");
+    let foreign = captured_request("foreign retained operation principal");
+    assert_eq!(original.action, foreign.action);
+    assert_eq!(original.execution_scope, None);
+    assert_eq!(foreign.execution_scope, None);
+    let mut h = Harness::new(true);
+    let (execution, _) = h.submit(original.clone());
+    let (joined, operation) = h.submit(foreign.clone());
+    assert_eq!(execution, joined);
+    h.complete(&assets.response);
+    let source = SourceInventory::capture(&h.state).unwrap();
+    assert_eq!(source.view.executions[0].request, original);
+    let snapshot: serde_json::Value = serde_json::from_slice(&source.snapshot).unwrap();
+    assert_eq!(
+        snapshot["state"]["operations"][operation.0.to_string()]["original_request"],
+        serde_json::to_value(&foreign).unwrap()
+    );
+    assert_eq!(source.operation_requests[&operation], foreign);
+    let (context, reads) = inputs(&source, &assets);
+    assert!(
+        adapter::project(&source, &context, &reads)
+            .unwrap_err()
+            .contains("captured principal")
+    );
+    assert_eq!(
+        SourceInventory::capture(&State::restore(&source.snapshot).unwrap()).unwrap(),
+        source
+    );
+    assert_eq!(source.snapshot, h.state.snapshot().unwrap());
+}
+
+#[test]
+fn joined_operation_keeps_its_original_priority_queue_time_and_lookup_policy() {
+    let assets = Assets::new(Algorithm::Sha256, false);
+    let original = captured_request("explicit authenticated principal/domain");
+    let payload = original.require_payload().unwrap();
+    let mut facts = payload.dispatch_facts().unwrap();
+    facts.execute_request.skip_cache_lookup = false;
+    facts.execute_request.execution_policy = Some(ExecutionPolicy { priority: -9 });
+    facts.queued_timestamp.seconds = 123;
+    let changed = Request::from_payload(
+        RequestPayload::capture(
+            &facts.execute_request,
+            facts.request_metadata.as_ref(),
+            &facts.queued_timestamp,
+            payload.principal(),
+            payload.action_bytes(),
+            payload.command_bytes(),
+            64 * 1024,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(original, changed);
+    let mut h = Harness::new(true);
+    let (execution, first) = h.submit(original.clone());
+    let (joined, second) = h.submit(changed.clone());
+    assert_eq!(execution, joined);
+    h.complete(&assets.response);
+    let (source, legacy) = qualify(&h, &assets);
+    assert_eq!(source.operation_requests[&first], original);
+    assert_eq!(source.operation_requests[&second], changed);
+    assert_eq!(source.view.executions[0].request, original);
+    assert_eq!(
+        legacy.operations[&first.0].value,
+        legacy.operations[&second.0].value
+    );
 }
