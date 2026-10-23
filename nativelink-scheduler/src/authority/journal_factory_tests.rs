@@ -588,3 +588,34 @@ async fn singleton_reopen_refuses_changed_limits_before_startup() {
     assert_eq!(logical_contents(&journal.database), before);
     assert_eq!(journal.read_applied().await.unwrap().1.view().now, 17);
 }
+
+#[nativelink_test]
+async fn matching_nondefault_limits_reopen_including_disabled_admission() {
+    for limits in [
+        Limits {
+            max_executions: 0,
+            max_operations: 0,
+            max_workers: 0,
+            max_effects: 0,
+            max_payload_bytes: 0,
+        },
+        Limits {
+            max_executions: 7,
+            max_operations: 19,
+            max_workers: 3,
+            max_effects: 101,
+            max_payload_bytes: 12_345,
+        },
+    ] {
+        let fixture = LimitsFixture::new();
+        let mut journal = fixture.reopen(limits, profile(), false).await.unwrap();
+        journal.build_snapshot().await.unwrap();
+        let before = logical_contents(&journal.database);
+        drop(journal);
+        for factory in [false, true] {
+            let journal = fixture.reopen(limits, profile(), factory).await.unwrap();
+            assert_eq!(journal.read_applied().await.unwrap().1.limits, limits);
+            assert_eq!(logical_contents(&journal.database), before);
+        }
+    }
+}
