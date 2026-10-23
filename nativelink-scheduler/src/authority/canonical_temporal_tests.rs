@@ -42,6 +42,119 @@ const FINITE: u64 = 315_576_000_001;
 const CUTOFF: u64 = 18_446_743_758_133_551_613;
 const BASE: u64 = 17;
 
+type TemporalPause = (
+    Box<dyn FnOnce() + Send>,
+    tokio::sync::oneshot::Receiver<()>,
+    Arc<(Mutex<bool>, Condvar)>,
+    tokio::sync::oneshot::Receiver<bool>,
+);
+
+fn temporal_pause() -> TemporalPause {
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let held = gate.clone();
+    let (reached, wait) = tokio::sync::oneshot::channel();
+    let (finished, done) = tokio::sync::oneshot::channel();
+    let hook = Box::new(move || {
+        reached.send(()).unwrap();
+        let (guard, timeout) = held
+            .1
+            .wait_timeout_while(
+                held.0.lock().unwrap(),
+                Duration::from_secs(10),
+                |released| !*released,
+            )
+            .unwrap();
+        finished.send(*guard && !timeout.timed_out()).unwrap();
+    });
+    (hook, wait, gate, done)
+}
+
+#[nativelink_test]
+async fn temporal_cancelled_owner_waiter_retains_namespace_until_read_finishes() {
+    for create in [true, false] {
+        let fixture = if create {
+            Fixture::new()
+        } else {
+            seeded(|epoch| empty(epoch, BASE)).await
+        };
+        let token = fixture.token(create);
+        let (pause, reached, gate, done) = temporal_pause();
+        let hooks = Hooks {
+            during_temporal: Some(pause),
+            ..Hooks::default()
+        };
+        let task = background_spawn!(
+            "canonical_temporal_cancel_owner",
+            PreparedCanonicalOwner::open(token, create, hooks)
+        );
+        tokio::time::timeout(Duration::from_secs(5), reached)
+            .await
+            .unwrap()
+            .unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        fixture.locked();
+        *gate.0.lock().unwrap() = true;
+        gate.1.notify_one();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), done)
+                .await
+                .unwrap()
+                .unwrap()
+        );
+        fixture.released().await;
+    }
+}
+
+#[nativelink_test]
+async fn temporal_cancelled_audit_retains_owned_journal_queue() {
+    let fixture = Fixture::new();
+    let owner = PreparedCanonicalOwner::prepare_cold(fixture.token(true))
+        .await
+        .unwrap();
+    // This test alone creates an extra private Journal alias. The public owner
+    // exposes no audit or Journal clone; releasing it here does not release the
+    // separately owned audit. This is a custody oracle, not a public release
+    // acknowledgement failure.
+    let journal = owner.journal.clone();
+    let queue = journal.queue.clone();
+    let domain = journal.domain;
+    let contract = journal.canonical_contract.unwrap();
+    let (pause, reached, gate, done) = temporal_pause();
+    let task = background_spawn!("canonical_temporal_cancel_queue", async move {
+        super::super::temporal::audit(
+            &journal,
+            domain,
+            contract,
+            CanonicalBootstrap::Preparing,
+            Some(pause),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), reached)
+        .await
+        .unwrap()
+        .unwrap();
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    assert!(
+        queue.try_lock().is_err(),
+        "cancelled audit released Journal.io serialization"
+    );
+    owner.release().await.unwrap();
+    fixture.locked();
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_one();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), done)
+            .await
+            .unwrap()
+            .unwrap()
+    );
+    fixture.released().await;
+    assert!(queue.try_lock().is_ok());
+}
+
 type Stored = (Vec<(String, Vec<u8>)>, Vec<(u64, Vec<u8>)>);
 
 fn digest(bytes: &[u8]) -> Digest {
@@ -355,7 +468,7 @@ async fn temporal_snapshot_cutoff_plus_one_refuses_with_safe_applied() {
     });
     refuses(
         &fixture,
-        "unsafe retained snapshot behind safe applied state",
+        "unsafe retained snapshot beside safe applied state at the same index",
     )
     .await;
 }
@@ -475,10 +588,23 @@ async fn temporal_synthetic_execution_payload_refuses() {
 #[nativelink_test]
 async fn temporal_synthetic_original_operation_payload_refuses() {
     let fixture = seeded(|epoch| {
-        let mut state = queued(epoch, BASE, finite(5, 0));
+        let captured = finite(5, 0);
+        let mut state = queued(epoch, BASE, captured.clone());
+        assert!(matches!(
+            step(
+                &mut state,
+                Event::Submit {
+                    operation: OperationId(2),
+                    request: captured,
+                },
+            ),
+            Reply::Submitted { .. }
+        ));
+        // REQUEST1 still has the first handle exactly matching execution.
+        // The second compatible handle independently loses captured provenance.
         state
             .operations
-            .get_mut(&OperationId(1))
+            .get_mut(&OperationId(2))
             .unwrap()
             .original_request
             .payload = None;

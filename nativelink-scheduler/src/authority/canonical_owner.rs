@@ -27,6 +27,9 @@ use super::{
     JournalDatabase, Limits, META, RecoveryExpectation, decode, failure, validate_metadata,
 };
 
+#[path = "canonical_temporal.rs"]
+mod temporal;
+
 // Versioned finite preparation policy; independent of changing generic defaults.
 const LIMITS: Limits = Limits {
     max_executions: 64,
@@ -160,6 +163,7 @@ impl PreparedCanonicalOwner {
         #[cfg(test)]
         let tests::Hooks {
             after_open,
+            during_temporal,
             before_current,
             after_commit,
             after_current,
@@ -196,6 +200,16 @@ impl PreparedCanonicalOwner {
                     None => JournalDatabase::existing(database),
                 })
             },
+        )
+        .await
+        .map_err(|_| OwnerError::Journal)?;
+        temporal::audit(
+            &journal,
+            domain,
+            contract,
+            phase,
+            #[cfg(test)]
+            during_temporal,
         )
         .await
         .map_err(|_| OwnerError::Journal)?;

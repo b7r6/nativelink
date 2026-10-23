@@ -41,6 +41,7 @@ type BeforeCurrent = Box<dyn FnOnce(&Database) + Send>;
 #[derive(Default)]
 pub(super) struct Hooks {
     pub after_open: Option<Box<dyn FnOnce() + Send>>,
+    pub during_temporal: Option<Box<dyn FnOnce() + Send>>,
     pub before_current: Option<BeforeCurrent>,
     pub after_commit: Option<Box<dyn FnOnce() + Send>>,
     pub after_current: Option<Box<dyn FnOnce() + Send>>,
