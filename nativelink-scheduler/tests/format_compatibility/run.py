@@ -178,7 +178,7 @@ def run(args):
             with manifest.open("a") as stream:
                 stream.write(f'\n[[bin]]\nname = "{binary_name}"\npath = "{binary_path}"\n')
                 if role == "upgraded":
-                    stream.write('\n[features]\ncompatibility-receipt-retirement = []\n')
+                    stream.write('\n[features]\ncompatibility-receipt-retirement = []\ncompatibility-accepted-history = []\n')
             report[f"{role}_compiled_sources_sha256"] = {
                 path: sha256(source / path)
                 for path in relevant_sources(revision)
@@ -189,8 +189,14 @@ def run(args):
                 "cargo", "build", "--locked", "--profile", "smol",
                 "-p", "nativelink-scheduler", "--bin", binary_name,
             ]
-            if role == "upgraded" and args.writer_mode != "direct":
-                build += ["--features", "compatibility-receipt-retirement"]
+            if role == "upgraded":
+                build_features = []
+                if args.writer_mode in {"receipt", "both", "all"}:
+                    build_features.append("compatibility-receipt-retirement")
+                if args.writer_mode in {"history", "all"}:
+                    build_features.append("compatibility-accepted-history")
+                if build_features:
+                    build += ["--features", ",".join(build_features)]
             command(build, source, f"{role}-build")
             binary = output / binary_name
             shutil.copy2(role_target / "smol" / binary_name, binary)
@@ -200,10 +206,14 @@ def run(args):
         artifacts = output / "artifacts"
         command([binaries["upgraded"], artifacts, args.writer_mode], output, "upgraded-produce", timeout=120)
         produced = json.loads((artifacts / "artifacts.json").read_text())
-        expected_features = {"direct": [1], "receipt": [2], "both": [1, 2]}[args.writer_mode]
+        expected_features = {"direct": [1], "receipt": [2], "both": [1, 2], "history": [3], "all": [1, 2, 3]}[args.writer_mode]
         if produced["writer_mode"] != args.writer_mode or produced["activated_features"] != expected_features:
             raise AssertionError("producer activated a different feature set")
         report["activated_features"] = produced["activated_features"]
+        expected_core_version = 7 if 3 in expected_features else (6 if 2 in expected_features else 5)
+        if produced["activated_core_version"] != expected_core_version:
+            raise AssertionError("producer activated a different core component version")
+        report["activated_core_version"] = produced["activated_core_version"]
         report["activated_state_sha256"] = hashlib.sha256(produced["activated_state_json"].encode()).hexdigest()
         artifact_hashes = {name: sha256(artifacts / name) for name in produced["artifacts"]}
         report["artifact_sha256"] = artifact_hashes
@@ -212,7 +222,7 @@ def run(args):
         report["charged_reservations"] = produced["charged_reservations"]
         activated_error = (
             "reader cannot recover the activated authority format"
-            if args.writer_mode == "receipt"
+            if args.writer_mode in {"receipt", "history"}
             else "data did not match any variant of untagged enum SchedulerSection"
         )
         cases = [
@@ -293,7 +303,7 @@ def main():
     run_parser = commands.add_parser("run", help="compile frozen Base and upgraded writer independently")
     run_parser.add_argument("--pin", type=Path, default=HERE / "frozen-base.json")
     run_parser.add_argument("--writer-revision")
-    run_parser.add_argument("--writer-mode", choices=["direct", "receipt", "both"], default="direct")
+    run_parser.add_argument("--writer-mode", choices=["direct", "receipt", "both", "history", "all"], default="direct")
     run_parser.add_argument("--output", type=Path, required=True)
     run_parser.add_argument("--cargo-target-dir", type=Path)
     args = parser.parse_args()

@@ -63,11 +63,21 @@ fn producer_reader(mode: &str) -> Result<ReaderCapabilities, &'static str> {
                 Err("receipt mode requires a receipt-capable writer build")
             }
         }
-        _ => Err("writer mode must be direct, receipt, or both"),
+        "history" | "all" => {
+            #[cfg(feature = "compatibility-accepted-history")]
+            {
+                Ok(ReaderCapabilities::AcceptedHistory)
+            }
+            #[cfg(not(feature = "compatibility-accepted-history"))]
+            {
+                Err("history mode requires a history-capable writer build")
+            }
+        }
+        _ => Err("writer mode must be direct, receipt, both, history, or all"),
     }
 }
 
-fn activated_state(state: &State, receipts: bool) -> Result<State, String> {
+fn activated_receipt_state(state: &State, receipts: bool) -> Result<State, String> {
     #[cfg(feature = "compatibility-receipt-retirement")]
     {
         let mut expected = state.clone();
@@ -82,6 +92,25 @@ fn activated_state(state: &State, receipts: bool) -> Result<State, String> {
             return Err("receipt mode requires a receipt-capable writer build".into());
         }
         Ok(state.clone())
+    }
+}
+
+fn activated_state(state: &State, features: &BTreeSet<u16>) -> Result<State, String> {
+    let expected = activated_receipt_state(state, features.contains(&2))?;
+    if !features.contains(&3) {
+        return Ok(expected);
+    }
+    #[cfg(feature = "compatibility-accepted-history")]
+    {
+        let mut expected = expected;
+        expected.enable_accepted_history(
+            nativelink_scheduler::authority::format::accepted_history_namespace(DOMAIN),
+        )?;
+        Ok(expected)
+    }
+    #[cfg(not(feature = "compatibility-accepted-history"))]
+    {
+        Err("history mode requires a history-capable writer build".into())
     }
 }
 
@@ -138,7 +167,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "direct" => BTreeSet::from([DIRECT_SCHEDULER]),
         "receipt" => BTreeSet::from([2]),
         "both" => BTreeSet::from([DIRECT_SCHEDULER, 2]),
-        _ => return Err("writer mode must be direct, receipt, or both".into()),
+        "history" => BTreeSet::from([3]),
+        "all" => BTreeSet::from([DIRECT_SCHEDULER, 2, 3]),
+        _ => return Err("writer mode must be direct, receipt, both, history, or all".into()),
     };
     let reader = producer_reader(&mode)?;
     assert!(
@@ -327,9 +358,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
     journal.apply([activation]).await?;
     assert_eq!(journal.active_format().await?.feature_epoch, 1);
-    let expected_activated = activated_state(&expected, mode != "direct")?;
+    let expected_activated = activated_state(&expected, &features)?;
     assert_eq!(journal.read_applied().await?.1, expected_activated);
     let activated_state_json = String::from_utf8(expected_activated.snapshot()?)?;
+    let activated_core_version = if features.contains(&3) {
+        7
+    } else if features.contains(&2) {
+        6
+    } else {
+        5
+    };
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&activated_state_json)?["version"],
+        activated_core_version
+    );
     let activated_snapshot = journal.build_snapshot().await?;
     std::fs::write(
         directory.join("activated.snapshot.json"),
@@ -345,6 +387,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "activated_state_json": activated_state_json,
         "writer_mode": mode,
         "activated_features": features,
+        "activated_core_version": activated_core_version,
         "pending_effects": view.effects.len(),
         "charged_reservations": 2,
         "artifacts": ["preactivation.redb", "preactivation.snapshot.json", "uncommitted-activation.redb", "committed-before-apply.redb", "activated.redb", "activated.snapshot.json"],

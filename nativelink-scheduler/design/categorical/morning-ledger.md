@@ -325,9 +325,21 @@ independent review exposed two concurrency races that are now regression cases.
 Nine compiled format faults are detected. Integrated RPC delivery now checks both digest algorithms through a verifying
 CAS, exact retry after lost acknowledgement, failure, stale exclusion, and cache
 hits. Six compiled delivery faults are detected. Ordinary storage effects and
-history share four slots with rotating selection. The frozen older-binary
-extension remains a separate qualification step. Production factories and
+history share four slots with rotating selection. The frozen Base reader now passes seven boundaries each against the original
+direct writer, the new history writer, and the writer activating all three
+features. Base sources and its binary hash remain unchanged. Production factories and
 worker history configuration are unchanged, so this does not close M4a.2. [Design and receipts](accepted-history.md) record exact scope.
+
+An independent finite M4-to-M6 activation reference is now frozen with fifteen
+cases and twelve detected semantic faults. It requires explicit disposition of
+retained old intents, original acceptance provenance, and verified protection
+for every retained result/history root. It separately records opaque old-domain
+exposure: an empty outbox cannot prove that forgotten duplicate requests stopped.
+Missing closure evidence refuses activation; a quarantine label does not waive
+protection. [Reference contract](../../tests/publication_activation/README.md)
+and [receipts](evidence/publication-activation-reference/manifest.json) state
+its scenario-owned evidence assumptions. No candidate activation implementation
+or production M6 switch follows from this reference alone.
 
 ## Decisions made provisionally
 

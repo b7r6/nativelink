@@ -129,3 +129,37 @@ deployed transport, authenticate remote capabilities, fence old processes, or
 replace a production admission and membership protocol. Compiler versions and
 locked dependency sources are recorded; the fixture is not a hermetic toolchain or
 a proof of bit-for-bit reproducible binaries across different hosts.
+
+## Accepted-history writer modes
+
+A history-capable writer revision can use `--writer-mode history` for feature 3
+with the string scheduler section, or `--writer-mode all` for features 1, 2,
+and 3 with the direct-object section. Both modes use the same frozen Base pin,
+reader source, and decoder overlay as the earlier modes.
+
+```sh
+python3 nativelink-scheduler/tests/format_compatibility/run.py run \
+  --writer-revision <history-commit> --writer-mode history \
+  --output /tmp/nativelink-history-base-evidence \
+  --cargo-target-dir /tmp/nativelink-frozen-base-target
+```
+
+Use a separate output directory for `all`. The fixture-only history build flag
+is independent of the receipt build flag, so `history` exercises feature 3
+without feature 2. The default `direct` mode still compiles against the original
+pinned writer revision. The producer derives the history namespace from its
+fixed authority domain and enables expected components according to the exact
+selected feature set.
+
+Every mode checks the complete core-5 state before activation. The report records
+the expected activated core version: 5 for `direct`, 6 for `receipt` and `both`,
+and 7 for `history` and `all`. History activation is prospective: the accepted
+terminal result produced before activation remains present, without creating a
+new history record for that earlier result.
+
+All seven artifact cases remain unchanged. For `history`, the frozen reader
+rejects the unsupported active feature while the outer scheduler section stays
+a string. For `all`, it also lacks the direct-object decoder. Both preserve the
+known unresolved control vocabulary, refuse unresolved Base admission, and
+reject a committed activation suffix even when the applied snapshot is older.
+Neither unsupported mode may reach a vote read or Raft startup.
