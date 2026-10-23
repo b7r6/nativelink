@@ -36,7 +36,7 @@ static FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 #[path = "capability_tests.rs"]
 mod capabilities;
 
-pub struct Fixture {
+pub(super) struct Fixture {
     pub(super) directory: PathBuf,
     pub(super) manifest: Manifest,
     _guard: MutexGuard<'static, ()>,
