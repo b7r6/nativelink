@@ -73,6 +73,9 @@ mod limits;
 #[path = "authority_listener/cas_admission.rs"]
 mod cas_admission;
 
+#[path = "authority_listener/bytestream_identity.rs"]
+mod bytestream_identity;
+
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {

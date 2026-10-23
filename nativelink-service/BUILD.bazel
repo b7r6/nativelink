@@ -93,6 +93,8 @@ rust_test_suite(
         "tests/worker_api_server_test.rs",
     ],
     compile_data = glob(["tests/data/**"]) + [
+        "tests/authority_listener/bytestream_identity.rs",
+        "tests/authority_listener/bytestream_identity/upstream.rs",
         "tests/authority_listener/cas_admission.rs",
         "tests/authority_listener/limits.rs",
         "tests/authority_listener/operations.rs",
