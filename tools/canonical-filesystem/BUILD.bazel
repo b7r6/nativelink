@@ -48,6 +48,7 @@ rust_test(
         "//tools/canonical-config:fixtures/canonical.json",
     ],
     crate = ":nativelink-canonical-filesystem-redb",
+    crate_features = ["redb"],
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
 )
