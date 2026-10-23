@@ -1,0 +1,25 @@
+{
+  "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=4 //nativelink-scheduler:publication_candidate_test //nativelink-scheduler:publication_differential_test //nativelink-scheduler:publication_physical_test //nativelink-scheduler:terminal_outcome_differential_test",
+  "executed_targets": 4,
+  "files": {
+    "bazel.log.gz": {
+      "sha256": "7e3e99af8e1c6b30abcdad8028cb91c8bfa8816a9d28079c855aa84ca6f4c35a",
+      "uncompressed_sha256": "c182c4228089a5e8f8309c1efa991f38d02fe739b29dc62eecc7c1c53522d612"
+    },
+    "before.json.gz": {
+      "sha256": "e10b481ad945b8bbb9f4e04e7d5065e0ee3d44ec8df5269f4a8076d204bb5014",
+      "uncompressed_sha256": "bebf0d63e42a4b7e33e4aebe4d767602e0460361c77eec62da28ed9071e073d2"
+    },
+    "hooks.log.gz": {
+      "sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    }
+  },
+  "head": "52b0cb22ce8432e0361c99ce0bed97c678bba7b3",
+  "hooks": "All applicable hooks passed using explicitly pinned current-source generated config; frozen evidence excludes preserved.",
+  "passing_targets": 4,
+  "schema_version": 1,
+  "scope": "Four affected integrated Bazel targets at candidate freeze; does not include new prepared-memory independent reference or new comparison.",
+  "source_count": 141,
+  "sources_unchanged": true
+}

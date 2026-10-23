@@ -652,6 +652,20 @@ exclude downtime, but integer rounding and stale samples can expire requested
 durations early. Fresh sampling, deadline comparison, overflow and bootstrap
 compatibility need explicit qualification. The proposal changes no runtime clock.
 
+The [prepared memory-report candidate](publication-prepared-memory.md) now applies
+actual MemoryFailure to a prepared result graph. Retry preserves staging and write
+obligations; final failure protects only the operations receiving that result and
+never changes the AC head. Its 72-case target and strict Clippy pass. The
+[candidate receipt](evidence/publication-prepared-memory-candidate/manifest.json)
+records the source and test freeze before the new independent reference was read.
+All four affected integrated Bazel targets executed and passed; their
+[separate receipt](evidence/publication-prepared-memory-integration/manifest.json)
+pins 141 unchanged scheduler source/build inputs.
+The [independent byte review](prepared-memory-bound-review.md) confirms the
+2,026,948-byte generated snapshot bound under the unchanged 2 MiB cap.
+Independent comparison and compiled faults remain separate qualification work;
+the private candidate adds no production routing or accepted-history activation.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions
