@@ -1,0 +1,31 @@
+{
+  "author_commit": "dfd431063a768612ebca37c24744b56ab2930e48",
+  "integrated_commit": "b44c462bba",
+  "archive": {
+    "path": "author-evidence.tar.gz",
+    "sha256": "dd227c4a26f83be73374206958bbade7e64819b55343d322fafff229bcb9ad8c",
+    "bytes": 1158373,
+    "verified_files": 59,
+    "receipt": "receipts-sha256.json",
+    "qualification": "verification.json"
+  },
+  "source": {
+    "base_commit": "0feb725f4b67929630a138bb5a58934cec9bd71b",
+    "files": {
+      "nativelink-worker/BUILD.bazel": "552d879d59d2beac9f1956acfe4aae23f38f90824759e14db54935f5c8314cc3",
+      "nativelink-worker/src/authority_worker.rs": "673e149c7825f62836fc5bc6854fbc2bb01d02da13c70e6a2f555f5a5f9cd0ec",
+      "nativelink-worker/src/running_actions_manager.rs": "e0b6f4e8bc7f895c85efa5c18ff11233929a4e632e170f01b0c98c6d20cb1698",
+      "nativelink-worker/tests/authority_worker_test.rs": "0b3f4dd172f85bc3d5f79ee2c9b1d5a01a7877c9f268f898ff784067a4027727",
+      "nativelink-worker/tests/authority_grant/cases.rs": "df6a4afc75519f33eab97226bd752b18af9c3519fb540f88e4762199ba2a6cad",
+      "nativelink-worker/tests/running_actions_manager_test.rs": "15c4545a6c82e50e86a380aad0e3712be603924c2237f397c5e6788a3f3acb09",
+      "nativelink-scheduler/design/categorical/authority-resource-grant.md": "523366f93327d5c779105555ec6331ae1df244aaa21d3d38306ba199743a17c7"
+    }
+  },
+  "audit": {
+    "path": "pre-implementation-audit.json.gz",
+    "sha256": "117d9caf5af40228856dff15ef5198d00311d9e9fa7caacba94286655c57fbe1",
+    "uncompressed_sha256": "ed0a8c6bff0578a80f69c2f182c0b42542996a86990f3d29eec584de4b0908ae",
+    "scope": "Original read-only audit before grant repair; later implementation fixes the grant loss, not RPC classification or heuristic attribution."
+  },
+  "root_integration": "../grant-journal-integration/manifest.json"
+}

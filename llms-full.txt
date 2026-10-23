@@ -8062,6 +8062,12 @@ See [upload integrity](/how-to/stores/compose-stores#upload-integrity).
 
 [Development implementation](https://github.com/TraceMachina/nativelink/blob/b7883e35eda1e66de537db19d3a4d61df2cf5cc7/nativelink-service/src/bytestream_server.rs).
 
+A later development repair preserves the resource name's digest function in
+completed-upload status checks and streamed downloads, including Zstandard
+downloads. Omitting the digest function uses the configured default. This is
+documented separately from the released behavior in the
+[development qualification](https://github.com/TraceMachina/nativelink/blob/de4ccfa6f85399441ecb23449495f6242926cd4d/nativelink-scheduler/design/categorical/bytestream-digest-context.md).
+
 A cache-only deployment needs the first four. Adding execution adds
 `execution` and `worker_api`. The rest are opt-in.
 

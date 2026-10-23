@@ -656,8 +656,11 @@ expiry wins before the grant, repeated Running cannot extend it, and expiry does
 not release charge. Six focused cases pass; actual journal positions confirm
 one extra proposal only when the clock advances. Both
 [integrated Bazel targets](evidence/authority-running-clock-integration/manifest.json)
-executed and passed, covering all thirteen service unit and eighteen authority
-RPC cases with 231 unchanged source/build inputs. Fixed units, conservative
+executed and passed, covering thirteen service unit and twelve authority
+RPC cases with 231 unchanged source/build inputs. The RPC target filtered six
+cases assigned to separate targets; the earlier count of eighteen here was
+incorrect. Those separate targets pass in the later grant/journal integration
+below. Fixed units, conservative
 duration comparisons, overflow and bootstrap compatibility remain open; this
 repair uses the existing injected clock.
 
@@ -717,6 +720,41 @@ duplicates. The bounded domain has one execution, up to three attempts and a
 preinstalled physical catalogue; it does not qualify global physical-capacity
 admission. Neither engine changed for this comparison, and the original
 reference's failures remain preserved.
+
+The [immutable worker grant repair](authority-resource-grant.md) closes an actual
+execution mismatch: a second attempt charged for 256 MiB still enforced the
+original request's 128 MiB property. The exact typed grant now reaches the
+sampler independently of the original Action, Command, platform and environment.
+Real namespace processes pass with both digest algorithms: the 128 MiB grant is
+enforced and the 256 MiB grant lets the same allocation complete. Checked upward
+rounding and configured headroom preserve the intended ceiling; legacy disk
+diagnostics remain intact. Author qualification passes 22 recipient and 97
+manager tests, five compiled fault probes and independent review. This does not
+activate RPC memory classification, automatic retry or a hard OS memory cap.
+[Author receipts](evidence/authority-resource-grant/manifest.json) preserve both
+the original failure and a caught disk-diagnostic regression.
+
+The [ByteStream composition repair](bytestream-digest-context.md) preserves the
+resource name's digest selection in completed status lookups and deferred read
+futures. Real HTTP/2 tests reproduced both an incorrect cross-algorithm status
+hit and a BLAKE3 read returning `NotFound` after a successful upload. All 36
+ByteStream tests pass after the repair, including both wire encodings and a
+backend pause before namespace selection. Removing the compressed-read context
+alone reproduces a failure. This qualifies request context through the service,
+not physical-store durability.
+
+The [descriptor-backed journal](descriptor-journal.md) now keeps all four owned
+root locks inside its redb backend through database and transaction lifetimes.
+It refuses missing or empty reopen attempts, retains artifacts after ambiguous
+initialization, and preserves the previous journal validation. The portable
+constructor has no Linux filesystem dependency. Actual syscall-failure and
+cancellation witnesses pass; three selected compiled faults are detected.
+The [combined integration](evidence/grant-journal-integration/manifest.json)
+built the server and passed 80 scheduler unit, 22 worker recipient, 97 manager,
+and all 18 RPC cases across three targets. The journal bridge passed seven
+cases; the explicit redb target passed 35 and the default filesystem target 25.
+The receipt preserves two initial test-build failures and the correction that
+enabled redb on the Bazel test itself. No production constructor changed.
 
 ## Next work and facts for the morning
 
