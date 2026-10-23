@@ -333,13 +333,37 @@ worker history configuration are unchanged, so this does not close M4a.2. [Desig
 An independent finite M4-to-M6 activation reference is now frozen with fifteen
 cases and twelve detected semantic faults. It requires explicit disposition of
 retained old intents, original acceptance provenance, and verified protection
-for every retained result/history root. It separately records opaque old-domain
+for every result/history root in its worker-accepted terminal universe. A later
+[scope audit](publication-activation-scope.md) found that its provenance type
+cannot represent retained cache-hit terminals. Those operations and their output
+roots remain an activation blocker; the frozen files and evidence are unchanged. It separately records opaque old-domain
 exposure: an empty outbox cannot prove that forgotten duplicate requests stopped.
 Missing closure evidence refuses activation; a quarantine label does not waive
 protection. [Reference contract](../../tests/publication_activation/README.md)
 and [receipts](evidence/publication-activation-reference/manifest.json) state
 its scenario-owned evidence assumptions. No candidate activation implementation
 or production M6 switch follows from this reference alone.
+
+The shared typed-retention composition now also covers BLAKE3 through actual
+Azure SDK requests, with SHA256 objects coexisting in its catalogue. Preparation
+selects the result algorithm and rejects a required edge from another algorithm.
+The BLAKE3 provider history records 37 requests and three conditional deletes;
+three compiled algorithm faults are detected. Unknown restored algorithms still
+refuse. [Receipts](evidence/azure-blake3-retention/manifest.json) also preserve a
+flaky checkpoint test whose random identity byte was sometimes already zero;
+its corruption now always changes that byte.
+
+The accepted-history checkpoint passed the full Cargo workspace: 1,745 tests,
+zero failures, nine ignored. After the activation reference, BLAKE3 retention,
+and real-process history additions, all 153 Bazel targets pass. The first two
+Bazel attempts retain their failures: two suite timeouts, a Rust-only argument
+sent to a protobuf shell test, and the unchanged-byte corruption fixture. A
+later build caught a formatting difference before running tests. The maximum
+snapshot case now has a separate moderate-timeout target, and the worker suites
+have a moderate allowance; their assertions and internal deadlines are unchanged.
+[Workspace receipts](evidence/history-workspace/manifest.json) identify each
+source boundary and keep all attempts. Provider tests remain separate explicit
+runs; an ignored provider case is never counted as provider qualification.
 
 ## Decisions made provisionally
 

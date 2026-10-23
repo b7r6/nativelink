@@ -38,7 +38,7 @@ use azure_core::http::{Method, StatusCode};
 use nativelink_proto::build::bazel::remote::execution::v2::{
     ActionResult, Digest, Directory, FileNode, OutputDirectory, Tree,
 };
-use nativelink_store::physical_closure::VerifiedReader;
+use nativelink_store::physical_closure::{Failure as ClosureFailure, VerifiedReader};
 use nativelink_store::physical_filesystem::{
     Algorithm, DeleteReceipt, Failure, FailureKind, ObjectId, PhysicalKey, VerifiedRead,
     WriteReceipt,
@@ -172,9 +172,11 @@ fn digest(row: Row) -> Digest {
     }
 }
 
-fn output(bridge: &mut Bridge<AzureBackend>) -> ([Row; 3], [Vec<u8>; 3]) {
+fn output(bridge: &mut Bridge<AzureBackend>, algorithm: Algorithm) -> ([Row; 3], [Vec<u8>; 3]) {
     let payload = b"the existing Serving grant reads these actual Azure bytes".to_vec();
-    let file = bridge.upload(&payload, CohortId(1), false).unwrap();
+    let file = bridge
+        .upload_with_algorithm(algorithm, &payload, CohortId(1), false)
+        .unwrap();
     let tree_bytes = Tree {
         root: Some(Directory {
             files: vec![FileNode {
@@ -187,7 +189,9 @@ fn output(bridge: &mut Bridge<AzureBackend>) -> ([Row; 3], [Vec<u8>; 3]) {
         children: vec![],
     }
     .encode_to_vec();
-    let tree = bridge.upload(&tree_bytes, CohortId(1), false).unwrap();
+    let tree = bridge
+        .upload_with_algorithm(algorithm, &tree_bytes, CohortId(1), false)
+        .unwrap();
     let result_bytes = ActionResult {
         output_directories: vec![OutputDirectory {
             path: "out".into(),
@@ -198,7 +202,9 @@ fn output(bridge: &mut Bridge<AzureBackend>) -> ([Row; 3], [Vec<u8>; 3]) {
         ..ActionResult::default()
     }
     .encode_to_vec();
-    let result = bridge.upload(&result_bytes, CohortId(1), false).unwrap();
+    let result = bridge
+        .upload_with_algorithm(algorithm, &result_bytes, CohortId(1), false)
+        .unwrap();
     ([file, tree, result], [payload, tree_bytes, result_bytes])
 }
 
@@ -217,6 +223,14 @@ fn deletes(transport: &ObservedTransport) -> usize {
 }
 
 pub(super) fn qualify() {
+    qualify_algorithm(Algorithm::Sha256);
+}
+
+pub(super) fn qualify_blake3() {
+    qualify_algorithm(Algorithm::Blake3);
+}
+
+fn qualify_algorithm(algorithm: Algorithm) {
     // A plain #[test] owns the runtime. No blocking runtime entry occurs inside
     // an async task, and only its two I/O threads execute SDK futures.
     let runtime = Arc::new(FixtureRuntime::new());
@@ -233,7 +247,49 @@ pub(super) fn qualify() {
     fs::create_dir(base.path().join("authority")).unwrap();
     let checkpoint = base.path().join("authority/checkpoint");
     let mut bridge = bootstrap(base.path(), &runtime, &endpoint, &transport);
-    let (rows, bytes) = output(&mut bridge);
+    let (rows, bytes) = output(&mut bridge, algorithm);
+    for (row, payload) in rows.iter().zip(&bytes) {
+        assert_eq!(
+            row.binding().object,
+            ObjectId::for_bytes(algorithm, payload),
+            "every uploaded descriptor preserves the requested digest function"
+        );
+    }
+    let cross_algorithm_control = if algorithm == Algorithm::Blake3 {
+        // A SHA256 object with the same payload may coexist in the catalogue.
+        // REAPI Digest has no algorithm field: the result's function supplies
+        // the context for every edge, so it cannot fall back to this object.
+        let other = bridge.upload(&bytes[0], CohortId(2), false).unwrap();
+        assert_eq!(other.binding().object.algorithm, Algorithm::Sha256);
+        assert_ne!(other.key, rows[0].key);
+        let invalid_bytes = ActionResult {
+            stdout_digest: Some(digest(other)),
+            ..ActionResult::default()
+        }
+        .encode_to_vec();
+        let invalid = bridge
+            .upload_with_algorithm(algorithm, &invalid_bytes, CohortId(2), false)
+            .unwrap();
+        let before = bridge.view();
+        let saved = fs::read(&checkpoint).unwrap();
+        let mut pending = bridge.begin(invalid).unwrap();
+        let outcome = (0..16).find_map(|_| match bridge.advance(&mut pending, 1) {
+            Ok(false) => None,
+            result => Some(result),
+        });
+        assert_eq!(
+            outcome,
+            Some(Err(Error::Closure(ClosureFailure::MissingBinding))),
+            "a BLAKE3 closure must not resolve a required edge in the SHA256 catalogue"
+        );
+        drop(pending);
+        assert_eq!(bridge.view(), before);
+        assert_eq!(fs::read(&checkpoint).unwrap(), saved);
+        assert_eq!(bridge.head().unwrap(), None);
+        Some(other)
+    } else {
+        None
+    };
     let keys: Vec<_> = rows.iter().map(|row| row.key).collect();
     let before_prepare = requests(&transport);
     let mut pending = bridge.begin(rows[2]).unwrap();
@@ -263,6 +319,30 @@ pub(super) fn qualify() {
         assert_eq!(
             bridge.read(serving, row.binding().object).unwrap(),
             *expected
+        );
+    }
+    if let Some(other) = cross_algorithm_control {
+        let object = rows[0].binding().object;
+        let before = requests(&transport);
+        assert_eq!(
+            bridge.read(
+                serving,
+                ObjectId {
+                    algorithm: Algorithm::Sha256,
+                    ..object
+                }
+            ),
+            Err(Error::Rejected),
+            "identical hash bytes under another algorithm are not a manifest member"
+        );
+        assert_eq!(
+            bridge.read(serving, other.binding().object),
+            Err(Error::Rejected)
+        );
+        assert_eq!(
+            requests(&transport),
+            before,
+            "algorithm refusal precedes HTTP"
         );
     }
     let before_refusal = requests(&transport);
@@ -413,8 +493,12 @@ pub(super) fn qualify() {
             .all(|request| request.if_match.is_some() && request.status == StatusCode::Accepted)
     );
     assert!(records.iter().all(|request| !request.multipart));
+    let digest_function = match algorithm {
+        Algorithm::Sha256 => "SHA256",
+        Algorithm::Blake3 => "BLAKE3",
+    };
     eprintln!(
-        "Qualified typed retention over {} actual SDK requests and {} exact conditional deletes",
+        "Qualified {digest_function} typed retention over {} actual SDK requests and {} exact conditional deletes",
         records.len(),
         actual_deletes.len()
     );

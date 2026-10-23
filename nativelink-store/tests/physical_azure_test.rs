@@ -124,6 +124,12 @@ fn local_azurite_typed_retention_contract() {
     retention::qualify();
 }
 
+#[test]
+#[ignore = "Explicit local qualification: requires the pinned Azurite runner; select this exact test with --ignored, and missing dependencies fail"]
+fn local_azurite_blake3_retention_contract() {
+    retention::qualify_blake3();
+}
+
 fn incarnation(last_byte: u8) -> Incarnation {
     let mut bytes = [7; 16];
     bytes[15] = last_byte;

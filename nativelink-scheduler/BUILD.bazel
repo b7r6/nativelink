@@ -306,6 +306,10 @@ rust_test_suite(
         "tests/worker_registry_test.rs",
         "tests/worker_running_operations_report_test.rs",
     ],
+    args = [
+        "--skip",
+        "saturated_admission_can_finalize_and_snapshot_escaping_heavy_results",
+    ],
     compile_data = [
         "tests/utils/scheduler_utils.rs",
     ],
@@ -340,6 +344,31 @@ rust_test_suite(
         "@crates//:tokio",
         "@crates//:tokio-stream",
         "@crates//:tonic",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+        "@crates//:uuid",
+    ],
+)
+
+# This maximum-size snapshot workload took 59 seconds alone in fastbuild and
+# exceeded the short suite's allowance during a workspace build. Keep its
+# assertions intact and run it with a separate CPU-work budget.
+rust_test(
+    name = "authority_snapshot_capacity_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_raft_test.rs"],
+    args = [
+        "--exact",
+        "saturated_admission_can_finalize_and_snapshot_escaping_heavy_results",
+    ],
+    proc_macro_deps = ["//nativelink-macro"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde_json",
+        "@crates//:tokio",
         "@crates//:tracing",
         "@crates//:tracing-test",
         "@crates//:uuid",

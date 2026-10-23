@@ -559,6 +559,18 @@ fn malformed_checkpoint_is_rejected_without_normalizing_or_truncating_physical_i
     let mut changed = namespace.clone();
     changed[0] = (namespace[0].as_u64().unwrap() ^ 1).into();
     let payload = String::from_utf8(original[48..].to_vec()).unwrap();
+    for algorithm in [0, 3, 255] {
+        // Keep field order and every descriptor consistent, so only the
+        // unsupported digest-function value can reject this restored state.
+        let changed = payload.replace("\"algorithm\":1", &format!("\"algorithm\":{algorithm}"));
+        assert_ne!(changed, payload);
+        fs::write(fixture.checkpoint(), repack(changed.as_bytes())).unwrap();
+        assert_eq!(
+            Bridge::reopen(&fixture.0).err(),
+            Some(Error::CorruptCheckpoint),
+            "unsupported descriptor algorithm must fail closed"
+        );
+    }
     for field in ["namespace", "physical_incarnation"] {
         let needle = format!("\"{field}\":{namespace}");
         let changed = payload.replacen(&needle, &format!("\"{field}\":{changed}"), 1);
@@ -572,8 +584,8 @@ fn malformed_checkpoint_is_rejected_without_normalizing_or_truncating_physical_i
     for case in 0..7 {
         let mut value = json.clone();
         match case {
-            0 => value["metadata"]["namespace"][0] = 0.into(),
-            1 => value["metadata"]["catalogue"][0]["physical_incarnation"][0] = 0.into(),
+            0 => value["metadata"]["namespace"][0] = changed[0].clone(),
+            1 => value["metadata"]["catalogue"][0]["physical_incarnation"][0] = changed[0].clone(),
             2 => value["metadata"]["catalogue"][0]["physical_generation"] = 999.into(),
             3 => {
                 let copy = value["metadata"]["catalogue"][0].clone();
@@ -592,6 +604,10 @@ fn malformed_checkpoint_is_rejected_without_normalizing_or_truncating_physical_i
             6 => value["version"] = 2.into(),
             _ => unreachable!(),
         }
+        assert_ne!(
+            value, json,
+            "corruption case {case} must change the checkpoint"
+        );
         fs::write(
             fixture.checkpoint(),
             repack(&serde_json::to_vec(&value).unwrap()),
@@ -599,7 +615,8 @@ fn malformed_checkpoint_is_rejected_without_normalizing_or_truncating_physical_i
         .unwrap();
         assert_eq!(
             Bridge::reopen(&fixture.0).err(),
-            Some(Error::CorruptCheckpoint)
+            Some(Error::CorruptCheckpoint),
+            "corruption case {case} must fail closed"
         );
     }
     for bytes in [original[..40].to_vec(), vec![0; 1024 * 1024 + 1]] {

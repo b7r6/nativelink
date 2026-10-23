@@ -113,3 +113,10 @@ and [delivery](evidence/accepted-history-delivery/manifest.json).
 The eight receipt-retirement faults also remain detected on the composed source;
 [composition receipts](evidence/history-receipt-composition/manifest.json) preserve
 the restored fourteen-test baseline and exact source snapshot.
+
+Two [real worker histories](evidence/real-worker-history/manifest.json) also execute
+namespace processes for noncacheable success and a nonzero exit. They verify
+outputs, exact diagnostic bytes, pending delivery across restart, and unchanged
+terminals while deliberately configuring the unused legacy upload policies.
+These process cases use SHA256; the separate verifying-CAS RPC cases cover both
+algorithms.

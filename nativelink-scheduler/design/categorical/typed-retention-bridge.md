@@ -32,6 +32,16 @@ fixtures cannot make a preparation from one namespace valid in the other.
 Restoration validates the mapping, row consistency, immutable root closures,
 and logical-object associations.
 
+Descriptors preserve SHA256 or BLAKE3 through upload, checkpoint restoration,
+preparation, and grant reads. The original upload helper still defaults to
+SHA256; an explicit typed input exists only in this test composition. A single
+catalogue may hold both algorithms. Preparation selects the ActionResult's
+algorithm context because each REAPI digest edge inherits that function. A
+required edge absent from that context fails preparation, even when another
+algorithm has a corresponding catalogue entry. Equal hash and size fields do
+not make differently qualified descriptors interchangeable. Unknown algorithm
+values in checkpoints are rejected.
+
 The global catalogue revision is deliberately conservative: even an unrelated
 catalogue change invalidates a preparation. A cohort close/reopen invalidates
 the captured fence without changing catalogue membership. Retirement is also

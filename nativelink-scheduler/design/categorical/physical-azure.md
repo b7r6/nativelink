@@ -155,6 +155,17 @@ suites and fails when selected without the emulator prerequisite. This is a
 singleton local composition qualification, not a production publication policy,
 replicated authority, cloud durability claim, or power-loss test.
 
+`local_azurite_blake3_retention_contract` runs the same upload, preparation,
+serving, restart, retirement, and conditional-delete sequence with BLAKE3
+descriptors throughout. Its catalogue also contains a SHA256 copy of the file
+payload. A BLAKE3 ActionResult referring to that SHA256 digest fails preparation
+with a missing binding and changes neither checkpoint nor protection state.
+The valid BLAKE3 closure still contains exactly its three provider objects.
+After restart, a grant read changing only the algorithm in a descriptor is rejected
+before HTTP; the SHA256 catalogue object is also outside the granted manifest.
+This additional explicit emulator test uses the same runner commands and scope
+restrictions as the SHA256 case.
+
 ## Missing capabilities
 
 This fixture does not qualify an Azure account, cloud persistence, service

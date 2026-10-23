@@ -70,7 +70,9 @@ rust_library(
 
 rust_test_suite(
     name = "integration",
-    timeout = "short",
+    # These suites include real processes, filesystem work and 96 manager
+    # cases. A busy workspace exceeded 60 seconds; per-case deadlines remain.
+    timeout = "moderate",
     srcs = [
         "tests/authority_rpc_test.rs",
         "tests/authority_scheduler_test.rs",
@@ -87,8 +89,11 @@ rust_test_suite(
     args = [
         "--skip",
         "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+        "--skip",
+        "history::",
     ],
     compile_data = [
+        "tests/authority_history_rpc/cases.rs",
         "tests/utils/local_worker_test_utils.rs",
         "tests/utils/mock_running_actions_manager.rs",
     ],
@@ -142,6 +147,54 @@ rust_test(
         "--exact",
         "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
     ],
+    compile_data = ["tests/authority_history_rpc/cases.rs"],
+    proc_macro_deps = [
+        "//nativelink-macro",
+        "@crates//:async-trait",
+    ],
+    deps = [
+        ":nativelink-worker",
+        "//nativelink-config",
+        "//nativelink-error",
+        "//nativelink-metric",
+        "//nativelink-proto",
+        "//nativelink-scheduler",
+        "//nativelink-service",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:async-lock",
+        "@crates//:bytes",
+        "@crates//:futures",
+        "@crates//:hyper-1.7.0",
+        "@crates//:pathdiff",
+        "@crates//:pin-project-lite",
+        "@crates//:pretty_assertions",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serial_test",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tokio-stream",
+        "@crates//:tonic",
+        "@crates//:tonic-prost",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+        "@crates//:uuid",
+        "@crates//:which",
+    ] + select({
+        "@platforms//os:linux": ["@crates//:libc"],
+        "@platforms//os:macos": ["@crates//:libc"],
+        "//conditions:default": [],
+    }),
+)
+
+# Real namespace processes with accepted-history publication and restart.
+rust_test(
+    name = "authority_history_rpc_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_rpc_test.rs"],
+    args = ["history::"],
+    compile_data = ["tests/authority_history_rpc/cases.rs"],
     proc_macro_deps = [
         "//nativelink-macro",
         "@crates//:async-trait",

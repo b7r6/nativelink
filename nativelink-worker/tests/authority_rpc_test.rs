@@ -236,6 +236,16 @@ impl Context {
         timeout: i64,
         command: Command,
     ) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
+        self.command_request_with_policy(timeout, command, false)
+            .await
+    }
+
+    async fn command_request_with_policy(
+        &self,
+        timeout: i64,
+        command: Command,
+        do_not_cache: bool,
+    ) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
         let command_digest = serialize_and_upload_message(
             &command,
             self.cas.as_pin(),
@@ -251,6 +261,7 @@ impl Context {
         .await
         .unwrap();
         let action = Action {
+            do_not_cache,
             command_digest: Some(command_digest.into()),
             input_root_digest: Some(input_root_digest.into()),
             timeout: Some(prost_types::Duration {
@@ -390,13 +401,24 @@ impl Runtime {
             .await
             .unwrap()
         };
+        Self::start_authority(context, clock, faults, worker_address, authority, [0; 32]).await
+    }
+
+    async fn start_authority(
+        context: &Context,
+        clock: Arc<AtomicU64>,
+        faults: Arc<QualificationFaults>,
+        worker_address: Option<SocketAddr>,
+        authority: Singleton,
+        cas_namespace: [u8; 32],
+    ) -> Self {
         let (service, task) = AuthorityService::start(
             authority,
             QualificationConfig {
                 instance: "rpc-test".to_owned(),
                 principal: "trusted-local-fixture".to_owned(),
                 cas: Store::new(context.cas.clone()),
-                cas_namespace: [0; 32],
+                cas_namespace,
                 publication_sink: Store::new(context.ac.clone()),
                 now: Arc::new(move || clock.load(Ordering::Relaxed)),
                 faults,
@@ -1800,3 +1822,6 @@ async fn restart_replays_due_interest_after_committed_clock_before_expiry() {
         "AUTHORITY_INTEREST: equal-clock restart replays due expiry after durable AdvanceTime cutpoint without renewing or postponing the retained deadline"
     );
 }
+
+#[path = "authority_history_rpc/cases.rs"]
+mod history;

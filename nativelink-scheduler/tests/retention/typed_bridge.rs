@@ -136,7 +136,6 @@ impl Row {
             || self.physical_generation != self.key.generation
             || self.physical_generation == 0
             || self.logical_object == 0
-            || self.descriptor.algorithm != 1
             || generation.logical_object != self.logical_object
             || self.descriptor.object()?.size > PhysicalLimits::default().object_bytes
         {
@@ -607,11 +606,23 @@ impl<B: PhysicalBackend> Bridge<B> {
         cohort: CohortId,
         replace: bool,
     ) -> Result<Row, Error> {
+        self.upload_with_algorithm(Algorithm::Sha256, bytes, cohort, replace)
+    }
+
+    /// Test composition input; the descriptor carries this function through
+    /// persistence and physical verification. Existing callers use SHA256.
+    pub(crate) fn upload_with_algorithm(
+        &mut self,
+        algorithm: Algorithm,
+        bytes: &[u8],
+        cohort: CohortId,
+        replace: bool,
+    ) -> Result<Row, Error> {
         self.live()?;
         if bytes.len() as u64 > PhysicalLimits::default().object_bytes {
             return Err(Error::Capacity);
         }
-        let descriptor = Descriptor::from(ObjectId::for_bytes(Algorithm::Sha256, bytes));
+        let descriptor = Descriptor::from(ObjectId::for_bytes(algorithm, bytes));
         let existing = self
             .state
             .metadata
@@ -710,6 +721,7 @@ impl<B: PhysicalBackend> Bridge<B> {
             .map_err(|_| Error::Capacity)?;
         let permit = Permit(self.pending.clone());
         let view = self.view();
+        let algorithm = result.binding().object.algorithm;
         let preparation = Preparation::new(
             self.store.clone(),
             self.state.metadata.revision,
@@ -718,6 +730,10 @@ impl<B: PhysicalBackend> Bridge<B> {
                 .metadata
                 .catalogue
                 .iter()
+                // REAPI edges inherit the result's digest function. Other
+                // algorithms may coexist but cannot satisfy a required edge;
+                // the preparer rejects any missing binding in this context.
+                .filter(|row| row.binding().object.algorithm == algorithm)
                 .map(|row| row.binding())
                 .collect::<Vec<_>>(),
             result.binding().object,
