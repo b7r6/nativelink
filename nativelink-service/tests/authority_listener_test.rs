@@ -16,6 +16,7 @@
 //! a process-quiescence witness. Plaintext sockets deliberately demonstrate that
 //! fixed routes and separate stores do not certify a credential boundary.
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -58,10 +59,13 @@ use prost::Message;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tonic::transport::{Channel, Server};
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Server};
 use tonic::{Code, Streaming};
 
 const INSTANCE: &str = "authority-listener-test";
+
+#[path = "authority_listener/tls.rs"]
+mod tls;
 
 struct TestDirectory(PathBuf);
 
@@ -97,6 +101,7 @@ struct Runtime {
     coordinator: CoordinatorTask,
     worker: Channel,
     client: Channel,
+    client_address: SocketAddr,
     stops: Vec<oneshot::Sender<()>>,
     servers: Vec<JoinHandle<Result<(), tonic::transport::Error>>>,
     faults: Arc<QualificationFaults>,
@@ -104,6 +109,15 @@ struct Runtime {
 
 impl Runtime {
     async fn start() -> Self {
+        Self::start_with_transports(Server::builder(), Server::builder(), None, None).await
+    }
+
+    async fn start_with_transports(
+        worker_transport: Server,
+        client_transport: Server,
+        worker_tls: Option<ClientTlsConfig>,
+        client_tls: Option<ClientTlsConfig>,
+    ) -> Self {
         let directory = TestDirectory::new();
         let authority = Singleton::open(
             directory.0.join("authority.redb"),
@@ -128,7 +142,7 @@ impl Runtime {
         let worker_server = background_spawn!("fixed_worker_listener", async move {
             listeners
                 .worker
-                .serve(Server::builder(), worker_socket, async {
+                .serve(worker_transport, worker_socket, async {
                     let _stopped = stopped_worker.await;
                 })
                 .await
@@ -136,7 +150,7 @@ impl Runtime {
         let client_server = background_spawn!("fixed_client_listener", async move {
             listeners
                 .client
-                .serve(Server::builder(), client_socket, async {
+                .serve(client_transport, client_socket, async {
                     let _stopped = stopped_client.await;
                 })
                 .await
@@ -145,16 +159,15 @@ impl Runtime {
             _directory: directory,
             service: listeners.service,
             coordinator: listeners.coordinator,
-            worker: Channel::from_shared(format!("http://{worker_address}"))
-                .unwrap()
+            worker: endpoint(worker_address, worker_tls)
                 .connect()
                 .await
                 .unwrap(),
-            client: Channel::from_shared(format!("http://{client_address}"))
-                .unwrap()
+            client: endpoint(client_address, client_tls)
                 .connect()
                 .await
                 .unwrap(),
+            client_address,
             stops: vec![stop_worker, stop_client],
             servers: vec![worker_server, client_server],
             faults,
@@ -189,6 +202,16 @@ impl Runtime {
         })
         .await
         .expect("authority failed to reach expected committed state");
+    }
+}
+
+fn endpoint(address: SocketAddr, tls: Option<ClientTlsConfig>) -> Endpoint {
+    match tls {
+        Some(tls) => Endpoint::from_shared(format!("https://{address}"))
+            .unwrap()
+            .tls_config(tls)
+            .unwrap(),
+        None => Endpoint::from_shared(format!("http://{address}")).unwrap(),
     }
 }
 

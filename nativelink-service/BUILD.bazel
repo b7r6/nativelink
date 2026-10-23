@@ -84,6 +84,7 @@ rust_test_suite(
     ],
     compile_data = glob(["tests/data/**"]) + [
         "tests/authority_listener/operations.rs",
+        "tests/authority_listener/tls.rs",
         "//nativelink-util:tests/data/SekienAkashita.jpg",
     ],
     proc_macro_deps = [

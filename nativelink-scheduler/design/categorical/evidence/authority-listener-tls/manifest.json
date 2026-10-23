@@ -1,0 +1,177 @@
+{
+  "base_commit": "f3686d14d3adb95ca7bcb6a76c7bb9d388b8de9a",
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+  "changed_source_sha256": {
+    "nativelink-scheduler/design/categorical/authority-listener-tls.md": "6a0c8fefc8e0d83dd43bf71f533c968c49127c94f52c07d394cca2b352592538",
+    "nativelink-service/BUILD.bazel": "97f9873f97dd9d0b05d84f983de4943f65a350b19198cac203c0ff77fd2c8394",
+    "nativelink-service/tests/authority_listener/tls.rs": "62925b9e12659c5ef026d03800e3c31efdc9f3cfe39b1934f76d4f6f638e312b",
+    "nativelink-service/tests/authority_listener_test.rs": "3696d42caeee6ed94e414cacdb9336e4486944612b8837fb4906838e02628daf",
+    "tools/test-authority-listener-tls.py": "7d8b965be7716f9703468cac3f4fc0ee26e45a9ad0f63102bd54b125eadf8538"
+  },
+  "checks": [
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test",
+      "exit_code": 0,
+      "failed": 0,
+      "ignored": 1,
+      "note": "TLS case is separately and explicitly executed below; default ignored count is not treated as qualification.",
+      "passed": 3,
+      "record": "cargo-default.log"
+    },
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo clippy --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test -- -D warnings",
+      "exit_code": 0,
+      "record": "clippy-initial.log"
+    },
+    {
+      "command": "env -u NL_AUTHORITY_LISTENER_CERT_DIR -u NL_AUTHORITY_LISTENER_TLS_REPORT /tmp/nativelink-authority-listener-tls-evidence/authority_listener_test --ignored --exact tls::fixed_authority_mtls_boundary --test-threads=1",
+      "exit_code": 101,
+      "expected_failure": true,
+      "note": "Invoked with these two variables removed via subprocess env mapping; explicit missing certificate selection fails, rather than skipping.",
+      "record": "missing-certificates.log"
+    },
+    {
+      "cases": 4,
+      "command": "python3 tools/test-authority-listener-tls.py --test-binary /tmp/nativelink-authority-listener-tls-evidence/authority_listener_test --output /tmp/nativelink-authority-listener-tls-evidence/run-initial",
+      "executed_tests": 1,
+      "exit_code": 0,
+      "failed": 0,
+      "ignored": 0,
+      "record": "run-initial/manifest.json"
+    },
+    {
+      "command": "/nix/store/x6cgwhgjipmrflxnr2wh0n9p20kwpvxm-pre-commit-4.5.1/bin/pre-commit run --files nativelink-service/BUILD.bazel nativelink-service/tests/authority_listener_test.rs nativelink-service/tests/authority_listener/tls.rs tools/test-authority-listener-tls.py nativelink-scheduler/design/categorical/authority-listener-tls.md",
+      "exit_code": 1,
+      "finding": "Two documentation spelling findings (unserved and umask), repaired before final check.",
+      "record": "precommit-source.log"
+    },
+    {
+      "command": "/nix/store/x6cgwhgjipmrflxnr2wh0n9p20kwpvxm-pre-commit-4.5.1/bin/pre-commit run --files nativelink-service/BUILD.bazel nativelink-service/tests/authority_listener_test.rs nativelink-service/tests/authority_listener/tls.rs tools/test-authority-listener-tls.py nativelink-scheduler/design/categorical/authority-listener-tls.md",
+      "exit_code": 0,
+      "record": "precommit-final.log"
+    }
+  ],
+  "executed_source_sha256": {
+    "Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+    "nativelink-service/src/authority_listener.rs": "68f3caa177cce119bf085b8ae3a5ecc98b26a32370e60b0f3e455e576fb713ed",
+    "nativelink-service/src/authority_server.rs": "bf8f3d4943c01659dda96daf63096dea3ff12eed572cd2812b6bbea71b48e361",
+    "nativelink-service/src/capabilities_server.rs": "01ffa27c366c7c967c3b3fb09eec97bac161b411ef69daaf0fab87044b3299f0",
+    "nativelink-service/tests/authority_listener/tls.rs": "62925b9e12659c5ef026d03800e3c31efdc9f3cfe39b1934f76d4f6f638e312b",
+    "nativelink-service/tests/authority_listener_test.rs": "3696d42caeee6ed94e414cacdb9336e4486944612b8837fb4906838e02628daf",
+    "tools/test-authority-listener-boundary.py": "c44a6700bf214dc0678b60fba52308033b9c9473691265892981928366231d6a",
+    "tools/test-authority-listener-tls.py": "7d8b965be7716f9703468cac3f4fc0ee26e45a9ad0f63102bd54b125eadf8538"
+  },
+  "observations": {
+    "all_declared_client_listeners_probed": true,
+    "authority_pipeline": "Both isolated-trust cases execute client input upload, Execute, authenticated Worker API registration/dispatch, manual candidate, accepted terminal with held publication, scheduler AC write, and later cache hit.",
+    "client_listeners_per_case": 1,
+    "digest_algorithms": [
+      "SHA256",
+      "BLAKE3"
+    ],
+    "isolated_trust_worker_attempt": "Actual RPC code 2, transport error; client sink remains exit_code 7. No fixed TLS status required by test.",
+    "object_isolation": "Worker certificate succeeds on CAS and ByteStream; valid same-key uploads leave AC at 7; client ByteStream reads exact object bytes.",
+    "positive_controls": "Authorized client AC update/read before and after worker credential attempt in every case.",
+    "private_keys_archived": false,
+    "retained_certificate_material": "SHA256 hashes of public certificates only; no certificate or key files included.",
+    "shared_trust_worker_attempt": "Actual RPC success, exit_code 33; authorized client reads 33; both cases classified unsafe.",
+    "temporary_certificate_directory_removed": true,
+    "topologies": [
+      "isolated_trust",
+      "shared_trust_negative_control"
+    ],
+    "worker_listener_ac": "Actual Unimplemented code 12 for valid request in all four cases."
+  },
+  "records": {
+    "binary.json": {
+      "compressed_bytes": 277,
+      "compressed_sha256": "739c13664e47adc5d47c438132027b1bed92f2e15afff7d88635a40953a95a85",
+      "path": "binary.json.gz",
+      "raw_bytes": 413,
+      "raw_sha256": "f54d8dee7e0ea64bede02cc71bfa0f7c4601da92e290a21782dfc00d85b4660c"
+    },
+    "cargo-default.log": {
+      "compressed_bytes": 468,
+      "compressed_sha256": "61bdbcec6b0d48831396dcba7bb3fc0f70046d03b3d539dd2fac20d0ed61924e",
+      "path": "cargo-default.log.gz",
+      "raw_bytes": 852,
+      "raw_sha256": "1b6a63b7f32e1059b998cc0cd8d67c05d9f914007c06fa3f15cad13217e5dea8"
+    },
+    "clippy-initial.log": {
+      "compressed_bytes": 188,
+      "compressed_sha256": "0be261b15ebf18dbf9b882243984f4b6e84ae96da23b17e45dc845e50205a7d2",
+      "path": "clippy-initial.log.gz",
+      "raw_bytes": 264,
+      "raw_sha256": "1304091a19bd3dea1c98ed47d596f7970ac5648647eb45ca63f81818cf22567b"
+    },
+    "missing-certificates.json": {
+      "compressed_bytes": 216,
+      "compressed_sha256": "74614cf710a5640e4629bc6a405f30c3c4353fb351fc4bf37d7cbb7f7abaf363",
+      "path": "missing-certificates.json.gz",
+      "raw_bytes": 308,
+      "raw_sha256": "7fdd98af6bd92350a5d4cf8b1e0d924cf061fa03089dba4565e769d141f2e11b"
+    },
+    "missing-certificates.log": {
+      "compressed_bytes": 360,
+      "compressed_sha256": "0199990f49cacd3cdb819d076d77a84fea51dea135dc9fd57c8c2becfc27a4e4",
+      "path": "missing-certificates.log.gz",
+      "raw_bytes": 565,
+      "raw_sha256": "bd82ab66bc674b1be6d7b7eee22d4e6cbce24f95c5eafe1327f093519ff60db5"
+    },
+    "precommit-final.log": {
+      "compressed_bytes": 339,
+      "compressed_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "path": "precommit-final.log.gz",
+      "raw_bytes": 2160,
+      "raw_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    },
+    "precommit-source.log": {
+      "compressed_bytes": 532,
+      "compressed_sha256": "d0e8d57c87e4aca37babed42a811f3f160a725b63f97e02ac32efd085806ca8f",
+      "path": "precommit-source.log.gz",
+      "raw_bytes": 2497,
+      "raw_sha256": "ed6b9a4777382d63f582dc7cc0408877bce10e429de3fa846a2de4152fd7a2f8"
+    },
+    "run-initial/manifest.json": {
+      "compressed_bytes": 1339,
+      "compressed_sha256": "8d5d84794b47202ba572a65f19a97025b28665960ef8a4bad3a770405cb31418",
+      "path": "run-initial-manifest.json.gz",
+      "raw_bytes": 2578,
+      "raw_sha256": "2ae771d39ec3cc9067f7f24b94efcec6645db5e1f81cc03204952b60c05e117d"
+    },
+    "run-initial/observations.json": {
+      "compressed_bytes": 594,
+      "compressed_sha256": "fde948d54c03df9589636464643f696cec5e315bf34c714e3e01f55b76867844",
+      "path": "run-initial-observations.json.gz",
+      "raw_bytes": 3720,
+      "raw_sha256": "906c91c2c76dcf885d65466d529569768de8765b23c0cb03f635d9f3dd2b60de"
+    },
+    "run-initial/test.log": {
+      "compressed_bytes": 135,
+      "compressed_sha256": "04622bde07cdc66866f46a30cd6952f7628bf5c11aac8877c5208b8a0b7c4b89",
+      "path": "run-initial-test.log.gz",
+      "raw_bytes": 159,
+      "raw_sha256": "a6cc9091bc12f998102bd8a8284b5af9b2c3e43da2dca1125a2cca0fb09f1ecd"
+    },
+    "runner-initial.log": {
+      "compressed_bytes": 117,
+      "compressed_sha256": "8fbacb1217afe28fe74121298a066173125131e57c28301a77bc66e30cc52a04",
+      "path": "runner-initial.log.gz",
+      "raw_bytes": 118,
+      "raw_sha256": "760206506123bc60c68ac318d68cc30722e1471e5ef891bbd9509b953e373686"
+    }
+  },
+  "residuals": [
+    "One declared local client listener is covered, not every possible deployment route or proxy.",
+    "No production config/binary selection, credential distribution or deployed endpoint claim.",
+    "Memory-store namespace isolation does not certify provider aliases or absence of worker backend sink credentials.",
+    "The manual worker report does not prove physical process quiescence.",
+    "The older plaintext negative control remains; ordinary tests intentionally ignore TLS unless explicitly selected with generated credentials.",
+    "Merged-root Bazel verification and root re-execution are separate integration evidence."
+  ],
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+  "schema_version": 1,
+  "scope": "Local actual fixed authority listener stack with explicit disposable mTLS trust; no deployment qualification",
+  "test_binary_sha256": "7972f2e7cca8416ae1d940525dad126745c4f88e0e79aa48c5c70aaa8324ad94",
+  "worktree": "/tmp/nativelink-authority-listener"
+}
