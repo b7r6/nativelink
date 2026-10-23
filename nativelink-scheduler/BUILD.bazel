@@ -504,6 +504,7 @@ rust_test(
     name = "publication_differential_test",
     srcs = ["tests/publication_differential_test.rs"],
     compile_data = [
+        "tests/publication_differential/real_requests.rs",
         "tests/publication_candidate/binding.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/real_request.rs",
@@ -520,6 +521,7 @@ rust_test(
         "//nativelink-store",
         "@crates//:blake3",
         "@crates//:prost",
+        "@crates//:prost-types",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:sha2",

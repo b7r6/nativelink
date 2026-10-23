@@ -439,6 +439,13 @@ hits and checkpoint reopen are checked. The worker's temporary upload CAS stays
 outside the collector namespace and its report remains unacknowledged; this is
 not yet the complete canonical gateway or M5 acknowledgment path.
 
+The independent publication comparison now also admits captured SHA256/BLAKE3
+requests into the real constructor. All eight cases pass in Cargo and Bazel;
+strict Clippy passes after an explicit Timestamp default spelling correction.
+The [additive receipts](evidence/publication-real-differential/manifest.json)
+retain both source boundaries. The frozen oracle is unchanged, and physical
+readiness remains an explicit fixture assumption in this comparison.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

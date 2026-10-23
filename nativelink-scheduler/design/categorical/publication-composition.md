@@ -55,7 +55,12 @@ SHA256 placeholder scheduler request. The separately qualified
 [real-request extension](publication-real-request.md) preserves the original
 REAPI payload and complete action binding in that same scheduler State. Its
 explicit trusted principal/configuration context also checks each joined
-operation's original request. These are distinct test alphabets.
+operation's original request. An additive independent comparison now drives
+that constructor with captured SHA256/BLAKE3 Action and Command bytes, while the
+original synthetic histories remain unchanged. The new cases cover worker
+publication, cache projection, skip-lookup/coalescing, noncacheable outcomes,
+recovery and revocation. Reference action labels remain opaque; the real fixture
+registers distinct immutable inputs under one explicit trusted context.
 Physical readiness and complete typed closure are trusted fixture observations
 in this adapter. No provider calls or materialization path are implied.
 

@@ -39,6 +39,9 @@ mod reference;
 #[path = "publication_head/types.rs"]
 mod types;
 
+#[path = "publication_differential/real_requests.rs"]
+mod real_requests;
+
 #[allow(
     dead_code,
     reason = "Candidate and retention have independent focused suites."
@@ -350,7 +353,15 @@ impl Pair {
     }
 
     fn from_scenario(scenario: r::Scenario, facts: r::Facts) -> Self {
-        let mut actual = PublicationAuthority::new(scenario.actions.clone()).unwrap();
+        let actual = PublicationAuthority::new(scenario.actions.clone()).unwrap();
+        Self::with_actual(scenario, facts, actual)
+    }
+
+    fn with_actual(
+        scenario: r::Scenario,
+        facts: r::Facts,
+        mut actual: PublicationAuthority,
+    ) -> Self {
         for row in &facts.physical {
             actual
                 .install_physical(candidate_key(row.key), candidate_object(&row.object), true)
@@ -418,6 +429,17 @@ impl Pair {
             .actual
             .admit(operation, action.into(), skip, OPERATION_UNTIL)
             .unwrap();
+        self.record_admission(operation, action, skip, proposed_execution, execution)
+    }
+
+    fn record_admission(
+        &mut self,
+        operation: u64,
+        action: &str,
+        skip: bool,
+        proposed_execution: u64,
+        execution: a::ExecutionId,
+    ) -> r::Reply {
         self.position += 1;
         let reply = self
             .expected
