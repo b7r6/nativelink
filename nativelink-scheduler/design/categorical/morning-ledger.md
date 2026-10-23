@@ -430,6 +430,15 @@ own captured request and trusted principal binding; removing real bindings canno
 downgrade captured requests into synthetic mode. The original failing snapshots
 and independent review are preserved with the separate correction receipts.
 
+The [actual-worker publication fixture](publication-worker.md) now connects
+both SHA256 and BLAKE3 namespace processes to real staged filesystem writes,
+typed preparation, and publication in the original scheduler State. All seven
+worker bridge cases pass in Cargo and Bazel, with no skipped process case.
+Independent expected edges, exact response bytes, joined operation reads, cache
+hits and checkpoint reopen are checked. The worker's temporary upload CAS stays
+outside the collector namespace and its report remains unacknowledged; this is
+not yet the complete canonical gateway or M5 acknowledgment path.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

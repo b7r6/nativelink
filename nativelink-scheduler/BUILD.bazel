@@ -20,6 +20,23 @@ exports_files(
     visibility = ["//nativelink-store:__pkg__"],
 )
 
+# Reuse the frozen test authorities and owned-filesystem preparation in the
+# worker process experiment without copying their implementations.
+filegroup(
+    name = "publication_fixture_sources",
+    srcs = [
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_physical/fixture.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    visibility = ["//nativelink-worker:__pkg__"],
+)
+
 rust_binary(
     name = "history_budget",
     srcs = ["examples/history_budget.rs"],

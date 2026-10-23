@@ -59,6 +59,12 @@ operation's original request. These are distinct test alphabets.
 Physical readiness and complete typed closure are trusted fixture observations
 in this adapter. No provider calls or materialization path are implied.
 
+The [actual-worker extension](publication-worker.md) then connects captured
+SHA256/BLAKE3 requests, real namespace processes, exact reports, staged filesystem
+writes and independently expected typed edges in the same authority State.
+Its temporary worker upload CAS remains outside collector ownership, and worker
+acknowledgment is explicitly outside that experiment.
+
 The [activation v2 reference](../../tests/publication_activation_v2/CONTRACT.md)
 separates execution terminals, operation terminals, history associations, and
 recorded versus unknown provenance. Its original frozen admission can accept a

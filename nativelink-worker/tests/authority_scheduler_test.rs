@@ -1164,3 +1164,6 @@ async fn actual_single_blob_bytes_renew_preparing_beyond_lease_then_chatter_cann
     );
     authority.shutdown().await.unwrap();
 }
+
+#[path = "authority_publication/cases.rs"]
+mod publication;
