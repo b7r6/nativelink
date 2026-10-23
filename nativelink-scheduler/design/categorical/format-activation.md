@@ -2,7 +2,7 @@
 
 Status: implementation proposal, not an implemented upgrade protocol. The
 current journal envelope is experimental format 2, its application batch is
-version 1, and its embedded scheduler snapshot is version 4. Their readers
+version 1, and its embedded scheduler snapshot is version 5. Their readers
 reject unsupported versions and unknown authority sections. They provide no
 compatible writer activation, previous-binary rollback, or migration promise.
 This proposal does not name or freeze a production format 3, qualify deployment,

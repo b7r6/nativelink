@@ -439,6 +439,9 @@ pub struct WorkerView {
 #[serde(deny_unknown_fields)]
 pub struct AttemptView {
     pub id: AttemptId,
+    /// Original delivery identity, retained after acknowledgment consumes the
+    /// dispatch intent. Recovered coordinators fence reports against this fact.
+    pub dispatch_effect: EffectId,
     pub execution: ExecutionId,
     pub worker: WorkerId,
     pub incarnation: IncarnationId,

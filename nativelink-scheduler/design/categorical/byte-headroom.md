@@ -2,7 +2,7 @@
 
 Status: implemented in the experimental authority and journal, 2026-10-22.
 Admission reserves finalization bytes before changing authority. Pure-state
-snapshots use version 4; journal membership and snapshot metadata have separate
+snapshots use version 5; journal membership and snapshot metadata have separate
 bounds. Candidate, independent-model, and real-journal boundary tests exercise
 the contract below. Production activation and throughput qualification remain
 separate requirements.
@@ -141,8 +141,10 @@ invariants. A bounded encoder also enforces the limit as defense against a
 future omitted field. Encoding borrows the state and grows its output buffer
 within the fixed limit.
 
-The capability is pure-state snapshot version 4, following version 3's
-memory-target semantics. This prevents an older writer from silently continuing
+The byte capability introduced pure-state snapshot version 4, following version
+3's memory-target semantics. Version 5 additionally retains the original dispatch
+effect identity on every attempt, even after acceptance consumes its outbox
+intent. The maximum-width fixed-row serializer guard includes this field. This prevents an older writer from silently continuing
 admission without the new byte rule. This implementation makes no rolling
 upgrade, production migration, or activation claim.
 

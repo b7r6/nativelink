@@ -138,6 +138,23 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "physical_retention_test",
+    timeout = "moderate",
+    srcs = ["tests/physical_retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+    ],
+    deps = [
+        "//nativelink-store",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
+    ],
+)
+
 rust_test_suite(
     name = "integration",
     timeout = "short",

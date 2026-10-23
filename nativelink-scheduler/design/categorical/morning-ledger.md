@@ -104,10 +104,30 @@ traversal, and graph work. Cargo and Bazel CLI outputs match and leave the input
 unchanged. Every report refuses deployment; this is an inventory aid, not the
 final migration converter or removal of the Redis dependency.
 
+A later recovery review found that worker acceptance consumed the only dispatch
+identity record. Pure-state snapshot version 5 now retains that identity with
+its attempt, including after acceptance and coordinator restart. The public
+ingress watermark also survives terminal retirement, so a serialized leader
+can allocate without reusing retired operation handles. Neither read method grants
+writer authority; ingress still needs a read barrier and commit correlation.
+Core tests and the independent oracle compare the new identity association.
+
+The [physical filesystem experiment](physical-filesystem.md) adds exact
+incarnation/generation effects and a durable finite retention bridge. Ten
+physical tests, three bridge tests, and all four affected Bazel targets pass.
+Three semantic mutations were detected. The [local listener experiment](listener-boundary.md)
+uses the actual binary and temporary certificates: the isolated topology passes,
+while shared trust, a worker-accessible AC route, and aliased object/sink stores
+are each detected as unsafe. This is local topology evidence, not deployed
+boundary qualification. [Recovery and physical receipts](evidence/physical-recovery-checkpoint/manifest.json)
+retain these focused checks; the earlier full workspace result remains scoped
+to its own checkpoint.
+
 Remaining engineering includes finite recipient-ledger
 compaction, replacement-incarnation fencing, feature activation and compatible
 writers, canonical ingress/listeners/effect drivers,
-generation-aware physical stores, actual typed closure protection, sustained
+qualified physical stores and their authority integration, actual typed closure
+protection, sustained
 collection, migration/cutover, and deletion of the legacy construction paths.
 The experimental snapshots explicitly reject earlier prototype versions; that
 is not an upgrade or rollback protocol. None of M0 through M9 is declared fully

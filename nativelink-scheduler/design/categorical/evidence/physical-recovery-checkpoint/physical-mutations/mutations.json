@@ -1,0 +1,119 @@
+{
+  "repository_head": "86fc7d55fd9a3950946652710ce816bd97393288",
+  "working_tree_included": true,
+  "scope": "Three semantic faults only; no storage power-loss qualification.",
+  "source_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-store/src/physical_filesystem.rs": "75534e8779ae5d9e9eb1c53d60d80a037bbeae6ce32471f3fbc331e4810cc189",
+    "nativelink-store/tests/physical_filesystem_test.rs": "c6d84a21057174adf73503a973bc0c64f2d2a8454bedba4832cf9d4a0ed4ce93"
+  },
+  "mutants": [
+    {
+      "name": "delete_foreign_incarnation",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-store",
+        "--test",
+        "physical_filesystem_test",
+        "-j",
+        "24",
+        "empty_catalogue_and_explicit_new_incarnation_never_alias_old_deletion",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "seconds": 5.569262858014554,
+      "executed": true,
+      "selected_test_failed": true,
+      "log": "delete_foreign_incarnation.txt",
+      "sha256": "9a762dfaf96ea4d1c5d639f6dc29479238d64ca78d6faa2b04c09d0448b9c193",
+      "killed": true
+    },
+    {
+      "name": "overwrite_immutable_generation",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-store",
+        "--test",
+        "physical_filesystem_test",
+        "-j",
+        "24",
+        "immutable_retry_cannot_overwrite_another_descriptor_or_accept_bad_input",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "seconds": 7.25694894202752,
+      "executed": true,
+      "selected_test_failed": true,
+      "log": "overwrite_immutable_generation.txt",
+      "sha256": "00483b8b1e92f1b63f6500777afe86928ca2061444e6f0776fb4528d857a683a",
+      "killed": true
+    },
+    {
+      "name": "expose_range_without_complete_digest_validation",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-store",
+        "--test",
+        "physical_filesystem_test",
+        "-j",
+        "24",
+        "corrupt_bytes_outside_requested_range_are_not_exposed_as_verified",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "seconds": 6.35998520499561,
+      "executed": true,
+      "selected_test_failed": true,
+      "log": "expose_range_without_complete_digest_validation.txt",
+      "sha256": "4b484314c8f91f6107ffb426154b0b5ff770912e98f5e4182d12329bccb6d6e7",
+      "killed": true
+    }
+  ],
+  "baseline": {
+    "name": "baseline",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-store",
+      "--test",
+      "physical_filesystem_test",
+      "-j",
+      "24"
+    ],
+    "exit_code": 0,
+    "seconds": 84.90218073804863,
+    "executed": true,
+    "selected_test_failed": false,
+    "log": "baseline.txt",
+    "sha256": "1bed700f34435a7ff50922ec2ee3570aab99984b0a610a7846cce4324f7af847"
+  },
+  "all_killed": true,
+  "runner_sha256": "4d98ca7b0915477a1aa9fc7016e9ec6efa8307702831c182bd0a6e5cdee83cbd"
+}

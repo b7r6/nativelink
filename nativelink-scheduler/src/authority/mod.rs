@@ -19,7 +19,7 @@
 //! commit, application, and effect delivery. External work is represented only
 //! by the recoverable outbox; this module has no I/O or clock dependencies.
 //!
-//! Snapshot version 4 is an experimental test format, not a production durable
+//! Snapshot version 5 is an experimental test format, not a production durable
 //! format. M0 workload qualification and M3 format activation remain required.
 
 #[cfg(test)]
@@ -40,7 +40,7 @@ pub use types::*;
 /// slots, one cache lookup, and one accepted-result handoff. This conservative
 /// bound prevents admission from consuming the space needed to finish work.
 const EFFECT_HEADROOM: usize = MAX_ATTEMPTS as usize * 2 + 2;
-const SNAPSHOT_VERSION: u32 = 4;
+const SNAPSHOT_VERSION: u32 = 5;
 /// Audited fixed fields, map key, and punctuation for every current row kind.
 /// Variable request/result/property subtrees are charged separately.
 const FIXED_ROW_BYTES: usize = 1024;
@@ -966,6 +966,7 @@ impl State {
                 attempt,
                 AttemptView {
                     id: attempt,
+                    dispatch_effect: EffectId(self.next_effect),
                     execution,
                     worker,
                     incarnation,
@@ -1482,6 +1483,22 @@ impl State {
         Reply::Applied
     }
 
+    /// Last committed accepted ingress identity, including retired operations.
+    /// A single leader ingress loop must allocate and submit serially, behind
+    /// a read barrier, and resynchronize after an ambiguous commit outcome.
+    /// This accessor alone does not reserve an identity or authorize a writer.
+    #[must_use]
+    pub const fn ingress_watermark(&self) -> OperationId {
+        OperationId(self.operation_watermark)
+    }
+
+    /// Recover the original dispatch identity even after its outbox was consumed.
+    /// The association lasts until the entire execution can be safely retired.
+    #[must_use]
+    pub fn dispatch_effect_id(&self, attempt: AttemptId) -> Option<EffectId> {
+        self.attempts.get(&attempt).map(|row| row.dispatch_effect)
+    }
+
     /// Canonical public state for refinement comparisons. Derived accounting is
     /// recomputed from original reservations, never from worker advertisements.
     #[must_use]
@@ -1729,7 +1746,17 @@ impl State {
                 return fail("OP2: handle request and terminal association");
             }
         }
+        let mut dispatch_identities = BTreeSet::new();
         for (id, attempt) in &self.attempts {
+            if attempt.dispatch_effect.0 == 0
+                || attempt.dispatch_effect.0 >= self.next_effect
+                || !dispatch_identities.insert(attempt.dispatch_effect)
+                || self.effects.get(&attempt.dispatch_effect).is_some_and(|effect| {
+                    !matches!(effect.kind, EffectKind::Dispatch { attempt: owner, .. } if owner == *id)
+                })
+            {
+                return fail("ID3: each attempt retains its unique allocated dispatch identity");
+            }
             let Some(execution) = self.executions.get(&attempt.execution) else {
                 return fail("AUTH3: attempt execution exists");
             };
@@ -1833,6 +1860,7 @@ impl State {
                 } => {
                     if self.attempts.get(attempt).is_none_or(|entry| {
                         entry.execution != *execution
+                            || entry.dispatch_effect != *id
                             || entry.worker != *worker
                             || entry.incarnation != *incarnation
                             || entry.reservation != *reservation

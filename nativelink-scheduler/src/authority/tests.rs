@@ -73,6 +73,97 @@ fn charged_state() -> State {
 }
 
 #[test]
+fn dispatch_identity_and_ingress_watermark_survive_consumption_and_retirement() {
+    let mut state = charged_state();
+    let attempt = state.view().attempts[0];
+    let dispatch = state.effects.values().next().unwrap().id;
+    let request = state.executions[&attempt.execution].request.clone();
+    assert_eq!(attempt.dispatch_effect, dispatch);
+    assert_eq!(state.ingress_watermark(), OperationId(1));
+    assert_eq!(
+        apply(
+            &mut state,
+            Event::WorkerAccepted {
+                attempt: attempt.id,
+                worker: attempt.worker,
+                incarnation: attempt.incarnation,
+            },
+        ),
+        Reply::Applied
+    );
+    assert!(state.effects.is_empty());
+    let mut recovered = State::restore(&state.snapshot().unwrap()).unwrap();
+    assert_eq!(recovered.dispatch_effect_id(attempt.id), Some(dispatch));
+    apply(
+        &mut recovered,
+        Event::Complete {
+            attempt: attempt.id,
+            worker: attempt.worker,
+            incarnation: attempt.incarnation,
+            result: ResultPayload {
+                digest: "completed".into(),
+                exit_code: 0,
+                error: None,
+                response: None,
+            },
+        },
+    );
+    let publication = recovered.effects.values().next().unwrap().id;
+    // An extant publication cannot be substituted for the consumed dispatch.
+    let mut corrupt: serde_json::Value =
+        serde_json::from_slice(&recovered.snapshot().unwrap()).unwrap();
+    corrupt["state"]["attempts"]["1"]["dispatch_effect"] = publication.0.into();
+    assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
+    apply(
+        &mut recovered,
+        Event::EffectOutcome {
+            effect: publication,
+            success: true,
+        },
+    );
+    apply(
+        &mut recovered,
+        Event::AdvanceTime {
+            now: TERMINAL_RETENTION,
+        },
+    );
+    assert_eq!(
+        apply(
+            &mut recovered,
+            Event::RetireExecution {
+                execution: attempt.execution
+            }
+        ),
+        Reply::Applied
+    );
+    let mut empty = State::restore(&recovered.snapshot().unwrap()).unwrap();
+    assert!(empty.view().operations.is_empty());
+    assert_eq!(empty.dispatch_effect_id(attempt.id), None);
+    assert_eq!(empty.ingress_watermark(), OperationId(1));
+    assert!(matches!(
+        apply(
+            &mut empty,
+            Event::Submit {
+                operation: OperationId(1),
+                request: request.clone()
+            }
+        ),
+        Reply::Rejected(_)
+    ));
+    assert!(matches!(
+        apply(
+            &mut empty,
+            Event::Submit {
+                operation: OperationId(2),
+                request
+            }
+        ),
+        Reply::Submitted { .. }
+    ));
+    assert_eq!(empty.ingress_watermark(), OperationId(2));
+}
+
+#[test]
 fn snapshots_reject_inconsistent_authority_relations() {
     let state = charged_state();
     let original = state.snapshot().unwrap();
@@ -84,6 +175,8 @@ fn snapshots_reject_inconsistent_authority_relations() {
         ("/state/reservations/1/released", true.into()),
         ("/state/reservations/1/charged/slots", 0.into()),
         ("/state/attempts/1/incarnation", 2.into()),
+        ("/state/attempts/1/dispatch_effect", 0.into()),
+        ("/state/attempts/1/dispatch_effect", u64::MAX.into()),
         ("/state/operations/1/view/version", u64::MAX.into()),
         ("/state/limits/max_effects", 0.into()),
         ("/state/executions/1/attempt", serde_json::Value::Null),
@@ -1527,6 +1620,7 @@ fn every_fixed_state_row_fits_the_prepaid_byte_allowance() {
     fixed_row_fits(
         &AttemptView {
             id: AttemptId(u),
+            dispatch_effect: EffectId(u),
             execution: ExecutionId(u),
             worker: WorkerId(u),
             incarnation: IncarnationId(u),

@@ -565,6 +565,7 @@ struct Node {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Trial {
     attempt: AttemptId,
+    dispatch_effect: EffectId,
     execution: ExecutionId,
     worker: WorkerId,
     incarnation: IncarnationId,
@@ -1346,6 +1347,7 @@ impl Reference {
         });
         self.trials.push(Trial {
             attempt,
+            dispatch_effect: EffectId(self.next_effect),
             execution,
             worker,
             incarnation,
@@ -1936,6 +1938,7 @@ impl Reference {
             .iter()
             .map(|row| AttemptView {
                 id: row.attempt,
+                dispatch_effect: row.dispatch_effect,
                 execution: row.execution,
                 worker: row.worker,
                 incarnation: row.incarnation,
@@ -2029,7 +2032,7 @@ impl Reference {
 
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, String> {
         // Tuple framing is independent from the implementation's envelope.
-        let bytes = serde_json::to_vec(&("independent-authority-relations-v4", self))
+        let bytes = serde_json::to_vec(&("independent-authority-relations-v5", self))
             .map_err(|error| error.to_string())?;
         if bytes.len() > CREDIT_LIMIT {
             return Err("independent reference snapshot exceeds byte limit".into());
@@ -2043,7 +2046,7 @@ impl Reference {
         }
         let (format, state): (String, Self) =
             serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
-        if format != "independent-authority-relations-v4" {
+        if format != "independent-authority-relations-v5" {
             return Err("unknown independent reference format".to_owned());
         }
         if state.limits.max_payload_bytes > COMPLETE_PAYLOAD_LIMIT
@@ -2067,6 +2070,13 @@ impl Reference {
             || !unique(state.jobs.iter().map(|row| row.execution.0).collect())
             || !unique(state.nodes.iter().map(|row| row.worker.0).collect())
             || !unique(state.trials.iter().map(|row| row.attempt.0).collect())
+            || !unique(
+                state
+                    .trials
+                    .iter()
+                    .map(|row| row.dispatch_effect.0)
+                    .collect(),
+            )
             || !unique(state.charges.iter().map(|row| row.reservation.0).collect())
             || !unique(state.charges.iter().map(|row| row.attempt.0).collect())
             || !unique(state.outbox.iter().map(|row| row.id.0).collect())
@@ -2085,6 +2095,11 @@ impl Reference {
                 .any(|job| job.execution == trial.execution)
         }) {
             return Err("independent reference has an unowned prepaid row".into());
+        }
+        if state.trials.iter().any(|trial| {
+            trial.dispatch_effect.0 == 0 || trial.dispatch_effect.0 >= state.next_effect
+        }) {
+            return Err("independent reference has an unallocated dispatch identity".into());
         }
         for request in state
             .interests
@@ -2156,6 +2171,14 @@ impl Reference {
                 return Err(
                     "independent reference has invalid publication response facts".to_owned(),
                 );
+            }
+            if let EffectKind::Dispatch { attempt, .. } = &effect.kind
+                && !state
+                    .trials
+                    .iter()
+                    .any(|trial| trial.attempt == *attempt && trial.dispatch_effect == effect.id)
+            {
+                return Err("independent reference dispatch identity mismatch".into());
             }
             if let EffectKind::Dispatch {
                 attempt, charged, ..
