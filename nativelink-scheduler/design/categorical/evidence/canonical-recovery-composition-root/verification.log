@@ -1,0 +1,20 @@
+{
+  "verified_archives": 8,
+  "verified_archive_members": 2222,
+  "verified_distinct_binaries": 13,
+  "verified_retained_binary_paths": 66,
+  "verified_attempt_receipt_bindings": 13,
+  "verified_external_api_probes": {
+    "api-first": {
+      "positive": 1,
+      "required_rejections": 16,
+      "original_classifier_count": 15
+    },
+    "api-restored": {
+      "positive": 1,
+      "required_rejections": 16,
+      "original_classifier_count": 16
+    }
+  },
+  "extracted_to": null
+}

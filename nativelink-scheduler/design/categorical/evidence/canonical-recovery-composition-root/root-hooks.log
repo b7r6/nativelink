@@ -1,0 +1,27 @@
+alejandra............................................(no files to check)Skipped
+buildifier format........................................................Passed
+buildifier lint..........................................................Passed
+check-case-conflicts.....................................................Passed
+check-license............................................................Passed
+deadnix..............................................(no files to check)Skipped
+detect-private-keys......................................................Passed
+end-of-file-fixer........................................................Passed
+fix-byte-order-marker....................................................Passed
+forbid-binary-files..................................(no files to check)Skipped
+formatjson5..........................................(no files to check)Skipped
+generate-bazel-rc....................................(no files to check)Skipped
+generate-stores-config...............................(no files to check)Skipped
+hadolint.............................................(no files to check)Skipped
+machete..................................................................Passed
+mixed-line-endings.......................................................Passed
+pretty-format-json...................................(no files to check)Skipped
+renovate.............................................(no files to check)Skipped
+rustfmt..................................................................Passed
+shellcheck...........................................(no files to check)Skipped
+shfmt................................................(no files to check)Skipped
+statix...............................................(no files to check)Skipped
+taplo................................................(no files to check)Skipped
+taplo validate.......................................(no files to check)Skipped
+trim-trailing-whitespace.................................................Passed
+typos....................................................................Passed
+vale.....................................................................Passed

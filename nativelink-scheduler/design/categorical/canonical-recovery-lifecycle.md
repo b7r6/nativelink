@@ -35,8 +35,10 @@ are retained and matched to their build-event digests. All 1,365 tracked inputs
 remain unchanged. This combines the private components; the closed public owner
 has its own subsequent qualification boundary.
 
-This component exposes no public recovered owner or serving capability. It does
-not yet capture the recovered clock or establish its application read barrier.
+This standalone component supplies no serving capability. Its subsequent
+[closed-owner composition](canonical-recovered-owner.md) captures the recovered
+clock after the required application read barrier and exposes only diagnostics
+and consuming shutdown.
 Early Raft construction failure has no returned handle and does not establish an
 explicit tick-task join. Storage holders can keep cleanup pending indefinitely;
 external ownership aliases can retain namespace locks after it finishes.

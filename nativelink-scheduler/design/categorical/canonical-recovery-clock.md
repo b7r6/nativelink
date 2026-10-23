@@ -46,5 +46,5 @@ guarantee. The [combined root check](evidence/canonical-recovery-components-root
 at `61a12ad332` passes five uncached targets and builds the server, with 295 test
 passes and one existing ignore. It preserves all 1,365 source inputs and all six
 executables. This confirms the private components compile and pass together;
-composition into the closed public owner remains a separate qualification step.
-Production construction is unchanged.
+the [closed public owner](canonical-recovered-owner.md) now has its own subsequent
+qualification. Production construction is unchanged.
