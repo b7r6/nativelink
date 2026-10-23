@@ -49,6 +49,16 @@ current-stage EIO failures, and requires explicit repair observation. Its syscal
 receipts establish the tested software boundary, not power-loss durability or
 production readiness.
 
+The [sealed author packet](evidence/canonical-journal-owner/author/README.md)
+retains the original fixtures, final source, executed binaries, independent
+reviews and restoration checks. The final source passes 116 scheduler unit tests,
+one external API test and 47 filesystem tests, plus three strict Clippy
+configurations. Eleven compiled runtime faults are detected. The separate API
+compiler controls comprise one positive and fourteen expected refusals. These
+counts and the author synchronization matrix belong to the author source;
+restoration reproduces its exact pre-mutation executable. The packet verifier
+checks all nine archives and 1,134 mapped files, including the receipts file.
+
 The [root integration receipt](evidence/canonical-journal-owner/root-integration.json)
 preserves the initial missing Bazel test dependency, the corrected nine-target
 gate and an independent execution of the full synchronization matrix against the

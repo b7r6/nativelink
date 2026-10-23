@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-canonical-journal-owner-package/packet.py"
+  ],
+  "started_at": "2026-10-23T20:38:36.577967+00:00",
+  "finished_at": "2026-10-23T20:38:39.203063+00:00",
+  "returncode": 0,
+  "package_sha256": "fe029b73391739e14e2c87c63040741f9412ec27021b6459ccbf7afed0ff815e"
+}

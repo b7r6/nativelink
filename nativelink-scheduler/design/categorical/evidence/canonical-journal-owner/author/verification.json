@@ -1,0 +1,1468 @@
+{
+  "recorded_at": "2026-10-23T20:37:16.557779+00:00",
+  "source_commit": "f1847e64c39203ae81c73d05edfd177d0dba5ce2",
+  "tests_first_commit": "411ba3698853f9b52782b032b781c7be3c864610",
+  "source_files": {
+    "Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+    "Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+    "nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+    "nativelink-scheduler/BUILD.bazel": "47fc85e247611538d9cb80504c165e23a55fbecd0c757fc657e21408b9bb2087",
+    "nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+    "nativelink-scheduler/src/authority/canonical_binding_tests.rs": "506d02f1cfd62d2dce76e62bffb882e8bc4403435874f6aa10f55985491059fc",
+    "nativelink-scheduler/src/authority/canonical_owner.rs": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+    "nativelink-scheduler/src/authority/canonical_owner_tests.rs": "13282b580a8b4c3b762066e48b9a53c07bbd370a502fa3b8f22b74c982b17cb9",
+    "tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+    "tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+    "tools/canonical-filesystem/src/journal_tests.rs": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+    "nativelink-scheduler/tests/canonical_owner_api_test.rs": "e9d0294d590ff64d1e8cfa2d87541ec2850c51ef1d8c46f3107567eee2326f56",
+    "tools/test-canonical-owner-api.py": "52ab81474c9353bf75afd819879fab4e5a7d16343ce97e3d6f65a5faa4fa040c",
+    "tools/test-canonical-owner-sync.py": "7ada7381e9e17aca054a71fe020f9faeb65e9a298e415d3ced5f82de9fde5253",
+    "nativelink-scheduler/design/categorical/authority-canonical-binding.md": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+    "nativelink-scheduler/design/categorical/canonical-journal-owner.md": "212eb4b5ac6b315e80666721a34f5696fcaecefd65e608f187e767a29ec9fe68",
+    "tools/canonical-store/Cargo.lock": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7"
+  },
+  "scope": "Linux inert namespace-bound canonical journal preparation and sealed reopening. No runtime activation or production seal.",
+  "basis": {
+    "root_base": "ef57a7deaed91e96ba9480e4a3e26b8310f975a6",
+    "namespace_author_commit": "8c929fecd76acefcb0d3b0ddd9790cd87d8a67ac",
+    "local_namespace_cherry_pick": "33196d473fbc66963c54cd000f51ce2be45cdda5",
+    "proposal": "proposal/proposal.json",
+    "tests_first": "Tests and input manifest froze before runtime. No compiled-original-baseline claim: the new closed owner API did not exist on original source.",
+    "initial_prerequisites": "Initial missing trait/type annotations and strict lint/format corrections are retained, not counted as semantic detections."
+  },
+  "final_artifacts": {
+    "source_manifest": "qualified-source.json",
+    "source_manifest_sha256": "aa750869904df775aa6ca874ca6faccad160c9af2f77cee0e424527ba95c6d71",
+    "source_commit": "f1847e64c39203ae81c73d05edfd177d0dba5ce2",
+    "rustc_version": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6\n",
+    "artifacts": {
+      "nativelink_canonical_filesystem-library": {
+        "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/libnativelink_canonical_filesystem-f62d739603cb824c.rlib",
+        "copy": "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/libnativelink_canonical_filesystem-f62d739603cb824c.rlib",
+        "sha256": "bbf11fe8b28849173fa6bc7ce0da68de4eca42eddb188775ad1bc9900f78a78e",
+        "features": [
+          "redb"
+        ],
+        "profile": {
+          "opt_level": "z",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        }
+      },
+      "nativelink_scheduler-library": {
+        "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/libnativelink_scheduler-77d75e569491f808.rlib",
+        "copy": "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/libnativelink_scheduler-77d75e569491f808.rlib",
+        "sha256": "78a26678c5e3dc3ffe35d8fd830dc00237c1c61839b712bfa8e6a1c1965e8875",
+        "features": [],
+        "profile": {
+          "opt_level": "z",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        }
+      },
+      "canonical_owner_api_test-test": {
+        "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/canonical_owner_api_test-e5944a2e9dc6769b",
+        "copy": "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/canonical_owner_api_test-e5944a2e9dc6769b",
+        "sha256": "1d820dd5ffae7f67c64bcb73ccc32251ccb7129f037df0ddd7843237c263edd7",
+        "features": [],
+        "profile": {
+          "opt_level": "z",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        }
+      },
+      "nativelink_scheduler-test": {
+        "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/nativelink_scheduler-e2c98c6b95548faa",
+        "copy": "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/nativelink_scheduler-e2c98c6b95548faa",
+        "sha256": "b0deb0f371702c60102c60dde429ae7d4e6ad1b24bc845393b80ac0587128aa5",
+        "features": [],
+        "profile": {
+          "opt_level": "z",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        }
+      }
+    }
+  },
+  "qualification": {
+    "scheduler_unit_tests": {
+      "passed": 116,
+      "ignored": 1,
+      "ignored_reason": "Explicit subprocess syscall witness executed separately."
+    },
+    "external_api_bridge_runtime_tests": 1,
+    "filesystem_all_features_tests": 47,
+    "external_api_compile_controls": {
+      "positive": 1,
+      "negative": 14,
+      "classification": "Expected compiler diagnostic controls, not semantic mutation detections."
+    },
+    "real_sync": {
+      "baseline_paths": [
+        "cold",
+        "reopen",
+        "repair"
+      ],
+      "baseline_invocations": 3,
+      "current_EIO_refusals": 6,
+      "seed_and_abrupt_exit_setup_invocations": 9,
+      "total_invocations": 18,
+      "repair_claim": "Repair callback explicitly observed after abrupt exit; owner success markers precede release and Drop."
+    },
+    "compiled_runtime_mutants": {
+      "bypass-current-attachment-record-check": {
+        "mutation": "bypass-current-attachment-record-check",
+        "file": "tools/canonical-filesystem/src/journal.rs",
+        "original_sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+        "mutated_sha256": "416801ef6ae2b6bcb6ae62d20c80ca3b35882641b570e49ccec642926069e828",
+        "oracle": "authority::journal::canonical_owner::tests::attachment_replacement_before_and_after_current_sync_refuses",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "fa5de81e1ca49133f3d152f7ec58eec3850a4b23105de3a464f36aa89fb6991e",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:29:43.712274+00:00",
+          "finished": "2026-10-23T20:30:32.766611+00:00",
+          "log_sha256": "3bceb6494eadc544134791095409a031abf9f04db360d8dd27739507f7a2a8a6"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/bypass-current-attachment-record-check/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::attachment_replacement_before_and_after_current_sync_refuses",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:30:32.776214+00:00",
+          "finished": "2026-10-23T20:30:32.840507+00:00",
+          "log_sha256": "1e47dc2bbf4576a309a9c775d0c87a3ebd57d985c5f76f815a80dd5cec62cba2"
+        },
+        "detected": true
+      },
+      "ignore-current-commit-error": {
+        "mutation": "ignore-current-commit-error",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "c664dbc4274fa88517b7d7fca99ee8ad4d59f9749613ffae54bb522ad456598e",
+        "oracle": "sync-fault",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "74101456a10101a7c8ed617fe23094210ca80231b068657c46dd2e55d879dcf7",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:30:32.863061+00:00",
+          "finished": "2026-10-23T20:31:12.515271+00:00",
+          "log_sha256": "0c06190b51e27b4bcdf86a9a818853be410e50d789f19ad98937649c6f0f3a70"
+        },
+        "observation": {
+          "command": [
+            "python3",
+            "/tmp/nativelink-canonical-journal-owner/tools/test-canonical-owner-sync.py",
+            "--test-binary",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/ignore-current-commit-error/test-binary",
+            "--output",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/ignore-current-commit-error/sync"
+          ],
+          "returncode": 1,
+          "timed_out": false,
+          "started": "2026-10-23T20:31:12.524640+00:00",
+          "finished": "2026-10-23T20:31:13.090031+00:00",
+          "log_sha256": "a5b7b142ae55c78916bbef172f013a997adbe1dfc4efdd3bff5dcf21800a7482"
+        },
+        "detected": true
+      },
+      "skip-exact-current-phase": {
+        "mutation": "skip-exact-current-phase",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "0a41d45086c4be6637e58087254054363ea704c69fc646e2d5fa6ccbbc84d4f5",
+        "oracle": "authority::journal::canonical_owner::tests::phase_change_before_current_barrier_refuses_without_sealing",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "cbe5f28c016fb31245cd7405246a2258cf8ee03ce4a061ce6949aac7c20fdc5d",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:28:53.856744+00:00",
+          "finished": "2026-10-23T20:29:34.361371+00:00",
+          "log_sha256": "a83d160d9eea8a5d1ba0ac4b0a886d8379bc42c09cb31d35b9eca65f62142424"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/skip-exact-current-phase/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::phase_change_before_current_barrier_refuses_without_sealing",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:29:34.370742+00:00",
+          "finished": "2026-10-23T20:29:43.651105+00:00",
+          "log_sha256": "82418c7ac8186f9e146f39c55a41a0d3f3246759522c97bca2d9b219c69697dc"
+        },
+        "detected": true
+      },
+      "fixed-limit-drift": {
+        "mutation": "fixed-limit-drift",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "0145e92efd3cf93297529d76c5c8125f6e672c561090ae81ae30dc36b4572108",
+        "oracle": "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "9165c74356ecfc865577200f99f9bf5c768f3a888d036afb255493e4dd3a47ed",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:27:32.799371+00:00",
+          "finished": "2026-10-23T20:28:09.594729+00:00",
+          "log_sha256": "b6007712d226c3018be842025c617239a68ff65dc55951f156c3d18ec4a806cd"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/fixed-limit-drift/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:28:09.608024+00:00",
+          "finished": "2026-10-23T20:28:09.722595+00:00",
+          "log_sha256": "872ab852d6f3bca362dd2fc0f8f8f3fc075937372bcc975d0252f7967dd20f22"
+        },
+        "detected": true
+      },
+      "zero-domain": {
+        "mutation": "zero-domain",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "1cd9bf5174165151095a9f1455a0d3597fb0dee94e7984af455936e0ae4af309",
+        "oracle": "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "396a2ec46a279c2b9cd4dbf78665586830613a79f452e7f2cd8e431d0f37cab7",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:26:01.576630+00:00",
+          "finished": "2026-10-23T20:26:39.529588+00:00",
+          "log_sha256": "ad410f51fab374dfed2780ec7b7ed165083c9a2e67d52e31e966db1813bb0cdf"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/zero-domain/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:26:39.539233+00:00",
+          "finished": "2026-10-23T20:26:40.204502+00:00",
+          "log_sha256": "5d7528a6e7d4a1d3a41c8bfc285abe7642f6dddedecd92a98eb9ea77134a3e21"
+        },
+        "detected": true
+      },
+      "suppress-repair-observation": {
+        "mutation": "suppress-repair-observation",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "ae718c7a5b58781f608f82d554cd3c34e556efe2896c2ae05c6bbf9ca1e00d14",
+        "oracle": "sync",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "ed443925c71cb32b5bd8da1fa319684f7973cf943983a969f6c4d9a9f31438dd",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:31:13.104553+00:00",
+          "finished": "2026-10-23T20:31:54.288972+00:00",
+          "log_sha256": "bf6bcea1a7a3ebb1f51a94e2cf46756e0755cf2554b09a7721f7c683cc3f07e4"
+        },
+        "observation": {
+          "command": [
+            "python3",
+            "/tmp/nativelink-canonical-journal-owner/tools/test-canonical-owner-sync.py",
+            "--test-binary",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/suppress-repair-observation/test-binary",
+            "--output",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/suppress-repair-observation/sync",
+            "--baseline-only"
+          ],
+          "returncode": 1,
+          "timed_out": false,
+          "started": "2026-10-23T20:31:54.298064+00:00",
+          "finished": "2026-10-23T20:31:55.815143+00:00",
+          "log_sha256": "fd58926697a7c7b5c1a1edfd9adc3dc7c80fe2e51494abecff50f329cf8555c1"
+        },
+        "detected": true
+      },
+      "skip-current-commit": {
+        "mutation": "skip-current-commit",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "34449a1cbe060941560ee2e56017859686d751105e19f5f8d09d47e1ae08a14f",
+        "oracle": "sync",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "481a548dee7d045c5b6de42b2e912b12b5d29f8640f4e9bf0869d650c855b2f8",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:23:59.493074+00:00",
+          "finished": "2026-10-23T20:24:39.422016+00:00",
+          "log_sha256": "f47584dcfe0f8ddee98c0f25bfa4c55c19afed2f814de1ac690baaf445ec54f7"
+        },
+        "observation": {
+          "command": [
+            "python3",
+            "/tmp/nativelink-canonical-journal-owner/tools/test-canonical-owner-sync.py",
+            "--test-binary",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/skip-current-commit/test-binary",
+            "--output",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/skip-current-commit/sync",
+            "--baseline-only"
+          ],
+          "returncode": 1,
+          "timed_out": false,
+          "started": "2026-10-23T20:24:39.432587+00:00",
+          "finished": "2026-10-23T20:24:39.797898+00:00",
+          "log_sha256": "a6b2e7fa09a1412912bf8d29009dc066ffcceac6e130594320e7a0f42a9aab5f"
+        },
+        "detected": true
+      },
+      "skip-current-parent-sync": {
+        "mutation": "skip-current-parent-sync",
+        "file": "tools/canonical-filesystem/src/journal.rs",
+        "original_sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+        "mutated_sha256": "732e97c3dfd6c79bd86bda750ac07c64fb7ea633e7113cd5dbb9502d8b51044e",
+        "oracle": "sync",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "023a747ca2b77acbe1cc750b75a26fa9c7ab2286a1506d54b7e7280733f8a030",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:25:17.853490+00:00",
+          "finished": "2026-10-23T20:26:00.737390+00:00",
+          "log_sha256": "5c6bf7894a44f84a7dddacb7b86375730b880afc4f50f0a08c3d0221eddf5f8c"
+        },
+        "observation": {
+          "command": [
+            "python3",
+            "/tmp/nativelink-canonical-journal-owner/tools/test-canonical-owner-sync.py",
+            "--test-binary",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/skip-current-parent-sync/test-binary",
+            "--output",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/skip-current-parent-sync/sync",
+            "--baseline-only"
+          ],
+          "returncode": 1,
+          "timed_out": false,
+          "started": "2026-10-23T20:26:00.745915+00:00",
+          "finished": "2026-10-23T20:26:01.561802+00:00",
+          "log_sha256": "a3da838e8bbd6391bbcbbfaea583f597d3698d5965a14fd998622e6649817879"
+        },
+        "detected": true
+      },
+      "volatile-current-commit": {
+        "mutation": "volatile-current-commit",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "2dc1980e92b24e9ddcde33ef5ba491a2b044337f613e46937ad9e89f36e730d8",
+        "oracle": "sync",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "5dad7cd68bdf3cabfbc67bc77069585543b77547fdea7bbfb89b11ecca2407bf",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:24:39.821000+00:00",
+          "finished": "2026-10-23T20:25:16.584492+00:00",
+          "log_sha256": "0de7d38a17fa254e524730704bf3f0beb33a9f1b12fd99c8634a1fcfa394bc41"
+        },
+        "observation": {
+          "command": [
+            "python3",
+            "/tmp/nativelink-canonical-journal-owner/tools/test-canonical-owner-sync.py",
+            "--test-binary",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/volatile-current-commit/test-binary",
+            "--output",
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/volatile-current-commit/sync",
+            "--baseline-only"
+          ],
+          "returncode": 1,
+          "timed_out": false,
+          "started": "2026-10-23T20:25:16.598021+00:00",
+          "finished": "2026-10-23T20:25:17.817452+00:00",
+          "log_sha256": "a6b2e7fa09a1412912bf8d29009dc066ffcceac6e130594320e7a0f42a9aab5f"
+        },
+        "detected": true
+      },
+      "synthetic-commitment": {
+        "mutation": "synthetic-commitment",
+        "file": "nativelink-scheduler/src/authority/canonical_owner.rs",
+        "original_sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+        "mutated_sha256": "d3e0708f11e441dd2526f74457b382670c4bbac2d11d380fe773e535e110b69d",
+        "oracle": "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "ec039375906e583338511c5fde5a0202fbc7a3bdf647b04e86d51c1d0cfa5135",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:26:40.220130+00:00",
+          "finished": "2026-10-23T20:27:26.974498+00:00",
+          "log_sha256": "c4cd6e2e1621c08085c0919c41becfa48bc675e12cb8553d908352179a86c4df"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/synthetic-commitment/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::cold_derives_exact_binding_and_fixed_limits_without_runtime",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:27:27.260389+00:00",
+          "finished": "2026-10-23T20:27:32.784222+00:00",
+          "log_sha256": "dffc808e66a81453da758a9ffce23adf358a1a61f4a33c9ba48355b450e2856c"
+        },
+        "detected": true
+      },
+      "existing-classified-created": {
+        "mutation": "existing-classified-created",
+        "file": "tools/canonical-filesystem/src/journal.rs",
+        "original_sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+        "mutated_sha256": "8f2eb73cecf731f052d670ddec056aa8ff3b49927b0c1ddea4d43b6eac1da84b",
+        "oracle": "authority::journal::canonical_owner::tests::sealed_reopen_preserves_history_and_creation_provenance",
+        "compiler_failure_is_detection": false,
+        "driver_sha256": "8ef9eb972010d4d117245d709f6f700a1fbc7b7a4c729911a6b0e1426d83ca4b",
+        "binary_sha256": "176be16aee03b9bca778aed4e4e56a3f5f7a40c8a90d4f39ae3eda4463f94367",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--profile",
+            "smol",
+            "-j4",
+            "-p",
+            "nativelink-scheduler",
+            "--lib",
+            "--no-run",
+            "--message-format=json"
+          ],
+          "returncode": 0,
+          "timed_out": false,
+          "started": "2026-10-23T20:28:09.739935+00:00",
+          "finished": "2026-10-23T20:28:45.999964+00:00",
+          "log_sha256": "ed61c4e45c33cb5d2516e389be8dde06c1eba6fbc989a8b1575321872ca465eb"
+        },
+        "observation": {
+          "command": [
+            "/tmp/nativelink-canonical-journal-owner-evidence/mutants/existing-classified-created/test-binary",
+            "--exact",
+            "authority::journal::canonical_owner::tests::sealed_reopen_preserves_history_and_creation_provenance",
+            "--test-threads=1",
+            "--nocapture"
+          ],
+          "returncode": 101,
+          "timed_out": false,
+          "started": "2026-10-23T20:28:46.010204+00:00",
+          "finished": "2026-10-23T20:28:53.841410+00:00",
+          "log_sha256": "673e6189b798596de74c3c53682628be9a975ca19f9975088eed84c4ed1d8aaa"
+        },
+        "detected": true
+      }
+    },
+    "mutation_detection_precision": "Existing-as-created is detected by valid sealed reopen returning CurrentSync at the expected unwrap (test line282), before later creation-provenance/history assertions. Compiler failures, unrelated startup failures and custody-elision are not counted.",
+    "strict_lint": [
+      "scheduler lib and tests",
+      "filesystem all targets/all features",
+      "filesystem all targets/default features"
+    ],
+    "full_hooks": "All17sourceinputs pass exact repository pre-commit configuration.",
+    "runs": {
+      "focused-repair.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "canonical_owner::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:56:11.847394+00:00",
+        "finished": "2026-10-23T19:56:57.575193+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-final-source.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "Cargo.lock",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs",
+          "nativelink-scheduler/tests/canonical_owner_api_test.rs",
+          "tools/test-canonical-owner-api.py",
+          "tools/test-canonical-owner-sync.py",
+          "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "nativelink-scheduler/design/categorical/canonical-journal-owner.md",
+          "tools/canonical-store/Cargo.lock"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:04:45.775370+00:00",
+        "finished": "2026-10-23T20:04:54.140161+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-filesystem-clippy.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:34:16.361162+00:00",
+        "finished": "2026-10-23T20:34:17.387565+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-namespace-corrected.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "Cargo.lock",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs",
+          "nativelink-scheduler/tests/canonical_owner_api_test.rs",
+          "tools/test-canonical-owner-api.py",
+          "tools/test-canonical-owner-sync.py",
+          "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "nativelink-scheduler/design/categorical/canonical-journal-owner.md",
+          "tools/canonical-store/Cargo.lock"
+        ],
+        "returncode": 1,
+        "started": "2026-10-23T20:04:30.097010+00:00",
+        "finished": "2026-10-23T20:04:40.486492+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "real-sync-initial.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-sync.py",
+          "--test-binary",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/repair-owner-tests",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/real-sync-initial"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:57:22.751694+00:00",
+        "finished": "2026-10-23T19:57:26.710078+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "real-sync-restored.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-sync.py",
+          "--test-binary",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/nativelink_scheduler-e2c98c6b95548faa",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/real-sync-restored"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:34:30.253266+00:00",
+        "finished": "2026-10-23T20:34:35.213043+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "real-sync-corrected.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-sync.py",
+          "--test-binary",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/corrected-witness-owner-tests",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/real-sync-corrected"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:04:31.322467+00:00",
+        "finished": "2026-10-23T20:04:38.579905+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-filesystem.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-features",
+          "--",
+          "--test-threads=4"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:33:15.456849+00:00",
+        "finished": "2026-10-23T20:33:20.075407+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "final-tests.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--test",
+          "canonical_owner_api_test",
+          "--message-format=json",
+          "--",
+          "--test-threads=4"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:03:01.192445+00:00",
+        "finished": "2026-10-23T20:03:58.549185+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "api-restored.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-api.py",
+          "--scheduler",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/libnativelink_scheduler-77d75e569491f808.rlib",
+          "--filesystem",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/restored/libnativelink_canonical_filesystem-f62d739603cb824c.rlib",
+          "--dependency-dir",
+          "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/api-restored"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:34:35.243840+00:00",
+        "finished": "2026-10-23T20:34:37.465573+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-scheduler-final.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--tests",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:01:52.835620+00:00",
+        "finished": "2026-10-23T20:02:18.459130+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-filesystem-corrected.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:04:07.731037+00:00",
+        "finished": "2026-10-23T20:04:08.437958+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "scheduler-unit-all.json": {
+        "command": [
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/repair-owner-tests",
+          "--test-threads=4"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:57:29.614813+00:00",
+        "finished": "2026-10-23T19:57:40.183324+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-filesystem.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 101,
+        "started": "2026-10-23T20:02:34.099765+00:00",
+        "finished": "2026-10-23T20:02:35.181475+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-filesystem-default.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:04:13.274818+00:00",
+        "finished": "2026-10-23T20:04:13.857250+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "filesystem-all-features.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-features",
+          "--",
+          "--test-threads=4"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:58:24.376330+00:00",
+        "finished": "2026-10-23T19:58:41.162706+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "api-controls.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-api.py",
+          "--scheduler",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/libnativelink_scheduler-77d75e569491f808.rlib",
+          "--filesystem",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/libnativelink_canonical_filesystem-f62d739603cb824c.rlib",
+          "--dependency-dir",
+          "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/api-controls"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:58:25.765732+00:00",
+        "finished": "2026-10-23T19:58:34.475202+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "focused-initial.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "canonical_owner::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "returncode": 101,
+        "started": "2026-10-23T19:43:01.075425+00:00",
+        "finished": "2026-10-23T19:43:55.707460+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-hooks.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "Cargo.lock",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs",
+          "nativelink-scheduler/tests/canonical_owner_api_test.rs",
+          "tools/test-canonical-owner-api.py",
+          "tools/test-canonical-owner-sync.py",
+          "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "nativelink-scheduler/design/categorical/canonical-journal-owner.md",
+          "tools/canonical-store/Cargo.lock"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:34:18.157263+00:00",
+        "finished": "2026-10-23T20:34:30.224801+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-scheduler.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--tests",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 101,
+        "started": "2026-10-23T19:58:47.982075+00:00",
+        "finished": "2026-10-23T19:59:26.948042+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "external-bridge.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "canonical_owner_api_test",
+          "--message-format=json",
+          "--",
+          "--test-threads=1"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:57:13.042127+00:00",
+        "finished": "2026-10-23T19:57:37.881033+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-initial.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs"
+        ],
+        "returncode": 1,
+        "started": "2026-10-23T19:41:45.467445+00:00",
+        "finished": "2026-10-23T19:41:52.746282+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-repair.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "Cargo.lock",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs",
+          "nativelink-scheduler/tests/canonical_owner_api_test.rs",
+          "tools/test-canonical-owner-api.py",
+          "tools/test-canonical-owner-sync.py",
+          "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "nativelink-scheduler/design/categorical/canonical-journal-owner.md",
+          "tools/canonical-store/Cargo.lock"
+        ],
+        "returncode": 1,
+        "started": "2026-10-23T19:55:59.457879+00:00",
+        "finished": "2026-10-23T19:56:08.327103+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-scheduler-clippy.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--tests",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:33:20.092957+00:00",
+        "finished": "2026-10-23T20:34:16.342134+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-corrected.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "Cargo.lock",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs",
+          "nativelink-scheduler/tests/canonical_owner_api_test.rs",
+          "tools/test-canonical-owner-api.py",
+          "tools/test-canonical-owner-sync.py",
+          "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "nativelink-scheduler/design/categorical/canonical-journal-owner.md",
+          "tools/canonical-store/Cargo.lock"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:01:35.307969+00:00",
+        "finished": "2026-10-23T20:02:01.029349+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "hooks-restored.json": {
+        "command": [
+          "pre-commit",
+          "run",
+          "--config",
+          "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+          "--files",
+          "Cargo.toml",
+          "nativelink-scheduler/Cargo.toml",
+          "nativelink-scheduler/BUILD.bazel",
+          "nativelink-scheduler/src/authority/journal.rs",
+          "nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+          "nativelink-scheduler/src/authority/canonical_owner.rs",
+          "nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+          "tools/canonical-filesystem/src/namespace.rs",
+          "tools/canonical-filesystem/src/journal.rs",
+          "tools/canonical-filesystem/src/journal_tests.rs"
+        ],
+        "returncode": 1,
+        "started": "2026-10-23T19:42:44.170611+00:00",
+        "finished": "2026-10-23T19:42:51.347246+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "pre-mutant-baseline.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "canonical_owner::tests::",
+          "--message-format=json",
+          "--",
+          "--test-threads=1"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:21:32.595543+00:00",
+        "finished": "2026-10-23T20:23:05.454832+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "focused-corrected.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "canonical_owner::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:45:05.169959+00:00",
+        "finished": "2026-10-23T19:45:51.907963+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "real-sync-pre-mutant.json": {
+        "command": [
+          "python3",
+          "tools/test-canonical-owner-sync.py",
+          "--test-binary",
+          "/tmp/nativelink-canonical-journal-owner-evidence/binaries/pre-mutant/nativelink_scheduler-e2c98c6b95548faa",
+          "--output",
+          "/tmp/nativelink-canonical-journal-owner-evidence/real-sync-pre-mutant"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:23:23.679071+00:00",
+        "finished": "2026-10-23T20:23:30.458279+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "compiled-mutants.json": {
+        "command": [
+          "python3",
+          "/tmp/nativelink-canonical-journal-owner-evidence/mutate.py"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:23:59.418454+00:00",
+        "finished": "2026-10-23T20:31:55.841358+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-default-clippy.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "--manifest-path",
+          "tools/canonical-filesystem/Cargo.toml",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:34:17.408132+00:00",
+        "finished": "2026-10-23T20:34:18.138068+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "clippy-scheduler-corrected.json": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--tests",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "returncode": 101,
+        "started": "2026-10-23T20:00:27.610727+00:00",
+        "finished": "2026-10-23T20:00:44.142909+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "restored-tests.json": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j4",
+          "-p",
+          "nativelink-scheduler",
+          "--lib",
+          "--test",
+          "canonical_owner_api_test",
+          "--message-format=json",
+          "--",
+          "--test-threads=4"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T20:32:15.476501+00:00",
+        "finished": "2026-10-23T20:33:15.272635+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      },
+      "metadata.json": {
+        "command": [
+          "cargo",
+          "metadata",
+          "--offline",
+          "--no-deps",
+          "--format-version",
+          "1"
+        ],
+        "returncode": 0,
+        "started": "2026-10-23T19:40:24.778946+00:00",
+        "finished": "2026-10-23T19:40:24.806935+00:00",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target"
+        }
+      }
+    }
+  },
+  "limitations": [
+    "No Raft actor, clock, serving listener, seal transition, canonical store bootstrap, worker incarnation or production readiness.",
+    "Sealed history is constructed only by private tests; abrupt exit and real redb repair do not prove power-loss durability.",
+    "Current fsync qualification separates setup, current transaction, current parent, success while alive and later destructor flushes; Drop is not an acknowledgement.",
+    "Cooperative namespace locks and instantaneous configured attachment checks do not protect against hostile writers or prove lifetime physical-directory continuity; experimental aliases remain possible.",
+    "Cancellation is behaviorally checked at blocked opening and current synchronization; backend and parent custody holders are independently reviewed. No compiled custody-elision mutant is claimed.",
+    "Failure preserves possible artifacts and provides no rollback promise. Preparing cannot be adopted or normally reopened.",
+    "Author qualification is Cargo/compiler/syscall evidence. Root combined Bazel integration is separate and is not claimed by this packet."
+  ]
+}

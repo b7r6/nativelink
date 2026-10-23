@@ -64,6 +64,12 @@ the real sync matrix against the root Bazel binary passed three successful opens
 and six injected sync refusals, with nine separate setup invocations. The
 [root receipt](evidence/canonical-journal-owner/root-integration.json) binds those
 observations to the exact binary and source, separately from author qualification.
+The [sealed author packet](evidence/canonical-journal-owner/author/README.md)
+retains eleven detected compiled faults, one positive and fourteen negative API
+compiler controls, the author sync matrix and independent reviews. Its restored
+source passes 116 scheduler unit tests, one API test, 47 filesystem tests and
+three strict Clippy configurations. All nine archives and 1,134 mapped files
+were independently checked after copying the packet into this checkout.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
