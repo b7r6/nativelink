@@ -670,6 +670,22 @@ were all detected by their named assertions. The unmodified and restored source
 each passed all 72 tests. This result does not inherit or complete the independent
 reference comparison.
 
+The new independent reference was frozen before reading the candidate. A
+subsequent [executable audit](evidence/prepared-memory-reference-audit/manifest.json)
+found five mismatches: preparation lease bounds, stage-local write IDs, repeated
+abandonment, duplicate admission, and atomic cache-miss resolution. The original
+candidate passed all five corresponding regressions; the original reference
+failed all five intended assertions. The corrected reference uses an explicitly
+new private replay format. Full focused suites now pass 77 candidate and 29
+reference cases with strict Clippy; both
+[integrated Bazel targets](evidence/prepared-memory-audit-integration/manifest.json)
+also executed and passed. The candidate and underlying scheduler implementations
+are unchanged. All six separately compiled
+[reference faults](evidence/prepared-memory-reference-mutations/manifest.json)
+were detected, with 29-case baseline and restored passes. These fault checks and
+the collaborative reference correction remain distinct from the pending
+command-by-command comparison.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions

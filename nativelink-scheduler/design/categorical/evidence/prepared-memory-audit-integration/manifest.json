@@ -1,0 +1,20 @@
+{
+  "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=4 //nativelink-scheduler:publication_candidate_test //nativelink-scheduler:prepared_memory_reference_test",
+  "executed_targets": 2,
+  "files": {
+    "bazel.log.gz": {
+      "sha256": "09684500ef8ad857a12dd12f02c50ead2fc74a4131f2c656a591658f963d555a",
+      "uncompressed_sha256": "0bca01369fe7343e9945177a9add820da7a4c01a95d8558eef4206691a82a85e"
+    },
+    "before.json.gz": {
+      "sha256": "0c144f06278fa8f10c210640e8dcec63d844869a235f3fb5c559c5a3515c26ef",
+      "uncompressed_sha256": "de1258543af639a985da0850c06778ecfefe1602eb3ad0883dd6cb965ff8c12c"
+    }
+  },
+  "head": "370935a2720dc711ea56f38c41259de133e00e26",
+  "passing_targets": 2,
+  "schema_version": 1,
+  "scope": "Candidate77 and reference29 cases after five concrete audit corrections. Does not include new command-by-command differential adapter or production cutover.",
+  "source_count": 146,
+  "sources_unchanged": true
+}
