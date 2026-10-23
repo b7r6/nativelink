@@ -1,0 +1,296 @@
+{
+  "source_commit": "dcd5ce8599b74e6bec6d004e68adfffb5e7a03ca",
+  "author_receipt_sha256": "6e46f85d7ec4fd7185ef4599bbeb62caccb09b9c4accce20077f8c568c136ed6",
+  "archive": "qualified-evidence.tar.gz",
+  "archive_sha256": "e2ec5e9d13ca85b40dc0417c32172bac64ad83e7e898c0e1229a86cb138809ee",
+  "archive_bytes": 291782,
+  "scope": "Private canonical journal storage compatibility prerequisite; no serving/bootstrap/clock lifetime qualification.",
+  "qualification": "Final scheduler lib107, strict Clippy, full hooks, and five compiled guard faults; root Bazel remains separate.",
+  "members": [
+    {
+      "path": "author-receipt.json",
+      "bytes": 12713,
+      "sha256": "6e46f85d7ec4fd7185ef4599bbeb62caccb09b9c4accce20077f8c568c136ed6"
+    },
+    {
+      "path": "cargo-clippy-corrected.log",
+      "bytes": 287,
+      "sha256": "f1500953b38afa6d3517b9af34f4a780a71d92bad08da3bfb499ae88d2c9592f"
+    },
+    {
+      "path": "cargo-clippy-initial.log",
+      "bytes": 1039,
+      "sha256": "dc0ad357bbaf57bb0a4a99d72821aad23e5022b244b59356bda8fa7df0874ccd"
+    },
+    {
+      "path": "cargo-focused-corrected.log",
+      "bytes": 2373,
+      "sha256": "8eee46577cd6340644ac833cdbaee07c006786336880cea733007d11cdd9598c"
+    },
+    {
+      "path": "cargo-focused-initial.log",
+      "bytes": 1276,
+      "sha256": "85854de386cde6fbd01955b8263c5260ae585fa07fe8ccb6a5f7176fec0ac0ff"
+    },
+    {
+      "path": "cargo-lib-restored.log",
+      "bytes": 12020,
+      "sha256": "315a602f9ebba0ce2271e17b3ec239415adec0e0957bf752970a4bde90febeaf"
+    },
+    {
+      "path": "cargo-lib.log",
+      "bytes": 11911,
+      "sha256": "6ba074605d89ae89777cce1e9ed232dfbd3a72fc1daa2fa33883ab03558700c3"
+    },
+    {
+      "path": "fault-attempts.json",
+      "bytes": 6809,
+      "sha256": "ec0d749a3967fcf3262ca03dddbe1695557f8aee96a0521573aba7fd8eea1450"
+    },
+    {
+      "path": "fault-run.log",
+      "bytes": 1090,
+      "sha256": "3f7238756788e1d3b6230fe8373a3a217b155ea391332f48808b43823b5856ca"
+    },
+    {
+      "path": "faults/allow_preparing_reopen/attempt.json",
+      "bytes": 1326,
+      "sha256": "5ec7739dad84f954156eb25348efa7b386d1691c791f9f6a0f597659298b2a2f"
+    },
+    {
+      "path": "faults/allow_preparing_reopen/cargo.log",
+      "bytes": 1310,
+      "sha256": "a97a32c162b94c6896cd4d7dd6ff8a197d4fa55405eeeb672655e0f5b6e58245"
+    },
+    {
+      "path": "faults/allow_preparing_reopen/mutant.rs",
+      "bytes": 3281,
+      "sha256": "c0a3aecc1d5fcc224a85d3dc074923e3a2311dc38372bfc395876d2044de580d"
+    },
+    {
+      "path": "faults/omit_applied_identity/attempt.json",
+      "bytes": 1229,
+      "sha256": "3afd2d65e0ac54ec59efacf4f752def03344a00d5015900cb3d1abbeb272cb12"
+    },
+    {
+      "path": "faults/omit_applied_identity/cargo.log",
+      "bytes": 1286,
+      "sha256": "612640f012a37b6b99e6fcde3a9566d6ff176007e1669fc5122670b58d873fe5"
+    },
+    {
+      "path": "faults/omit_applied_identity/mutant.rs",
+      "bytes": 122002,
+      "sha256": "a4295ec71bc3345e6db175bb9d39a356a58d5fea103226d6e29ed429fb519a26"
+    },
+    {
+      "path": "faults/omit_metadata_identity_presence/attempt.json",
+      "bytes": 1305,
+      "sha256": "dd37788df9c4b8b51ba70c55cbc15394b528acab73b8e7976d0d221a09bdf6a6"
+    },
+    {
+      "path": "faults/omit_metadata_identity_presence/cargo.log",
+      "bytes": 1379,
+      "sha256": "5086248f61c0ce30a6ac858c341c7f484c2624e32703c10115d8854d6bc80ef2"
+    },
+    {
+      "path": "faults/omit_metadata_identity_presence/mutant.rs",
+      "bytes": 3283,
+      "sha256": "f11ad8202b293382d322ae52d721805ae49dbca0519780901f994c61bce143aa"
+    },
+    {
+      "path": "faults/omit_recovery_snapshot_identity/attempt.json",
+      "bytes": 1270,
+      "sha256": "312fcefb3bf76f470cd00f2f00db64f933b82637d3e5b8c3b4d6f524ecf949af"
+    },
+    {
+      "path": "faults/omit_recovery_snapshot_identity/cargo.log",
+      "bytes": 1993,
+      "sha256": "912f4ab31633ea93c48db8f90c0f5c5ed2ea05e4f8795f621620bdbfff8442cf"
+    },
+    {
+      "path": "faults/omit_recovery_snapshot_identity/mutant.rs",
+      "bytes": 122019,
+      "sha256": "45cc76fa76a1c0abe46ded8f8e31265be36e755afa5716d0b6ea386e21f2d99d"
+    },
+    {
+      "path": "faults/snapshot_trusts_own_identity/attempt.json",
+      "bytes": 1301,
+      "sha256": "2b3e0e70c1bfa5a62e9598cf5684c8e56139c64ac9fa77043aca4c2b919d15fe"
+    },
+    {
+      "path": "faults/snapshot_trusts_own_identity/cargo.log",
+      "bytes": 1869,
+      "sha256": "7736cb198eb0b05eee952ba133647c8f49198bc3ec46e23f3275d9d7cd02bb91"
+    },
+    {
+      "path": "faults/snapshot_trusts_own_identity/mutant.rs",
+      "bytes": 122015,
+      "sha256": "7e584e2f384e3196229bcae044cda0bfbc7f524216fff10fc2a2aa2ce32b7394"
+    },
+    {
+      "path": "full-hooks.log",
+      "bytes": 2160,
+      "sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    },
+    {
+      "path": "independent-review.json",
+      "bytes": 4187,
+      "sha256": "d348328801d26c758c8ea43a644e80b0b8ad479c07c5b2b2019c60100d1427d5"
+    },
+    {
+      "path": "pre-compile/Cargo.lock",
+      "bytes": 159851,
+      "sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8"
+    },
+    {
+      "path": "pre-compile/manifest.json",
+      "bytes": 1877,
+      "sha256": "d9246d3faf149c8d2f9429d2a095121e71361f732e23d266dd5dd034030e3557"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/BUILD.bazel",
+      "bytes": 23824,
+      "sha256": "00ba51a97883f29fa7954574818dd61a5707224d309b3c3b39457555a9b9ea8b"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+      "bytes": 4221,
+      "sha256": "5134464b8802d32fb933bb8c8f3a42abc1516daf238d2551dcbe8bf9786d2a18"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+      "bytes": 11728,
+      "sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+      "bytes": 20042,
+      "sha256": "0ac5c9392edf55d530d24491bc6a9b09ed919c3b0c74674f60794e7e1bf9f24d"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 121993,
+      "sha256": "27e2ef1a8a0944d6eef5c727241aeb868d04099e8a87844b18909a5b0396619d"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/src/authority/journal_factory_tests.rs",
+      "bytes": 19649,
+      "sha256": "b04794ee8efd109a3aa1b60e284077773a68ed8b557f1cbc9e585f841e189b27"
+    },
+    {
+      "path": "pre-compile/nativelink-scheduler/src/authority/singleton_recovery_tests.rs",
+      "bytes": 16623,
+      "sha256": "44beda041e908edf53bbbf67a644b447aade4eec849393acc1781a1585cabd32"
+    },
+    {
+      "path": "pre-compile-hooks-restored.log",
+      "bytes": 2160,
+      "sha256": "0dc6bb55c1017ce4e38789dc9b55dcb90707839f863748f9e5ed7ff6ae2c97a2"
+    },
+    {
+      "path": "pre-compile-hooks.log",
+      "bytes": 2497,
+      "sha256": "e3a1f94d9043ae4eec7c0281ab82fe6e9de8b39676283f1ebc3f28d77cda5c4b"
+    },
+    {
+      "path": "qualified-binary.json",
+      "bytes": 192,
+      "sha256": "812430678ac3f543511174beba4e69a4376f0ba0451e0047b740fd4b1c5a1e06"
+    },
+    {
+      "path": "qualified-source/Cargo.lock",
+      "bytes": 159851,
+      "sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8"
+    },
+    {
+      "path": "qualified-source/manifest.json",
+      "bytes": 1928,
+      "sha256": "bbcf3d91a3f6606d22adf64a77def05fa7d82c5e96698f6eb5c0bc3200ccab12"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 23824,
+      "sha256": "00ba51a97883f29fa7954574818dd61a5707224d309b3c3b39457555a9b9ea8b"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+      "bytes": 4221,
+      "sha256": "5134464b8802d32fb933bb8c8f3a42abc1516daf238d2551dcbe8bf9786d2a18"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+      "bytes": 11728,
+      "sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+      "bytes": 20015,
+      "sha256": "76d698dd3181f69ffee8cab51af4d6b9a2118579f8ddba1339550b55f431816f"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 121993,
+      "sha256": "27e2ef1a8a0944d6eef5c727241aeb868d04099e8a87844b18909a5b0396619d"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/journal_factory_tests.rs",
+      "bytes": 19649,
+      "sha256": "b04794ee8efd109a3aa1b60e284077773a68ed8b557f1cbc9e585f841e189b27"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs",
+      "bytes": 16629,
+      "sha256": "435531a5523b5af6c412d290b9d8146c4d59a05353cf5110aa7eb746bfd8896e"
+    },
+    {
+      "path": "review-context/nativelink-service/src/authority_server.rs",
+      "bytes": 89250,
+      "sha256": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0"
+    },
+    {
+      "path": "review-context/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 8084,
+      "sha256": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899"
+    },
+    {
+      "path": "run-faults.py",
+      "bytes": 4219,
+      "sha256": "c6dbfc0d3db18e577d3231fc64a96746ba82f022b978c6f4adc57a240ddbbf57"
+    },
+    {
+      "path": "source-commit.log",
+      "bytes": 2571,
+      "sha256": "aa2b7424de644d87fae0f6d04e1d81423635fe390a71db16998046fe7b14c331"
+    },
+    {
+      "path": "tests-first/manifest.json",
+      "bytes": 729,
+      "sha256": "2fbc0a5beac728f1a82f1b7b7938901d670bfa533c6dae77a2eb5327ae8d62a4"
+    },
+    {
+      "path": "tests-first/nativelink-scheduler/BUILD.bazel",
+      "bytes": 23778,
+      "sha256": "bb64064085dd3b7629600cea030d1be7e675bf93cdb317d1eca90ea0558cb08a"
+    },
+    {
+      "path": "tests-first/nativelink-scheduler/src/authority/canonical_binding_tests.rs",
+      "bytes": 19507,
+      "sha256": "514710f3d52bb3bef4afa83400fcc63247e8ab6df45a032e9f736e05d7b80944"
+    },
+    {
+      "path": "tests-first/nativelink-scheduler/src/authority/journal_factory_tests.rs",
+      "bytes": 19643,
+      "sha256": "430f57c090c786fb4167475e8104155a4d33c17a8985fe6b9d95f6e80109369f"
+    }
+  ]
+}
