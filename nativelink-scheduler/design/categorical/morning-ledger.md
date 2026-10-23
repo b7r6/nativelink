@@ -7,7 +7,8 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add fixed listener digest defaults, ByteStream read
+Latest focused checkpoints add an inert canonical journal owner, fixed listener
+digest defaults, ByteStream read
 producer completion, synchronized namespace commitments, bounded fixed CAS and AC
 admission, digest context for
 captured requests and replayed effects, private canonical journal binding,
@@ -51,6 +52,18 @@ Cargo Clippy for the service library and tests also passed at `f5e589bb37`.
 The [integration receipt](evidence/fixed-listener-digest-default/root-integration.json)
 separates those checks from the author's original failures and twelve compiled
 fault controls. These are focused counts, not a new full-workspace checkpoint.
+
+The canonical-owner checkpoint at `595ece120c` passes nine selected targets and
+the server build. At its preceding `2947999e96` source, all eight compiled targets
+executed and passed (298 Rust tests and two ignored cases), while the external
+API test failed compilation because its Bazel rule omitted the tracing macro
+dependency. Adding that one dependency completed the gate: the API test ran,
+eight results were cached, and the logs total 299 passes and two ignored cases.
+Each run retained 1,346 unchanged tracked inputs. An independent execution of
+the real sync matrix against the root Bazel binary passed three successful opens
+and six injected sync refusals, with nine separate setup invocations. The
+[root receipt](evidence/canonical-journal-owner/root-integration.json) binds those
+observations to the exact binary and source, separately from author qualification.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also

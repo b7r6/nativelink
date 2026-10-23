@@ -48,3 +48,10 @@ harness observes real file and parent syncs while the owner is alive, injects
 current-stage EIO failures, and requires explicit repair observation. Its syscall
 receipts establish the tested software boundary, not power-loss durability or
 production readiness.
+
+The [root integration receipt](evidence/canonical-journal-owner/root-integration.json)
+preserves the initial missing Bazel test dependency, the corrected nine-target
+gate and an independent execution of the full synchronization matrix against the
+Bazel-built binary. Its three successful opens, six injected sync refusals and
+nine setup invocations remain distinct from compiler controls and semantic
+mutation qualification.
