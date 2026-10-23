@@ -70,7 +70,9 @@ files.
 
 Admission uses a semaphore that never waits. A fifth operation fails immediately;
 there is no backend admission wait queue. A batch holds one permit and verifies
-keys sequentially, so its maximum content scan is 4 GiB. `update_oneshot` splits
+keys sequentially, so a successful batch scans at most 4 GiB. A corrupt file
+can consume one additional 64 KiB read buffer before length rejection stops the
+batch; the failing-batch bound is 4 GiB plus 64 KiB. `update_oneshot` splits
 its existing input into 64 KiB chunks and acquires only the update's permit.
 These are finite experimental constants, not M0 workload or latency qualification.
 Caller-owned payloads, returned data, service decoding, other store instances
