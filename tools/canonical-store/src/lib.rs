@@ -52,6 +52,7 @@ pub const MAX_ACTIVE_OPERATIONS: usize = 4;
 pub const MAX_HAS_KEYS: usize = 64;
 
 /// Both adapters share admission permits and retain the fixed layout's locks.
+#[derive(Debug)]
 pub struct CanonicalStores {
     pub cas: Arc<CanonicalCas>,
     pub sink: Arc<CanonicalSink>,
@@ -62,7 +63,9 @@ impl CanonicalStores {
     /// Construction does not adopt data or reconstruct any execution authority.
     pub async fn from_layout(layout: Arc<FixedLayout>) -> Result<Self, Error> {
         let shared = blocking(move || {
-            layout.sync_layout().map_err(namespace_error)?;
+            layout
+                .sync_layout()
+                .map_err(|error| namespace_error(&error))?;
             Ok(Arc::new(Shared {
                 layout,
                 permits: Arc::new(Semaphore::new(MAX_ACTIVE_OPERATIONS)),
@@ -99,7 +102,7 @@ enum Directory {
 }
 
 impl Directory {
-    fn is_cas(&self) -> bool {
+    const fn is_cas(&self) -> bool {
         matches!(self, Self::Cas(_))
     }
 
@@ -108,7 +111,7 @@ impl Directory {
             Self::Cas(directory) => directory.read(leaf),
             Self::Sink(directory) => directory.read(leaf),
         }
-        .map_err(namespace_error)
+        .map_err(|error| namespace_error(&error))
     }
 
     fn temporary(&self) -> Result<PendingWrite, Error> {
@@ -117,7 +120,7 @@ impl Directory {
             Self::Cas(directory) => directory.create_exclusive(id),
             Self::Sink(directory) => directory.create_exclusive(id),
         }
-        .map_err(namespace_error)
+        .map_err(|error| namespace_error(&error))
     }
 
     fn sync(&self) -> Result<(), Error> {
@@ -125,7 +128,7 @@ impl Directory {
             Self::Cas(directory) => directory.sync_directories(),
             Self::Sink(directory) => directory.sync_directories(),
         }
-        .map_err(namespace_error)
+        .map_err(|error| namespace_error(&error))
     }
 }
 
@@ -149,7 +152,7 @@ struct Key {
 }
 
 impl Driver {
-    fn key(&self, key: StoreKey<'_>, algorithm: DigestHasherFunc) -> Result<Key, Error> {
+    fn key(&self, key: &StoreKey<'_>, algorithm: DigestHasherFunc) -> Result<Key, Error> {
         let StoreKey::Digest(digest) = key else {
             return Err(make_err!(
                 Code::InvalidArgument,
@@ -160,7 +163,7 @@ impl Driver {
             return Err(make_err!(Code::ResourceExhausted, "canonical object limit"));
         }
         let virtual_empty = self.directory.is_cas() && digest.size_bytes() == 0;
-        if virtual_empty && algorithm.hasher().finalize_digest() != digest {
+        if virtual_empty && algorithm.hasher().finalize_digest() != *digest {
             return Err(make_err!(Code::InvalidArgument, "invalid empty CAS digest"));
         }
         let leaf = DigestLeaf::new(
@@ -172,7 +175,7 @@ impl Driver {
             digest.size_bytes(),
         );
         Ok(Key {
-            digest,
+            digest: *digest,
             algorithm,
             leaf,
             virtual_empty,
@@ -197,7 +200,7 @@ impl Driver {
         let algorithm = digest_hasher_func_from_context();
         let keys = keys
             .iter()
-            .map(|key| self.key(key.borrow(), algorithm))
+            .map(|key| self.key(key, algorithm))
             .collect::<Result<Vec<_>, _>>()?;
         let permit = self.permit()?;
         let driver = self.clone();
@@ -210,6 +213,7 @@ impl Driver {
                     Ok(verified) => {
                         if let Some(file) = verified.file {
                             file.sync_all().map_err(io_error)?;
+                            #[cfg(test)]
                             driver.before_sync()?;
                             driver.directory.sync()?;
                         }
@@ -232,7 +236,7 @@ impl Driver {
         mut reader: DropCloserReadHalf,
         size: UploadSizeInfo,
     ) -> Result<u64, Error> {
-        let key = self.key(key, digest_hasher_func_from_context())?;
+        let key = self.key(&key, digest_hasher_func_from_context())?;
         let permit = self.permit()?;
         let driver = self.clone();
         let mut state = blocking(move || {
@@ -336,7 +340,7 @@ impl Driver {
         offset: u64,
         length: Option<u64>,
     ) -> Result<(), Error> {
-        let key = self.key(key, digest_hasher_func_from_context())?;
+        let key = self.key(&key, digest_hasher_func_from_context())?;
         let end = length
             .map(|length| {
                 offset
@@ -359,10 +363,9 @@ impl Driver {
         Ok(())
     }
 
+    #[cfg(test)]
     fn before_sync(&self) -> Result<(), Error> {
-        #[cfg(test)]
-        self.shared.hooks.hit(tests::HookPoint::DirectorySync)?;
-        Ok(())
+        self.shared.hooks.hit(tests::HookPoint::DirectorySync)
     }
 
     fn verify(&self, key: &Key, range: Option<(u64, u64)>) -> Result<Verified, Error> {
@@ -380,7 +383,7 @@ impl Driver {
         let mut hasher = self.directory.is_cas().then(|| key.algorithm.hasher());
         let mut bytes = Vec::new();
         let mut size = 0u64;
-        let mut buffer = [0; IO_BUFFER_BYTES];
+        let mut buffer = vec![0; IO_BUFFER_BYTES].into_boxed_slice();
         loop {
             let count = file.read(&mut buffer).map_err(io_error)?;
             if count == 0 {
@@ -405,7 +408,11 @@ impl Driver {
                 let from = start.max(size);
                 let to = end.min(next);
                 if from < to {
-                    bytes.extend_from_slice(&buffer[(from - size) as usize..(to - size) as usize]);
+                    let from = usize::try_from(from - size)
+                        .map_err(|_| make_err!(Code::Internal, "canonical range start overflow"))?;
+                    let to = usize::try_from(to - size)
+                        .map_err(|_| make_err!(Code::Internal, "canonical range end overflow"))?;
+                    bytes.extend_from_slice(&buffer[from..to]);
                 }
             }
             size = next;
@@ -464,15 +471,16 @@ impl WriteState {
                             .sync_all()
                             .map_err(io_error)?;
                     }
-                    Err(error) => return Err(namespace_error(error)),
+                    Err(error) => return Err(namespace_error(&error)),
                 }
             }
             Directory::Sink(directory) => {
                 directory
                     .replace(pending, &self.key.leaf)
-                    .map_err(namespace_error)?;
+                    .map_err(|error| namespace_error(&error))?;
             }
         }
+        #[cfg(test)]
         self.driver.before_sync()?;
         self.driver.directory.sync()?;
         Ok(self.bytes)
@@ -491,7 +499,7 @@ fn io_error(_: std::io::Error) -> Error {
     make_err!(Code::Unavailable, "canonical filesystem IO failed")
 }
 
-fn namespace_error(error: nativelink_canonical_config::Error) -> Error {
+fn namespace_error(error: &nativelink_canonical_config::Error) -> Error {
     make_err!(
         if error.code == "missing_slot" {
             Code::NotFound

@@ -265,10 +265,7 @@ async fn cas_batch_status_waits_for_directory_sync_and_propagates_refusal() {
                         .is_err()
                 );
                 gate.release();
-                assert_eq!(
-                    query.await.unwrap().unwrap_err().code(),
-                    tonic::Code::Unavailable
-                );
+                assert_eq!(query.await.unwrap().unwrap_err().code(), Code::Unavailable);
             }
             let status = rpc
                 .bs
@@ -279,7 +276,10 @@ async fn cas_batch_status_waits_for_directory_sync_and_propagates_refusal() {
                 .unwrap()
                 .into_inner();
             assert!(status.complete);
-            assert_eq!(status.committed_size, key.size_bytes() as i64);
+            assert_eq!(
+                status.committed_size,
+                i64::try_from(key.size_bytes()).unwrap()
+            );
         }
     }
 }
@@ -312,11 +312,11 @@ async fn bytestream_write_ack_and_identity_compressed_reads_use_qualified_backen
             gate.release();
             let response = request.await.unwrap();
             if fail {
-                assert_eq!(response.unwrap_err().code(), tonic::Code::Unavailable);
+                assert_eq!(response.unwrap_err().code(), Code::Unavailable);
             } else {
                 assert_eq!(
                     response.unwrap().into_inner().committed_size,
-                    data.len() as i64
+                    i64::try_from(data.len()).unwrap()
                 );
             }
             for compressed in [false, true] {
@@ -451,7 +451,7 @@ async fn ac_update_get_preserves_mutable_action_result_and_final_sync_status() {
             gate.release();
             let response = request.await.unwrap();
             if fail {
-                assert_eq!(response.unwrap_err().code(), tonic::Code::Unavailable);
+                assert_eq!(response.unwrap_err().code(), Code::Unavailable);
             } else {
                 assert_eq!(response.unwrap().into_inner(), result);
             }
@@ -522,6 +522,6 @@ fn syscall_fsync_rpc_witness() {
                 _ => (1, 0),
             };
             assert_eq!((content, temporary), expected_entries, "failed IO preserves evidence at the observed boundary");
-            println!("syscall witness: scenario={scenario} status={status} content={content} temporary={temporary}");
+            eprintln!("syscall witness: scenario={scenario} status={status} content={content} temporary={temporary}");
         });
 }

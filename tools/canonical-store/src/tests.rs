@@ -430,7 +430,7 @@ async fn reads_and_has_refuse_corruption_before_returning_any_bytes() {
     let leaf = stores
         .cas
         .0
-        .key(key.into(), DigestHasherFunc::Sha256)
+        .key(&key.into(), DigestHasherFunc::Sha256)
         .unwrap()
         .leaf;
     fs::write(fixture.path(false, &leaf), b"evil").unwrap();
@@ -595,7 +595,7 @@ async fn same_digest_key_is_partitioned_by_algorithm() {
     let sha = stores
         .cas
         .0
-        .key(key.into(), DigestHasherFunc::Sha256)
+        .key(&key.into(), DigestHasherFunc::Sha256)
         .unwrap();
     assert!(fixture.path(false, &sha.leaf).exists());
     assert_eq!(
@@ -644,7 +644,7 @@ async fn actual_uploads_share_four_permits_and_release_after_cancellation() {
         tasks.push(spawn!("waiting_upload", async move {
             pin(&sink)
                 .update(
-                    DigestInfo::new([index as u8; 32], 1).into(),
+                    DigestInfo::new([u8::try_from(index).unwrap(); 32], 1).into(),
                     rx,
                     UploadSizeInfo::ExactSize(1),
                 )
@@ -696,7 +696,7 @@ async fn exact_object_cap_is_accepted_and_one_more_byte_is_refused() {
         }
         tx.send_eof()
     };
-    let (_, size) = futures::try_join!(
+    let ((), size) = futures::try_join!(
         send,
         pin(&stores.sink).update(key.into(), rx, UploadSizeInfo::ExactSize(MAX_OBJECT_BYTES))
     )

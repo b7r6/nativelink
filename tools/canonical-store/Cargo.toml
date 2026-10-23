@@ -43,7 +43,24 @@ tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 unsafe_code = "forbid"
 
 [lints.clippy]
-all = "deny"
+all = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+# Keep the standalone checker aligned with repository policy exceptions.
+cast_precision_loss = { level = "allow", priority = 1 }
+cast_sign_loss = { level = "allow", priority = 1 }
+large_futures = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_fields_in_debug = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+must_use_candidate = { level = "allow", priority = 1 }
+redundant_pub_crate = { level = "allow", priority = 1 }
+ref_option = { level = "allow", priority = 1 }
+significant_drop_tightening = { level = "allow", priority = 1 }
+std_instead_of_core = { level = "allow", priority = 1 }
+too_many_lines = { level = "allow", priority = 1 }
+unused_async = { level = "allow", priority = 1 }
+unused_self = { level = "allow", priority = 1 }
 
 [package.metadata.cargo-machete]
 ignored = ["tracing", "tracing-test"]
