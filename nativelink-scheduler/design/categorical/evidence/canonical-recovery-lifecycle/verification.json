@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-10-23T22:39:46.094909+00:00",
+  "manifest_sha256": "a11f6987db1ce562ecc9ef2aad18eb6ca1dc7eecdf7372298bf0525750aed5c1",
+  "local_verification": {
+    "verified_archives": 4,
+    "verified_archive_members": 1034,
+    "verified_distinct_executables": 9,
+    "verified_retained_executable_paths": 26,
+    "verified_attempt_receipt_bindings": 14,
+    "extracted_to": null
+  },
+  "whole_bundle_relocation_and_extraction": {
+    "verified_archives": 4,
+    "verified_archive_members": 1034,
+    "verified_distinct_executables": 9,
+    "verified_retained_executable_paths": 26,
+    "verified_attempt_receipt_bindings": 14,
+    "extracted_to": "/tmp/nativelink-canonical-recovery-lifecycle-relocated-evidence"
+  },
+  "independent_storage_final_review_sha256": "84637452749ffc4bb93d8b163fa7ae8b9e6d30e63b811c6369a7079373e2f328",
+  "source_restoration_sha256": "128aa72d68556ad1c6c8db2f712e01ca4ed6c5bfad2089d55dc4dd76b0527482",
+  "proof": "Copied the entire packet to another directory, then ran its relative verifier to extract/check all1025 source/log/review files,9unique ELF payloads and26retained executable aliases. All14raw Cargo attempt receipts bind their exact source boundary, logs and test ELF copies. Original /tmp execution paths are documentary metadata, not verifier inputs.",
+  "limits": "Archive verification executes no Rust tests and is not a hermetic build closure; actual test execution is represented by retained commands/raw logs/ELFs and independent review."
+}
