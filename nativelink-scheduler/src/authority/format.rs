@@ -21,13 +21,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 
-use openraft::{BasicNode, LogId, StoredMembership};
+use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
+use openraft::{BasicNode, CommittedLeaderId, LogId, StoredMembership};
 use serde::{Deserialize, Serialize};
+use tokio::sync::{Mutex as AsyncMutex, watch};
 
 use super::ClusterEpoch;
 
 pub const DIRECT_SCHEDULER: u16 = 1;
 pub const RECEIPT_RETIREMENT: u16 = 2;
+pub const ACCEPTED_HISTORY: u16 = 3;
 pub const MAX_FEATURES: usize = 8;
 pub const MAX_FORMAT_MEMBERS: usize = 64;
 pub const MAX_FORMAT_BYTES: usize = 64 * 1024;
@@ -41,6 +44,17 @@ pub struct AuthorityDomain {
     pub namespace: u64,
 }
 
+/// Fixed logical publication namespace. This binds the authority domain, not a
+/// physical storage provider's incarnation. Sink construction must bind the
+/// same identity explicitly before executing any history intent.
+pub fn accepted_history_namespace(domain: AuthorityDomain) -> [u8; 32] {
+    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    hasher.update(b"nativelink.accepted-history.namespace.v1\0");
+    hasher.update(&domain.epoch.0.to_be_bytes());
+    hasher.update(&domain.namespace.to_be_bytes());
+    **hasher.finalize_digest().packed_hash()
+}
+
 /// These profiles represent executable capabilities, never configuration bits
 /// accepted from a remote member's advertisement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,6 +62,7 @@ pub enum ReaderCapabilities {
     Base,
     DirectScheduler,
     ReceiptRetirement,
+    AcceptedHistory,
 }
 
 impl ReaderCapabilities {
@@ -56,6 +71,10 @@ impl ReaderCapabilities {
             Self::Base => false,
             Self::DirectScheduler => *feature == DIRECT_SCHEDULER,
             Self::ReceiptRetirement => matches!(*feature, DIRECT_SCHEDULER | RECEIPT_RETIREMENT),
+            Self::AcceptedHistory => matches!(
+                *feature,
+                DIRECT_SCHEDULER | RECEIPT_RETIREMENT | ACCEPTED_HISTORY
+            ),
         })
     }
 
@@ -65,7 +84,9 @@ impl ReaderCapabilities {
     pub const fn encoding(self) -> ReaderEncoding {
         match self {
             Self::Base => ReaderEncoding::Base,
-            Self::DirectScheduler | Self::ReceiptRetirement => ReaderEncoding::DirectScheduler,
+            Self::DirectScheduler | Self::ReceiptRetirement | Self::AcceptedHistory => {
+                ReaderEncoding::DirectScheduler
+            }
         }
     }
 }
@@ -167,6 +188,14 @@ pub struct ActiveFormat {
 }
 
 impl ActiveFormat {
+    pub(crate) fn freezes_proposals(&self) -> bool {
+        !self.required.contains(&ACCEPTED_HISTORY)
+            && self
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.required.contains(&ACCEPTED_HISTORY))
+    }
+
     pub const fn base(domain: AuthorityDomain) -> Self {
         Self {
             domain,
@@ -281,11 +310,25 @@ pub(crate) struct MemberLease {
 struct Pending {
     preparation: Preparation,
     prepare_position: Option<LogId<u64>>,
+    prepare_enqueued: bool,
     activation_position: Option<LogId<u64>>,
+    // Set before enqueue, not at append: commands must not use the old feature
+    // epoch behind an activation whose storage callback has not run yet.
+    activation_enqueued: bool,
+    decision_owner: Option<CommittedLeaderId<u64>>,
     recovering: bool,
     // Strong references pin the actual registered profiles while the proposal
     // may still commit, even if its initiating future is canceled.
     leases: Vec<Arc<MemberLease>>,
+}
+
+/// Only one decision can enter Raft for a permit in a leader's term. A new
+/// leader can resolve an abandoned earlier branch after its read barrier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ControlAdmission {
+    Enqueue,
+    Wait,
+    Applied(FormatDecision),
 }
 
 #[derive(Debug)]
@@ -310,6 +353,8 @@ struct RegistryState {
 pub struct AdmissionRegistry {
     domain: AuthorityDomain,
     state: Mutex<RegistryState>,
+    pub(crate) proposal_gate: Arc<AsyncMutex<()>>,
+    changed: watch::Sender<()>,
 }
 
 /// Constructed only by validated, closed journal artifacts. This does not
@@ -327,6 +372,8 @@ impl AdmissionRegistry {
         Arc::new(Self {
             domain,
             state: Mutex::new(RegistryState::default()),
+            proposal_gate: Arc::new(AsyncMutex::new(())),
+            changed: watch::channel(()).0,
         })
     }
 
@@ -392,7 +439,10 @@ impl AdmissionRegistry {
                     .or_insert_with(|| Pending {
                         preparation: preparation.clone(),
                         prepare_position: None,
+                        prepare_enqueued: false,
                         activation_position: None,
+                        activation_enqueued: false,
+                        decision_owner: None,
                         recovering: true,
                         leases: Vec::new(),
                     });
@@ -410,6 +460,8 @@ impl AdmissionRegistry {
                     }
                     *slot = Some(position);
                 }
+                record.activation_enqueued |= activation;
+                record.prepare_enqueued |= !activation;
                 if records.len() > MAX_FORMAT_MEMBERS {
                     return Err("recovered control history is oversized".into());
                 }
@@ -449,6 +501,8 @@ impl AdmissionRegistry {
         Ok(Arc::new(Self {
             domain,
             state: Mutex::new(state),
+            proposal_gate: Arc::new(AsyncMutex::new(())),
+            changed: watch::channel(()).0,
         }))
     }
 
@@ -522,7 +576,7 @@ impl AdmissionRegistry {
         active: &ActiveFormat,
         membership: &StoredMembership<u64, BasicNode>,
         required: Features,
-    ) -> Result<Preparation> {
+    ) -> Result<Option<Preparation>> {
         let mut state = self
             .state
             .lock()
@@ -532,6 +586,11 @@ impl AdmissionRegistry {
             || state.completed.len() == MAX_FORMAT_MEMBERS
         {
             return Err("foreign domain or another activation is unresolved".into());
+        }
+        // SaveCommitted can advance this registry after the caller's read
+        // barrier but before Apply. Never mint a permit from that old epoch.
+        if active.required != state.required || active.prepared.is_some() {
+            return Ok(None);
         }
         let mut members = BTreeMap::new();
         let mut leases = Vec::new();
@@ -572,11 +631,116 @@ impl AdmissionRegistry {
         state.pending = Some(Pending {
             preparation: preparation.clone(),
             prepare_position: None,
+            prepare_enqueued: false,
             activation_position: None,
+            activation_enqueued: false,
+            decision_owner: None,
             recovering: false,
             leases,
         });
-        Ok(preparation)
+        self.changed.send_replace(());
+        Ok(Some(preparation))
+    }
+
+    pub(crate) fn subscribe(&self) -> watch::Receiver<()> {
+        self.changed.subscribe()
+    }
+
+    /// A short enqueue gate surrounds this check and the subsequent Raft send.
+    /// The registry is a trusted fixture; log-order checks independently enforce
+    /// the preparation boundary on every receiving journal.
+    pub(crate) fn proposal_state(&self) -> Result<(Features, bool)> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "admission registry poisoned")?;
+        let paused = state.pending.as_ref().is_some_and(|pending| {
+            pending.activation_enqueued
+                || (!state.required.contains(&ACCEPTED_HISTORY)
+                    && pending.preparation.required.contains(&ACCEPTED_HISTORY))
+        });
+        Ok((state.required.clone(), paused))
+    }
+
+    pub(crate) fn pending_preparation(&self) -> Result<Option<Preparation>> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| "admission registry poisoned")?
+            .pending
+            .as_ref()
+            .map(|pending| pending.preparation.clone()))
+    }
+
+    pub(crate) fn decision(&self, permit: u64) -> Result<Option<FormatDecision>> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| "admission registry poisoned")?
+            .completed
+            .get(&permit)
+            .map(|completed| completed.decision))
+    }
+
+    /// Admission immediately before enqueue. No wire vocabulary is added and
+    /// cancellation never clears the pending permit or its capability pins.
+    pub(crate) fn enqueue_control(
+        &self,
+        control: &FormatControl,
+        owner: CommittedLeaderId<u64>,
+    ) -> Result<ControlAdmission> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "admission registry poisoned")?;
+        if let FormatControl::Abort { domain, permit } = control
+            && *domain == self.domain
+            && let Some(completed) = state.completed.get(permit)
+        {
+            return if completed.decision.activated {
+                Err("preparation already activated".into())
+            } else {
+                Ok(ControlAdmission::Applied(completed.decision))
+            };
+        }
+        let pending = state
+            .pending
+            .as_mut()
+            .ok_or("control has no unresolved preparation")?;
+        match control {
+            FormatControl::Prepare(prepared)
+                if *prepared == pending.preparation
+                    && !pending.recovering
+                    && !pending.prepare_enqueued
+                    && pending.decision_owner.is_none() =>
+            {
+                pending.prepare_enqueued = true;
+            }
+            FormatControl::Activate(prepared)
+                if *prepared == pending.preparation
+                    && !pending.recovering
+                    && !pending.activation_enqueued
+                    && pending.decision_owner.is_none() =>
+            {
+                pending.activation_enqueued = true;
+                pending.decision_owner = Some(owner);
+            }
+            FormatControl::Abort { domain, permit }
+                if *domain == self.domain && *permit == pending.preparation.permit =>
+            {
+                if let Some(prior) = pending.decision_owner {
+                    if prior == owner {
+                        return Ok(ControlAdmission::Wait);
+                    }
+                    if prior.term >= owner.term {
+                        return Err("decision owner has a newer or conflicting leader term".into());
+                    }
+                }
+                pending.decision_owner = Some(owner);
+            }
+            _ => return Err("control is stale, duplicated, or requires recovery abort".into()),
+        }
+        Ok(ControlAdmission::Enqueue)
     }
 
     pub(crate) fn authorize(&self, control: &FormatControl, position: LogId<u64>) -> Result<()> {
@@ -590,6 +754,7 @@ impl AdmissionRegistry {
             }
             match control {
                 FormatControl::Prepare(value) if *value == pending.preparation => {
+                    pending.prepare_enqueued = true;
                     if (!pending.recovering || pending.prepare_position.is_some())
                         && pending.prepare_position.get_or_insert(position) == &position
                     {
@@ -597,6 +762,12 @@ impl AdmissionRegistry {
                     }
                 }
                 FormatControl::Activate(value) if *value == pending.preparation => {
+                    pending.activation_enqueued = true;
+                    pending.decision_owner = Some(
+                        pending
+                            .decision_owner
+                            .map_or(position.leader_id, |prior| prior.max(position.leader_id)),
+                    );
                     if (!pending.recovering || pending.activation_position.is_some())
                         && pending.activation_position.get_or_insert(position) == &position
                     {
@@ -606,6 +777,11 @@ impl AdmissionRegistry {
                 FormatControl::Abort { domain, permit }
                     if *domain == self.domain && *permit == pending.preparation.permit =>
                 {
+                    pending.decision_owner = Some(
+                        pending
+                            .decision_owner
+                            .map_or(position.leader_id, |prior| prior.max(position.leader_id)),
+                    );
                     return Ok(());
                 }
                 _ => {}
@@ -766,6 +942,7 @@ impl AdmissionRegistry {
                 },
             );
         }
+        self.changed.send_replace(());
     }
 }
 
@@ -775,4 +952,179 @@ pub struct JournalProfile {
     pub incarnation: u64,
     pub reader: ReaderCapabilities,
     pub admission: Arc<AdmissionRegistry>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn position(term: u64, member: u64, index: u64) -> LogId<u64> {
+        LogId::new(CommittedLeaderId::new(term, member), index)
+    }
+
+    fn setup() -> (
+        Arc<AdmissionRegistry>,
+        ActiveFormat,
+        StoredMembership<u64, BasicNode>,
+        Arc<MemberLease>,
+    ) {
+        let domain = AuthorityDomain {
+            epoch: ClusterEpoch(7),
+            namespace: 8,
+        };
+        let registry = AdmissionRegistry::new(domain);
+        let active = ActiveFormat::base(domain);
+        let member = registry
+            .register(domain, 1, 1, ReaderCapabilities::AcceptedHistory, &active)
+            .unwrap();
+        let membership = StoredMembership::new(
+            Some(position(1, 1, 0)),
+            openraft::Membership::new(
+                vec![BTreeSet::from([1])],
+                BTreeMap::from([(1, BasicNode::default())]),
+            ),
+        );
+        (registry, active, membership, member)
+    }
+
+    #[test]
+    fn duplicate_abort_waits_for_original_decision_position() {
+        let (registry, mut active, membership, _member) = setup();
+        let preparation = registry
+            .prepare(&active, &membership, BTreeSet::from([ACCEPTED_HISTORY]))
+            .unwrap()
+            .unwrap();
+        let abort = FormatControl::Abort {
+            domain: active.domain,
+            permit: preparation.permit,
+        };
+        let owner = position(1, 1, 1).leader_id;
+        assert_eq!(
+            registry.enqueue_control(&abort, owner).unwrap(),
+            ControlAdmission::Enqueue
+        );
+        assert!(registry.decision(preparation.permit).unwrap().is_none());
+        assert_eq!(
+            registry.enqueue_control(&abort, owner).unwrap(),
+            ControlAdmission::Wait
+        );
+        registry.authorize(&abort, position(1, 1, 1)).unwrap();
+        active
+            .apply(
+                &abort,
+                &membership,
+                ReaderCapabilities::AcceptedHistory,
+                position(1, 1, 1),
+            )
+            .unwrap();
+        registry.observe_committed(&active);
+        assert_eq!(
+            registry.enqueue_control(&abort, owner).unwrap(),
+            ControlAdmission::Applied(active.decision.unwrap())
+        );
+        assert!(registry.authorize(&abort, position(1, 1, 2)).is_err());
+    }
+
+    #[test]
+    fn abort_waits_for_live_activation_but_successor_can_resolve_old_owner() {
+        for first_is_activation in [false, true] {
+            let (registry, active, membership, _member) = setup();
+            let preparation = registry
+                .prepare(&active, &membership, BTreeSet::from([ACCEPTED_HISTORY]))
+                .unwrap()
+                .unwrap();
+            let abort = FormatControl::Abort {
+                domain: active.domain,
+                permit: preparation.permit,
+            };
+            let first = if first_is_activation {
+                FormatControl::Activate(preparation)
+            } else {
+                abort.clone()
+            };
+            assert_eq!(
+                registry
+                    .enqueue_control(&first, position(2, 1, 1).leader_id)
+                    .unwrap(),
+                ControlAdmission::Enqueue
+            );
+            assert_eq!(
+                registry
+                    .enqueue_control(&abort, position(2, 1, 1).leader_id)
+                    .unwrap(),
+                ControlAdmission::Wait
+            );
+            assert!(
+                registry
+                    .enqueue_control(&abort, position(1, 1, 1).leader_id)
+                    .is_err()
+            );
+            assert!(
+                registry
+                    .enqueue_control(&abort, position(2, 2, 1).leader_id)
+                    .is_err()
+            );
+            assert_eq!(
+                registry
+                    .enqueue_control(&abort, position(3, 2, 1).leader_id)
+                    .unwrap(),
+                ControlAdmission::Enqueue
+            );
+            assert_eq!(
+                registry
+                    .enqueue_control(&abort, position(3, 2, 1).leader_id)
+                    .unwrap(),
+                ControlAdmission::Wait
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_retries_stale_applied_metadata_after_committed_decision() {
+        for activated in [false, true] {
+            let (registry, mut committed, membership, _member) = setup();
+            let first = registry
+                .prepare(&committed, &membership, BTreeSet::from([ACCEPTED_HISTORY]))
+                .unwrap()
+                .unwrap();
+            committed
+                .apply(
+                    &FormatControl::Prepare(first.clone()),
+                    &membership,
+                    ReaderCapabilities::AcceptedHistory,
+                    position(1, 1, 1),
+                )
+                .unwrap();
+            let old_applied = committed.clone();
+            let decision = if activated {
+                FormatControl::Activate(first)
+            } else {
+                FormatControl::Abort {
+                    domain: committed.domain,
+                    permit: first.permit,
+                }
+            };
+            committed
+                .apply(
+                    &decision,
+                    &membership,
+                    ReaderCapabilities::AcceptedHistory,
+                    position(1, 1, 2),
+                )
+                .unwrap();
+            registry.observe_committed(&committed);
+            let target = BTreeSet::from([ACCEPTED_HISTORY, RECEIPT_RETIREMENT]);
+            assert!(
+                registry
+                    .prepare(&old_applied, &membership, target.clone())
+                    .unwrap()
+                    .is_none()
+            );
+            let fresh = registry
+                .prepare(&committed, &membership, target)
+                .unwrap()
+                .unwrap();
+            assert_eq!(fresh.from_epoch, u64::from(activated));
+        }
+    }
 }

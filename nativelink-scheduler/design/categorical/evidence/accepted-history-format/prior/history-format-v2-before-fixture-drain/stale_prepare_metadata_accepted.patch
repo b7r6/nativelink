@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/format.rs
++++ nativelink-scheduler/src/authority/format.rs
+@@ -589,7 +589,7 @@
+         }
+         // SaveCommitted can advance this registry after the caller's read
+         // barrier but before Apply. Never mint a permit from that old epoch.
+-        if active.required != state.required || active.prepared.is_some() {
++        if false && (active.required != state.required || active.prepared.is_some()) {
+             return Ok(None);
+         }
+         let mut members = BTreeMap::new();

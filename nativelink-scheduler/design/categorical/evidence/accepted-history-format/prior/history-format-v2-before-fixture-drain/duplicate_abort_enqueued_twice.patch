@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/format.rs
++++ nativelink-scheduler/src/authority/format.rs
+@@ -730,7 +730,7 @@
+             {
+                 if let Some(prior) = pending.decision_owner {
+                     if prior == owner {
+-                        return Ok(ControlAdmission::Wait);
++                        return Ok(ControlAdmission::Enqueue);
+                     }
+                     if prior.term >= owner.term {
+                         return Err("decision owner has a newer or conflicting leader term".into());

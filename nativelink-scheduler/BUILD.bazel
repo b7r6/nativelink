@@ -40,6 +40,8 @@ rust_library(
     srcs = [
         "src/admin.rs",
         "src/api_worker_scheduler.rs",
+        "src/authority/accepted_history.rs",
+        "src/authority/accepted_history_tests.rs",
         "src/authority/format.rs",
         "src/authority/journal.rs",
         "src/authority/mod.rs",
@@ -177,6 +179,24 @@ rust_test(
     ],
     deps = [
         "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "accepted_history_differential_test",
+    srcs = ["tests/accepted_history_differential_test.rs"],
+    compile_data = [
+        "tests/accepted_history/reference.rs",
+        "tests/accepted_history/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "@crates//:blake3",
+        "@crates//:prost",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:sha2",

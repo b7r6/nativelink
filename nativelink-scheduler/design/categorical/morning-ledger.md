@@ -315,6 +315,18 @@ Integrated Bazel passes the provider case and both unchanged filesystem suites.
 source hashes. This remains a singleton test composition, without production
 construction, cloud-account qualification, or a completed M5 gate.
 
+The experimental accepted-history core now records one fixed diagnostic recipe
+at accepted worker completion, including noncacheable and final failed results.
+Its metadata and identity budget is prepaid; pending delivery pins retirement,
+and acknowledgement cannot alter the accepted terminal. An independent model
+and real-State adapter cover the contract, with eight compiled core faults
+caught. Feature-3 journal activation adds proposal ordering and staged preflight;
+independent review exposed two concurrency races that are now regression cases.
+Nine compiled format faults are detected. The frozen older-binary extension and
+RPC delivery integration remain separate qualification steps. Production
+factories and worker history configuration are unchanged, so this does not close
+M4a.2. [Design and receipts](accepted-history.md) record exact scope.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

@@ -56,9 +56,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::Mutex;
 
 use super::format::{
-    ActiveFormat, AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, Features, FormatControl,
-    FormatDecision, JournalProfile, MAX_FORMAT_BYTES, MAX_FORMAT_MEMBERS, MemberLease,
-    RECEIPT_RETIREMENT, ReaderCapabilities, RecoveryEvidence,
+    ACCEPTED_HISTORY, ActiveFormat, AdmissionRegistry, AuthorityDomain, ControlAdmission,
+    DIRECT_SCHEDULER, Features, FormatControl, FormatDecision, JournalProfile, MAX_FORMAT_BYTES,
+    MAX_FORMAT_MEMBERS, MemberLease, RECEIPT_RETIREMENT, ReaderCapabilities, RecoveryEvidence,
+    accepted_history_namespace,
 };
 use super::{ClusterEpoch, Limits, RecordedEvent, Reply, State};
 
@@ -510,6 +511,16 @@ impl AppliedState {
                 "receipt retirement state disagrees with activated format",
             ));
         }
+        if state.accepted_history_enabled() != self.format.required.contains(&ACCEPTED_HISTORY)
+            || state.accepted_history_namespace().is_some_and(|namespace| {
+                namespace != accepted_history_namespace(self.format.domain)
+            })
+        {
+            return Err(failure(
+                ErrorVerb::Read,
+                "accepted history state disagrees with activated domain/format",
+            ));
+        }
         if state.view().epoch != epoch {
             return Err(failure(
                 ErrorVerb::Read,
@@ -563,6 +574,11 @@ fn replay_format(
                 active
                     .apply(control, membership, reader, entry.log_id)
                     .map_err(|e| failure(ErrorVerb::Read, e))?;
+            } else if active.freezes_proposals() {
+                return Err(failure(
+                    ErrorVerb::Read,
+                    "application command crosses unresolved accepted history preparation",
+                ));
             } else if batch.feature_epoch != active.feature_epoch {
                 return Err(failure(
                     ErrorVerb::Read,
@@ -578,6 +594,16 @@ fn replay_format(
                     ErrorVerb::Read,
                     "receipt retirement command precedes feature activation",
                 ));
+            } else if !active.required.contains(&ACCEPTED_HISTORY)
+                && batch
+                    .events
+                    .iter()
+                    .any(|recorded| recorded.event.requires_accepted_history())
+            {
+                return Err(failure(
+                    ErrorVerb::Read,
+                    "accepted history command precedes feature activation",
+                ));
             }
         }
         EntryPayload::Membership(value) => {
@@ -589,38 +615,109 @@ fn replay_format(
     Ok(())
 }
 
+fn enable_features(
+    state: &mut State,
+    before: &Features,
+    active: &ActiveFormat,
+) -> std::result::Result<(), String> {
+    if !before.contains(&RECEIPT_RETIREMENT) && active.required.contains(&RECEIPT_RETIREMENT) {
+        state.enable_receipt_retirement()?;
+    }
+    if !before.contains(&ACCEPTED_HISTORY) && active.required.contains(&ACCEPTED_HISTORY) {
+        state.enable_accepted_history(accepted_history_namespace(active.domain))?;
+    }
+    Ok(())
+}
+
+/// The same pure transition runs while validating a proposed suffix and while
+/// applying its committed entries. Staging never runs an external effect.
+fn replay_state(
+    applied: &mut AppliedState,
+    state: &mut State,
+    entry: &Entry<TypeConfig>,
+    reader: ReaderCapabilities,
+) -> Result<BatchReply> {
+    let before = applied.format.required.clone();
+    replay_format(&mut applied.format, &mut applied.membership, entry, reader)?;
+    enable_features(state, &before, &applied.format).map_err(|e| failure(ErrorVerb::Write, e))?;
+    applied.last_applied = Some(entry.log_id);
+    Ok(match &entry.payload {
+        EntryPayload::Normal(batch) => BatchReply {
+            replies: if batch.control.is_some() {
+                vec![Reply::Applied]
+            } else {
+                batch
+                    .events
+                    .iter()
+                    .cloned()
+                    .map(|event| state.apply(event))
+                    .collect()
+            },
+        },
+        EntryPayload::Blank | EntryPayload::Membership(_) => BatchReply::default(),
+    })
+}
+
 /// Feature-bearing commands may arrive behind an unapplied activation. Check
 /// their preceding log sequence, not only the receiver's applied feature set.
 /// Plain controls remain readable without applying an unsupported target.
-fn validate_receipt_append(
+fn validate_feature_append(
     tx: &WriteTransaction,
     epoch: ClusterEpoch,
     reader: ReaderCapabilities,
     entries: &[Entry<TypeConfig>],
+    admitted_features: bool,
 ) -> Result<()> {
-    let requires_receipt_retirement = |entry: &Entry<TypeConfig>| matches!(&entry.payload, EntryPayload::Normal(batch) if batch.events.iter().any(|recorded| recorded.event.requires_receipt_retirement()));
-    let Some(last_feature_index) = entries
-        .iter()
-        .filter(|entry| requires_receipt_retirement(entry))
-        .map(|entry| entry.log_id.index)
-        .max()
-    else {
+    let Some(last_feature_index) = entries.iter().map(|entry| entry.log_id.index).max() else {
         return Ok(());
     };
     let meta = tx
         .open_table(META)
         .map_err(|e| failure(ErrorVerb::Read, e))?;
-    let applied: AppliedState = decode(
+    let mut applied: AppliedState = decode(
         epoch,
         meta.get("applied")
             .map_err(|e| failure(ErrorVerb::Read, e))?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
             .value(),
     )?;
-    applied.state(epoch, reader)?;
     let logs = tx
         .open_table(LOGS)
         .map_err(|e| failure(ErrorVerb::Read, e))?;
+    let feature_entry = |entry: &Entry<TypeConfig>| {
+        matches!(&entry.payload,
+        EntryPayload::Normal(batch) if batch.control.is_some() || batch.events.iter().any(|recorded|
+            recorded.event.requires_receipt_retirement() || recorded.event.requires_accepted_history()))
+    };
+    let start = applied
+        .last_applied
+        .map_or(Some(0), |position| position.index.checked_add(1));
+    let mut feature_context = admitted_features
+        || !applied.format.required.is_empty()
+        || applied.format.freezes_proposals()
+        || entries.iter().any(feature_entry);
+    if !feature_context
+        && let Some(start) = start
+        && start <= last_feature_index
+    {
+        for row in logs
+            .range(start..=last_feature_index)
+            .map_err(|e| failure(ErrorVerb::Read, e))?
+        {
+            let (key, value) = row.map_err(|e| failure(ErrorVerb::Read, e))?;
+            if feature_entry(&decode_log(epoch, key.value(), value.value())?) {
+                feature_context = true;
+                break;
+            }
+        }
+    }
+    if !feature_context {
+        // Preserve the base storage contract, including OpenRaft rebuilding
+        // older ordinary log rows after state-machine application. A plain
+        // command behind any retained preparation still takes the checked path.
+        return Ok(());
+    }
+    let mut state = applied.state(epoch, reader)?;
     let incoming: std::collections::BTreeMap<_, _> = entries
         .iter()
         .map(|entry| (entry.log_id.index, entry))
@@ -632,10 +729,9 @@ fn validate_receipt_append(
         ));
     }
     for entry in entries.iter().filter(|entry| {
-        requires_receipt_retirement(entry)
-            && applied
-                .last_applied
-                .is_some_and(|position| entry.log_id.index <= position.index)
+        applied
+            .last_applied
+            .is_some_and(|position| entry.log_id.index <= position.index)
     }) {
         let existing = logs
             .get(entry.log_id.index)
@@ -648,24 +744,19 @@ fn validate_receipt_append(
             ));
         }
     }
-    let Some(start) = applied
-        .last_applied
-        .map_or(Some(0), |position| position.index.checked_add(1))
-    else {
+    let Some(start) = start else {
         return Ok(());
     };
-    let mut active = applied.format;
-    let mut membership = applied.membership;
     for index in start..=last_feature_index {
         if let Some(entry) = incoming.get(&index) {
-            replay_format(&mut active, &mut membership, entry, reader)?;
+            replay_state(&mut applied, &mut state, entry, reader)?;
         } else {
             let bytes = logs
                 .get(index)
                 .map_err(|e| failure(ErrorVerb::Read, e))?
                 .ok_or_else(|| failure(ErrorVerb::Write, "feature append has no preceding log"))?;
             let entry = decode_log(epoch, index, bytes.value())?;
-            replay_format(&mut active, &mut membership, &entry, reader)?;
+            replay_state(&mut applied, &mut state, &entry, reader)?;
         }
     }
     Ok(())
@@ -820,6 +911,9 @@ pub enum JournalPersistence {
 pub struct Journal {
     database: Arc<Database>,
     queue: Arc<Mutex<()>>,
+    proposal_gate: Arc<Mutex<()>>,
+    history_apply_pause: Arc<std::sync::Mutex<Option<HistoryApplyPause>>>,
+    feature_prepare_pause: Arc<std::sync::Mutex<Option<HistoryApplyPause>>>,
     fault: Arc<AtomicU8>,
     measurements: Arc<MeasurementCounters>,
     node_id: u64,
@@ -830,6 +924,11 @@ pub struct Journal {
     reader: ReaderCapabilities,
     profile: Option<JournalProfile>,
     _admission: Option<Arc<MemberLease>>,
+}
+
+struct HistoryApplyPause {
+    reached: tokio::sync::oneshot::Sender<()>,
+    release: tokio::sync::oneshot::Receiver<()>,
 }
 
 impl Debug for Journal {
@@ -908,6 +1007,12 @@ impl Journal {
         Ok(Self {
             database: Arc::new(database),
             queue: Arc::new(Mutex::new(())),
+            proposal_gate: profile.as_ref().map_or_else(
+                || Arc::new(Mutex::new(())),
+                |profile| profile.admission.proposal_gate.clone(),
+            ),
+            history_apply_pause: Arc::new(std::sync::Mutex::new(None)),
+            feature_prepare_pause: Arc::new(std::sync::Mutex::new(None)),
             fault: Arc::new(AtomicU8::new(0)),
             measurements: Arc::new(MeasurementCounters::default()),
             node_id,
@@ -1488,21 +1593,41 @@ impl Journal {
         if raft.metrics().borrow().id != self.node_id {
             return Err("activation must use this journal's Raft member".into());
         }
-        raft.ensure_linearizable()
-            .await
-            .map_err(|e| e.to_string())?;
-        let applied: AppliedState = self
-            .read_meta("applied")
-            .await
-            .map_err(|e| e.to_string())?
-            .ok_or("missing applied state")?;
         let profile = self
             .profile
             .as_ref()
             .ok_or("no trusted member admission registry")?;
-        profile
-            .admission
-            .prepare(&applied.format, &applied.membership, required)
+        loop {
+            raft.ensure_linearizable()
+                .await
+                .map_err(|e| e.to_string())?;
+            let pause = self
+                .feature_prepare_pause
+                .lock()
+                .map_err(|_| "feature prepare pause poisoned")?
+                .take();
+            if let Some(pause) = pause {
+                let _ = pause.reached.send(());
+                pause.release.await.map_err(|e| e.to_string())?;
+            }
+            let proposal = self.proposal_gate.lock().await;
+            let applied: AppliedState = self
+                .read_meta("applied")
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or("missing applied state")?;
+            let prepared = profile.admission.prepare(
+                &applied.format,
+                &applied.membership,
+                required.clone(),
+            )?;
+            drop(proposal);
+            if let Some(prepared) = prepared {
+                return Ok(prepared);
+            }
+            // A previous decision committed after our barrier. Wait for Apply
+            // outside the shared gate, then derive the next permit afresh.
+        }
     }
 
     pub async fn activate_features(
@@ -1511,13 +1636,53 @@ impl Journal {
         required: Features,
     ) -> std::result::Result<(), String> {
         let preparation = self.prepare_features(raft, required).await?;
-        raft.client_write(Batch::format(FormatControl::Prepare(preparation.clone()))?)
-            .await
-            .map_err(|e| e.to_string())?;
-        raft.client_write(Batch::format(FormatControl::Activate(preparation))?)
-            .await
-            .map_err(|e| e.to_string())?;
+        self.propose_batch(
+            raft,
+            Batch::format(FormatControl::Prepare(preparation.clone()))?,
+        )
+        .await
+        .map_err(|e| format!("activation unresolved (permit {}): {e}", preparation.permit))?;
+        if let Err(reason) = self.preflight_activation(&preparation).await {
+            self.abort_preparation(raft, preparation.permit)
+                .await
+                .map_err(|error| {
+                    format!(
+                        "activation unresolved (permit {}): preflight {reason}; abort {error}",
+                        preparation.permit
+                    )
+                })?;
+            return Err(format!(
+                "activation refused after committed abort (permit {}): {reason}",
+                preparation.permit
+            ));
+        }
+        self.propose_batch(
+            raft,
+            Batch::format(FormatControl::Activate(preparation.clone()))?,
+        )
+        .await
+        .map_err(|e| format!("activation unresolved (permit {}): {e}", preparation.permit))?;
         Ok(())
+    }
+
+    async fn preflight_activation(
+        &self,
+        preparation: &super::format::Preparation,
+    ) -> std::result::Result<(), String> {
+        let applied: AppliedState = self
+            .read_meta("applied")
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("missing applied state")?;
+        if applied.format.prepared.as_ref() != Some(preparation) {
+            return Err("preflight requires the exact applied preparation".into());
+        }
+        let mut state = applied
+            .state(self.epoch, self.reader)
+            .map_err(|e| e.to_string())?;
+        let mut target = applied.format.clone();
+        target.required.clone_from(&preparation.required);
+        enable_features(&mut state, &applied.format.required, &target)
     }
 
     pub async fn abort_preparation(
@@ -1531,13 +1696,198 @@ impl Journal {
         raft.ensure_linearizable()
             .await
             .map_err(|e| e.to_string())?;
-        raft.client_write(Batch::format(FormatControl::Abort {
-            domain: self.domain,
-            permit,
-        })?)
+        self.propose_batch(
+            raft,
+            Batch::format(FormatControl::Abort {
+                domain: self.domain,
+                permit,
+            })?,
+        )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("abort unresolved (permit {permit}): {e}"))?;
         Ok(())
+    }
+
+    /// A capable current leader resolves an abandoned preparation before serving
+    /// writes. An already committed activation remains active; otherwise the
+    /// original permit is aborted. Cold recovery never invents a new control
+    /// position for an old Activate. A retry uses a fresh preparation.
+    pub async fn resolve_preparation(
+        &self,
+        raft: &Raft<TypeConfig>,
+    ) -> std::result::Result<Option<FormatDecision>, String> {
+        if raft.metrics().borrow().id != self.node_id {
+            return Err("resolution must use this journal's Raft member".into());
+        }
+        raft.ensure_linearizable()
+            .await
+            .map_err(|e| e.to_string())?;
+        let Some(profile) = &self.profile else {
+            return Ok(None);
+        };
+        let Some(preparation) = profile.admission.pending_preparation()? else {
+            return Ok(None);
+        };
+        self.abort_preparation(raft, preparation.permit).await?;
+        profile.admission.decision(preparation.permit)
+    }
+
+    /// Canonical application proposal path, shared by singleton and replicated
+    /// wrappers. Cancellation after enqueue leaves the command in Raft.
+    pub async fn propose_batch(
+        &self,
+        raft: &Raft<TypeConfig>,
+        batch: Batch,
+    ) -> std::result::Result<openraft::raft::ClientWriteResponse<TypeConfig>, String> {
+        let expected = if batch.control.is_some() {
+            1
+        } else {
+            batch.events.len()
+        };
+        let receiver = self.enqueue_batch(raft, batch).await?;
+        let response = receiver
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        if response.data.replies.len() != expected {
+            return Err("batch reply count does not match committed command".into());
+        }
+        Ok(response)
+    }
+
+    /// Guarded fire-and-forget seam for interrupted-proposal qualification.
+    /// The shared gate covers admission and the actual Raft enqueue, never the
+    /// subsequent response wait. Normal writes pause without becoming failed
+    /// committed commands or stopping the automatic coordinator.
+    pub async fn enqueue_batch(
+        &self,
+        raft: &Raft<TypeConfig>,
+        batch: Batch,
+    ) -> std::result::Result<
+        tokio::sync::oneshot::Receiver<openraft::raft::ClientWriteResult<TypeConfig>>,
+        String,
+    > {
+        batch.validate()?;
+        if raft.metrics().borrow().id != self.node_id {
+            return Err("proposal must use this journal's Raft member".into());
+        }
+        if batch.control.is_some() {
+            raft.ensure_linearizable()
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        let mut changed = self
+            .profile
+            .as_ref()
+            .map(|profile| profile.admission.subscribe());
+        let mut metrics = raft.metrics();
+        loop {
+            if let Some(changed) = &mut changed {
+                changed.borrow_and_update();
+            }
+            let proposal = self.proposal_gate.lock().await;
+            if let Some(control) = &batch.control {
+                let profile = self
+                    .profile
+                    .as_ref()
+                    .ok_or("no trusted member admission registry")?;
+                if let FormatControl::Activate(preparation) = control {
+                    self.preflight_activation(preparation).await?;
+                }
+                let owner = {
+                    let metrics = metrics.borrow();
+                    if metrics.current_leader != Some(self.node_id) {
+                        return Err("control enqueue lost leadership".into());
+                    }
+                    openraft::CommittedLeaderId::new(metrics.current_term, self.node_id)
+                };
+                match profile.admission.enqueue_control(control, owner)? {
+                    ControlAdmission::Enqueue => {}
+                    ControlAdmission::Applied(decision) => {
+                        drop(proposal);
+                        raft.ensure_linearizable()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        let (sender, receiver) = tokio::sync::oneshot::channel();
+                        drop(sender.send(Ok(openraft::raft::ClientWriteResponse {
+                            log_id: decision.position,
+                            data: BatchReply {
+                                replies: vec![Reply::Applied],
+                            },
+                            membership: None,
+                        })));
+                        return Ok(receiver);
+                    }
+                    ControlAdmission::Wait => {
+                        drop(proposal);
+                        if metrics.borrow().current_leader != Some(self.node_id) {
+                            return Err("decision wait lost leadership".into());
+                        }
+                        let changed = changed
+                            .as_mut()
+                            .ok_or("decision wait lacks admission registry")?;
+                        tokio::select! {
+                            result = changed.changed() => result.map_err(|e| e.to_string())?,
+                            result = metrics.changed() => result.map_err(|e| e.to_string())?,
+                        }
+                        raft.ensure_linearizable()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        continue;
+                    }
+                }
+                // OpenRaft 0.9.25 sends to its unbounded API channel before
+                // returning this receiver; dropping it cannot undo that send.
+                let receiver = raft
+                    .client_write_ff(batch)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                drop(proposal);
+                return Ok(receiver);
+            }
+            let active = self.active_format().await.map_err(|e| e.to_string())?;
+            let (required, paused) = self.profile.as_ref().map_or_else(
+                || Ok((active.required.clone(), false)),
+                |profile| profile.admission.proposal_state(),
+            )?;
+            if paused {
+                drop(proposal);
+                if metrics.borrow().current_leader != Some(self.node_id) {
+                    return Err("preparation wait lost leadership".into());
+                }
+                let changed = changed
+                    .as_mut()
+                    .ok_or("paused proposal lacks admission registry")?;
+                tokio::select! {
+                    result = changed.changed() => result.map_err(|e| e.to_string())?,
+                    result = metrics.changed() => result.map_err(|e| e.to_string())?,
+                }
+                continue;
+            }
+            if active.required != required || active.freezes_proposals() {
+                // SaveCommitted may have resolved the registry before Apply
+                // installs its state. Do not stamp the preceding feature epoch.
+                drop(proposal);
+                raft.ensure_linearizable()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                continue;
+            }
+            if batch.events.iter().any(|recorded| {
+                (recorded.event.requires_receipt_retirement()
+                    && !active.required.contains(&RECEIPT_RETIREMENT))
+                    || (recorded.event.requires_accepted_history()
+                        && !active.required.contains(&ACCEPTED_HISTORY))
+            }) {
+                return Err("application command requires an inactive feature".into());
+            }
+            let receiver = raft
+                .client_write_ff(batch.at_feature_epoch(active.feature_epoch))
+                .await
+                .map_err(|e| e.to_string())?;
+            drop(proposal);
+            return Ok(receiver);
+        }
     }
 
     /// Consistent backend applied state. Callers serving authority reads must
@@ -1557,6 +1907,53 @@ impl Journal {
     #[doc(hidden)]
     pub fn inject_failure_once(&self, fault: JournalFault) {
         self.fault.store(fault as u8, Ordering::SeqCst);
+    }
+
+    /// Deterministic qualification cutpoint after Raft commits history
+    /// activation but before its state-machine transaction begins. No state or
+    /// proposal gate is held. Dropping the release sender fails the apply.
+    #[doc(hidden)]
+    pub fn pause_history_apply_once(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (reached, observed) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        let mut slot = self
+            .history_apply_pause
+            .lock()
+            .expect("history apply pause poisoned");
+        assert!(slot.is_none(), "history apply pause already armed");
+        *slot = Some(HistoryApplyPause {
+            reached,
+            release: released,
+        });
+        (observed, release)
+    }
+
+    /// Qualification cutpoint after a successful preparation read barrier,
+    /// before acquiring the enqueue gate. No registry or I/O lock is held.
+    #[doc(hidden)]
+    pub fn pause_feature_prepare_once(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (reached, observed) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        let mut slot = self
+            .feature_prepare_pause
+            .lock()
+            .expect("prepare pause poisoned");
+        assert!(slot.is_none(), "prepare pause already armed");
+        *slot = Some(HistoryApplyPause {
+            reached,
+            release: released,
+        });
+        (observed, release)
     }
 
     /// Enable in-memory measurement for this opened journal and its clones.
@@ -1704,7 +2101,13 @@ impl RaftLogStorage<TypeConfig> for Journal {
                 validate_entry(entry, ErrorVerb::Write)?;
             }
             self.write(MeasuredOperation::Append, entries.len(), move |tx| {
-                validate_receipt_append(tx, epoch, reader, &entries)?;
+                let admitted_features = profile
+                    .as_ref()
+                    .map(|profile| profile.admission.proposal_state())
+                    .transpose()
+                    .map_err(|e| failure(ErrorVerb::Write, e))?
+                    .is_some_and(|(required, paused)| !required.is_empty() || paused);
+                validate_feature_append(tx, epoch, reader, &entries, admitted_features)?;
                 for entry in &entries {
                     match &entry.payload {
                         EntryPayload::Normal(batch) if batch.control.is_some() => {
@@ -1843,6 +2246,18 @@ impl RaftStateMachine<TypeConfig> for Journal {
         for entry in &entries {
             validate_entry(entry, ErrorVerb::Write)?;
         }
+        let pause = if entries.iter().any(|entry| matches!(&entry.payload,
+            EntryPayload::Normal(batch) if matches!(&batch.control,
+                Some(FormatControl::Activate(preparation)) if preparation.required.contains(&ACCEPTED_HISTORY)))) {
+            self.history_apply_pause.lock().expect("history apply pause poisoned").take()
+        } else { None };
+        if let Some(pause) = pause {
+            let _observed = pause.reached.send(());
+            pause
+                .release
+                .await
+                .map_err(|e| failure(ErrorVerb::Write, e))?;
+        }
         let epoch = self.epoch;
         let reader = self.reader;
         self.write(MeasuredOperation::Apply, entries.len(), move |tx| {
@@ -1859,35 +2274,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             let mut state = applied.state(epoch, reader)?;
             let mut replies = Vec::with_capacity(entries.len());
             for entry in entries {
-                let receipt_retirement_active =
-                    applied.format.required.contains(&RECEIPT_RETIREMENT);
-                replay_format(&mut applied.format, &mut applied.membership, &entry, reader)?;
-                if !receipt_retirement_active
-                    && applied.format.required.contains(&RECEIPT_RETIREMENT)
-                {
-                    state
-                        .enable_receipt_retirement()
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
-                }
-                applied.last_applied = Some(entry.log_id);
-                replies.push(match entry.payload {
-                    EntryPayload::Blank => BatchReply::default(),
-                    EntryPayload::Normal(batch) => BatchReply {
-                        replies: if batch.control.is_some() {
-                            vec![Reply::Applied]
-                        } else {
-                            batch
-                                .events
-                                .into_iter()
-                                .map(|event| state.apply(event))
-                                .collect()
-                        },
-                    },
-                    EntryPayload::Membership(membership) => {
-                        applied.membership = StoredMembership::new(Some(entry.log_id), membership);
-                        BatchReply::default()
-                    }
-                });
+                replies.push(replay_state(&mut applied, &mut state, &entry, reader)?);
             }
             applied.scheduler = SchedulerSection::from_state(&state, &applied.format)?;
             applied.state(epoch, reader)?;
@@ -2102,32 +2489,7 @@ impl Singleton {
         &self,
         batch: Batch,
     ) -> std::result::Result<openraft::raft::ClientWriteResponse<TypeConfig>, String> {
-        batch.validate()?;
-        let expected = if batch.control.is_some() {
-            1
-        } else {
-            batch.events.len()
-        };
-        let batch = if batch.control.is_none() {
-            batch.at_feature_epoch(
-                self.journal
-                    .active_format()
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .feature_epoch,
-            )
-        } else {
-            batch
-        };
-        let response = self
-            .raft
-            .client_write(batch)
-            .await
-            .map_err(|error| error.to_string())?;
-        if response.data.replies.len() != expected {
-            return Err("batch reply count does not match committed command".to_owned());
-        }
-        Ok(response)
+        self.journal.propose_batch(&self.raft, batch).await
     }
 
     pub async fn open(

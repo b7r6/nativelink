@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/format.rs
++++ nativelink-scheduler/src/authority/format.rs
+@@ -637,7 +637,7 @@
+             .state
+             .lock()
+             .map_err(|_| "admission registry poisoned")?;
+-        let paused = state.pending.as_ref().is_some_and(|pending| {
++        let paused = false && state.pending.as_ref().is_some_and(|pending| {
+             pending.activation_enqueued
+                 || (!state.required.contains(&ACCEPTED_HISTORY)
+                     && pending.preparation.required.contains(&ACCEPTED_HISTORY))

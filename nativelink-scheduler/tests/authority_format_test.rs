@@ -21,10 +21,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nativelink_macro::nativelink_test;
+use nativelink_scheduler::authority::accepted_history::{
+    HistoryAlgorithm, HistoryObject, HistoryOutcome,
+};
 use nativelink_scheduler::authority::format::{
-    AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, FormatControl, JournalProfile,
-    MAX_FEATURES, MAX_FORMAT_MEMBERS, MemberEvidence, Preparation, RECEIPT_RETIREMENT,
-    ReaderCapabilities,
+    ACCEPTED_HISTORY, AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, FormatControl,
+    JournalProfile, MAX_FEATURES, MAX_FORMAT_MEMBERS, MemberEvidence, Preparation,
+    RECEIPT_RETIREMENT, ReaderCapabilities, accepted_history_namespace,
 };
 use nativelink_scheduler::authority::journal::{
     Batch, Journal, JournalFault, Singleton, SnapshotBuffer, TypeConfig,
@@ -54,6 +57,1141 @@ const DOMAIN: AuthorityDomain = AuthorityDomain {
 };
 const NODE: u64 = 1;
 const WAIT: Duration = Duration::from_secs(15);
+
+fn history_limits() -> Limits {
+    Limits {
+        max_effects: 1024,
+        ..Limits::default()
+    }
+}
+
+fn history_ack() -> RecordedEvent {
+    RecordedEvent {
+        epoch: DOMAIN.epoch,
+        event: Event::HistoryPublication {
+            effect: nativelink_scheduler::authority::EffectId(77),
+            object: HistoryObject {
+                namespace: accepted_history_namespace(DOMAIN),
+                algorithm: HistoryAlgorithm::Sha256,
+                hash: [9; 32],
+                size_bytes: 1,
+            },
+            outcome: HistoryOutcome::Stored,
+        },
+    }
+}
+
+fn history_ineligible_submit(operation: u64) -> RecordedEvent {
+    let mut value = submit(operation);
+    if let Event::Submit { request, .. } = &mut value.event {
+        request.action.digest_function = "not-a-history-algorithm".into();
+    }
+    value
+}
+
+#[nativelink_test]
+async fn history_second_preparation_retries_after_commit_before_apply() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("prepare-gap"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let first = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    node.journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(first.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let (prepared_barrier, resume_prepare) = node.journal.pause_feature_prepare_once();
+    let journal = node.journal.clone();
+    let raft = node.raft.clone();
+    let mut second = tokio::spawn(async move {
+        journal
+            .prepare_features(
+                &raft,
+                BTreeSet::from([ACCEPTED_HISTORY, RECEIPT_RETIREMENT]),
+            )
+            .await
+    });
+    tokio::time::timeout(WAIT, prepared_barrier)
+        .await
+        .unwrap()
+        .unwrap();
+    let (activation_committed, resume_apply) = node.journal.pause_history_apply_once();
+    let journal = node.journal.clone();
+    let raft = node.raft.clone();
+    let activation = tokio::spawn(async move {
+        journal
+            .propose_batch(
+                &raft,
+                Batch::format(FormatControl::Activate(first)).unwrap(),
+            )
+            .await
+    });
+    tokio::time::timeout(WAIT, activation_committed)
+        .await
+        .unwrap()
+        .unwrap();
+    tokio::time::timeout(WAIT, async {
+        loop {
+            if node.journal.clone().read_committed().await.unwrap()
+                > node.journal.read_applied().await.unwrap().0
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    resume_prepare.send(()).unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut second)
+            .await
+            .is_err()
+    );
+    resume_apply.send(()).unwrap();
+    tokio::time::timeout(WAIT, activation)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let second = tokio::time::timeout(WAIT, second)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(second.from_epoch, 1);
+    assert_eq!(second.target_epoch, 2);
+    node.journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(second.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    node.journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Activate(second)).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(node.journal.active_format().await.unwrap().feature_epoch, 2);
+    node.write(submit(1)).await.unwrap();
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_concurrent_abort_helpers_share_one_committed_decision() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("concurrent-abort"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let prepared = node
+        .journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let start = Arc::new(tokio::sync::Barrier::new(17));
+    let mut helpers = Vec::new();
+    for _ in 0..16 {
+        let journal = node.journal.clone();
+        let raft = node.raft.clone();
+        let start = start.clone();
+        let permit = preparation.permit;
+        helpers.push(tokio::spawn(async move {
+            start.wait().await;
+            journal.abort_preparation(&raft, permit).await
+        }));
+    }
+    start.wait().await;
+    for helper in helpers {
+        tokio::time::timeout(WAIT, helper)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+    let active = node.journal.active_format().await.unwrap();
+    assert!(!active.decision.unwrap().activated);
+    assert_eq!(
+        active.decision.unwrap().position.index,
+        prepared.log_id.index + 1
+    );
+    assert_eq!(
+        node.journal
+            .clone()
+            .get_log_state()
+            .await
+            .unwrap()
+            .last_log_id,
+        Some(active.decision.unwrap().position)
+    );
+    node.write(submit(1)).await.unwrap();
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_committed_activation_waits_for_applied_epoch_before_enqueuing_work() {
+    let directory = Directory::new();
+    let registry = AdmissionRegistry::new(DOMAIN);
+    let node = Singleton::open_with_profile(
+        directory.file("epoch-gap"),
+        NODE,
+        history_limits(),
+        profile(&registry, ReaderCapabilities::AcceptedHistory, 1),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    node.journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let (reached, release) = node.journal.pause_history_apply_once();
+    let journal = node.journal.clone();
+    let raft = node.raft.clone();
+    let activation = tokio::spawn(async move {
+        journal
+            .propose_batch(
+                &raft,
+                Batch::format(FormatControl::Activate(preparation)).unwrap(),
+            )
+            .await
+    });
+    tokio::time::timeout(WAIT, reached).await.unwrap().unwrap();
+    // The commit marker resolves the registry while application is paused.
+    tokio::time::timeout(WAIT, async {
+        loop {
+            let committed = node.journal.clone().read_committed().await.unwrap();
+            let applied = node.journal.read_applied().await.unwrap().0;
+            if committed > applied {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let last = node
+        .journal
+        .clone()
+        .get_log_state()
+        .await
+        .unwrap()
+        .last_log_id;
+    let journal = node.journal.clone();
+    let raft = node.raft.clone();
+    let mut writer = tokio::spawn(async move {
+        journal
+            .propose_batch(&raft, Batch::new([submit(1)]).unwrap())
+            .await
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut writer)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        node.journal
+            .clone()
+            .get_log_state()
+            .await
+            .unwrap()
+            .last_log_id,
+        last
+    );
+    release.send(()).unwrap();
+    tokio::time::timeout(WAIT, activation)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    tokio::time::timeout(WAIT, writer)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(node.journal.active_format().await.unwrap().feature_epoch, 1);
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_cold_recovery_retains_prepare_until_consensus_abort() {
+    let directory = Directory::new();
+    let registry = AdmissionRegistry::new(DOMAIN);
+    let node = Singleton::open_with_profile(
+        directory.file("recover-prepare"),
+        NODE,
+        history_limits(),
+        profile(&registry, ReaderCapabilities::AcceptedHistory, 1),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let prepared = node
+        .journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let before = node.read().await.unwrap().snapshot().unwrap();
+    let mut journal = node.journal.clone();
+    node.shutdown().await.unwrap();
+    let activation = entry(
+        next(prepared.log_id),
+        Batch::format(FormatControl::Activate(preparation.clone())).unwrap(),
+    );
+    journal.blocking_append([activation]).await.unwrap();
+    drop(journal);
+    drop(registry);
+    // Unknown target controls retain the frozen base representation. That
+    // permits offline decoding, not an unsupported live member admission.
+    let offline = Journal::recover_admission(
+        DOMAIN,
+        ReaderCapabilities::Base,
+        vec![(NODE, directory.file("recover-prepare"))],
+    )
+    .await
+    .unwrap();
+    assert!(
+        Journal::open_with_profile(
+            directory.file("recover-prepare"),
+            NODE,
+            history_limits(),
+            profile(&offline, ReaderCapabilities::Base, 2)
+        )
+        .await
+        .is_err()
+    );
+    drop(offline);
+    let recovered = Journal::recover_admission(
+        DOMAIN,
+        ReaderCapabilities::AcceptedHistory,
+        vec![(NODE, directory.file("recover-prepare"))],
+    )
+    .await
+    .unwrap();
+    let mut journal = Journal::open_with_profile(
+        directory.file("recover-prepare"),
+        NODE,
+        history_limits(),
+        profile(&recovered, ReaderCapabilities::AcceptedHistory, 2),
+    )
+    .await
+    .unwrap();
+    // Resolve a genuinely uncommitted suffix by truncating it before electing
+    // the recovered singleton. No stopped Raft handle is reused.
+    journal.truncate(next(prepared.log_id)).await.unwrap();
+    assert_eq!(
+        journal.read_applied().await.unwrap().1.snapshot().unwrap(),
+        before
+    );
+    let abort = entry(
+        next(prepared.log_id),
+        Batch::format(FormatControl::Abort {
+            domain: DOMAIN,
+            permit: preparation.permit,
+        })
+        .unwrap(),
+    );
+    journal.inject_failure_once(JournalFault::BeforeCommit);
+    assert!(journal.apply([abort.clone()]).await.is_err());
+    assert!(journal.active_format().await.unwrap().prepared.is_some());
+    assert_eq!(
+        journal.read_applied().await.unwrap().1.snapshot().unwrap(),
+        before
+    );
+    drop(journal);
+    drop(recovered);
+    let recovered = Journal::recover_admission(
+        DOMAIN,
+        ReaderCapabilities::AcceptedHistory,
+        vec![(NODE, directory.file("recover-prepare"))],
+    )
+    .await
+    .unwrap();
+    let node = Singleton::open_with_profile(
+        directory.file("recover-prepare"),
+        NODE,
+        history_limits(),
+        profile(&recovered, ReaderCapabilities::AcceptedHistory, 3),
+    )
+    .await
+    .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), node.write(submit(2)))
+            .await
+            .is_err()
+    );
+    let decision = node
+        .journal
+        .resolve_preparation(&node.raft)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(decision.permit, preparation.permit);
+    assert!(!decision.activated);
+    assert_eq!(node.read().await.unwrap().snapshot().unwrap(), before);
+    node.write(submit(1)).await.unwrap();
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_compacted_prepare_preserves_freeze_and_rejects_missing_suffix() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("purged-prepare"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let prepared = node
+        .journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut journal = node.journal.clone();
+    journal.build_snapshot().await.unwrap();
+    journal.purge(prepared.log_id).await.unwrap();
+    node.shutdown().await.unwrap();
+    assert!(journal.try_get_log_entries(0..).await.unwrap().is_empty());
+    let work = Batch::new([submit(1)]).unwrap();
+    assert!(
+        journal
+            .blocking_append([entry(next(prepared.log_id), work.clone())])
+            .await
+            .is_err()
+    );
+    assert!(
+        journal
+            .blocking_append([entry(next(next(prepared.log_id)), work)])
+            .await
+            .is_err()
+    );
+    let abort = entry(
+        next(prepared.log_id),
+        Batch::format(FormatControl::Abort {
+            domain: DOMAIN,
+            permit: preparation.permit,
+        })
+        .unwrap(),
+    );
+    journal.blocking_append([abort.clone()]).await.unwrap();
+    journal.apply([abort.clone()]).await.unwrap();
+    let work = entry(next(abort.log_id), Batch::new([submit(1)]).unwrap());
+    journal.blocking_append([work.clone()]).await.unwrap();
+    journal.apply([work]).await.unwrap();
+    assert_eq!(
+        journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .view()
+            .operations
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn history_namespace_and_frozen_reader_vocabulary() {
+    assert_eq!(
+        accepted_history_namespace(DOMAIN),
+        [
+            17, 232, 5, 111, 16, 219, 141, 117, 178, 35, 90, 252, 98, 33, 216, 28, 176, 219, 90,
+            183, 237, 105, 162, 75, 195, 34, 35, 212, 61, 38, 210, 100
+        ]
+    );
+    assert_ne!(
+        accepted_history_namespace(DOMAIN),
+        accepted_history_namespace(AuthorityDomain {
+            epoch: ClusterEpoch(DOMAIN.namespace),
+            namespace: DOMAIN.epoch.0
+        })
+    );
+    assert_eq!(
+        ReaderCapabilities::AcceptedHistory.encoding(),
+        ReaderCapabilities::DirectScheduler.encoding()
+    );
+    assert!(ReaderCapabilities::AcceptedHistory.supports(&BTreeSet::from([1, 2, 3])));
+    assert!(!ReaderCapabilities::AcceptedHistory.supports(&BTreeSet::from([4])));
+    assert!(!ReaderCapabilities::ReceiptRetirement.supports(&BTreeSet::from([3])));
+}
+
+#[nativelink_test]
+async fn history_activation_preserves_old_versions_and_supports_independent_feature_orders() {
+    let directory = Directory::new();
+    let mut original = None;
+    for (index, reader) in [
+        ReaderCapabilities::Base,
+        ReaderCapabilities::AcceptedHistory,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let node = Singleton::open_with_profile(
+            directory.file(&format!("pre-{index}")),
+            NODE,
+            history_limits(),
+            profile(&AdmissionRegistry::new(DOMAIN), reader, 1),
+        )
+        .await
+        .unwrap();
+        node.write(submit(1)).await.unwrap();
+        let bytes = node.read().await.unwrap().snapshot().unwrap();
+        if let Some(original) = &original {
+            assert_eq!(&bytes, original);
+        } else {
+            original = Some(bytes);
+        }
+        node.shutdown().await.unwrap();
+    }
+    for (index, order) in [
+        vec![vec![3]],
+        vec![vec![1, 3]],
+        vec![vec![2], vec![2, 3]],
+        vec![vec![3], vec![2, 3]],
+        vec![vec![1, 2, 3]],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let node = Singleton::open_with_profile(
+            directory.file(&format!("active-{index}")),
+            NODE,
+            history_limits(),
+            profile(
+                &AdmissionRegistry::new(DOMAIN),
+                ReaderCapabilities::AcceptedHistory,
+                1,
+            ),
+        )
+        .await
+        .unwrap();
+        node.write(submit(1)).await.unwrap();
+        for features in order {
+            let features = BTreeSet::from_iter(features);
+            node.journal
+                .activate_features(&node.raft, features.clone())
+                .await
+                .unwrap();
+            let state = node.read().await.unwrap();
+            assert_eq!(
+                state.accepted_history_enabled(),
+                features.contains(&ACCEPTED_HISTORY)
+            );
+            assert_eq!(
+                state.receipt_retirement_enabled(),
+                features.contains(&RECEIPT_RETIREMENT)
+            );
+            let snapshot: serde_json::Value =
+                serde_json::from_slice(&state.snapshot().unwrap()).unwrap();
+            assert_eq!(
+                snapshot["version"],
+                if features.contains(&ACCEPTED_HISTORY) {
+                    7
+                } else {
+                    6
+                }
+            );
+            if features.contains(&ACCEPTED_HISTORY) {
+                assert_eq!(
+                    state.accepted_history_namespace(),
+                    Some(accepted_history_namespace(DOMAIN))
+                );
+            }
+        }
+        node.write(history_ack()).await.unwrap();
+        node.shutdown().await.unwrap();
+    }
+}
+
+#[nativelink_test]
+async fn history_preflight_refusal_commits_abort_without_poisoning_authority() {
+    let directory = Directory::new();
+    let capacity_limits = Limits {
+        max_executions: 1,
+        max_operations: 4,
+        max_workers: 1,
+        max_effects: 8,
+        ..Limits::default()
+    };
+    for (index, limits, event) in [
+        (0, capacity_limits, submit(1)),
+        (1, history_limits(), history_ineligible_submit(1)),
+    ] {
+        let node = Singleton::open_with_profile(
+            directory.file(&format!("refuse-{index}")),
+            NODE,
+            limits,
+            profile(
+                &AdmissionRegistry::new(DOMAIN),
+                ReaderCapabilities::AcceptedHistory,
+                1,
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            node.write(event).await.unwrap().data,
+            Reply::Submitted { .. }
+        ));
+        let before = node.read().await.unwrap().snapshot().unwrap();
+        let error = node
+            .journal
+            .activate_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+            .await
+            .unwrap_err();
+        assert!(error.contains("refused after committed abort"), "{error}");
+        assert_eq!(node.read().await.unwrap().snapshot().unwrap(), before);
+        let format = node.journal.active_format().await.unwrap();
+        assert_eq!(format.feature_epoch, 0);
+        assert!(format.prepared.is_none());
+        assert!(!format.decision.unwrap().activated);
+        assert!(matches!(
+            node.write(RecordedEvent {
+                epoch: DOMAIN.epoch,
+                event: Event::Observe {
+                    operation: OperationId(1)
+                }
+            })
+            .await
+            .unwrap()
+            .data,
+            Reply::Observed(_)
+        ));
+        node.shutdown().await.unwrap();
+    }
+}
+
+#[nativelink_test]
+async fn history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("pause"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let before = node
+        .journal
+        .clone()
+        .get_log_state()
+        .await
+        .unwrap()
+        .last_log_id;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), node.write(submit(99)))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        node.journal
+            .clone()
+            .get_log_state()
+            .await
+            .unwrap()
+            .last_log_id,
+        before
+    );
+    node.journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let journal = node.journal.clone();
+    let raft = node.raft.clone();
+    let mut waiting = tokio::spawn(async move {
+        journal
+            .propose_batch(&raft, Batch::new([submit(1)]).unwrap())
+            .await
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut waiting)
+            .await
+            .is_err()
+    );
+    node.journal
+        .abort_preparation(&node.raft, preparation.permit)
+        .await
+        .unwrap();
+    let response = tokio::time::timeout(WAIT, waiting)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        response.data.replies.as_slice(),
+        [Reply::Submitted { .. }]
+    ));
+    let before_duplicate_abort = node
+        .journal
+        .clone()
+        .get_log_state()
+        .await
+        .unwrap()
+        .last_log_id;
+    node.journal
+        .abort_preparation(&node.raft, preparation.permit)
+        .await
+        .unwrap();
+    assert_eq!(
+        node.journal
+            .clone()
+            .get_log_state()
+            .await
+            .unwrap()
+            .last_log_id,
+        before_duplicate_abort
+    );
+    assert_eq!(node.read().await.unwrap().view().operations.len(), 1);
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("stage"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let mut journal = node.journal.clone();
+    let (position, before) = journal.read_applied().await.unwrap();
+    node.shutdown().await.unwrap();
+    let work = entry(
+        next(position.unwrap()),
+        Batch::new([history_ineligible_submit(1)]).unwrap(),
+    );
+    let prepare = entry(
+        next(work.log_id),
+        Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+    );
+    let activate = entry(
+        next(prepare.log_id),
+        Batch::format(FormatControl::Activate(preparation.clone())).unwrap(),
+    );
+    assert!(
+        journal
+            .blocking_append([work.clone(), prepare.clone(), activate.clone()])
+            .await
+            .is_err()
+    );
+    assert!(
+        journal
+            .try_get_log_entries(work.log_id.index..)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(journal.read_applied().await.unwrap().1, before);
+    journal
+        .blocking_append([work.clone(), prepare.clone()])
+        .await
+        .unwrap();
+    let illegal_work = entry(activate.log_id, Batch::new([submit(2)]).unwrap());
+    assert!(journal.blocking_append([illegal_work]).await.is_err());
+    assert!(journal.blocking_append([activate]).await.is_err());
+    assert!(
+        journal
+            .try_get_log_entries(prepare.log_id.index + 1..)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let abort = entry(
+        next(prepare.log_id),
+        Batch::format(FormatControl::Abort {
+            domain: DOMAIN,
+            permit: preparation.permit,
+        })
+        .unwrap(),
+    );
+    journal.blocking_append([abort.clone()]).await.unwrap();
+    journal.apply([work, prepare, abort]).await.unwrap();
+    assert!(
+        !journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .accepted_history_enabled()
+    );
+    assert_eq!(
+        journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .view()
+            .operations
+            .len(),
+        1
+    );
+}
+
+#[nativelink_test]
+async fn history_commands_gate_append_apply_and_unapplied_activation_suffix() {
+    for reader in [
+        ReaderCapabilities::Base,
+        ReaderCapabilities::DirectScheduler,
+        ReaderCapabilities::ReceiptRetirement,
+        ReaderCapabilities::AcceptedHistory,
+    ] {
+        let mut journal = Journal::fresh_volatile_with_profile(
+            NODE,
+            history_limits(),
+            profile(&AdmissionRegistry::new(DOMAIN), reader, 1),
+        )
+        .await
+        .unwrap();
+        let before = journal.read_applied().await.unwrap();
+        let command = entry(
+            LogId::new(openraft::CommittedLeaderId::new(1, NODE), 0),
+            Batch::new([history_ack()]).unwrap(),
+        );
+        assert!(journal.blocking_append([command.clone()]).await.is_err());
+        assert!(journal.apply([command]).await.is_err());
+        assert_eq!(journal.read_applied().await.unwrap(), before);
+        assert!(journal.try_get_log_entries(0..).await.unwrap().is_empty());
+    }
+    let directory = Directory::new();
+    let registry = AdmissionRegistry::new(DOMAIN);
+    let node = Singleton::open_with_profile(
+        directory.file("suffix"),
+        NODE,
+        history_limits(),
+        profile(&registry, ReaderCapabilities::AcceptedHistory, 1),
+    )
+    .await
+    .unwrap();
+    let preparation = node
+        .journal
+        .prepare_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let response = node
+        .journal
+        .propose_batch(
+            &node.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut journal = node.journal.clone();
+    node.shutdown().await.unwrap();
+    let activation = entry(
+        next(response.log_id),
+        Batch::format(FormatControl::Activate(preparation)).unwrap(),
+    );
+    let wrong_epoch = entry(
+        next(activation.log_id),
+        Batch::new([history_ack()]).unwrap(),
+    );
+    assert!(
+        journal
+            .blocking_append([activation.clone(), wrong_epoch])
+            .await
+            .is_err()
+    );
+    let ack = entry(
+        next(activation.log_id),
+        Batch::new([history_ack()]).unwrap().at_feature_epoch(1),
+    );
+    journal
+        .blocking_append([activation.clone(), ack.clone()])
+        .await
+        .unwrap();
+    journal.save_committed(Some(ack.log_id)).await.unwrap();
+    journal.apply([activation, ack]).await.unwrap();
+    assert_eq!(
+        journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .accepted_history_namespace(),
+        Some(accepted_history_namespace(DOMAIN))
+    );
+    drop(journal);
+    drop(registry);
+    assert!(
+        Journal::recover_admission(
+            DOMAIN,
+            ReaderCapabilities::ReceiptRetirement,
+            vec![(NODE, directory.file("suffix"))]
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[nativelink_test]
+async fn history_snapshot_component_and_namespace_mismatches_are_atomic() {
+    let directory = Directory::new();
+    let node = Singleton::open_with_profile(
+        directory.file("snapshot"),
+        NODE,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    node.journal
+        .activate_features(&node.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let snapshot = node.journal.clone().build_snapshot().await.unwrap();
+    let original: serde_json::Value = serde_json::from_slice(snapshot.snapshot.get_ref()).unwrap();
+    for alteration in 0..3 {
+        let mut envelope = original.clone();
+        let mut payload: serde_json::Value =
+            serde_json::from_str(envelope["payload"].as_str().unwrap()).unwrap();
+        match alteration {
+            0 => {
+                payload["applied"]["format"] = serde_json::to_value(
+                    nativelink_scheduler::authority::format::ActiveFormat::base(DOMAIN),
+                )
+                .unwrap();
+            }
+            1 | 2 => {
+                let mut replacement = State::new(DOMAIN.epoch, history_limits()).unwrap();
+                if alteration == 2 {
+                    replacement.enable_accepted_history([42; 32]).unwrap();
+                }
+                payload["applied"]["scheduler"] =
+                    String::from_utf8(replacement.snapshot().unwrap())
+                        .unwrap()
+                        .into();
+            }
+            _ => unreachable!(),
+        }
+        let body = serde_json::to_string(&payload).unwrap();
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        hasher.update(body.as_bytes());
+        envelope["length"] = body.len().into();
+        envelope["checksum"] = hasher.finalize_digest().packed_hash().to_string().into();
+        envelope["payload"] = body.into();
+        let bytes =
+            Box::new(SnapshotBuffer::from_bytes(serde_json::to_vec(&envelope).unwrap()).unwrap());
+        let mut target = Journal::fresh_volatile_with_profile(
+            NODE + 1,
+            history_limits(),
+            profile(
+                &AdmissionRegistry::new(DOMAIN),
+                ReaderCapabilities::AcceptedHistory,
+                1,
+            ),
+        )
+        .await
+        .unwrap();
+        let before = target.read_applied().await.unwrap();
+        assert!(
+            target
+                .install_snapshot(&snapshot.meta, bytes)
+                .await
+                .is_err()
+        );
+        assert_eq!(target.read_applied().await.unwrap(), before);
+        assert!(target.get_current_snapshot().await.unwrap().is_none());
+    }
+    let mut target = Journal::fresh_volatile_with_profile(
+        NODE + 1,
+        history_limits(),
+        profile(
+            &AdmissionRegistry::new(DOMAIN),
+            ReaderCapabilities::AcceptedHistory,
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    target
+        .install_snapshot(&snapshot.meta, snapshot.snapshot)
+        .await
+        .unwrap();
+    assert_eq!(
+        target.read_applied().await.unwrap(),
+        node.journal.read_applied().await.unwrap()
+    );
+    let response = node
+        .journal
+        .propose_batch(&node.raft, Batch::new([submit(1)]).unwrap())
+        .await
+        .unwrap();
+    let suffix = node
+        .journal
+        .clone()
+        .try_get_log_entries((snapshot.meta.last_log_id.unwrap().index + 1)..=response.log_id.index)
+        .await
+        .unwrap();
+    target.blocking_append(suffix.clone()).await.unwrap();
+    target.apply(suffix).await.unwrap();
+    assert_eq!(
+        target.read_applied().await.unwrap(),
+        node.journal.read_applied().await.unwrap()
+    );
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn history_successor_aborts_existing_prepare_and_accepts_waiting_work() {
+    let cluster = FormatCluster::with_readers_and_limits(
+        [ReaderCapabilities::AcceptedHistory; 3],
+        BTreeSet::from([1, 2, 3]),
+        history_limits(),
+    )
+    .await;
+    let first = &cluster.nodes[&1];
+    let preparation = first
+        .journal
+        .prepare_features(&first.raft, BTreeSet::from([ACCEPTED_HISTORY]))
+        .await
+        .unwrap();
+    let response = first
+        .journal
+        .propose_batch(
+            &first.raft,
+            Batch::format(FormatControl::Prepare(preparation.clone())).unwrap(),
+        )
+        .await
+        .unwrap();
+    for id in [2, 3] {
+        cluster.nodes[&id]
+            .raft
+            .wait(Some(WAIT))
+            .applied_index_at_least(
+                Some(response.log_id.index),
+                "history preparation replicated",
+            )
+            .await
+            .unwrap();
+    }
+    cluster.isolate(1);
+    cluster.nodes[&2].raft.runtime_config().elect(true);
+    cluster.nodes[&2].raft.trigger().elect().await.unwrap();
+    cluster.leader(2).await;
+    cluster.nodes[&2].raft.runtime_config().elect(false);
+    let successor = &cluster.nodes[&2];
+    let decision = successor
+        .journal
+        .resolve_preparation(&successor.raft)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(decision.permit, preparation.permit);
+    assert!(!decision.activated);
+    let response = successor
+        .journal
+        .propose_batch(&successor.raft, Batch::new([submit(1)]).unwrap())
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.data.replies.as_slice(),
+        [Reply::Submitted { .. }]
+    ));
+    assert!(
+        !successor
+            .journal
+            .read_applied()
+            .await
+            .unwrap()
+            .1
+            .accepted_history_enabled()
+    );
+    cluster.links.lock().blocked.clear();
+    cluster.shutdown().await;
+}
 
 #[derive(Default)]
 struct FormatLinks {
@@ -156,6 +1294,7 @@ struct FormatCluster {
     registry: Arc<AdmissionRegistry>,
     links: Arc<Mutex<FormatLinks>>,
     nodes: BTreeMap<u64, FormatNode>,
+    limits: Limits,
 }
 
 impl FormatCluster {
@@ -176,11 +1315,20 @@ impl FormatCluster {
     }
 
     async fn with_readers(readers: [ReaderCapabilities; 3], voters: BTreeSet<u64>) -> Self {
+        Self::with_readers_and_limits(readers, voters, Limits::default()).await
+    }
+
+    async fn with_readers_and_limits(
+        readers: [ReaderCapabilities; 3],
+        voters: BTreeSet<u64>,
+        limits: Limits,
+    ) -> Self {
         let mut cluster = Self {
             directory: Directory::new(),
             registry: AdmissionRegistry::new(DOMAIN),
             links: Arc::default(),
             nodes: BTreeMap::new(),
+            limits,
         };
         for (index, reader) in readers.into_iter().enumerate() {
             cluster
@@ -212,7 +1360,7 @@ impl FormatCluster {
         let journal = Journal::open_with_profile(
             self.directory.file(&format!("member-{id}")),
             id,
-            Limits::default(),
+            self.limits,
             profile(&self.registry, reader, incarnation),
         )
         .await
@@ -223,9 +1371,11 @@ impl FormatCluster {
     async fn connect_journal(&mut self, id: u64, incarnation: u64, journal: Journal) {
         let config = openraft::Config {
             cluster_name: "categorical-format-test".into(),
-            heartbeat_interval: 50,
-            election_timeout_min: 200,
-            election_timeout_max: 400,
+            // A quorum read uses the heartbeat interval as its RPC deadline.
+            // These file-backed tests run concurrently with compilation/I/O.
+            heartbeat_interval: 500,
+            election_timeout_min: 2000,
+            election_timeout_max: 4000,
             enable_elect: false,
             snapshot_policy: SnapshotPolicy::Never,
             ..Default::default()
@@ -290,6 +1440,28 @@ impl FormatCluster {
         let node = self.nodes.remove(&id).unwrap();
         node.raft.shutdown().await.unwrap();
         drop(node);
+        // Core shutdown can precede the last replication task dropping its
+        // storage clone. Cold recovery requires genuinely closed artifacts.
+        let path = self.directory.file(&format!("member-{id}"));
+        tokio::time::timeout(WAIT, async {
+            loop {
+                let path = path.clone();
+                match nativelink_util::spawn_blocking!("format_fixture_closed_journal", move || {
+                    redb::Database::open(path).map(drop)
+                })
+                .await
+                .unwrap()
+                {
+                    Ok(()) => break,
+                    Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    Err(error) => panic!("closed member journal probe failed: {error}"),
+                }
+            }
+        })
+        .await
+        .unwrap();
     }
 
     async fn shutdown(mut self) {
@@ -515,6 +1687,10 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
             ReaderCapabilities::ReceiptRetirement,
             BTreeSet::from([RECEIPT_RETIREMENT]),
         ),
+        (
+            ReaderCapabilities::AcceptedHistory,
+            BTreeSet::from([ACCEPTED_HISTORY]),
+        ),
     ] {
         check_activation_suffix(reader, features).await;
     }
@@ -652,6 +1828,10 @@ async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
             ReaderCapabilities::ReceiptRetirement,
             BTreeSet::from([RECEIPT_RETIREMENT]),
         ),
+        (
+            ReaderCapabilities::AcceptedHistory,
+            BTreeSet::from([ACCEPTED_HISTORY]),
+        ),
     ] {
         check_activation_cutpoints(reader, features).await;
     }
@@ -689,6 +1869,11 @@ async fn check_activation_cutpoints(reader: ReaderCapabilities, features: BTreeS
     let mut expected = old.1.clone();
     if features.contains(&RECEIPT_RETIREMENT) {
         expected.enable_receipt_retirement().unwrap();
+    }
+    if features.contains(&ACCEPTED_HISTORY) {
+        expected
+            .enable_accepted_history(accepted_history_namespace(DOMAIN))
+            .unwrap();
     }
     let old_snapshot = journal.build_snapshot().await.unwrap();
     journal.inject_failure_once(JournalFault::BeforeCommit);
@@ -900,6 +2085,7 @@ async fn paused_leader_cannot_release_admission_or_reuse_an_aborted_activation()
             .await
             .is_err()
     );
+    drop(journal);
     drop(admitted);
     // Only the consensus-committed abort permits a Base replacement to reopen
     // the old leader's preserved, uncommitted activation tail.

@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/journal.rs
++++ nativelink-scheduler/src/authority/journal.rs
+@@ -579,7 +579,7 @@
+                     ErrorVerb::Read,
+                     "application command crosses unresolved accepted history preparation",
+                 ));
+-            } else if batch.feature_epoch != active.feature_epoch {
++            } else if batch.feature_epoch > active.feature_epoch {
+                 return Err(failure(
+                     ErrorVerb::Read,
+                     "application command feature epoch mismatch",

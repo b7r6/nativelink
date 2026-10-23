@@ -47,8 +47,8 @@ MUTANTS = [
     ),
     (
         "forget_pending_attempt_pins", CORE,
-        "if self.receipt_attempts_pinned(&attempts)",
-        "if false && self.receipt_attempts_pinned(&attempts)",
+        "self.receipt_attempts_pinned(&attempts)",
+        "(false && self.receipt_attempts_pinned(&attempts))",
         "immutable_pending_certificate_pins_released_attempts_and_ack_never_releases_resources",
     ),
     (
@@ -90,7 +90,7 @@ def main():
             raise ValueError(f"mutation {name} needs a unique source anchor")
     target = (args.target_dir or root / "target/receipt-authority-mutations").resolve()
     command = ["cargo", "test", "--locked", "--offline", "--profile", "smol",
-               "-p", "nativelink-scheduler", "--lib", "-j", "16"]
+               "-p", "nativelink-scheduler", "--lib", "-j", "8"]
     report = {
         "scope": "Eight compiled authority receipt faults; no production rollout or throughput claim",
         "base_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),

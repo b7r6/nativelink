@@ -1,0 +1,556 @@
+{
+  "base": "552aaa890c",
+  "prior_qualification": "prior/history-format-v3-before-task-wrapper/manifest.json",
+  "opaque_core_patches": [
+    {
+      "path": "/tmp/nativelink-history-candidate-v1.patch",
+      "sha256": "2c1ce10e6a5327ecf2ec74451705810d71675eba4dafd5f01ee2790e970f9de1"
+    },
+    {
+      "path": "/tmp/nativelink-history-candidate-v1-followup.patch",
+      "sha256": "fefc9567d266a194f4ba364e8f52638118c44e066e2a570fc8acfa003b6464d8"
+    }
+  ],
+  "source_sha256": {
+    "nativelink-scheduler/src/authority/format.rs": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+    "nativelink-scheduler/src/authority/journal.rs": "b64b7631b5b62677cb906a340bb0624bd29da6e625439953d2c06508f95c266e",
+    "nativelink-scheduler/tests/authority_format_test.rs": "07eb86366ff25fd0f58949ee59e0baaaca5c2165e00b6b4e05070ba6c2d8122b"
+  },
+  "core_dependency_sha256": {
+    "nativelink-scheduler/src/authority/mod.rs": "edd45433a4c0a913f40c5ecffd11e2b30118528233cfcc1829124a7785ac7514",
+    "nativelink-scheduler/src/authority/accepted_history.rs": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+    "nativelink-scheduler/src/authority/receipt_retirement.rs": "e2946bbf4a592f87577aa36b5f189596593ac984bbfdc5e67a3d99c4d47868f0",
+    "nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+  },
+  "mutants": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 10.793,
+      "log_sha256": "be463a7c07958db1296ad0b886c3c462d258d1d1ea4e0f8aa20f1d98f8df9264",
+      "compressed_log": "admission_pause_disabled.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "admission_pause_disabled",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers",
+      "mutated_source_sha256": "ef9b2638f62583e682819dadde1439ecd41befd3c1c6e7c98c4e39ab2d637c65",
+      "patch_sha256": "02323f053a6bdb2ba48b743eee74f6e55e0340fce2eb69d9ef27183cb24a1ff2",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers' (4118563) panicked at nativelink-scheduler/tests/authority_format_test.rs:755:5:",
+        "assertion failed: tokio::time::timeout(Duration::from_millis(50),",
+        "            node.write(submit(99))).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "2026-10-23T03:27:58.566443Z  INFO history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers: openraft::core::tick: Timer shutdown signal sent: Ok(())"
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_committed_activation_waits_for_applied_epoch_before_enqueuing_work",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 12.101,
+      "log_sha256": "ea10467de2952055c40445478e81ab0e8508a6ef9b60503f3a4c0692e8dfa63a",
+      "compressed_log": "committed_applied_epoch_gate_disabled.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "committed_applied_epoch_gate_disabled",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_committed_activation_waits_for_applied_epoch_before_enqueuing_work",
+      "mutated_source_sha256": "18653a1ae7212ae03ab8a3b734f36dd5fbef8b31e68c9c75f673a16af9d71d14",
+      "patch_sha256": "26ddd9a7947af527a405b84eca678e8549d431a570e4343bac2ec4c1ce8d965f",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_committed_activation_waits_for_applied_epoch_before_enqueuing_work' (4120722) panicked at nativelink-scheduler/tests/authority_format_test.rs:329:5:",
+        "assertion failed: tokio::time::timeout(Duration::from_millis(50), &mut writer).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "2026-10-23T03:28:10.664381Z  INFO history_committed_activation_waits_for_applied_epoch_before_enqueuing_work: openraft::core::tick: Timer shutdown signal sent: Ok(())",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 11.647,
+      "log_sha256": "be6742acb1ee922d4a517dae3ed0c9f63408fac4e2661fc5ee20312f650c04b8",
+      "compressed_log": "staged_core_preflight_omitted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "staged_core_preflight_omitted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically",
+      "mutated_source_sha256": "837cac5d4bd31120d7e337f7cf7ce84dfabed0c5e79bfc0263e78f382aa83bd2",
+      "patch_sha256": "60e26c4493fa90a6ddc63d0de340153203d96fb0f421823f8ecfb4b996c4f121",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically' (4121430) panicked at nativelink-scheduler/tests/authority_format_test.rs:860:5:",
+        "assertion failed: journal.blocking_append([work.clone(), prepare.clone(),",
+        "                    activate.clone()]).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 16.111,
+      "log_sha256": "0f2abb07e6c72de0f57899a2888983aaa3b091b4b77cdeb425a683009f93369f",
+      "compressed_log": "unsupported_history_reader_admitted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "unsupported_history_reader_admitted",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+      "mutated_source_sha256": "7cffeed424415b15c7e669106005e9c557acfc4284fe4b310167106b403cae4a",
+      "patch_sha256": "5cd3d13a91570f32e5fcd45fa95da2df27d077abc0fb8ece8b17c256f9d4cf77",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_commands_gate_append_apply_and_unapplied_activation_suffix' (4122164) panicked at nativelink-scheduler/tests/authority_format_test.rs:1004:5:",
+        "assertion failed: Journal::recover_admission(DOMAIN, ReaderCapabilities::ReceiptRetirement,",
+        "            vec![(NODE, directory.file(\"suffix\"))]).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 8.808,
+      "log_sha256": "3944a3750e78edd7011897f9bce739f93d5041240aaa4a187196960b8c6debd7",
+      "compressed_log": "older_feature_epoch_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "older_feature_epoch_accepted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+      "mutated_source_sha256": "28f6356aef636d49d8bcfb9f74b0ddf393508fc517d52348cc88098616fc6fa2",
+      "patch_sha256": "1666448484a1313ac175129563a93de48ef67a05e599bbc18e4c81ccf255cf50",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_commands_gate_append_apply_and_unapplied_activation_suffix' (4127914) panicked at nativelink-scheduler/tests/authority_format_test.rs:977:5:",
+        "assertion failed: journal.blocking_append([activation.clone(), wrong_epoch]).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--lib",
+        "authority::format::tests::duplicate_abort_waits_for_original_decision_position",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 7.54,
+      "log_sha256": "49a73cf3c48fd028a1547d67b8d36e488f09e65954397fb6d7accd2f8e234607",
+      "compressed_log": "duplicate_abort_enqueued_twice.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "duplicate_abort_enqueued_twice",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "authority::format::tests::duplicate_abort_waits_for_original_decision_position",
+      "mutated_source_sha256": "d4a6be56e31c0d82ef530a14c2abbdd70f86c3b76c2a100eb9d80539206baafc",
+      "patch_sha256": "52154754aff16b97a21f1d9b51c39d7dec798216d4ae20091afc14ea3aaa9711",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'authority::format::tests::duplicate_abort_waits_for_original_decision_position' (4134759) panicked at nativelink-scheduler/src/authority/format.rs:1007:9:",
+        "assertion `left == right` failed",
+        "  left: Enqueue",
+        " right: Wait",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_second_preparation_retries_after_commit_before_apply",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 12.818,
+      "log_sha256": "038edee9185017e344d932f3d0d5c9b911e088c4a54353b98e537b61c1a1797b",
+      "compressed_log": "stale_prepare_metadata_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "stale_prepare_metadata_accepted",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "history_second_preparation_retries_after_commit_before_apply",
+      "mutated_source_sha256": "dd579b1b2da7b1140cbb080bf3d1e9ddf5ca26943a201ad36f68504a80c8263e",
+      "patch_sha256": "17295d805cb72e7c34b12057c327f87c3c9c67afe41079ccc9b8e694949d1174",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_second_preparation_retries_after_commit_before_apply' (4139919) panicked at nativelink-scheduler/tests/authority_format_test.rs:162:5:",
+        "assertion failed: tokio::time::timeout(Duration::from_millis(50), &mut second).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "2026-10-23T03:29:07.620206Z  INFO history_second_preparation_retries_after_commit_before_apply: openraft::core::tick: Timer shutdown signal sent: Ok(())",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--lib",
+        "authority::format::tests::abort_waits_for_live_activation_but_successor_can_resolve_old_owner",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 5.484,
+      "log_sha256": "c8c06bc64209fafda94adb8abd0cfe1f56831bddbf61eb76e4c03940564e0e05",
+      "compressed_log": "stale_decision_owner_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "stale_decision_owner_accepted",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "authority::format::tests::abort_waits_for_live_activation_but_successor_can_resolve_old_owner",
+      "mutated_source_sha256": "bfa3fb86de8f02f4353c9c110a377631b3f7d0f0e631c22716ad438b9a2fa067",
+      "patch_sha256": "a30d94cb6401082ab1dac94e2d4d3b4361477c7abba0c43322e59fe7013e4e1d",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'authority::format::tests::abort_waits_for_live_activation_but_successor_can_resolve_old_owner' (4142640) panicked at nativelink-scheduler/src/authority/format.rs:1057:13:",
+        "assertion failed: registry.enqueue_control(&abort, position(1, 1, 1).leader_id).is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_snapshot_component_and_namespace_mismatches_are_atomic",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 10.645,
+      "log_sha256": "da3a3164b24cb5b80c198d962ed9feaba2f78f2091238891c1fa3859367d4f3a",
+      "compressed_log": "foreign_history_namespace_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "foreign_history_namespace_accepted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_snapshot_component_and_namespace_mismatches_are_atomic",
+      "mutated_source_sha256": "a63f04b9f599b7e23f3257f96949f24a23ab2735313d63c4fd399ddbe5b831b0",
+      "patch_sha256": "9e5dcbe97caeb21b4f439176048fcb37f0d4f38d8c0a0dbc7fc0177119fe999e",
+      "killed": true,
+      "failure_excerpt": [
+        "thread 'history_snapshot_component_and_namespace_mismatches_are_atomic' (4145685) panicked at nativelink-scheduler/tests/authority_format_test.rs:1079:9:",
+        "assertion failed: target.install_snapshot(&snapshot.meta, bytes).await.is_err()",
+        "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+        "2026-10-23T03:29:23.750416Z  INFO history_snapshot_component_and_namespace_mismatches_are_atomic: openraft::core::tick: Timer shutdown signal sent: Ok(())",
+        ""
+      ],
+      "expected_semantic_assertion_reviewed": true
+    }
+  ],
+  "restored_source_sha256": {
+    "nativelink-scheduler/src/authority/format.rs": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+    "nativelink-scheduler/src/authority/journal.rs": "b64b7631b5b62677cb906a340bb0624bd29da6e625439953d2c06508f95c266e",
+    "nativelink-scheduler/tests/authority_format_test.rs": "07eb86366ff25fd0f58949ee59e0baaaca5c2165e00b6b4e05070ba6c2d8122b"
+  },
+  "restored_run": {
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "nativelink-scheduler",
+      "--test",
+      "authority_format_test",
+      "--",
+      "--test-threads=4"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 18.752,
+    "log_sha256": "f9f37c02be60198883dd4221cbc13bd60928aaee6ce75eb5b859a133484ec64e",
+    "compressed_log": "restored_format.log.gz",
+    "compiled": true,
+    "semantic_failure": false
+  },
+  "restored_unit_run": {
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "nativelink-scheduler",
+      "--lib",
+      "authority::format::tests",
+      "--",
+      "--test-threads=4"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 6.979,
+    "log_sha256": "54d5b0f9550ddf785b094c76fc543af5958c23f9d05990a9f6c9a2cd851eb0b3",
+    "compressed_log": "restored_units.log.gz",
+    "compiled": true,
+    "semantic_failure": false
+  },
+  "owned_source": {
+    "nativelink-scheduler/src/authority/format.rs": {
+      "path": "frozen-source/nativelink-scheduler/src/authority/format.rs.gz",
+      "uncompressed_sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "gzip_sha256": "9b46be7e432bab3bf0cd072aa601e5ff925ce38f5002369b2cb2ab601b95cfad"
+    },
+    "nativelink-scheduler/src/authority/journal.rs": {
+      "path": "frozen-source/nativelink-scheduler/src/authority/journal.rs.gz",
+      "uncompressed_sha256": "b64b7631b5b62677cb906a340bb0624bd29da6e625439953d2c06508f95c266e",
+      "gzip_sha256": "8d5fbf9ab5bf934346da5d806df00e4b5843565c636e727e10a98cb43daa63af"
+    },
+    "nativelink-scheduler/tests/authority_format_test.rs": {
+      "path": "frozen-source/nativelink-scheduler/tests/authority_format_test.rs.gz",
+      "uncompressed_sha256": "07eb86366ff25fd0f58949ee59e0baaaca5c2165e00b6b4e05070ba6c2d8122b",
+      "gzip_sha256": "5930af95a0416b2f2219ead965951c79fac1865ae023a8cf5bdb58924fdd16af"
+    },
+    "nativelink-scheduler/design/categorical/history-format.md": {
+      "path": "frozen-source/nativelink-scheduler/design/categorical/history-format.md.gz",
+      "uncompressed_sha256": "5e2c54e9e9eaf980b596534df201b616ab58a27633f9023d499747d8ace17136",
+      "gzip_sha256": "7fade9913e6fc894bbd32a3f8706890d410fb100818237ff17274501dde475e8"
+    }
+  },
+  "validation": {
+    "full_baseline": {
+      "path": "validation/full_baseline.log.gz",
+      "uncompressed_sha256": "0e8857c962b25b4e7d3c3df925ad255821706ec08e3d1b5ef56f9cb8b097a101",
+      "gzip_sha256": "33856aedd41a168dcf030e7640b60f292375be70e9af2c8e6f901942f91aefba",
+      "command": "cargo test -p nativelink-scheduler --test authority_cluster_test --test authority_format_test --test authority_raft_test --test authority_volatile_test -- --test-threads=4"
+    },
+    "clippy": {
+      "path": "validation/clippy.log.gz",
+      "uncompressed_sha256": "e352278e87559ea04ef03cee9ae296a67c46a8b6ab2b533dc85227952019a148",
+      "gzip_sha256": "faec203bbd6c3e439519fa6440d8150a8ee13a3cc214cf1b834b7c8b63c46b40",
+      "command": "cargo clippy -p nativelink-scheduler --tests -- -D warnings"
+    },
+    "vale": {
+      "path": "validation/vale.log.gz",
+      "uncompressed_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "gzip_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da",
+      "command": "vale nativelink-scheduler/design/categorical/history-format.md"
+    }
+  },
+  "qualification_scope": "Experimental trusted in-process feature-3 admission, journal replay, restore, proposal concurrency and recovery. No production cutover, distributed capability authentication, or physical CAS identity claim.",
+  "counts": {
+    "integration_tests": 68,
+    "format_integration_tests": 28,
+    "new_registry_unit_tests": 3,
+    "compiled_semantic_mutants_killed": 9
+  },
+  "independent_review": {
+    "reviewer": "authority_core",
+    "preview_v1_sha256": "dc50369d4dac04dbea78a6a9dbdb3fe34a9d3042c99b784d01e2e2a3d73a71d0",
+    "preview_v2_sha256": "e9546866d1ddf2c477006de2d93c8ce15c251b5d3334455cdbb2495941c0e27c",
+    "findings": [
+      "Concurrent Abort could enqueue conflicting decision positions; per-permit leader/term admission now shares the original decision.",
+      "Preparation could use stale applied metadata after its earlier read barrier; atomic registry check now retries the barrier outside the gate."
+    ],
+    "delta_review": "Both counterexamples addressed; no new safety/deadlock gap found in bounded source delta review. Reviewer did not rerun integration tests.",
+    "gate_counterexamples.rs": {
+      "path": "review/gate_counterexamples.rs.gz",
+      "uncompressed_sha256": "6fa9b7b51508735fba19f1d30d7daf4e734376c0cea1ab58440665f76bcbc7f9",
+      "gzip_sha256": "aca50d30e8ce4ce85b253ae5e5e09ec3740c8edc94825802ef4661bf8b965aa6"
+    },
+    "preview-counterexamples.log": {
+      "path": "review/preview-counterexamples.log.gz",
+      "uncompressed_sha256": "619309e71d28fd5fbe4531b89838d70292243f1dab9be9fb415d35172ec7e1f1",
+      "gzip_sha256": "56abbfaed2a9653550c54e6edbb5f83c1b5b936b784f520d155cc1622d5d3ff4"
+    },
+    "nativelink-history-format-preview.patch.gz": {
+      "path": "review/nativelink-history-format-preview.patch.gz",
+      "uncompressed_sha256": "dc50369d4dac04dbea78a6a9dbdb3fe34a9d3042c99b784d01e2e2a3d73a71d0",
+      "gzip_sha256": "cdf2ffa6e89d02c4a4a4d2ee6649a00bc261f08ba96984966d5117e6f0b28f77"
+    },
+    "nativelink-history-format-preview-v2.patch.gz": {
+      "path": "review/nativelink-history-format-preview-v2.patch.gz",
+      "uncompressed_sha256": "e9546866d1ddf2c477006de2d93c8ce15c251b5d3334455cdbb2495941c0e27c",
+      "gzip_sha256": "e1cb401141e102e0154ea5456471b2ee201e223f467f380b7a5ce2c43ce185d2"
+    },
+    "preview-v1-format.rs.gz": {
+      "path": "review/preview-v1-format.rs.gz",
+      "uncompressed_sha256": "1ae8428d8954be0558338fa1e002b67f8630d70a436bb598dea1061e692d167a",
+      "gzip_sha256": "66d3948c59418c7ff2ec113c36e90d6432a292add249c148d9cb4681234f0a8d"
+    }
+  },
+  "prior_v1_qualification": "prior/history-format-v1/manifest.json",
+  "retained_failures": {
+    "nativelink-history-format-existing.log": {
+      "path": "exploratory/nativelink-history-format-existing.log.gz",
+      "uncompressed_sha256": "79e6689d0062f4020e7921f8c141a01a2920501c2e5668ceeb090d86d3f21984",
+      "gzip_sha256": "c7615cf89f423b5902c6e80c1e86d5200e215d3a055bb402927d390b1c967268"
+    },
+    "nativelink-history-format-compat.log": {
+      "path": "exploratory/nativelink-history-format-compat.log.gz",
+      "uncompressed_sha256": "641322363e04839639ade135c7246d9c251cb082b1d217792e06808ce156db5f",
+      "gzip_sha256": "90153034a22864bdad29b9f04aa070c19b9d41f92544c4e0b6b7f6a6bb94cb7b"
+    },
+    "nativelink-history-format-capacity.log": {
+      "path": "exploratory/nativelink-history-format-capacity.log.gz",
+      "uncompressed_sha256": "03a6027ed78c18d4d79c26d921e6d3607caf1c31d2718a3a27af41db4f431e4a",
+      "gzip_sha256": "bcedb283ddcaa6150775e2444ef939a998a610aa8afae9d7371d02386ab6e35b"
+    },
+    "nativelink-history-format-clippy.log": {
+      "path": "exploratory/nativelink-history-format-clippy.log.gz",
+      "uncompressed_sha256": "3b4c9605d3b753ceefe064a8c8dccc53b84e5eef20d7d8441f4f98247532d621",
+      "gzip_sha256": "95701aa9ec5ec11f69a535d4994cc00c31f8a0ef3f9a44a2c9594c2224b67dd9"
+    },
+    "nativelink-history-format-races-unit.log": {
+      "path": "exploratory/nativelink-history-format-races-unit.log.gz",
+      "uncompressed_sha256": "73d2300f7003ab4f325ac801096f2c50f614cd9f7f9af08df90cbd68a2a31f26",
+      "gzip_sha256": "e7b172be05763daca006a1ded8fd35326206ab793b003b5a208273f41c201c08"
+    },
+    "nativelink-history-format-fixture-drain.log": {
+      "path": "exploratory/nativelink-history-format-fixture-drain.log.gz",
+      "uncompressed_sha256": "47000ad6227b6671f95b6614b8e16c5f81604754933f934743b01ca834ed4fa9",
+      "gzip_sha256": "ac68383d654c1637248e9911b0cd29f5b500d09bcdace45a26d6bd8848cd5ca2"
+    },
+    "nativelink-history-format-vale.log": {
+      "path": "exploratory/nativelink-history-format-vale.log.gz",
+      "uncompressed_sha256": "528093e37363d3055fcf3babf1904ba9116ad9124e1cc0db48854cc72a5c8540",
+      "gzip_sha256": "12e63c81e5ea9fa1017ddb6dd6e2624975f02a69e65f15094000025a7dd58386"
+    },
+    "nativelink-history-format-clippy-final-v3.log": {
+      "path": "exploratory/nativelink-history-format-clippy-final-v3.log.gz",
+      "uncompressed_sha256": "4e9711753bad7ad14ab31f91661097b370bcc9320812578ca66a22be8fb67950",
+      "gzip_sha256": "2a08a02ab2e6b31422ce58963d28ff629559e5285ddfdec5bc09f666dcf27838"
+    }
+  },
+  "failure_resolution_notes": [
+    "The original core dependency rejected lowercase canonical digest-function spellings emitted by request.rs. The opaque followup core patch fixes that defect.",
+    "Feature validation initially changed the plain-base split-storage contract. The final guard limits staged replay to feature-bearing context while keeping the base storage-suite path.",
+    "The v2 nine-mutant run killed every mutant but restored only 26/28 format tests: a 50ms quorum RPC deadline expired under load and cold recovery raced a remaining storage clone after Raft core shutdown. The final fixture uses a 500ms RPC deadline and waits for each journal to become exclusively openable.",
+    "The first explicit closed-journal wait revealed an intentional test-owned clone retained to final shutdown; the stale-leader test now drops it before teardown. That failed attempt is retained.",
+    "Earlier exploratory logs and prior source hashes describe those earlier candidates; only current source hashes identify the final qualification."
+  ],
+  "runner_sha256": "1a22c3222b3cd6af64b6f00c100e920fbead966cd0d6a1258aea3390bfed4610",
+  "delivery_patch": {
+    "path": "/tmp/nativelink-history-format-final.patch",
+    "sha256": "95158b0e45880631f5a967b69ada8d4c69ab43a79eb10aca29c9b8469aabdd7e"
+  },
+  "root_integration": {
+    "base_commit": "ec22f03826b67ebd6a39a3d8001a315241b39288",
+    "passed_tests": {
+      "library": 77,
+      "reference": 14,
+      "differential": 8,
+      "format": 28,
+      "raft": 25,
+      "cluster": 10,
+      "volatile": 5
+    },
+    "receipts": [
+      {
+        "path": "integrated/command.log.gz",
+        "uncompressed_sha256": "093f58c607ba8119d79f1b4e0f75ddf0620b721feddea06622592f698097808c",
+        "gzip_sha256": "20ec544ab5c178bab0a4a27b3b72b6f6c65a2b5a44e18957ba0f5fa489c5a440"
+      },
+      {
+        "path": "integrated/unit_test/test.log.gz",
+        "uncompressed_sha256": "bfa68512405561ae475bf425a67216e0dda136e948552af95e85e610ef804b11",
+        "gzip_sha256": "d4629a4b3f493ec18f4a05d72702751b910b479fcfe5d54998a77b8cd0f6d232"
+      },
+      {
+        "path": "integrated/accepted_history_reference_test/test.log.gz",
+        "uncompressed_sha256": "7b316ac930b9db795e4ede16e01c7f12ea93e03ab367a0f88277b8191c159b76",
+        "gzip_sha256": "10d54ac1b7d36f1a2e4778bd9a2407b2b98e077b7b7a7ac79522bf2bc6785a06"
+      },
+      {
+        "path": "integrated/accepted_history_differential_test/test.log.gz",
+        "uncompressed_sha256": "b74c6e92bd356ef6193ac18608857be3fa2bb30d9e9006faa4fd933e5ded5666",
+        "gzip_sha256": "2fb3459b304b3ea543489f9596e51246701330f159312d7b372bb40934f0cab9"
+      },
+      {
+        "path": "integrated/integration_tests/authority_format_test_test/test.log.gz",
+        "uncompressed_sha256": "b46f4091bad5f11d2ecb210927c3c4468f84b59c63fb94e7ff1bc99c62daad03",
+        "gzip_sha256": "13350c75cc65999a28bf5eaf20aa8e7520fd63fcf0bc51cbcf49d8dbec680e17"
+      },
+      {
+        "path": "integrated/integration_tests/authority_raft_test_test/test.log.gz",
+        "uncompressed_sha256": "b186c6cfcb2a3521d4e0cec53b7f4bb16be92ee871800218ad985034fc7a1f74",
+        "gzip_sha256": "22d6f4bf833f45dbef06a0f53ac6aa7795d093d65acc1bbb3516b676cf1d4364"
+      },
+      {
+        "path": "integrated/integration_tests/authority_cluster_test_test/test.log.gz",
+        "uncompressed_sha256": "f8013da505f5758b0aa0a3ff561cc16e39a4b6813862b03bf8ce3bd06a95202d",
+        "gzip_sha256": "615916cb15e4965c3b727796586c7e5045141ce02753a66777ff2a75c1740c50"
+      },
+      {
+        "path": "integrated/integration_tests/authority_volatile_test_test/test.log.gz",
+        "uncompressed_sha256": "0f1a3a0d264ecc8c24b5ca2d2dd03dbf06a7a04911b66f8b39cb57e6c9e25fc0",
+        "gzip_sha256": "10a0bd5f54e223e910fe20ab954fba01e632cccbc8f1f8258aec355776973f6c"
+      }
+    ]
+  }
+}

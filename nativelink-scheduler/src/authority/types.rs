@@ -318,6 +318,13 @@ pub enum Event {
         incarnation: IncarnationId,
         certificate: ReceiptCertificate,
     },
+    /// Exact committed diagnostic-object observation. This acknowledges only
+    /// materialization, never completion, cleanup, or a retention guarantee.
+    HistoryPublication {
+        effect: EffectId,
+        object: super::accepted_history::HistoryObject,
+        outcome: super::accepted_history::HistoryOutcome,
+    },
 }
 
 /// A receipt exception binds every identity domain that recipient compaction
@@ -375,6 +382,10 @@ pub const MAX_RECEIPT_BINDINGS: usize = 1024;
 pub const MAX_RECEIPT_CERTIFICATE_BYTES: usize = 256 * 1024;
 
 impl Event {
+    #[must_use]
+    pub const fn requires_accepted_history(&self) -> bool {
+        matches!(self, Self::HistoryPublication { .. })
+    }
     #[must_use]
     pub const fn requires_receipt_retirement(&self) -> bool {
         matches!(

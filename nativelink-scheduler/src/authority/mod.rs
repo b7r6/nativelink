@@ -14,17 +14,19 @@
 
 //! Experimental committed-event authority for the M1 scheduler contract.
 //!
-//! This module is not connected to production RPC, worker dispatch, or Raft.
+//! Production factories do not construct this authority. Experimental journal
+//! and RPC fixtures connect it to committed delivery.
 //! `apply` requires a committed input. The harness separately checks proposal,
 //! commit, application, and effect delivery. External work is represented only
 //! by the recoverable outbox; this module has no I/O or clock dependencies.
 //!
-//! Snapshot version 5 is an experimental test format, not a production durable
-//! format. M0 workload qualification and M3 format activation remain required.
+//! Core snapshot versions 5, 6, and 7 are experimental test formats. M0 workload
+//! qualification and a production format freeze remain required.
 
 #[cfg(test)]
 mod tests;
 
+pub mod accepted_history;
 pub mod format;
 pub mod journal;
 pub mod reapi;
@@ -35,6 +37,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
 
+use accepted_history::AcceptedHistory;
 use serde::{Deserialize, Serialize};
 pub use types::*;
 
@@ -76,6 +79,8 @@ pub struct State {
     effects: BTreeMap<EffectId, Effect>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     receipt_retirement: Option<ReceiptRetirement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    accepted_history: Option<AcceptedHistory>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -204,6 +209,7 @@ impl State {
             reservations: BTreeMap::new(),
             effects: BTreeMap::new(),
             receipt_retirement: None,
+            accepted_history: None,
         })
     }
 
@@ -492,6 +498,11 @@ impl State {
                 incarnation,
                 certificate,
             } => self.acknowledge_receipts(worker, incarnation, &certificate),
+            Event::HistoryPublication {
+                effect,
+                object,
+                outcome,
+            } => self.observe_history(effect, &object, outcome),
         }
     }
 
@@ -531,7 +542,7 @@ impl State {
         for worker in self.workers.values() {
             credit = credit.checked_add(self.payload_bytes(&worker.properties)?)?;
         }
-        Some(credit)
+        credit.checked_add(self.history_byte_credit(0)?)
     }
 
     fn submit_byte_credit(&self, request: &Request, new_execution: bool) -> Option<usize> {
@@ -546,6 +557,9 @@ impl State {
                 .checked_add(request_bytes.checked_mul(3)?)?
                 .checked_add(self.limits.max_payload_bytes.checked_mul(2)?)?
                 .checked_add(EXECUTION_ROWS.checked_mul(FIXED_ROW_BYTES)?)?;
+            if self.accepted_history_enabled() {
+                credit = credit.checked_add(accepted_history::HISTORY_ROW_BYTES)?;
+            }
         }
         Some(credit)
     }
@@ -645,6 +659,7 @@ impl State {
             || request.action.digest_function.is_empty()
             || !self.payload_fits(&request)
             || request.validate_payload().is_err()
+            || !self.history_request_valid(&request.action)
         {
             return Reply::Rejected(Rejection::Invalid);
         }
@@ -674,7 +689,7 @@ impl State {
                     .executions
                     .len()
                     .saturating_add(1)
-                    .saturating_mul(EFFECT_HEADROOM)
+                    .saturating_mul(self.effect_headroom())
                     > self.limits.max_effects
                 || self.next_execution == u64::MAX
                 || !self.identities_have_headroom(true)
@@ -1135,6 +1150,9 @@ impl State {
         if !self.payload_fits(&result) || result.validate_response().is_err() {
             return Reply::Rejected(Rejection::Invalid);
         }
+        let Ok(history) = self.prepare_history(self.attempts[&attempt].execution, &result) else {
+            return Reply::Rejected(Rejection::Invalid);
+        };
         let entry = self.attempts.get_mut(&attempt).expect("authorized attempt");
         entry.authorized = false;
         let execution = entry.execution;
@@ -1150,6 +1168,7 @@ impl State {
                 result,
             });
         }
+        self.accept_history(attempt, history);
         Reply::Applied
     }
 
@@ -1212,6 +1231,9 @@ impl State {
             return Reply::Rejected(Rejection::Invalid);
         }
 
+        let Ok(history) = self.prepare_history(entry.execution, &result) else {
+            return Reply::Rejected(Rejection::Invalid);
+        };
         // Validation ends before the first mutation. This accepted report closes
         // exactly its original physical obligation, never a successor's target.
         self.attempts
@@ -1253,6 +1275,7 @@ impl State {
                 entry.execution,
                 TerminalResult::ResourceFailed { result, reason },
             );
+            self.accept_history(attempt, history);
         } else {
             self.executions
                 .get_mut(&entry.execution)
@@ -1401,7 +1424,7 @@ impl State {
     // identity space for every admitted execution's remaining finalization.
     fn identities_have_headroom(&self, admitting: bool) -> bool {
         let mut attempts_left = u64::from(admitting) * u64::from(MAX_ATTEMPTS);
-        let mut effects_left = u64::from(admitting) * EFFECT_HEADROOM as u64;
+        let mut effects_left = u64::from(admitting) * self.effect_headroom() as u64;
         for execution in self
             .executions
             .values()
@@ -1414,7 +1437,8 @@ impl State {
             attempts_left = attempts;
             let effects = remaining * 2
                 + u64::from(execution.attempt.is_some())
-                + u64::from(!execution.request.do_not_cache);
+                + u64::from(!execution.request.do_not_cache)
+                + u64::from(self.accepted_history_enabled());
             let Some(total) = effects_left.checked_add(effects) else {
                 return false;
             };
@@ -1470,7 +1494,8 @@ impl State {
             .filter(|attempt| attempt.execution == execution)
             .map(|attempt| attempt.id)
             .collect();
-        if self.receipt_attempts_pinned(&attempts)
+        if self.history_pins(execution)
+            || self.receipt_attempts_pinned(&attempts)
             || self
                 .reservations
                 .values()
@@ -1488,6 +1513,7 @@ impl State {
         self.attempts.retain(|id, _| !attempts.contains(id));
         self.reservations
             .retain(|_, reservation| !attempts.contains(&reservation.attempt));
+        self.retire_history(execution);
         Reply::Applied
     }
 
@@ -1589,7 +1615,8 @@ impl State {
             || self.operations.len() > self.limits.max_operations
             || self.workers.len() > self.limits.max_workers
             || self.effects.len() > self.limits.max_effects
-            || self.executions.len().saturating_mul(EFFECT_HEADROOM) > self.limits.max_effects
+            || self.executions.len().saturating_mul(self.effect_headroom())
+                > self.limits.max_effects
             || self.attempts.len() > self.executions.len().saturating_mul(MAX_ATTEMPTS as usize)
             || self.reservations.len() != self.attempts.len()
         {
@@ -1940,6 +1967,7 @@ impl State {
             }
         }
         self.check_receipt_invariants()?;
+        self.check_history_invariants()?;
         if self.holds.len() > self.hold_cap() {
             return fail("HOLD1: held workers fit the fixed usable-fleet cap");
         }

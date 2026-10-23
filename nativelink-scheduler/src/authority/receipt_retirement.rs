@@ -59,7 +59,9 @@ impl State {
     }
 
     pub(super) const fn snapshot_version(&self) -> u32 {
-        if self.receipt_retirement_enabled() {
+        if self.accepted_history_enabled() {
+            7
+        } else if self.receipt_retirement_enabled() {
             6
         } else {
             SNAPSHOT_VERSION

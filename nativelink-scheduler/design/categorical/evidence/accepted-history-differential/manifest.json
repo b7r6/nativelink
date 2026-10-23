@@ -1,0 +1,369 @@
+{
+  "base_commit": "ec22f03826b67ebd6a39a3d8001a315241b39288",
+  "scope": "Eight actual-State differential histories against the independently frozen accepted-history reference. No journal, transport, provider durability or production rollout claim.",
+  "candidate_v2_patch_sha256": "b33a762054ec3648d6e2a5dc0cdfb6592f27da756c3a1794090bfb80cde94df0",
+  "adapter_patch_sha256": "15045425bdc2714a8e7fc3b9f618eed66fd70a573663ce8f4e00619db0ba033d",
+  "archive_tar_sha256": "e2469474077be6cda40b4aae8f2516c02a1b1d45248d2a001006fdb7d863be8b",
+  "validation": [
+    "Cargo and Bazel:8 differential histories and14 frozen reference cases pass; strict Clippy/pinned rustfmt/buildifier/typos/Vale pass.",
+    "Integrated Bazel also passes74 scheduler unit tests,8 differential histories,14 reference cases.",
+    "Canonical lowercase algorithm bug corrected in candidate; mistaken shared do_not_cache fixture changed only from normative request contract; all original failures preserved.",
+    "The frozen model source receives only repository-required Rust license headers during integration; original source hashes/archives remain preserved. Narrow compiler diagnostic helper exposure is disclosed in adapter documentation."
+  ],
+  "receipts": [
+    {
+      "file": "adapter-clippy-first.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/adapter-clippy-first.log",
+      "source_sha256": "01217f0c54e02797ba001131f43397f5578b56359bbd626d90dd965e3a9ef159",
+      "archive_sha256": "ca34dfc8ef54d4823422ca7f6b3ae8d8d90cb1be86a20ec5920fad39b928b3e4"
+    },
+    {
+      "file": "adapter.patch.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/adapter.patch",
+      "source_sha256": "15045425bdc2714a8e7fc3b9f618eed66fd70a573663ce8f4e00619db0ba033d",
+      "archive_sha256": "1c6d6b7171bc3ce9f0704609099d58a63b15939c8e766536e1c5692a56fe3f9b"
+    },
+    {
+      "file": "bazel-results/accepted_history_differential_test/test.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/bazel-results/accepted_history_differential_test/test.log",
+      "source_sha256": "4f19d0731241bd1f2335d07692ee976980ea220ec20cfc63810f526cc5e8acea",
+      "archive_sha256": "3d706775c093aae9f7e9d12109662353a455656ff8d8577d6fb48119c3bcaf29"
+    },
+    {
+      "file": "bazel-results/accepted_history_differential_test/test.xml.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/bazel-results/accepted_history_differential_test/test.xml",
+      "source_sha256": "f32ed52893acbbec732fa88956023773ffbaa73d2b60a58806f18d5e9ceedadc",
+      "archive_sha256": "bc53037a8dfc05741959829354767e2471dcf3ce040d1324034dd42062a82500"
+    },
+    {
+      "file": "bazel-results/accepted_history_reference_test/test.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/bazel-results/accepted_history_reference_test/test.log",
+      "source_sha256": "5757f750a68a32a2aff042b9c3e5261db32692083508fb19c3fb6969ca35b132",
+      "archive_sha256": "7fccb39e6d910e3f732d0c42eb57a87d0d567b25d63ee141d982213764e6ace3"
+    },
+    {
+      "file": "bazel-results/accepted_history_reference_test/test.xml.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/bazel-results/accepted_history_reference_test/test.xml",
+      "source_sha256": "c0ce6ae1dac3b18b57a1da8b5d0a0e7de0b163fab008ea28308a273022a1591b",
+      "archive_sha256": "f01b7ca308f9a62456cfd7f871f6db3dcf4e034c2798030518fb53e4e8802239"
+    },
+    {
+      "file": "candidate-followup-inputs.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-inputs.json",
+      "source_sha256": "ccb4ab21e3bb9f21746791364b3a3fd81164301fe7b6f7caa4bcf6a9eb32b068",
+      "archive_sha256": "917ff24dfcd58ea823cc59063d69bf8a94306cebf60b4ad49602b515e43a7f95"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/accepted_history.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/accepted_history.rs",
+      "source_sha256": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+      "archive_sha256": "23655b2a34bf2f4aeda35e90fd398fc0ddcfe8998a9933ddf9f60eb4d870cd46"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/accepted_history_tests.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/accepted_history_tests.rs",
+      "source_sha256": "32b9015ec45b02b2b586bc88aa764b3017b4afe9e839fa8f48c9681244a2bb91",
+      "archive_sha256": "9152bbac3cd0a50a83661b6a0045815e9004abf0790ab88f5bd97d38c3050404"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/mod.rs",
+      "source_sha256": "edd45433a4c0a913f40c5ecffd11e2b30118528233cfcc1829124a7785ac7514",
+      "archive_sha256": "a485d56ad60ede307d3c59c4b382cbfea8dcde2f16c5997da02aacb6d5635255"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/receipt_retirement.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/receipt_retirement.rs",
+      "source_sha256": "e2946bbf4a592f87577aa36b5f189596593ac984bbfdc5e67a3d99c4d47868f0",
+      "archive_sha256": "8db7cf56a41363ca2d85169ea2e130abf2fc724d7c12089d8e0264f8aeff18a0"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/tests.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/tests.rs",
+      "source_sha256": "7c522292f0fe46de83108f81c31454cbe5e4a692e28469dddfb0c91ddca0a154",
+      "archive_sha256": "02e60a5f8f375637ce5a5afa3ca7e5aeba926cb976ff4261abe7c1ee49235b60"
+    },
+    {
+      "file": "candidate-followup-source/nativelink-scheduler/src/authority/types.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup-source/nativelink-scheduler/src/authority/types.rs",
+      "source_sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "archive_sha256": "f5996408955d1b30dc8f7424ad250e38c08927a6bb48fa9c0a27f8950f85b7ff"
+    },
+    {
+      "file": "candidate-followup.patch.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-followup.patch",
+      "source_sha256": "fefc9567d266a194f4ba364e8f52638118c44e066e2a570fc8acfa003b6464d8",
+      "archive_sha256": "a89f0d8703dd6b54a576a43481307a10b755c68d9f17120051942b510c8d0da7"
+    },
+    {
+      "file": "candidate-inputs.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-inputs.json",
+      "source_sha256": "7363f742097dcbc6dc341828856ffd36129dff4f87d8537b8563e831e5ccb835",
+      "archive_sha256": "1a6ed87299550af9de322b2332a7698c2717cdd86cf10fc990e2079025f7872c"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/accepted_history.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/accepted_history.rs",
+      "source_sha256": "739f356a13450b8c5a9505ba8991b1f92920b6aabd0af05696c58eed6bfe8ed9",
+      "archive_sha256": "7afe088022643f6a3f4317f1a82b8be84fa7f5a22f90fe9df1206ee80cf27eb1"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/accepted_history_tests.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/accepted_history_tests.rs",
+      "source_sha256": "a729a6aa511039bb35fdd51aca878285663a98d7ad807e3234bd14108332b1f2",
+      "archive_sha256": "6ccd63b861c9b8369f4984b84eeca93bd3027588a52d35b98bd508ae1e2958bc"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/mod.rs",
+      "source_sha256": "edd45433a4c0a913f40c5ecffd11e2b30118528233cfcc1829124a7785ac7514",
+      "archive_sha256": "a485d56ad60ede307d3c59c4b382cbfea8dcde2f16c5997da02aacb6d5635255"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/receipt_retirement.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/receipt_retirement.rs",
+      "source_sha256": "e2946bbf4a592f87577aa36b5f189596593ac984bbfdc5e67a3d99c4d47868f0",
+      "archive_sha256": "8db7cf56a41363ca2d85169ea2e130abf2fc724d7c12089d8e0264f8aeff18a0"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/tests.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/tests.rs",
+      "source_sha256": "7c522292f0fe46de83108f81c31454cbe5e4a692e28469dddfb0c91ddca0a154",
+      "archive_sha256": "02e60a5f8f375637ce5a5afa3ca7e5aeba926cb976ff4261abe7c1ee49235b60"
+    },
+    {
+      "file": "candidate-source/nativelink-scheduler/src/authority/types.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/candidate-source/nativelink-scheduler/src/authority/types.rs",
+      "source_sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "archive_sha256": "f5996408955d1b30dc8f7424ad250e38c08927a6bb48fa9c0a27f8950f85b7ff"
+    },
+    {
+      "file": "digest-counterexample-adapter.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/digest-counterexample-adapter.rs",
+      "source_sha256": "5da7a1603ec1b516c4c3ea4756261178213df67fc93b8f510a24c791b1ec5a79",
+      "archive_sha256": "bc44182032c0ed53147fe0bf0b373429c1783166ecd1cc4370f4ba3bed66536c"
+    },
+    {
+      "file": "final-bazel-tests.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-bazel-tests.log",
+      "source_sha256": "4d84be4b14d57e30bb7597b8bd1e7a25090de81667732cce55bd460b9777bfa8",
+      "archive_sha256": "30a684383c8db5221812b6bcde49cc4fd339f8468e1be6b9116cf0a2744df86a"
+    },
+    {
+      "file": "final-buildifier.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-buildifier.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "final-cargo-tests.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-cargo-tests.log",
+      "source_sha256": "37f6f7fe284249b6abe94792ad2dc2053538526d81281caa8d79941a69f69ff9",
+      "archive_sha256": "c88bd903254983f9cd82a2ff74db9df5b5814c3c678793bb1dcafd35d0c2bda1"
+    },
+    {
+      "file": "final-clippy.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-clippy.log",
+      "source_sha256": "4a975ea3b846f9135b0463f67365735e8a5db7efbf9d260a48453714a253d818",
+      "archive_sha256": "7081093843a33ee92798c2e1b99e5be02eb71088263754352de6fa87f813d56c"
+    },
+    {
+      "file": "final-rustfmt.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-rustfmt.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "final-sources/Cargo.lock.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/Cargo.lock",
+      "source_sha256": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+      "archive_sha256": "627a55943b3bcc9994edc52eef46bb80ab6e3b3e20963eafe99540dca9af7677"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/BUILD.bazel.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/BUILD.bazel",
+      "source_sha256": "f60f624c14c2672355397061f98029cebbb8e64c561a484474964fabacd4e58b",
+      "archive_sha256": "d9d4171caf64960bf8ceae1f733bfdeeaf17940268c3e2e988a5b37b855f4c85"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/Cargo.toml.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/Cargo.toml",
+      "source_sha256": "3f052d46b38150ff24502ecadf44119dc4eec867cc9a41ca2723a2f9ef138b0d",
+      "archive_sha256": "f6b9090c1fa3c3f084fd555bca80056973038306500bc12621f32a83764b3cd6"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/design/categorical/contract.md.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/design/categorical/contract.md",
+      "source_sha256": "d467dcf22ef9402e45e8f5138651ceb9bcf34c82b35ae6afb8fe2fff89763bad",
+      "archive_sha256": "ac66e4da93e7e88a27f9385d7bd3e09de5c84900dda85ed3ceb9938a0f20e3cc"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/design/categorical/resource-failure-policy.md.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/design/categorical/resource-failure-policy.md",
+      "source_sha256": "477c447e4f552796f0253007a5d589ac1ef834cf804e967ae969f149faa59748",
+      "archive_sha256": "00dfc5d5a0f7c54fc82fe3625a2842832735f5059ab72bf4d8985bef6506f149"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history/ADAPTER.md.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history/ADAPTER.md",
+      "source_sha256": "4fcaa11a2775b941e14109c32af6644a70e6ccb535cc0ef69d015b26e4767cf1",
+      "archive_sha256": "57e69e879c0d34dd18209008ce8a664d1cda1565534b572225f2e3a82e7d493a"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history/README.md.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history/README.md",
+      "source_sha256": "482fa4775ab741944767f0828ae04bc96efd09b65cd36910550046b69f219ee7",
+      "archive_sha256": "f141e9c0fff147fcacfcdbe8ee9ae22ae98d298beaa90c3fbea13c6f13cc7880"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history/reference.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history/reference.rs",
+      "source_sha256": "488445e2df8a2721b6711b792665364d50f2c9b837f0dabd64d7258cb53e9da1",
+      "archive_sha256": "e56190dd7d6980777a204c7025cf6e672ca9f2e013e3bba02707ba1d8bbbd1b9"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history/types.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history/types.rs",
+      "source_sha256": "7f005e9a424fb8332525d2f29bb4fc284108f4f90f21575c67b3bae5696e9c98",
+      "archive_sha256": "a91385ae65d94d342a56900c16fd459715e84b5f836455e9c77f685fedaa83dc"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history_differential_test.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history_differential_test.rs",
+      "source_sha256": "fb823b7cc9219347da36d5a08d19dd8acd9c9f1e98d60b3d96a51a71b6ea238d",
+      "archive_sha256": "2ed06e2c1b01e8aca4d20cd64632669224cfb25af368a4816d6ca265d046c358"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/accepted_history_reference_test.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-sources/nativelink-scheduler/tests/accepted_history_reference_test.rs",
+      "source_sha256": "62aef7d0be4732d611ab99d993667f406b43bc63c1fcec76bdd4cb757aa06802",
+      "archive_sha256": "9534fb12718d55977df3659457a41ddc1ad0e722f4ae887e118e9a97787b1b00"
+    },
+    {
+      "file": "final-typos.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-typos.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "final-vale.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/final-vale.log",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "first-semantic.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/first-semantic.log",
+      "source_sha256": "7e27cec318b6deae495170f62bd7b24db215bd76c8068a55faedae7440541be9",
+      "archive_sha256": "a0dde606532a49eee36b426e08931d8ca221cbc46d85af3bf6732b133828aa3b"
+    },
+    {
+      "file": "followup-clippy.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/followup-clippy.log",
+      "source_sha256": "60aa50db8dd0faf42e53b1f3c68c7f84cfb37b975a9702ffa5460d64cb2695b8",
+      "archive_sha256": "027311436f7229f5fb50eeac60a3b30c4c5844f5815bc085d9536b29350072f9"
+    },
+    {
+      "file": "followup-semantic.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/followup-semantic.log",
+      "source_sha256": "fa6768f3acdef0370d7c704e993ac7f2435d578594a325b8c851f89da9f840f5",
+      "archive_sha256": "bb9f1cd715fcf07515560cd835421854eeb947f8b4f8b4a082145a8c8b29c173"
+    },
+    {
+      "file": "frozen-model-hashes.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/frozen-model-hashes.json",
+      "source_sha256": "0cc7ee47c1fb462b0fe1515dd8575afb2b212d7ddda0c6bceb1c60e3d1fd1195",
+      "archive_sha256": "3fa236228912d6392793b25b03b8382e404f5d7eb98af1423c68b2d286adfaba"
+    },
+    {
+      "file": "initial-adapter-source.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/initial-adapter-source.rs",
+      "source_sha256": "9fca6e29cc4a8c23684f66856bf3e801272ac3ada0246476817cf18b32d06f64",
+      "archive_sha256": "eeb043457acdab3f373edb02e667c70ed6af5daebcd776f87c52af0a35215d12"
+    },
+    {
+      "file": "initial-clippy.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/initial-clippy.log",
+      "source_sha256": "9d72e63535f505c0a897f52c812d934d05fc37ab3b865997debc55675b7d2306",
+      "archive_sha256": "bb11e65ac960936cd350b835ebebff62c9bd8c0cf99fbb8ea3929e10eda827cb"
+    },
+    {
+      "file": "initial-tests.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/initial-tests.log",
+      "source_sha256": "27ed1ccd2fcd51689bd427dd3a9e96d93e08b5784ac698a370ef58d8d7822a89",
+      "archive_sha256": "2f4393f5c22d0a39ae2c640c72c2f68c25e007d93c2562cadd1c7be77c7115f3"
+    },
+    {
+      "file": "manifest.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/manifest.json",
+      "source_sha256": "967081af9ae1393e0018937cc50b12528622d81de3c76fcce913c17e7aae61bc",
+      "archive_sha256": "ce30d9ecb12810dfdd217cc2e94859722ea217b574b9dfb75e6b6eba25ec9b79"
+    },
+    {
+      "file": "nativelink-accepted-history-reference.patch.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/nativelink-accepted-history-reference.patch",
+      "source_sha256": "48851d003e7634d7fef7181731da33196953ef6c69c6c152ea43686736b70b76",
+      "archive_sha256": "8d39e99d143dba3340a8120d442034c171b1d06e1fa81c075883084b41ac7e32"
+    },
+    {
+      "file": "nativelink-history-candidate-v1.patch.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/nativelink-history-candidate-v1.patch",
+      "source_sha256": "2c1ce10e6a5327ecf2ec74451705810d71675eba4dafd5f01ee2790e970f9de1",
+      "archive_sha256": "2f7d049d1ed7097f742beafd05f70e587055824d2e6372ee6bbacdd7c7ac3ff9"
+    },
+    {
+      "file": "pre-coalescing-correction-adapter.rs.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/pre-coalescing-correction-adapter.rs",
+      "source_sha256": "24a4a9ac42a80e8c1eea2b222b42b911b91a15614fe73231e63627419397c672",
+      "archive_sha256": "16931827ee0b920cbfa95e7c74cd1fe9f4ca77fd7478747819fd4a5c4d4b9b0d"
+    },
+    {
+      "file": "qualification.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/qualification.json",
+      "source_sha256": "3f90a10ed90e8ff34b779b5c64c195ff9ff767eb0d0c4436677d0cd3a5fca78d",
+      "archive_sha256": "addcf5bb6c2f2aea55f235c0f4ef3b4fc95b51018a4c5057d4d4453b7ae0aa38"
+    },
+    {
+      "file": "scheduler-build-base.bazel.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/scheduler-build-base.bazel",
+      "source_sha256": "ea2f16d44bf913a8dc658d150315980918f23253340eacc220bd2da3e45b7dc6",
+      "archive_sha256": "fdcc92e9673c69fe96f9582fa526401ab82c4d5e3c7bbfb272d49313396b2e24"
+    },
+    {
+      "file": "tested-binaries.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/tested-binaries.json",
+      "source_sha256": "4ebef1134a4298b6df0cc8a3fa451ea7a1258c12e13e73b82de1ca4d025ae643",
+      "archive_sha256": "6d8ff8d99364a8ca0278a52d860895fcaaf969500f1d55430cdf88a617879e5e"
+    },
+    {
+      "file": "tools-and-base.json.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/tools-and-base.json",
+      "source_sha256": "f5b2879c7703ba8a552e86276237a964fca85b24f030500ecbfbfffcf7f63cec",
+      "archive_sha256": "989a2471d23e6871e0077d3e4659d58363cb18390c75b12c5074dd31d40ef87a"
+    },
+    {
+      "file": "typos-first.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/typos-first.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "vale-first.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/vale-first.log",
+      "source_sha256": "96ef33bd6c19cfda05d8741820861d918bcc9aa17355e0b0287caa341cfe284b",
+      "archive_sha256": "c93d62e0c393201ad4344457f46e921a60aeaf070b7ec6ebc19835800f1ee8be"
+    },
+    {
+      "file": "vale-second.log.gz",
+      "source": "/tmp/nativelink-history-differential-evidence/vale-second.log",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "history-core-integrated-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-core-integrated-bazel.log",
+      "source_sha256": "857a5d0c597d3b62f3e6f63dacbf86ac370789aef384b88db7da0c91cb6415bc",
+      "archive_sha256": "672b6c1bc895696edc94dae4903dfa6fc315bf4cefbc6534d8ff53cbb5cca03e"
+    }
+  ]
+}

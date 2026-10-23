@@ -19,6 +19,9 @@ use super::*;
 #[path = "receipt_retirement_tests.rs"]
 mod receipts;
 
+#[path = "accepted_history_tests.rs"]
+mod histories;
+
 fn apply(state: &mut State, event: Event) -> Reply {
     let reply = state.apply(RecordedEvent {
         epoch: ClusterEpoch(1),
@@ -2001,6 +2004,16 @@ fn every_command_frame_leaves_room_for_the_maximum_accepted_payload() {
         Event::RetireExecution {
             execution: ExecutionId(u),
         },
+        Event::HistoryPublication {
+            effect: EffectId(u),
+            object: accepted_history::HistoryObject {
+                namespace: [255; 32],
+                algorithm: accepted_history::HistoryAlgorithm::Sha256,
+                hash: [255; 32],
+                size_bytes: u,
+            },
+            outcome: accepted_history::HistoryOutcome::Unknown,
+        },
     ];
     for event in events {
         let paid = match &event {
@@ -2028,6 +2041,7 @@ fn every_command_frame_leaves_room_for_the_maximum_accepted_payload() {
             | Event::Cleanup { .. }
             | Event::EffectOutcome { .. }
             | Event::RetireExecution { .. }
+            | Event::HistoryPublication { .. }
             | Event::IssueReceipts { .. } => 0,
         };
         let batch = journal::Batch::new(vec![RecordedEvent {
