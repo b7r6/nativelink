@@ -607,6 +607,33 @@ rust_test(
 )
 
 rust_test(
+    name = "prepared_memory_reference_test",
+    srcs = ["tests/prepared_memory_reference_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/prepared_memory/cases.rs",
+        "tests/prepared_memory/head.rs",
+        "tests/prepared_memory/reference.rs",
+        "tests/prepared_memory/types.rs",
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+        "tests/retention/protocol.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
     name = "terminal_outcome_restore_audit_test",
     srcs = ["tests/terminal_outcome_restore_audit_test.rs"],
     compile_data = [
