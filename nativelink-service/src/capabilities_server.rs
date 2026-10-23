@@ -52,6 +52,15 @@ pub struct CapabilitiesServer {
 }
 
 impl CapabilitiesServer {
+    /// Fixed experimental authority construction, without a legacy scheduler.
+    /// No optional node properties, compression, or chunking are advertised.
+    pub fn new_authority(instance: InstanceName) -> Self {
+        Self {
+            supported_node_properties_for_instance: HashMap::from([(instance, Vec::new())]),
+            ..Self::default()
+        }
+    }
+
     pub async fn new(
         configs: &[WithInstanceName<CapabilitiesConfig>],
         scheduler_map: &HashMap<String, Arc<dyn KnownPlatformPropertyProvider>>,

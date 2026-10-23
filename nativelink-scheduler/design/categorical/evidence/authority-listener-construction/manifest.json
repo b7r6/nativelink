@@ -1,0 +1,191 @@
+{
+  "base_commit": "0318e72abb0ea6973ec136868019cd50ef44e8b6",
+  "checks": [
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test -- --nocapture",
+      "exit_code": 101,
+      "failed": 1,
+      "finding": "Same-driver rejection succeeded; immediate journal reopen raced asynchronous OpenRaft state-machine worker shutdown. Initial missing Debug derives also warned.",
+      "log": "cargo-focused-initial.log",
+      "passed": 2
+    },
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test",
+      "exit_code": 0,
+      "failed": 0,
+      "ignored": 0,
+      "log": "cargo-focused-final.log",
+      "passed": 3
+    },
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo clippy --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test -- -D warnings",
+      "exit_code": 101,
+      "finding": "Three new module doc-markdown backtick lints; repaired.",
+      "log": "clippy-initial.log"
+    },
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo clippy --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test -- -D warnings",
+      "exit_code": 101,
+      "finding": "Test predicate required Send + Sync for a Send wait future; repaired.",
+      "log": "clippy-second.log"
+    },
+    {
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo clippy --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test -- -D warnings",
+      "exit_code": 0,
+      "log": "clippy-final.log"
+    },
+    {
+      "by_target": {
+        "ac_server_test": 4,
+        "authority_listener_test": 3,
+        "bytestream_server_test": 34,
+        "capabilities_server_test": 3,
+        "cas_server_test": 27
+      },
+      "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-service --test authority_listener_test --test capabilities_server_test --test ac_server_test --test cas_server_test --test bytestream_server_test",
+      "exit_code": 0,
+      "failed": 0,
+      "ignored": 0,
+      "log": "cargo-regression.log",
+      "passed": 71
+    },
+    {
+      "command": "/nix/store/x6cgwhgjipmrflxnr2wh0n9p20kwpvxm-pre-commit-4.5.1/bin/pre-commit run --files nativelink-service/BUILD.bazel nativelink-service/src/lib.rs nativelink-service/src/capabilities_server.rs nativelink-service/src/authority_listener.rs nativelink-service/tests/authority_listener_test.rs nativelink-scheduler/design/categorical/authority-listener-construction.md",
+      "exit_code": 0,
+      "log": "precommit-source.log",
+      "note": "Repository Nix pre-commit config; all applicable hooks passed. Documentation receipt link was added afterward and will be checked at commit."
+    },
+    {
+      "command": "/nix/store/8vn3l8abbbqakb5jv9g2845p9g0wbqav-rustfmt-preview-1.100.0-nightly-2026-08-26-x86_64-unknown-linux-gnu/bin/rustfmt --check --edition 2024 --config skip_children=true nativelink-service/src/authority_listener.rs nativelink-service/src/capabilities_server.rs nativelink-service/src/lib.rs nativelink-service/tests/authority_listener_test.rs",
+      "exit_code": 0,
+      "log": "rustfmt-final.log"
+    }
+  ],
+  "logs": {
+    "cargo-focused-final.log": {
+      "compressed_bytes": 407,
+      "compressed_sha256": "ab8191fb6091e54e35ed6c8d2daaf57ea8f76ccf0a5be21583284617b5dbc5a2",
+      "path": "cargo-focused-final.log.gz",
+      "raw_bytes": 724,
+      "raw_sha256": "66b86bbce5bc708ff9a447f3d37bfad6a83d2c28b012bbc47f170bdae1c42871"
+    },
+    "cargo-focused-initial.log": {
+      "compressed_bytes": 224421,
+      "compressed_sha256": "48dba25c0f0aa1ea2425e728aee45c30aef1d28d9271a50f6825a1fea5a319e0",
+      "path": "cargo-focused-initial.log.gz",
+      "raw_bytes": 3513652,
+      "raw_sha256": "7da58f8fc21fc133c397bb9d55f2d903d51d4a3f130f3d1c75d9d46d28bf0da1"
+    },
+    "cargo-regression.log": {
+      "compressed_bytes": 1623,
+      "compressed_sha256": "7b1576ff9d1e8fff2eea495b9478b2b7b6c411e8573d414c6e5a10f019c2c328",
+      "path": "cargo-regression.log.gz",
+      "raw_bytes": 5536,
+      "raw_sha256": "1f5f7547c2abe458dac7525230effae9468663d661d7c3bd34af4babd6189ab1"
+    },
+    "clippy-final.log": {
+      "compressed_bytes": 187,
+      "compressed_sha256": "f1e3aecebe805492cf80b933615f469658532f21fcc55f2da4c626579c4bbcd8",
+      "path": "clippy-final.log.gz",
+      "raw_bytes": 264,
+      "raw_sha256": "eca437a80cb1ae6e686f429e4d99afa09c3c4428658e853041e03fbd09abcef7"
+    },
+    "clippy-initial.log": {
+      "compressed_bytes": 823,
+      "compressed_sha256": "01a5f0fa7de49adf0c0af9b4f93ded776924fda57c16375d5fcd42dd4b9a4c01",
+      "path": "clippy-initial.log.gz",
+      "raw_bytes": 3388,
+      "raw_sha256": "73ed772d116973ffec30aff2713b7bee1dff8d46ec957d5221dc64483855913b"
+    },
+    "clippy-second.log": {
+      "compressed_bytes": 593,
+      "compressed_sha256": "b506c43c96fca04105cd2e9af037a0e0c5460977fd6c100be4d6987a5c7cd49c",
+      "path": "clippy-second.log.gz",
+      "raw_bytes": 1456,
+      "raw_sha256": "70ceb672129e8b013109256b90819b3d10929b9281378f0eb36d0c7d07cf2f81"
+    },
+    "precommit-source.log": {
+      "compressed_bytes": 339,
+      "compressed_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "path": "precommit-source.log.gz",
+      "raw_bytes": 2160,
+      "raw_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    },
+    "rustfmt-final.log": {
+      "compressed_bytes": 20,
+      "compressed_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "path": "rustfmt-final.log.gz",
+      "raw_bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "observed": {
+    "capabilities": "Execution enabled; both digest algorithms; writable AC; no optional node properties, compression or chunking.",
+    "client_routes": [
+      "Execution",
+      "ActionCache",
+      "CAS",
+      "ByteStream",
+      "Capabilities"
+    ],
+    "digest_algorithms": [
+      "SHA256",
+      "BLAKE3"
+    ],
+    "plaintext_negative_control": "Unauthenticated peer could write exit_code 19 through the client route; credential exclusion is not established.",
+    "publication": "Accepted terminal and pending publication observed while sink absent; scheduler release writes exact ActionResult; next Execute returns cached_result=true.",
+    "same_driver_guard": "Rejects immediate Arc<dyn StoreDriver> equality, including separate Store handles around one driver.",
+    "shutdown": "Eventual journal release proven within five seconds. Only exact Database already open errors are retried; all other reopen errors fail.",
+    "valid_same_key_worker_cas_and_bytestream_uploads": "succeeded; original client cache exit_code 7 unchanged",
+    "worker_action_cache_update_status": "Unimplemented",
+    "worker_routes": [
+      "AuthorityWorkerApi",
+      "CAS",
+      "ByteStream"
+    ]
+  },
+  "qualification": "experimental fixed authority listener construction; local wire and publication wiring only",
+  "residuals": [
+    "No production binary/config selection or deployment.",
+    "Mounted authority TLS trust and worker credential exclusion remain unqualified.",
+    "Distinct wrappers/provider prefixes/filesystem aliases and worker backend sink credentials are not detected by same-handle check.",
+    "Manual wire candidate does not certify physical process quiescence.",
+    "Operations is not mounted in this slice; existing unknown-instance capabilities behavior remains.",
+    "Bazel and merged-root regression verification are deferred to integration, not claimed by this receipt."
+  ],
+  "schema_version": 1,
+  "shutdown_source": {
+    "crate": "openraft",
+    "raft_shutdown": "src/raft/mod.rs:893 joins core and tick",
+    "scope": "Existing Singleton::shutdown semantics unchanged.",
+    "state_machine_handle": "src/core/sm/handle.rs join_handle is dropped without joining; worker exits when its command channel closes",
+    "version": "0.9.25"
+  },
+  "source_files": {
+    "nativelink-scheduler/design/categorical/authority-listener-construction.md": {
+      "bytes": 4301,
+      "sha256": "4bd44dbcea36492f05536acfd5446cdf8e195896f3817f7c58cbbdb19a5508df"
+    },
+    "nativelink-service/BUILD.bazel": {
+      "bytes": 4311,
+      "sha256": "9bd8c901469be6cb88b1e06f1bb4e201b82f0a0c1a987585f822a64758b95c21"
+    },
+    "nativelink-service/src/authority_listener.rs": {
+      "bytes": 7460,
+      "sha256": "68f3caa177cce119bf085b8ae3a5ecc98b26a32370e60b0f3e455e576fb713ed"
+    },
+    "nativelink-service/src/capabilities_server.rs": {
+      "bytes": 8917,
+      "sha256": "01ffa27c366c7c967c3b3fb09eec97bac161b411ef69daaf0fab87044b3299f0"
+    },
+    "nativelink-service/src/lib.rs": {
+      "bytes": 987,
+      "sha256": "e2d7516847ebabd789edcbc4980b66719448cf1c6a958ceaf503c1d447de71ed"
+    },
+    "nativelink-service/tests/authority_listener_test.rs": {
+      "bytes": 23085,
+      "sha256": "de31d8934bb3a9e7f082582115e7e46836acaec66ac9d658d9240df5ddcc1a1a"
+    }
+  },
+  "worktree": "/tmp/nativelink-authority-listener"
+}

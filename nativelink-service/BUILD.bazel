@@ -11,6 +11,7 @@ rust_library(
     name = "nativelink-service",
     srcs = [
         "src/ac_server.rs",
+        "src/authority_listener.rs",
         "src/authority_server.rs",
         "src/authority_server/operations.rs",
         "src/bep_server.rs",
@@ -66,6 +67,7 @@ rust_test_suite(
     timeout = "short",
     srcs = [
         "tests/ac_server_test.rs",
+        "tests/authority_listener_test.rs",
         "tests/bep_server_test.rs",
         "tests/bytestream_server_test.rs",
         "tests/capabilities_server_test.rs",
