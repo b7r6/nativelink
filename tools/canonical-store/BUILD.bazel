@@ -25,6 +25,7 @@ rust_test(
     compile_data = [
         "src/tests.rs",
         "src/tests/listener.rs",
+        "src/tests/listener/hash_context.rs",
         "src/tests/rpc.rs",
         "//tools/canonical-config:fixtures/canonical.json",
     ],

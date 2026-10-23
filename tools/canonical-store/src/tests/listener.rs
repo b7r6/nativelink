@@ -29,7 +29,7 @@ use nativelink_scheduler::authority::journal::Singleton;
 use nativelink_scheduler::authority::{ClusterEpoch, Limits};
 use nativelink_service::authority_listener::AuthorityListeners;
 use nativelink_service::authority_server::{
-    CoordinatorTask, QualificationConfig, QualificationFaults,
+    AuthorityService, CoordinatorTask, QualificationConfig, QualificationFaults,
 };
 use nativelink_util::store_trait::Store;
 use nativelink_util::task::JoinHandleDropGuard;
@@ -41,11 +41,15 @@ use tonic::transport::{Channel, Endpoint, Server};
 
 use super::*;
 
+#[path = "listener/hash_context.rs"]
+mod hash_context;
+
 const INSTANCE: &str = "fixed-canonical";
 
 struct FixedRpc {
     worker: Channel,
     client: Channel,
+    service: AuthorityService,
     coordinator: CoordinatorTask,
     stops: [oneshot::Sender<()>; 2],
     tasks: [JoinHandleDropGuard<()>; 2],
@@ -53,6 +57,14 @@ struct FixedRpc {
 
 impl FixedRpc {
     async fn new(fixture: &Fixture, stores: &CanonicalStores) -> Self {
+        Self::with_faults(fixture, stores, Arc::new(QualificationFaults::default())).await
+    }
+
+    async fn with_faults(
+        fixture: &Fixture,
+        stores: &CanonicalStores,
+        faults: Arc<QualificationFaults>,
+    ) -> Self {
         let authority = Singleton::open(
             fixture.directory.join("listener-authority.redb"),
             1,
@@ -70,7 +82,7 @@ impl FixedRpc {
                 cas_namespace: [1; 32],
                 publication_sink: Store::new(stores.sink.clone()),
                 now: Arc::new(|| Ok(1)),
-                faults: Arc::new(QualificationFaults::default()),
+                faults,
             },
         )
         .await
@@ -110,6 +122,7 @@ impl FixedRpc {
                 .connect()
                 .await
                 .unwrap(),
+            service: listeners.service,
             coordinator: listeners.coordinator,
             stops: [stop_worker, stop_client],
             tasks: [worker_task, client_task],
