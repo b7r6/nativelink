@@ -2820,6 +2820,7 @@ name = "nativelink-canonical-filesystem"
 version = "0.0.0"
 dependencies = [
  "nativelink-canonical-config",
+ "redb",
  "rustix",
  "serde",
  "serde_json",
@@ -2958,6 +2959,7 @@ dependencies = [
  "humantime",
  "lru",
  "mock_instant",
+ "nativelink-canonical-filesystem",
  "nativelink-config",
  "nativelink-error",
  "nativelink-metric",

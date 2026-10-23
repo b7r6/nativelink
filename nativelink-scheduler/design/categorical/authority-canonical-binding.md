@@ -1,16 +1,19 @@
 # Private canonical journal binding
 
-This storage prerequisite adds no canonical serving constructor. Every public
-journal and singleton constructor still requires an unbound experimental
-journal. Only private tests request the new contract. A binding is compatible
-storage metadata; it does not prove that a clock, filesystem namespace, worker
-or running process followed that contract.
+This storage prerequisite adds no canonical serving constructor. Public generic
+journal and singleton constructors require an unbound experimental journal. The
+Linux-only `PreparedCanonicalOwner` consumes a `SyncedNamespace` to create or
+reopen a bound journal through its closed storage-only API; see
+[the inert owner contract](canonical-journal-owner.md). A binding is compatible
+storage metadata; it does not prove that a clock, worker or running process
+followed that contract.
 
 The fixed `singleton_seconds_v1` profile carries one opaque 32-byte namespace
 commitment. Zero is reserved for an unbound commitment and refuses before a
 factory runs. No operator setting selects time units, offsets or proposal rules.
-The future owned constructor must mint this commitment from the four retained
-namespace capabilities. The current tests use synthetic bytes.
+The inert owner uses the commitment minted by synchronization of the four
+retained namespace capabilities. Private binding tests also use synthetic bytes;
+those bytes alone cannot construct the inert owner.
 
 Two required metadata records accompany a bound journal:
 

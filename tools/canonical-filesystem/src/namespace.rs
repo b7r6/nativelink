@@ -34,10 +34,18 @@ const ROLES: [Role; 4] = [
 /// acknowledgement, physical-directory continuity, journal or object durability,
 /// worker admission, fencing, or execution authority. Existing ownership aliases
 /// may remain; this is not linear ownership or protection from other writers.
-/// No authority constructor consumes this prerequisite yet.
+/// The inert canonical journal owner consumes this prerequisite without starting
+/// a serving authority.
 pub struct SyncedNamespace {
     commitment: [u8; 32],
-    _ownership: Arc<Ownership>,
+    #[cfg_attr(
+        not(feature = "redb"),
+        expect(
+            dead_code,
+            reason = "Without the journal bridge, this field only retains custody."
+        )
+    )]
+    ownership: Arc<Ownership>,
 }
 
 impl SyncedNamespace {
@@ -45,6 +53,42 @@ impl SyncedNamespace {
     /// facts. These bytes alone do not grant custody or execution authority.
     pub const fn commitment(&self) -> [u8; 32] {
         self.commitment
+    }
+}
+
+#[cfg(feature = "redb")]
+impl SyncedNamespace {
+    /// Identity facts from this token's retained namespace, never caller input.
+    pub fn journal_binding(&self) -> super::JournalBinding {
+        super::JournalBinding {
+            node_id: self.ownership.binding.node,
+            epoch: self.ownership.binding.epoch,
+            namespace: self.ownership.binding.authority_namespace,
+        }
+    }
+
+    /// Exclusively create the fixed experimental journal from this namespace.
+    /// This writes no canonical authority metadata and grants no runtime authority.
+    pub fn create_journal(self) -> std::io::Result<super::OpenedJournal> {
+        self.open_journal(true)
+    }
+
+    /// Open only existing journal storage from this namespace, without adoption.
+    /// Redb may repair before the caller can validate authority metadata.
+    pub fn reopen_journal(self) -> std::io::Result<super::OpenedJournal> {
+        self.open_journal(false)
+    }
+
+    fn open_journal(self, create: bool) -> std::io::Result<super::OpenedJournal> {
+        self.ownership.verify_current_records()?;
+        let directory = super::JournalDirectory::new(&self.ownership, self.journal_binding())?;
+        let opened = if create {
+            directory.create()?
+        } else {
+            directory.reopen()?
+        };
+        self.ownership.verify_current_records()?;
+        Ok(opened)
     }
 }
 
@@ -100,7 +144,7 @@ impl Ownership {
         self.verify_attached()?;
         Ok(SyncedNamespace {
             commitment,
-            _ownership: self,
+            ownership: self,
         })
     }
 }
@@ -158,4 +202,19 @@ pub(super) fn nonzero_commitment(commitment: [u8; 32]) -> Result<[u8; 32], Error
         return Err(failure("unbound_namespace_commitment"));
     }
     Ok(commitment)
+}
+
+#[cfg(feature = "redb")]
+impl Ownership {
+    pub(super) fn verify_current_records(&self) -> std::io::Result<()> {
+        let verify = || {
+            self.verify_attached()?;
+            for root in &self.roots {
+                self.open_record(root)?;
+            }
+            self.verify_attached()
+        };
+        verify()
+            .map_err(|_| std::io::Error::other("current namespace records or attachment changed"))
+    }
 }

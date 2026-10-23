@@ -66,6 +66,11 @@ use super::{ClusterEpoch, Limits, RecordedEvent, Reply, State};
 #[path = "canonical_binding.rs"]
 mod canonical_binding;
 use canonical_binding::{CanonicalBootstrap, CanonicalContract, validate_metadata};
+#[cfg(target_os = "linux")]
+#[path = "canonical_owner.rs"]
+mod canonical_owner;
+#[cfg(target_os = "linux")]
+pub use canonical_owner::{OwnerDiagnostic, OwnerError, OwnerPhase, PreparedCanonicalOwner};
 
 #[path = "snapshot_buffer.rs"]
 mod snapshot_buffer;
@@ -1318,6 +1323,7 @@ impl Journal {
         Self::open_with_factory_inner(
             node_id,
             profile.domain.epoch,
+            profile.domain,
             limits,
             Some(profile),
             expectation,
@@ -1462,9 +1468,17 @@ impl Journal {
         expectation: RecoveryExpectation,
     ) -> Result<Self> {
         let path = path.as_ref().to_owned();
+        let domain = profile.as_ref().map_or(
+            AuthorityDomain {
+                epoch,
+                namespace: 0,
+            },
+            |p| p.domain,
+        );
         Self::open_with_factory_inner(
             node_id,
             epoch,
+            domain,
             limits,
             profile,
             expectation,
@@ -1496,27 +1510,29 @@ impl Journal {
         .await
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Private opening keeps expected epoch, explicit domain and storage policy independent."
+    )]
     async fn open_with_factory_inner(
         node_id: u64,
         epoch: ClusterEpoch,
+        domain: AuthorityDomain,
         limits: Limits,
         profile: Option<JournalProfile>,
         expectation: RecoveryExpectation,
         canonical: Option<CanonicalContract>,
         factory: impl FnOnce() -> Result<JournalDatabase> + Send + 'static,
     ) -> Result<Self> {
-        let domain = profile.as_ref().map_or(
-            AuthorityDomain {
-                epoch,
-                namespace: 0,
-            },
-            |p| p.domain,
-        );
+        if domain.epoch != epoch || profile.as_ref().is_some_and(|p| p.domain != domain) {
+            return Err(failure(ErrorVerb::Read, "journal opening domain mismatch"));
+        }
         let reader = profile
             .as_ref()
             .map_or(ReaderCapabilities::Base, |p| p.reader);
-        // No public caller supplies a canonical expectation. Its private path
-        // qualifies storage only; it exposes no canonical runtime constructor.
+        // Public callers cannot supply a canonical expectation directly. The
+        // inert owner derives its private expectation from namespace custody;
+        // it exposes no canonical runtime constructor.
         if let Some(contract) = canonical {
             contract.validate()?;
         }

@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io;
 use std::ops::Bound;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use redb::backends::FileBackend;
 use redb::{BackendError, Database, StorageBackend};
@@ -95,12 +96,17 @@ impl JournalDirectory {
 
     fn open(&self, created: bool) -> io::Result<OpenedJournal> {
         let backend = self.open_backend(created)?;
+        let repair_observed = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&repair_observed);
         let database = Database::builder()
+            .set_repair_callback(move |_| observed.store(true, Ordering::Relaxed))
             .create_with_backend(backend)
             .map_err(io::Error::other)?;
         Ok(OpenedJournal {
             database,
-            parent: created.then(|| JournalParent(Arc::clone(&self.ownership))),
+            parent: JournalParent(Arc::clone(&self.ownership)),
+            created,
+            repair_observed: repair_observed.load(Ordering::Relaxed),
         })
     }
 
@@ -141,17 +147,31 @@ fn journal_root(ownership: &Ownership) -> &std::os::fd::OwnedFd {
         .descriptor
 }
 
-/// A database with ownership held inside its backend, and a parent sync token
-/// only when newly created. Splitting these cannot detach database ownership.
+/// A database with ownership held inside its backend and pinned parent custody.
+/// Creation provenance is separate; splitting cannot detach database ownership.
 #[derive(Debug)]
 pub struct OpenedJournal {
     database: Database,
-    parent: Option<JournalParent>,
+    parent: JournalParent,
+    created: bool,
+    repair_observed: bool,
 }
 
 impl OpenedJournal {
+    /// Whether redb invoked its fixed internal repair observer during this open.
+    /// Observation does not certify authority metadata or a current sync barrier.
+    pub const fn repair_observed(&self) -> bool {
+        self.repair_observed
+    }
+
+    /// Pinned parent custody for a current sync, regardless of creation status.
+    /// This is never evidence that the database was exclusively created.
+    pub fn current_parent(&self) -> JournalParent {
+        JournalParent(Arc::clone(&self.parent.0))
+    }
+
     pub fn into_parts(self) -> (Database, Option<JournalParent>) {
-        (self.database, self.parent)
+        (self.database, self.created.then_some(self.parent))
     }
 }
 
@@ -160,6 +180,19 @@ impl OpenedJournal {
 pub struct JournalParent(Arc<Ownership>);
 
 impl JournalParent {
+    /// Recheck current records and configured attachment against pinned custody.
+    pub fn verify_current(&self) -> io::Result<()> {
+        self.0.verify_current_records()
+    }
+
+    /// Sync the pinned parent between current namespace checks. No ambient
+    /// replacement is followed, and failure never grants a successful barrier.
+    pub fn sync_current(self) -> io::Result<()> {
+        self.verify_current()?;
+        fsync(journal_root(&self.0))?;
+        self.verify_current()
+    }
+
     pub fn sync_all(self) -> io::Result<()> {
         fsync(journal_root(&self.0))?;
         Ok(())

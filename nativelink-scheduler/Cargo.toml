@@ -73,3 +73,15 @@ tokio = { version = "1.52.2", features = [
 tracing-test = { version = "0.2.5", default-features = false, features = [
   "no-env-filter",
 ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nativelink-canonical-filesystem = { path = "../tools/canonical-filesystem", features = [
+  "redb",
+] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+nativelink-canonical-config = { path = "../tools/canonical-config" }
+rustix = { version = "=1.1.2", default-features = false, features = [
+  "fs",
+  "std",
+] }

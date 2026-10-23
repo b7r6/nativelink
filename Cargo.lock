@@ -3061,6 +3061,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "nativelink-canonical-config"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_json5",
+]
+
+[[package]]
+name = "nativelink-canonical-filesystem"
+version = "0.0.0"
+dependencies = [
+ "nativelink-canonical-config",
+ "redb",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "nativelink-config"
 version = "1.8.0"
 dependencies = [
@@ -3169,6 +3190,8 @@ dependencies = [
  "humantime",
  "lru",
  "mock_instant",
+ "nativelink-canonical-config",
+ "nativelink-canonical-filesystem",
  "nativelink-config",
  "nativelink-error",
  "nativelink-macro",
@@ -3186,6 +3209,7 @@ dependencies = [
  "prost-types",
  "redb",
  "redis",
+ "rustix",
  "scopeguard",
  "serde",
  "serde_json",

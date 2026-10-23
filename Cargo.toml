@@ -3,6 +3,8 @@
 exclude = [
   "nativelink-config/generate-stores-config",
   "nativelink-test/fuzz",
+  "tools/canonical-config",
+  "tools/canonical-filesystem",
   "tools/generate-bazel-rc",
 ]
 resolver = "2"

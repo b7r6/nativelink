@@ -79,6 +79,8 @@ rust_library(
         "src/authority/accepted_history_tests.rs",
         "src/authority/canonical_binding.rs",
         "src/authority/canonical_binding_tests.rs",
+        "src/authority/canonical_owner.rs",
+        "src/authority/canonical_owner_tests.rs",
         "src/authority/format.rs",
         "src/authority/journal.rs",
         "src/authority/journal_factory_tests.rs",
@@ -146,7 +148,10 @@ rust_library(
         "@crates//:tonic",
         "@crates//:tracing",
         "@crates//:uuid",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["//tools/canonical-filesystem:nativelink-canonical-filesystem-redb"],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
@@ -432,6 +437,7 @@ rust_test(
 rust_test(
     name = "unit_test",
     timeout = "short",
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
     crate = ":nativelink-scheduler",
     proc_macro_deps = [
         "//nativelink-macro",
@@ -440,7 +446,13 @@ rust_test(
         "@crates//:pretty_assertions",
         "@crates//:redis",
         "@crates//:tracing-test",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "//tools/canonical-config:nativelink-canonical-config",
+            "@crates//:rustix-1.1.2",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
@@ -761,5 +773,23 @@ rust_test(
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:sha2",
+    ],
+)
+
+# The filesystem redb variant must be the same crate identity used by the owner.
+rust_test(
+    name = "canonical_owner_api_test",
+    srcs = ["tests/canonical_owner_api_test.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    proc_macro_deps = ["//nativelink-macro"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem-redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:tokio",
+        "@crates//:tracing-test",
     ],
 )

@@ -24,17 +24,21 @@ use nativelink_canonical_config::{Manifest, parse_canonical};
 use nativelink_canonical_filesystem::{JOURNAL_FILE, JournalBinding, JournalDirectory, Ownership};
 use nativelink_macro::nativelink_test;
 use nativelink_util::background_spawn;
+use redb::ReadableDatabase;
 use rustix::fs::{FlockOperation, flock};
 
-use super::super::{AppliedState, Event, RecordedEvent, Singleton, decode, encode};
+use super::super::{AppliedState, RecordedEvent, Singleton, decode, encode};
 use super::*;
+use crate::authority::Event;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+type BeforeCurrent = Box<dyn FnOnce(&Database) + Send>;
 
 #[derive(Default)]
 pub(super) struct Hooks {
     pub after_open: Option<Box<dyn FnOnce() + Send>>,
-    pub before_current: Option<Box<dyn FnOnce(&Database) + Send>>,
+    pub before_current: Option<BeforeCurrent>,
     pub after_commit: Option<Box<dyn FnOnce() + Send>>,
     pub after_current: Option<Box<dyn FnOnce() + Send>>,
 }
@@ -47,7 +51,7 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         Self::at(
-            std::env::temp_dir().join(format!(
+            &std::env::temp_dir().join(format!(
                 "nativelink-canonical-owner-{}-{}",
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)
@@ -56,9 +60,9 @@ impl Fixture {
         )
     }
 
-    fn at(root: PathBuf, fresh: bool) -> Self {
+    fn at(root: &Path, fresh: bool) -> Self {
         if fresh {
-            fs::create_dir(&root).unwrap();
+            fs::create_dir(root).unwrap();
         }
         let root = root.canonicalize().unwrap();
         let mut manifest = parse_canonical(include_bytes!(
@@ -344,6 +348,90 @@ async fn sealed_reopen_refuses_partial_foreign_limits_and_membership() {
 }
 
 #[nativelink_test]
+async fn typed_reopen_refuses_legacy_snapshots_pending_membership_and_controls() {
+    use super::super::{
+        Batch, Entry, EntryPayload, FormatControl, LOGS, LogId, SavedSnapshot, SnapshotMeta,
+    };
+    for case in 0..6 {
+        let fixture = Fixture::new();
+        sealed(&fixture).await;
+        let owned = fixture.owned(false);
+        let (database, _) = fixture.directory(&owned).reopen().unwrap().into_parts();
+        let epoch = ClusterEpoch(fixture.manifest.authority.cluster_epoch);
+        let mut value = applied(&database, epoch);
+        let transaction = database.begin_write().unwrap();
+        {
+            let mut table = transaction.open_table(META).unwrap();
+            if case < 2 {
+                if case == 0 {
+                    value
+                        .canonical_contract
+                        .as_mut()
+                        .unwrap()
+                        .namespace_commitment[1] ^= 1;
+                } else {
+                    let super::super::SchedulerSection::String(json) = &mut value.scheduler else {
+                        panic!("base fixture")
+                    };
+                    let mut state = super::super::State::restore(json.as_bytes()).unwrap();
+                    state.limits.max_operations += 1;
+                    *json = String::from_utf8(state.snapshot().unwrap()).unwrap();
+                }
+                let saved = SavedSnapshot {
+                    meta: SnapshotMeta {
+                        last_log_id: value.last_applied,
+                        last_membership: value.membership.clone(),
+                        snapshot_id: "synthetic-owner-snapshot".to_owned(),
+                    },
+                    applied: value,
+                };
+                let bytes = encode(epoch, &saved).unwrap();
+                table.insert("snapshot", bytes.as_slice()).unwrap();
+            } else if case == 2 || case == 3 {
+                let mut logs = transaction.open_table(LOGS).unwrap();
+                let index = logs.last().unwrap().unwrap().0.value() + 1;
+                let payload: EntryPayload<super::super::TypeConfig> = if case == 2 {
+                    EntryPayload::Membership(value.membership.membership().clone())
+                } else {
+                    EntryPayload::Normal(
+                        Batch::format(FormatControl::Abort {
+                            domain: value.format.domain,
+                            permit: 123,
+                        })
+                        .unwrap(),
+                    )
+                };
+                let entry = Entry {
+                    log_id: LogId::new(value.last_applied.unwrap().leader_id, index),
+                    payload,
+                };
+                let bytes = encode(epoch, &entry).unwrap();
+                logs.insert(index, bytes.as_slice()).unwrap();
+            } else {
+                if case == 4 {
+                    value.format.feature_epoch = 1;
+                    value.format.required.insert(1);
+                    value.format.activated_at = value.last_applied;
+                } else {
+                    value.canonical_contract = None;
+                    table.remove("canonical_contract").unwrap();
+                    table.remove("canonical_bootstrap").unwrap();
+                }
+                let bytes = encode(epoch, &value).unwrap();
+                table.insert("applied", bytes.as_slice()).unwrap();
+            }
+        }
+        transaction.commit().unwrap();
+        drop(database);
+        let token = owned.resynchronize().unwrap();
+        assert!(
+            PreparedCanonicalOwner::reopen_sealed(token).await.is_err(),
+            "case {case}"
+        );
+    }
+}
+
+#[nativelink_test]
 async fn changed_record_after_token_refuses_before_creating_journal() {
     let fixture = Fixture::new();
     let token = fixture.token(true);
@@ -426,11 +514,15 @@ async fn cancellation_retains_all_roots_until_current_work_finishes() {
         let gate = Arc::new((Mutex::new(false), Condvar::new()));
         let held = gate.clone();
         let (reached, wait) = tokio::sync::oneshot::channel();
-        let pause = Box::new(move || {
+        let pause: Box<dyn FnOnce() + Send> = Box::new(move || {
             reached.send(()).unwrap();
             let (lock, ready) = &*held;
             let guard = lock.lock().unwrap();
-            drop(ready.wait_while(guard, |released| !*released).unwrap());
+            drop(
+                ready
+                    .wait_timeout_while(guard, Duration::from_secs(10), |released| !*released)
+                    .unwrap(),
+            );
         });
         let hooks = if after_open {
             Hooks {
@@ -462,12 +554,25 @@ async fn cancellation_retains_all_roots_until_current_work_finishes() {
     }
 }
 
-#[nativelink_test]
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "The isolated syscall witness requires exactly one blocking thread for injection ordinals."
+)]
 #[ignore = "requires tools/test-canonical-owner-sync.py and an isolated subprocess"]
-async fn syscall_witness() {
+fn syscall_witness() {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .unwrap()
+        .block_on(syscall_witness_async());
+}
+
+async fn syscall_witness_async() {
     let mode = std::env::var("NL_OWNER_MODE").unwrap();
     let root = PathBuf::from(std::env::var("NL_OWNER_ROOT").unwrap());
-    let fixture = Fixture::at(root, matches!(mode.as_str(), "cold" | "seed"));
+    let fixture = Fixture::at(&root, matches!(mode.as_str(), "cold" | "seed"));
     if mode == "seed" {
         sealed(&fixture).await;
         eprintln!("NL_OWNER_SEEDED");
@@ -483,7 +588,23 @@ async fn syscall_witness() {
         std::process::exit(0);
     }
     let create = mode == "cold";
-    let token = fixture.token(create);
+    // Namespace fsyncs and both owner tasks use the single blocking worker, so
+    // per-tracee strace injection ordinals cannot hit a second thread's token.
+    let manifest = fixture.manifest.clone();
+    let token = spawn_blocking!("canonical_namespace_witness", move || {
+        Arc::new(
+            if create {
+                Ownership::claim_cold(&manifest)
+            } else {
+                Ownership::reopen(&manifest)
+            }
+            .unwrap(),
+        )
+        .resynchronize()
+        .unwrap()
+    })
+    .await
+    .unwrap();
     let hooks = Hooks {
         before_current: Some(Box::new(|_| eprintln!("NL_OWNER_CURRENT_BEGIN"))),
         after_commit: Some(Box::new(|| eprintln!("NL_OWNER_COMMIT_ACK"))),
@@ -496,6 +617,10 @@ async fn syscall_witness() {
         eprintln!("NL_OWNER_REFUSED");
     } else {
         let owner = result.unwrap();
+        assert_eq!(owner.diagnostic().repair_observed, mode == "repair");
+        if owner.diagnostic().repair_observed {
+            eprintln!("NL_OWNER_REPAIR_OBSERVED");
+        }
         eprintln!("NL_OWNER_SUCCESS_ALIVE");
         fixture.locked();
         owner.release().await.unwrap();

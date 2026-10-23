@@ -48,6 +48,13 @@ async fn open(
     Journal::open_with_factory_inner(
         NODE,
         DOMAIN.epoch,
+        admission.as_ref().map_or(
+            AuthorityDomain {
+                epoch: DOMAIN.epoch,
+                namespace: 0,
+            },
+            |p| p.domain,
+        ),
         Limits::default(),
         admission,
         RecoveryExpectation::Any,
@@ -238,6 +245,7 @@ async fn invalid_commitment_refuses_before_factory_and_existing_empty_is_not_new
         Journal::open_with_factory_inner(
             NODE,
             DOMAIN.epoch,
+            DOMAIN,
             Limits::default(),
             Some(profile()),
             RecoveryExpectation::Any,
