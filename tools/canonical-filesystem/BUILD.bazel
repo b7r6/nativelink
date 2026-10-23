@@ -69,6 +69,7 @@ rust_test(
         "@crates//:redb",
         "@crates//:rustix-1.1.2",
         "@crates//:tokio",
+        "@crates//:tracing",
         "@crates//:tracing-test",
     ],
 )
