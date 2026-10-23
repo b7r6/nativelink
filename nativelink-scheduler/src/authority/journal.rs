@@ -550,15 +550,15 @@ struct SavedSnapshot {
 }
 
 impl SavedSnapshot {
-    fn validate(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<()> {
+    fn validate(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<Limits> {
         validate_snapshot_meta(&self.meta)?;
-        self.applied.state(epoch, reader)?;
+        let state = self.applied.state(epoch, reader)?;
         if self.meta.last_log_id != self.applied.last_applied
             || self.meta.last_membership != self.applied.membership
         {
             return Err(failure(ErrorVerb::Read, "snapshot metadata/state mismatch"));
         }
-        Ok(())
+        Ok(state.limits)
     }
 }
 
@@ -1141,6 +1141,7 @@ impl Journal {
 
     /// Open only a valid existing database, or exclusively create a new one.
     /// An existing empty/corrupt file is never interpreted as a fresh cluster.
+    /// Existing applied state and saved snapshots must exactly match `limits`.
     pub async fn open(
         path: impl AsRef<Path>,
         node_id: u64,
@@ -1388,7 +1389,12 @@ impl Journal {
                         .map_err(|e| failure(ErrorVerb::Read, e))?
                         .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
                     let applied: AppliedState = decode(epoch, bytes.value())?;
-                    applied.state(epoch, reader)?;
+                    if applied.state(epoch, reader)?.limits != limits {
+                        return Err(failure(
+                            ErrorVerb::Read,
+                            "persisted authority limits differ from requested limits",
+                        ));
+                    }
                     if applied.format.domain != domain {
                         return Err(failure(ErrorVerb::Read, "authority namespace mismatch"));
                     }
@@ -1417,7 +1423,12 @@ impl Journal {
                             }
                             "snapshot" => {
                                 let saved: SavedSnapshot = decode(epoch, value.value())?;
-                                saved.validate(epoch, reader)?;
+                                if saved.validate(epoch, reader)? != limits {
+                                    return Err(failure(
+                                        ErrorVerb::Read,
+                                        "persisted snapshot limits differ from requested limits",
+                                    ));
+                                }
                                 if saved.applied.format.domain != domain {
                                     return Err(failure(
                                         ErrorVerb::Read,

@@ -63,9 +63,15 @@ the artifact automatically.
 The existing path preserves the entire previous validation: identity, applied
 state, domain, every metadata section, snapshots, log continuity, committed
 suffix and format controls. Dynamic admission registration still follows this
-validation. Legacy path constructors use the same helper and retain their
-existing behavior and error mapping. `recover_admission` still opens ambient
-paths and is outside this bridge's claim.
+validation. Before registration, both the restored applied state and every saved
+snapshot must have exactly the five `Limits` supplied by the caller: executions,
+operations, workers, effects and payload bytes. Lower and higher values both
+refuse; reopening does not migrate an admission envelope. The comparison reuses
+the state restored by existing validation and does not change the journal format.
+Legacy path constructors use the same helper and enforce this equality too.
+`recover_admission` still opens ambient paths and is outside this bridge's claim. Live snapshot installation also remains
+outside this constructor check: it can install another valid state's limits.
+This check does not establish an immutable cluster-wide admission envelope.
 
 Cancellation does not stop a blocking operation that is already running. The
 factory holds custody before opening, the backend holds it through initialization
