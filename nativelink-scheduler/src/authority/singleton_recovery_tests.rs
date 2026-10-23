@@ -105,6 +105,7 @@ fn applied(
 ) -> AppliedState {
     let format = ActiveFormat::base(domain);
     AppliedState {
+        canonical_contract: None,
         last_applied: Some(position(last)),
         membership,
         scheduler: SchedulerSection::from_state(
@@ -135,11 +136,11 @@ async fn seed(
     saved: Option<SavedSnapshot>,
 ) -> LimitsFixture {
     applied
-        .state(DOMAIN.epoch, ReaderCapabilities::Base)
+        .state(DOMAIN.epoch, ReaderCapabilities::Base, None)
         .unwrap();
     if let Some(saved) = &saved {
         saved
-            .validate(DOMAIN.epoch, ReaderCapabilities::Base)
+            .validate(DOMAIN.epoch, ReaderCapabilities::Base, None)
             .unwrap();
     }
     let fixture = LimitsFixture::new();

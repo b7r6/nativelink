@@ -63,6 +63,10 @@ use super::format::{
 };
 use super::{ClusterEpoch, Limits, RecordedEvent, Reply, State};
 
+#[path = "canonical_binding.rs"]
+mod canonical_binding;
+use canonical_binding::{CanonicalBootstrap, CanonicalContract, validate_metadata};
+
 #[path = "snapshot_buffer.rs"]
 mod snapshot_buffer;
 pub use snapshot_buffer::{MAX_SNAPSHOT_BYTES, SnapshotBuffer};
@@ -419,6 +423,8 @@ struct Identity {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct AppliedState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical_contract: Option<CanonicalContract>,
     last_applied: Option<LogId<u64>>,
     membership: StoredMembership<u64, BasicNode>,
     scheduler: SchedulerSection,
@@ -472,7 +478,26 @@ impl SchedulerSection {
 }
 
 impl AppliedState {
-    fn state(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<State> {
+    fn validate_contract(&self, expected: Option<CanonicalContract>) -> Result<()> {
+        if let Some(contract) = self.canonical_contract {
+            contract.validate()?;
+        }
+        if self.canonical_contract != expected {
+            return Err(failure(
+                ErrorVerb::Read,
+                "applied canonical contract mismatch",
+            ));
+        }
+        Ok(())
+    }
+
+    fn state(
+        &self,
+        epoch: ClusterEpoch,
+        reader: ReaderCapabilities,
+        canonical: Option<CanonicalContract>,
+    ) -> Result<State> {
+        self.validate_contract(canonical)?;
         self.format
             .validate(reader)
             .map_err(|e| failure(ErrorVerb::Read, e))?;
@@ -550,9 +575,14 @@ struct SavedSnapshot {
 }
 
 impl SavedSnapshot {
-    fn validate(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<Limits> {
+    fn validate(
+        &self,
+        epoch: ClusterEpoch,
+        reader: ReaderCapabilities,
+        canonical: Option<CanonicalContract>,
+    ) -> Result<Limits> {
         validate_snapshot_meta(&self.meta)?;
-        let state = self.applied.state(epoch, reader)?;
+        let state = self.applied.state(epoch, reader, canonical)?;
         if self.meta.last_log_id != self.applied.last_applied
             || self.meta.last_membership != self.applied.membership
         {
@@ -730,6 +760,7 @@ fn validate_feature_append(
     reader: ReaderCapabilities,
     entries: &[Entry<TypeConfig>],
     admitted_features: bool,
+    canonical: Option<CanonicalContract>,
 ) -> Result<()> {
     let Some(last_feature_index) = entries.iter().map(|entry| entry.log_id.index).max() else {
         return Ok(());
@@ -744,6 +775,7 @@ fn validate_feature_append(
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
             .value(),
     )?;
+    applied.validate_contract(canonical)?;
     let logs = tx
         .open_table(LOGS)
         .map_err(|e| failure(ErrorVerb::Read, e))?;
@@ -780,7 +812,7 @@ fn validate_feature_append(
         // command behind any retained preparation still takes the checked path.
         return Ok(());
     }
-    let mut state = applied.state(epoch, reader)?;
+    let mut state = applied.state(epoch, reader, canonical)?;
     let incoming: std::collections::BTreeMap<_, _> = entries
         .iter()
         .map(|entry| (entry.log_id.index, entry))
@@ -831,6 +863,7 @@ fn committed_format(
     tx: &WriteTransaction,
     epoch: ClusterEpoch,
     reader: ReaderCapabilities,
+    canonical: Option<CanonicalContract>,
 ) -> Result<ActiveFormat> {
     let meta = tx
         .open_table(META)
@@ -842,7 +875,7 @@ fn committed_format(
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
             .value(),
     )?;
-    applied.state(epoch, reader)?;
+    applied.state(epoch, reader, canonical)?;
     let committed: Option<LogId<u64>> = meta
         .get("committed")
         .map_err(|e| failure(ErrorVerb::Read, e))?
@@ -1030,6 +1063,7 @@ pub struct Journal {
     node_id: u64,
     epoch: ClusterEpoch,
     created: bool,
+    canonical_contract: Option<CanonicalContract>,
     persistence: JournalPersistence,
     domain: AuthorityDomain,
     reader: ReaderCapabilities,
@@ -1059,7 +1093,11 @@ impl Journal {
         epoch: ClusterEpoch,
         initial: &State,
         domain: AuthorityDomain,
+        canonical: Option<CanonicalContract>,
     ) -> Result<()> {
+        if let Some(contract) = canonical {
+            contract.validate()?;
+        }
         let mut tx = database
             .begin_write()
             .map_err(|e| failure(ErrorVerb::Write, e))?;
@@ -1069,6 +1107,16 @@ impl Journal {
             let mut table = tx
                 .open_table(META)
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
+            if let Some(contract) = canonical {
+                let binding = encode(epoch, &contract)?;
+                table
+                    .insert("canonical_contract", binding.as_slice())
+                    .map_err(|e| failure(ErrorVerb::Write, e))?;
+                let phase = encode(epoch, &CanonicalBootstrap::Preparing)?;
+                table
+                    .insert("canonical_bootstrap", phase.as_slice())
+                    .map_err(|e| failure(ErrorVerb::Write, e))?;
+            }
             let identity = encode(epoch, &Identity { node_id, epoch })?;
             table
                 .insert("identity", identity.as_slice())
@@ -1076,6 +1124,7 @@ impl Journal {
             let applied = encode(
                 epoch,
                 &AppliedState {
+                    canonical_contract: canonical,
                     last_applied: None,
                     membership: StoredMembership::default(),
                     scheduler: SchedulerSection::String(state_json(initial)?),
@@ -1129,6 +1178,7 @@ impl Journal {
             node_id,
             epoch,
             created,
+            canonical_contract: None,
             persistence,
             domain: committed_format.domain,
             reader: profile
@@ -1182,7 +1232,7 @@ impl Journal {
             let database = Database::builder()
                 .create_with_backend(redb::backends::InMemoryBackend::new())
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
-            Self::initialize_database(&database, node_id, epoch, &initial, domain)?;
+            Self::initialize_database(&database, node_id, epoch, &initial, domain, None)?;
             Ok::<_, StorageError<u64>>(database)
         })
         .await
@@ -1271,6 +1321,7 @@ impl Journal {
             limits,
             Some(profile),
             expectation,
+            None,
             move || factory().map_err(|error| failure(ErrorVerb::Read, error)),
         )
         .await
@@ -1302,6 +1353,7 @@ impl Journal {
                 let table = tx
                     .open_table(META)
                     .map_err(|e| failure(ErrorVerb::Read, e))?;
+                validate_metadata(&table, domain.epoch, None, true)?;
                 let identity: Identity = decode(
                     domain.epoch,
                     table
@@ -1321,7 +1373,16 @@ impl Journal {
                         .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
                         .value(),
                 )?;
-                applied.state(domain.epoch, reader)?;
+                applied.state(domain.epoch, reader, None)?;
+                if let Some(bytes) = table
+                    .get("snapshot")
+                    .map_err(|e| failure(ErrorVerb::Read, e))?
+                {
+                    // Registry reconstruction still does not certify snapshot
+                    // recovery, but cannot ignore a binding stored only here.
+                    let saved: SavedSnapshot = decode(domain.epoch, bytes.value())?;
+                    saved.applied.validate_contract(None)?;
+                }
                 if applied.format.domain != domain {
                     return Err(failure(ErrorVerb::Read, "recovery namespace mismatch"));
                 }
@@ -1401,8 +1462,14 @@ impl Journal {
         expectation: RecoveryExpectation,
     ) -> Result<Self> {
         let path = path.as_ref().to_owned();
-        Self::open_with_factory_inner(node_id, epoch, limits, profile, expectation, move || {
-            match OpenOptions::new()
+        Self::open_with_factory_inner(
+            node_id,
+            epoch,
+            limits,
+            profile,
+            expectation,
+            None,
+            move || match OpenOptions::new()
                 .read(true)
                 .write(true)
                 .create_new(true)
@@ -1424,8 +1491,8 @@ impl Journal {
                     .map(JournalDatabase::existing)
                     .map_err(|e| failure(ErrorVerb::Read, e)),
                 Err(e) => Err(failure(ErrorVerb::Write, e)),
-            }
-        })
+            },
+        )
         .await
     }
 
@@ -1435,6 +1502,7 @@ impl Journal {
         limits: Limits,
         profile: Option<JournalProfile>,
         expectation: RecoveryExpectation,
+        canonical: Option<CanonicalContract>,
         factory: impl FnOnce() -> Result<JournalDatabase> + Send + 'static,
     ) -> Result<Self> {
         let domain = profile.as_ref().map_or(
@@ -1447,6 +1515,11 @@ impl Journal {
         let reader = profile
             .as_ref()
             .map_or(ReaderCapabilities::Base, |p| p.reader);
+        // No public caller supplies a canonical expectation. Its private path
+        // qualifies storage only; it exposes no canonical runtime constructor.
+        if let Some(contract) = canonical {
+            contract.validate()?;
+        }
         // Refuse an invalid admission envelope before creating any durable file.
         let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
         let (database, created, committed_format, controls) =
@@ -1459,7 +1532,7 @@ impl Journal {
                 let mut committed_format = ActiveFormat::base(domain);
                 let mut controls = Vec::new();
                 if let Some(sync_new_parent) = sync_new_parent {
-                    Self::initialize_database(&database, node_id, epoch, &initial, domain)?;
+                    Self::initialize_database(&database, node_id, epoch, &initial, domain, canonical)?;
                     // Persist the new directory entry as well as database contents.
                     sync_new_parent().map_err(|e| failure(ErrorVerb::Write, e))?;
                 } else {
@@ -1469,6 +1542,7 @@ impl Journal {
                     let table = tx
                         .open_table(META)
                         .map_err(|e| failure(ErrorVerb::Read, e))?;
+                    validate_metadata(&table, epoch, canonical, true)?;
                     let bytes = table
                         .get("identity")
                         .map_err(|e| failure(ErrorVerb::Read, e))?
@@ -1482,7 +1556,7 @@ impl Journal {
                         .map_err(|e| failure(ErrorVerb::Read, e))?
                         .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
                     let applied: AppliedState = decode(epoch, bytes.value())?;
-                    if applied.state(epoch, reader)?.limits != limits {
+                    if applied.state(epoch, reader, canonical)?.limits != limits {
                         return Err(failure(
                             ErrorVerb::Read,
                             "persisted authority limits differ from requested limits",
@@ -1502,7 +1576,7 @@ impl Journal {
                     for record in table.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
                         let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
                         match key.value() {
-                            "identity" | "applied" => {}
+                            "identity" | "applied" | "canonical_contract" | "canonical_bootstrap" => {}
                             "vote" => {
                                 decode::<Vote<u64>>(epoch, value.value())?;
                             }
@@ -1517,7 +1591,7 @@ impl Journal {
                             }
                             "snapshot" => {
                                 let saved: SavedSnapshot = decode(epoch, value.value())?;
-                                if saved.validate(epoch, reader)? != limits {
+                                if saved.validate(epoch, reader, canonical)? != limits {
                                     return Err(failure(
                                         ErrorVerb::Read,
                                         "persisted snapshot limits differ from requested limits",
@@ -1638,7 +1712,7 @@ impl Journal {
                 .knows_persisted(&control, position)
                 .map_err(|e| failure(ErrorVerb::Read, e))?;
         }
-        Self::from_database(
+        let mut journal = Self::from_database(
             database,
             node_id,
             epoch,
@@ -1646,7 +1720,9 @@ impl Journal {
             JournalPersistence::Durable,
             profile,
             &committed_format,
-        )
+        )?;
+        journal.canonical_contract = canonical;
+        Ok(journal)
     }
 
     async fn io<T: Send + 'static>(
@@ -1702,12 +1778,20 @@ impl Journal {
         let profile = self.profile.clone();
         let epoch = self.epoch;
         let reader = self.reader;
+        let canonical = self.canonical_contract;
         self.io(kind, batch_items, move |database| {
             let mut tx = database
                 .begin_write()
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
             tx.set_durability(Durability::Immediate)
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
+            validate_metadata(
+                &tx.open_table(META)
+                    .map_err(|e| failure(ErrorVerb::Read, e))?,
+                epoch,
+                canonical,
+                false,
+            )?;
             let result = operation(&tx)?;
             let committed_format = if profile.is_some()
                 && matches!(
@@ -1716,7 +1800,7 @@ impl Journal {
                         | MeasuredOperation::SaveCommitted
                         | MeasuredOperation::InstallSnapshot
                 ) {
-                Some(committed_format(&tx, epoch, reader)?)
+                Some(committed_format(&tx, epoch, reader, canonical)?)
             } else {
                 None
             };
@@ -1764,6 +1848,7 @@ impl Journal {
             "snapshot" => MeasuredOperation::ReadSnapshot,
             _ => return Err(failure(ErrorVerb::Read, "unknown read metadata key")),
         };
+        let canonical = self.canonical_contract;
         self.io(kind, 0, move |database| {
             let tx = database
                 .begin_read()
@@ -1771,6 +1856,7 @@ impl Journal {
             let table = tx
                 .open_table(META)
                 .map_err(|e| failure(ErrorVerb::Read, e))?;
+            validate_metadata(&table, epoch, canonical, false)?;
             table
                 .get(key)
                 .map_err(|e| failure(ErrorVerb::Read, e))?
@@ -1802,7 +1888,7 @@ impl Journal {
             .read_meta("applied")
             .await?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
-        applied.state(self.epoch, self.reader)?;
+        applied.state(self.epoch, self.reader, self.canonical_contract)?;
         Ok(applied.format)
     }
 
@@ -1903,7 +1989,7 @@ impl Journal {
             return Err("preflight requires the exact applied preparation".into());
         }
         let mut state = applied
-            .state(self.epoch, self.reader)
+            .state(self.epoch, self.reader, self.canonical_contract)
             .map_err(|e| e.to_string())?;
         let mut target = applied.format.clone();
         target.required.clone_from(&preparation.required);
@@ -2122,7 +2208,7 @@ impl Journal {
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
         Ok((
             applied.last_applied,
-            applied.state(self.epoch, self.reader)?,
+            applied.state(self.epoch, self.reader, self.canonical_contract)?,
         ))
     }
 
@@ -2213,10 +2299,18 @@ impl RaftLogReader<TypeConfig> for Journal {
         let start = range.start_bound().cloned();
         let end = range.end_bound().cloned();
         let epoch = self.epoch;
+        let canonical = self.canonical_contract;
         self.io(MeasuredOperation::ReadLogs, 0, move |database| {
             let tx = database
                 .begin_read()
                 .map_err(|e| failure(ErrorVerb::Read, e))?;
+            validate_metadata(
+                &tx.open_table(META)
+                    .map_err(|e| failure(ErrorVerb::Read, e))?,
+                epoch,
+                canonical,
+                false,
+            )?;
             let table = tx
                 .open_table(LOGS)
                 .map_err(|e| failure(ErrorVerb::Read, e))?;
@@ -2238,6 +2332,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
 
     async fn get_log_state(&mut self) -> Result<LogState<TypeConfig>> {
         let epoch = self.epoch;
+        let canonical = self.canonical_contract;
         self.io(MeasuredOperation::GetLogState, 0, move |database| {
             let tx = database
                 .begin_read()
@@ -2245,6 +2340,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
             let meta = tx
                 .open_table(META)
                 .map_err(|e| failure(ErrorVerb::Read, e))?;
+            validate_metadata(&meta, epoch, canonical, false)?;
             let last_purged_log_id: Option<LogId<u64>> = meta
                 .get("purged")
                 .map_err(|e| failure(ErrorVerb::Read, e))?
@@ -2307,6 +2403,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
         let entries: Vec<_> = entries.into_iter().collect();
         let profile = self.profile.clone();
         let reader = self.reader;
+        let canonical = self.canonical_contract;
         let result = async {
             // Validate every command and membership before beginning the write.
             // The completion callback must receive validation failures too.
@@ -2320,7 +2417,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
                     .transpose()
                     .map_err(|e| failure(ErrorVerb::Write, e))?
                     .is_some_and(|(required, paused)| !required.is_empty() || paused);
-                validate_feature_append(tx, epoch, reader, &entries, admitted_features)?;
+                validate_feature_append(tx, epoch, reader, &entries, admitted_features, canonical)?;
                 for entry in &entries {
                     match &entry.payload {
                         EntryPayload::Normal(batch) if batch.control.is_some() => {
@@ -2443,7 +2540,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             .read_meta("applied")
             .await?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
-        applied.state(self.epoch, self.reader)?;
+        applied.state(self.epoch, self.reader, self.canonical_contract)?;
         Ok((applied.last_applied, applied.membership))
     }
 
@@ -2473,6 +2570,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
         }
         let epoch = self.epoch;
         let reader = self.reader;
+        let canonical = self.canonical_contract;
         self.write(MeasuredOperation::Apply, entries.len(), move |tx| {
             let mut table = tx
                 .open_table(META)
@@ -2484,13 +2582,13 @@ impl RaftStateMachine<TypeConfig> for Journal {
                     .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
                 decode(epoch, bytes.value())?
             };
-            let mut state = applied.state(epoch, reader)?;
+            let mut state = applied.state(epoch, reader, canonical)?;
             let mut replies = Vec::with_capacity(entries.len());
             for entry in entries {
                 replies.push(replay_state(&mut applied, &mut state, &entry, reader)?);
             }
             applied.scheduler = SchedulerSection::from_state(&state, &applied.format)?;
-            applied.state(epoch, reader)?;
+            applied.state(epoch, reader, canonical)?;
             let bytes = encode(epoch, &applied)?;
             table
                 .insert("applied", bytes.as_slice())
@@ -2518,7 +2616,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             .into_inner()
             .map_err(|e| failure(ErrorVerb::Read, e))?;
         let saved: SavedSnapshot = decode(self.epoch, &bytes)?;
-        saved.validate(self.epoch, self.reader)?;
+        saved.validate(self.epoch, self.reader, self.canonical_contract)?;
         if saved.applied.format.domain != self.domain {
             return Err(failure(ErrorVerb::Read, "foreign snapshot namespace"));
         }
@@ -2548,7 +2646,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
         let saved: Option<SavedSnapshot> = self.read_meta("snapshot").await?;
         saved
             .map(|saved| {
-                saved.validate(self.epoch, self.reader)?;
+                saved.validate(self.epoch, self.reader, self.canonical_contract)?;
                 if saved.applied.format.domain != self.domain {
                     return Err(failure(ErrorVerb::Read, "foreign snapshot namespace"));
                 }
@@ -2570,6 +2668,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Journal {
         let epoch = self.epoch;
         let node_id = self.node_id;
         let reader = self.reader;
+        let canonical = self.canonical_contract;
         self.write(MeasuredOperation::BuildSnapshot, 0, move |tx| {
             let mut table = tx
                 .open_table(META)
@@ -2597,7 +2696,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Journal {
                 },
                 applied,
             };
-            saved.validate(epoch, reader)?;
+            saved.validate(epoch, reader, canonical)?;
             let bytes = encode(epoch, &saved)?;
             table
                 .insert("snapshot", bytes.as_slice())
@@ -2944,6 +3043,7 @@ mod batch_validation_tests {
                 snapshot_id: "\0".repeat(MAX_SNAPSHOT_ID_BYTES),
             },
             applied: AppliedState {
+                canonical_contract: None,
                 last_applied: position,
                 membership,
                 scheduler: SchedulerSection::String(String::new()),

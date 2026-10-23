@@ -10,7 +10,10 @@ snapshot changes accompany these repairs. The
 separate [first Running sampling repair](authority-running-clock-sampling.md)
 orders observations from the existing injected clock; a fixed canonical clock
 source is available as a [checked prerequisite](authority-fallible-clock.md),
-without a persistent bootstrap binding.
+without a complete persistent bootstrap binding. A
+[private storage prerequisite](authority-canonical-binding.md) now validates
+contract metadata and applied/snapshot compatibility; public construction remains
+experimental.
 
 ## One clock and an explicit recovery policy
 

@@ -77,6 +77,8 @@ rust_library(
         "src/api_worker_scheduler.rs",
         "src/authority/accepted_history.rs",
         "src/authority/accepted_history_tests.rs",
+        "src/authority/canonical_binding.rs",
+        "src/authority/canonical_binding_tests.rs",
         "src/authority/format.rs",
         "src/authority/journal.rs",
         "src/authority/journal_factory_tests.rs",

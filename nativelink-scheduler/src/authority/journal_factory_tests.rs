@@ -499,7 +499,7 @@ async fn reopen_refuses_limits_hidden_only_in_saved_snapshot() {
             // This is a valid snapshot and envelope. Only its Limits disagree
             // with the caller and the unchanged applied state.
             saved
-                .validate(DOMAIN.epoch, ReaderCapabilities::Base)
+                .validate(DOMAIN.epoch, ReaderCapabilities::Base, None)
                 .unwrap();
             let bytes = encode(DOMAIN.epoch, &saved).unwrap();
             let transaction = database.begin_write().unwrap();
@@ -622,3 +622,6 @@ async fn matching_nondefault_limits_reopen_including_disabled_admission() {
 
 #[path = "singleton_recovery_tests.rs"]
 mod recovery_tests;
+
+#[path = "canonical_binding_tests.rs"]
+mod canonical_binding_tests;
