@@ -3221,6 +3221,7 @@ dependencies = [
  "nativelink-scheduler",
  "nativelink-store",
  "nativelink-util",
+ "openraft",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "parking_lot",

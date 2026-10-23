@@ -30,11 +30,12 @@ elapsed authority time.
 This is a prerequisite for the [canonical clock contract](authority-clock-proposal.md),
 not its activation. A caller must bind the recovered journal to seconds and the
 sampling and proposal rules before using this source. The constructor does not
-validate that provenance. Deadline comparisons, request projections, reducer
-events and persisted formats remain unchanged. The existing inclusive expiry
-comparison does not establish a minimum elapsed duration after rounding a start
-down to a whole second. Policy-window semantics, checked deadline headroom and
-persistent bootstrap binding remain open.
+validate that provenance. This source repair left deadline comparisons, request
+projections, reducer events and persisted formats unchanged. The subsequent
+[execution boundary repair](authority-quantized-deadline.md) supplies the extra
+boundary tick after rounding a fresh execution start down to a whole second.
+Policy-window semantics, checked deadline headroom and persistent bootstrap
+binding remain open.
 
 Qualification uses deterministic fractional, restart and exhaustion boundaries
 and real redb/Raft histories. The service cases check startup refusal with due

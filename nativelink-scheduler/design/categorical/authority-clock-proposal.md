@@ -1,14 +1,16 @@
 # Proposed singleton authority clock
 
-This is a design proposal, not an implemented clock contract. The current
+This is a design proposal for the complete canonical clock contract. The current
 qualification interface accepts arbitrary experimental ticks. The
 [deadline-driver repair](authority-deadline-driver.md) orders the recovery sweep
-and fixes upload expiry; its comparisons remain `deadline <= now`. No timeout
-projection, reducer event or snapshot changes accompany this proposal. The
+and fixes upload expiry; the subsequent
+[execution boundary repair](authority-quantized-deadline.md) now proposes execution
+expiry only past its stored deadline. No timeout projection, reducer event or
+snapshot changes accompany these repairs. The
 separate [first Running sampling repair](authority-running-clock-sampling.md)
 orders observations from the existing injected clock; a fixed canonical clock
-source is now available as a [checked prerequisite](authority-fallible-clock.md),
-without a persistent bootstrap binding or a changed expiry comparison.
+source is available as a [checked prerequisite](authority-fallible-clock.md),
+without a persistent bootstrap binding.
 
 ## One clock and an explicit recovery policy
 
@@ -125,8 +127,8 @@ add inferred downtime or round the restored base forward.
 | Driver proposes execution expiry only when `now > running_deadline` | Supplies the extra boundary tick without changing the stored deadline or request projection. | Fresh starting sample; review every expiry proposal path, including recovery and progress expiry. The reducer still accepts its existing inclusive event contract. |
 | Derive an extra tick in the captured timeout and retain inclusive expiry | Supplies the same conservative boundary for finite positive durations. | Fresh starting sample still required. Changes immutable request projections and needs explicit versioning or migration, including zero and omitted-timeout rules. |
 
-The driver-only choice is the narrower candidate. It is not implemented or
-qualified by the current deadline repair. The
+The driver-only choice is now implemented in the experimental coordinator and
+qualified by the separate boundary repair. The
 [request validation](../../src/authority/request.rs) recomputes the projection
 from retained Action bytes and compares `execution_timeout`. Changing that
 projection in place would reject previously valid explicit-timeout requests on
@@ -179,6 +181,7 @@ enough.
 - Exercise checked exhaustion, incompatible bootstrap time-unit bindings, and
   due expiry with unresolved cancellation. Time alone must never release charge.
 
-These are requirements for the full clock contract. The existing deadline and
-first Running sampling receipts cover bounded subsets; they establish neither
-the canonical clock nor these duration guarantees.
+These are requirements for the full clock contract. The deadline, first Running
+sampling, checked source and execution boundary receipts cover bounded subsets;
+they do not establish a persistently bound canonical clock or the complete
+duration guarantees.

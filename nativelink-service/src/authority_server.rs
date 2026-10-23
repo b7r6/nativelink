@@ -763,8 +763,11 @@ impl Driver {
             if !attempt.authorized {
                 continue;
             }
+            // A fresh Running sample is rounded down to a whole tick. Wait
+            // past the stored execution deadline to retain that lost fraction.
+            // The independent progress window below remains a coarse boundary.
             if attempt.phase == Phase::Running
-                && attempt.running_deadline.is_some_and(|at| at <= now)
+                && attempt.running_deadline.is_some_and(|at| at < now)
             {
                 due.push(Event::ExpireExecution {
                     attempt: attempt.id,

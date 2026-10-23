@@ -53,8 +53,11 @@ this new path. Invalid session, identity, framing and effect reports also do not
 trigger it. These exclusions concern additional clock work; the existing outer
 loop can still propose its usual matching check after input.
 
-The repair leaves later progress timing and the inclusive `deadline <= now`
-expiry comparison unchanged. Expiry continues to revoke authorization and emit
+The original repair left later progress timing and the inclusive `deadline <= now`
+expiry comparison unchanged. The subsequent
+[execution boundary repair](authority-quantized-deadline.md) waits strictly past
+the stored execution deadline while preserving independent progress expiry.
+Expiry continues to revoke authorization and emit
 cancellation. It supplies no quiescence evidence and cannot release the original
 reservation. Only the existing matching cleanup observation can release charge.
 
@@ -84,9 +87,11 @@ wrong dispatch effect and missing attempt identity. The encoded-size and epoch
 guards are existing source checks; this fixture does not separately exercise
 their malformed-frame and wrong-epoch inputs.
 
-This change does not define seconds, a canonical clock constructor, checked clock
-exhaustion, journal clock-contract binding, downtime accounting, or compatibility
-with old Running anchors. Fractional start-time quantization and the alternative
-execution expiry comparisons in the clock proposal remain unresolved. Neither
-this fixture nor the repair establishes the full execution-duration guarantee,
-physical process termination or production readiness.
+This sampling change did not define seconds, a canonical clock constructor,
+checked clock exhaustion, journal clock-contract binding, downtime accounting,
+or compatibility with old Running anchors. A separate
+[checked clock source](authority-fallible-clock.md) and the execution boundary
+repair now cover parts of those obligations. Persistent bootstrap binding,
+finite deadline headroom and the complete policy-window contract remain open.
+These fixtures do not establish the full execution-duration guarantee, physical
+process termination or production readiness.

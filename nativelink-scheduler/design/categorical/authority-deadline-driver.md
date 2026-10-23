@@ -15,10 +15,11 @@ that proposal outside `Running`, so the selection masked the due upload progress
 deadline. The driver now selects execution expiry only in the running phase and
 otherwise considers `ExpireAttempt` with the current progress generation.
 
-The deadline comparison remains `at <= now`. This change does not redefine a
-tick, alter the captured action timeout, grant an extra tick, or introduce a
-runtime clock source. It changes no reducer event, snapshot format, or oracle
-transition. Expiry revokes authorization and emits cancellation; only a matching
+The original repair retained `at <= now`. The subsequent
+[execution boundary repair](authority-quantized-deadline.md) changes only execution
+expiry to `at < now`; independent progress expiry remains inclusive. Neither
+repair changes the captured action timeout, reducer event, snapshot format, or
+oracle transition. Expiry revokes authorization and emits cancellation; only a matching
 cleanup observation can settle the retained physical reservation.
 
 ## Focused qualification

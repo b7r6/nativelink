@@ -145,6 +145,7 @@ rust_test(
         "@crates//:async-lock",
         "@crates//:hyper",
         "@crates//:hyper-util",
+        "@crates//:openraft",
         "@crates//:pretty_assertions",
         "@crates//:prost-types",
         "@crates//:tracing-test",

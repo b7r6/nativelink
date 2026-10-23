@@ -22,6 +22,7 @@ use nativelink_macro::nativelink_test;
 use nativelink_scheduler::authority::{AttemptView, ClusterEpoch, Limits};
 use nativelink_store::memory_store::MemoryStore;
 use nativelink_util::fs;
+use openraft::storage::RaftLogReader;
 
 use super::*;
 
@@ -66,6 +67,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new(phase: Phase, initial_time: u64) -> Self {
+        Self::with_timeout(phase, initial_time, 5).await
+    }
+
+    async fn with_timeout(phase: Phase, initial_time: u64, execution_timeout: u64) -> Self {
         let directory =
             std::env::temp_dir().join(format!("authority-running-clock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&directory).await.unwrap();
@@ -106,7 +111,7 @@ impl Fixture {
                     priority: 0,
                     properties: BTreeMap::new(),
                     resources,
-                    execution_timeout: 5,
+                    execution_timeout,
                     payload: None,
                 },
             },
@@ -296,6 +301,171 @@ impl Fixture {
 
     async fn close(self) {
         let (mut driver, directory) = self.stop().await;
+        driver.workers.clear();
+        driver.authority.shutdown().await.unwrap();
+        fs::remove_dir_all(directory).await.unwrap();
+    }
+}
+
+/// Read the actual committed events, so progress revocation cannot be mistaken
+/// for execution-duration expiry when their coarse deadlines happen to agree.
+async fn recorded_sweep(driver: &mut Driver, now: u64) -> Vec<Event> {
+    let after = driver
+        .authority
+        .journal
+        .read_applied()
+        .await
+        .unwrap()
+        .0
+        .unwrap()
+        .index
+        + 1;
+    driver.config.now = Arc::new(move || Ok(now));
+    driver.time().await.unwrap();
+    driver
+        .authority
+        .journal
+        .clone()
+        .try_get_log_entries(after..)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|entry| match entry.payload {
+            openraft::EntryPayload::Normal(batch) => Some(batch),
+            _ => None,
+        })
+        .flat_map(|batch| batch.events().to_vec())
+        .map(|recorded| recorded.event)
+        .collect()
+}
+
+#[nativelink_test]
+async fn quantized_execution_waits_past_boundary_without_releasing_charge() {
+    // For a fresh sample at 10.999s and a requested 5s duration, tick15
+    // represents only 4.001s since that sample. Tick16 is conservative.
+    for duration in [1, 2, 5] {
+        let (mut driver, directory) = Fixture::with_timeout(Phase::Running, 10, duration)
+            .await
+            .stop()
+            .await;
+        let boundary = 10 + duration;
+        let before = driver.state.attempts[0];
+        assert_eq!(before.running_deadline, Some(boundary));
+        assert!(before.deadline.at > boundary);
+        let at_boundary = recorded_sweep(&mut driver, boundary).await;
+        assert_eq!(at_boundary, vec![Event::AdvanceTime { now: boundary }]);
+        assert!(driver.state.attempts[0].authorized);
+        assert!(!driver.state.reservations[0].released);
+        let later = recorded_sweep(&mut driver, boundary + 1).await;
+        assert_eq!(
+            later,
+            vec![
+                Event::AdvanceTime { now: boundary + 1 },
+                Event::ExpireExecution { attempt: before.id },
+            ]
+        );
+        assert!(!driver.state.attempts[0].authorized);
+        assert_eq!(
+            driver.state.attempts[0].running_deadline,
+            before.running_deadline
+        );
+        assert!(!driver.state.reservations[0].released);
+        driver.workers.clear();
+        driver.authority.shutdown().await.unwrap();
+        fs::remove_dir_all(directory).await.unwrap();
+    }
+}
+
+#[nativelink_test]
+async fn quantized_recovery_keeps_equality_and_expires_strictly_later() {
+    for (now, authorized) in [(15, true), (16, false)] {
+        let (mut driver, directory) = Fixture::new(Phase::Running, 10).await.stop().await;
+        driver
+            .authority
+            .write(RecordedEvent {
+                epoch: EPOCH,
+                event: Event::AdvanceTime { now },
+            })
+            .await
+            .unwrap();
+        assert!(driver.authority.read().await.unwrap().view().attempts[0].authorized);
+        driver.workers.clear();
+        driver.authority.shutdown().await.unwrap();
+        let reopened = Singleton::open(
+            directory.join("authority.redb"),
+            1,
+            EPOCH,
+            Limits::default(),
+        )
+        .await
+        .unwrap();
+        // Model an origin reset: no new elapsed observation is supplied. The
+        // initial recovery sweep must still apply the selected comparison.
+        driver.config.now = Arc::new(|| Ok(0));
+        let (service, coordinator) = AuthorityService::start(reopened, driver.config)
+            .await
+            .unwrap();
+        let observed = service.subscribe().borrow().clone();
+        assert_eq!(observed.now, now);
+        assert_eq!(observed.attempts[0].authorized, authorized);
+        assert_eq!(observed.attempts[0].running_deadline, Some(15));
+        assert!(!observed.reservations[0].released);
+        coordinator.shutdown().await.unwrap();
+        fs::remove_dir_all(directory).await.unwrap();
+    }
+}
+
+#[nativelink_test]
+async fn quantized_progress_expiry_is_independent_of_execution_equality() {
+    for renew in [false, true] {
+        let (mut driver, directory) = Fixture::with_timeout(Phase::Running, 0, 30)
+            .await
+            .stop()
+            .await;
+        let initial = driver.state.attempts[0];
+        assert_eq!(initial.running_deadline, Some(30));
+        assert_eq!(initial.deadline.at, 30);
+        if renew {
+            driver.commit(Event::AdvanceTime { now: 29 }).await.unwrap();
+            driver
+                .commit(Event::Progress {
+                    attempt: initial.id,
+                    worker: initial.worker,
+                    incarnation: initial.incarnation,
+                    phase: Phase::Running,
+                    progress: 1,
+                })
+                .await
+                .unwrap();
+            assert_eq!(driver.state.attempts[0].deadline.at, 59);
+            assert_eq!(driver.state.attempts[0].running_deadline, Some(30));
+        }
+        let events = recorded_sweep(&mut driver, 30).await;
+        let expected = if renew {
+            vec![Event::AdvanceTime { now: 30 }]
+        } else {
+            vec![
+                Event::AdvanceTime { now: 30 },
+                Event::ExpireAttempt {
+                    attempt: initial.id,
+                    generation: initial.deadline.generation,
+                },
+            ]
+        };
+        assert_eq!(events, expected);
+        assert_eq!(driver.state.attempts[0].authorized, renew);
+        assert!(!driver.state.reservations[0].released);
+        if renew {
+            assert_eq!(
+                recorded_sweep(&mut driver, 31).await,
+                vec![
+                    Event::AdvanceTime { now: 31 },
+                    Event::ExpireExecution {
+                        attempt: initial.id
+                    },
+                ]
+            );
+        }
         driver.workers.clear();
         driver.authority.shutdown().await.unwrap();
         fs::remove_dir_all(directory).await.unwrap();
@@ -622,7 +792,10 @@ async fn invalid_stale_and_replayed_reports_do_not_sample_or_reanchor() {
     assert_eq!(advanced.attempts[0].progress, 2);
     assert_eq!(advanced.attempts[0].running_deadline, Some(15));
     assert_eq!(fixture.samples.load(Ordering::SeqCst), initial_samples + 1);
-    let expired = fixture.sweep(15).await;
+    let boundary = fixture.sweep(15).await;
+    assert!(boundary.attempts[0].authorized);
+    assert!(!boundary.reservations[0].released);
+    let expired = fixture.sweep(16).await;
     assert!(!expired.attempts[0].authorized);
     assert!(!expired.reservations[0].released);
     let sampled = fixture.samples.load(Ordering::SeqCst);
