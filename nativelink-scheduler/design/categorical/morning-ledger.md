@@ -919,6 +919,21 @@ combined-total fixture. Raw byte limits do not establish a decoded heap bound;
 arbitrary backends can allocate or start blocking work before collector refusal.
 AC decoding, ByteStream registry growth and global concurrency remain open.
 
+Captured Action timeout fixtures now cover omission, explicit zero, fractional
+seconds and the maximum finite duration. They preserve exact request bytes and
+the derived timeout through snapshot restore, replay of committed Submit/Match
+entries not yet applied, and actual singleton restart. Short finite durations retain the strict
+driver boundary. A diagnostic starts admission at a high committed tick and
+shows that a finite duration can reach `u64::MAX` without arithmetic overflow;
+there is no later representable strict-expiry tick. Independent progress and
+interest expiry can still revoke authorization. This does not demonstrate
+indefinite execution or select a canonical lifetime policy. Six compiled faults
+were detected; root ran both affected Bazel targets with 38 passes, a server
+build and 560 unchanged inputs. The
+[receipt](evidence/authority-captured-timeouts/manifest.json) retains the initial
+incorrect Bazel label and its correction. This patch changes tests and documents
+the missing headroom contract; it changes no runtime timeout projection.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
