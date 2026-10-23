@@ -649,8 +649,30 @@ still cannot safely consume this guard; no runtime calls it.
 The [clock proposal](authority-clock-proposal.md) records another construction
 prerequisite. A persisted monotonic base and fresh origin can conservatively
 exclude downtime, but integer rounding and stale samples can expire requested
-durations early. Fresh sampling, deadline comparison, overflow and bootstrap
-compatibility need explicit qualification. The proposal changes no runtime clock.
+durations early. The [first Running sampling repair](authority-running-clock-sampling.md)
+now removes the reproduced stale starting sample: a report at tick 10 previously
+derived deadline 5 from stored time 0, and now derives deadline 15. Already-due
+expiry wins before the grant, repeated Running cannot extend it, and expiry does
+not release charge. Six focused cases pass; actual journal positions confirm
+one extra proposal only when the clock advances. Both
+[integrated Bazel targets](evidence/authority-running-clock-integration/manifest.json)
+executed and passed, covering all thirteen service unit and eighteen authority
+RPC cases with 231 unchanged source/build inputs. Fixed units, conservative
+duration comparisons, overflow and bootstrap compatibility remain open; this
+repair uses the existing injected clock.
+
+The [filesystem capability prerequisite](../../../../tools/canonical-filesystem/README.md)
+now pins the fixed CAS/sink layout and retains all ownership locks through
+opaque file handles and delayed blocking I/O. CAS publication cannot replace an
+existing slot; sink replacement preserves already-open readers. Twenty-five
+Cargo cases, strict Clippy and the
+[integrated Bazel target](evidence/canonical-filesystem-capabilities-integration/manifest.json)
+pass. The [author receipt](evidence/canonical-filesystem-capabilities/manifest.json)
+also preserves failures at both final parent-directory syncs: artifacts and
+locks remain, while readable reopen does not prove historical sync success.
+The API checks filenames and descriptor identity, not content hashes or persistent
+physical generations. Existing path-based store and journal constructors still
+need separate capability adapters; no runtime consumes this package.
 
 The [prepared memory-report candidate](publication-prepared-memory.md) now applies
 actual MemoryFailure to a prepared result graph. Retry preserves staging and write

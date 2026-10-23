@@ -1,0 +1,10 @@
+{
+  "archive_sha256": "2440fd9faf26b11120db172519dbbb007357aac9035aca27db13c7927acc8ce8",
+  "author_commit": "049c04f94d0905d17ee35d4f6da20f8c0d943948",
+  "author_manifest_sha256": "ac5a40da81fc83f0d8a6a98afa95a63896353a8a779617d976215e06042cfe0b",
+  "integration_commit": "e449d0a5906d72abb400e5ba9212a81b949c414b",
+  "root_verified_archive_entries": 86,
+  "root_verified_source_hashes": 23,
+  "schema_version": 1,
+  "scope": "Pinned descriptor capability prerequisite only; 25 cases, strict lint, two injected parent-sync failures. No runtime StoreDriver or durable-generation proof."
+}
