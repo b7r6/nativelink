@@ -26,6 +26,7 @@ path = "src/bin/convert.rs"
 
 [lints.rust]
 unsafe_code = "forbid"
+unreachable_pub = "deny"
 
 [lints.clippy]
 all = "deny"
@@ -35,3 +36,7 @@ missing_errors_doc = { level = "allow", priority = 1 }
 missing_panics_doc = { level = "allow", priority = 1 }
 must_use_candidate = { level = "allow", priority = 1 }
 too_many_lines = { level = "allow", priority = 1 }
+
+# Match the repository override: this nursery lint conflicts with the explicit
+# visibility required by unreachable_pub in binary-only private modules.
+redundant_pub_crate = { level = "allow", priority = 1 }

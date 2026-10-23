@@ -22,7 +22,7 @@ use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Legacy {
+pub(crate) struct Legacy {
     pub stores: Vec<Store>,
     pub schedulers: Vec<Scheduler>,
     pub servers: Vec<Server>,
@@ -31,32 +31,32 @@ pub struct Legacy {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Store {
+pub(crate) struct Store {
     pub name: String,
     pub filesystem: Filesystem,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Filesystem {
+pub(crate) struct Filesystem {
     pub content_path: String,
     pub temp_path: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Scheduler {
+pub(crate) struct Scheduler {
     pub name: String,
     pub simple: Empty,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Empty {}
+pub(crate) struct Empty {}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Server {
+pub(crate) struct Server {
     pub name: String,
     pub listener: Listener,
     pub services: Services,
@@ -64,20 +64,20 @@ pub struct Server {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Listener {
+pub(crate) struct Listener {
     pub http: Http,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Http {
+pub(crate) struct Http {
     pub socket_address: SocketAddr,
     pub tls: Option<Tls>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Tls {
+pub(crate) struct Tls {
     #[serde(rename = "cert_file")]
     pub certificate: String,
     #[serde(rename = "key_file")]
@@ -90,7 +90,7 @@ pub struct Tls {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Services {
+pub(crate) struct Services {
     pub cas: Option<Vec<CasRoute>>,
     pub ac: Option<Vec<AcRoute>>,
     pub bytestream: Option<Vec<CasRoute>>,
@@ -101,7 +101,7 @@ pub struct Services {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CasRoute {
+pub(crate) struct CasRoute {
     #[serde(default)]
     pub instance_name: String,
     pub cas_store: String,
@@ -109,7 +109,7 @@ pub struct CasRoute {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct AcRoute {
+pub(crate) struct AcRoute {
     #[serde(default)]
     pub instance_name: String,
     pub ac_store: String,
@@ -119,7 +119,7 @@ pub struct AcRoute {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ExecutionRoute {
+pub(crate) struct ExecutionRoute {
     #[serde(default)]
     pub instance_name: String,
     pub cas_store: String,
@@ -128,7 +128,7 @@ pub struct ExecutionRoute {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CapabilitiesRoute {
+pub(crate) struct CapabilitiesRoute {
     #[serde(default)]
     pub instance_name: String,
     pub remote_execution: SchedulerRoute,
@@ -136,6 +136,6 @@ pub struct CapabilitiesRoute {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct SchedulerRoute {
+pub(crate) struct SchedulerRoute {
     pub scheduler: String,
 }

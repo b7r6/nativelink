@@ -107,6 +107,12 @@ all branches within its bounds; unsupported input values are withheld, while
 recognized feature names and JSON Pointer locations remain visible. A caller
 cannot make an unsupported source safe merely by supplying mapping declarations.
 
+Identity and capacity fields require integer tokens; floating-point or exponent
+spellings are rejected rather than coerced. The pinned JSON5 reader currently
+rejects decimal integer tokens outside the signed 64-bit range and hexadecimal
+integer tokens above the unsigned 32-bit range. Accepted decimal integers retain
+exact precision, including values above the IEEE-754 exact-integer range.
+
 Both inputs are limited to 1 MiB, 32 nesting levels, 16,384 values and 4,096 bytes
 per string/key. Duplicate keys, nonfinite numbers, non-object roots and strings
 containing `$` or `~` fail; no interpolation is resolved. Unsupported-feature

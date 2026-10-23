@@ -77,6 +77,72 @@ fn legacy_key_presence_always_refuses_even_with_bad_credential_locations() {
 }
 
 #[test]
+fn json5_key_equivalence_cannot_bypass_legacy_or_duplicate_refusal() {
+    let canonical = core::str::from_utf8(CANONICAL).unwrap();
+    for (key, unicode, hexadecimal) in [
+        (
+            "stores",
+            r"\u0073\u0074\u006f\u0072\u0065\u0073",
+            r"'\x73tores'",
+        ),
+        (
+            "schedulers",
+            r"\u0073\u0063\u0068\u0065\u0064\u0075\u006c\u0065\u0072\u0073",
+            r"'\x73chedulers'",
+        ),
+    ] {
+        let mut spellings = vec![
+            format!("\"{unicode}\""),
+            unicode.to_owned(),
+            hexadecimal.to_owned(),
+        ];
+        for terminator in ["\n", "\r", "\r\n", "\u{2028}", "\u{2029}"] {
+            spellings.push(format!("'{}\\{terminator}{}'", &key[..2], &key[2..]));
+        }
+        for spelling in spellings {
+            let input = format!("{{{spelling}:null,{}", &canonical[1..]);
+            assert_eq!(
+                parse_canonical(input.as_bytes()).unwrap_err().code,
+                "legacy_key"
+            );
+            let duplicate = format!("{{{key}:null,{spelling}:[]}}");
+            assert_eq!(
+                parse_data(duplicate.as_bytes()).unwrap_err().code,
+                "invalid_json5"
+            );
+        }
+    }
+}
+
+#[test]
+fn identity_numbers_preserve_integer_precision_and_refuse_float_coercion() {
+    for node_id in [(1_u64 << 53) - 1, (1_u64 << 53) + 1, (1_u64 << 63) - 1] {
+        let mut candidate = value();
+        candidate["authority"]["node_id"] = json!(node_id);
+        assert_eq!(
+            parse_canonical(&bytes(&candidate))
+                .unwrap()
+                .authority
+                .node_id,
+            node_id
+        );
+    }
+    let canonical = serde_json::to_string(&value()).unwrap();
+    for literal in [
+        "1.0",
+        "1e0",
+        "1.0000000000000001",
+        "9007199254740993.0",
+        "-1",
+        "9223372036854775808",
+        "18446744073709551615",
+    ] {
+        let candidate = canonical.replace("\"node_id\":1", &format!("\"node_id\":{literal}"));
+        assert!(parse_canonical(candidate.as_bytes()).is_err(), "{literal}");
+    }
+}
+
+#[test]
 fn comments_and_string_values_do_not_become_legacy_keys() {
     let mut candidate = value();
     candidate["instance_name"] = json!("stores schedulers");

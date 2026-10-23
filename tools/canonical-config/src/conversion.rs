@@ -79,7 +79,7 @@ enum ColdDisposition {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Report {
+pub(crate) struct Report {
     #[serde(rename = "report_format")]
     pub format: &'static str,
     pub mapping_complete: bool,
@@ -93,7 +93,7 @@ pub struct Report {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Difference {
+pub(crate) struct Difference {
     pub before: Value,
     pub proposed: Value,
 }
@@ -127,7 +127,7 @@ impl Report {
     }
 }
 
-pub fn convert(legacy_bytes: &[u8], mapping_bytes: &[u8]) -> Report {
+pub(crate) fn convert(legacy_bytes: &[u8], mapping_bytes: &[u8]) -> Report {
     let mut report = Report::empty();
     let source = match parse_data(legacy_bytes) {
         Ok(value) => value,
