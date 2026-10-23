@@ -207,7 +207,7 @@ async fn grpc_backed_query_uses_local_exact_upload_identity() {
     assert_eq!(
         exact,
         QueryWriteStatusResponse {
-            committed_size: PREFIX as i64,
+            committed_size: i64::try_from(PREFIX).unwrap(),
             complete: false
         }
     );

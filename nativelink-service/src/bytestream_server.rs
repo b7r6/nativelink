@@ -25,7 +25,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use bytes::BytesMut;
 use futures::future::pending;
 use futures::stream::unfold;
-use futures::{Future, Stream, TryFutureExt, try_join};
+use futures::{Future, Stream, StreamExt, TryFutureExt, try_join};
 use nativelink_config::cas_server::{ByteStreamConfig, InstanceName, WithInstanceName};
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::{
@@ -213,6 +213,35 @@ type BytesWrittenAndIdleStream = (Arc<AtomicU64>, Option<IdleStream>);
 /// cache locality for `HashMap` operations.
 type UuidKey = u128;
 
+#[derive(Debug, Eq, Hash, PartialEq)]
+struct FixedUploadIdentity {
+    uuid: Box<str>,
+    digest_function: DigestHasherFunc,
+    digest: DigestInfo,
+}
+
+/// Fixed identities share their immutable allocation between the map and guard.
+/// Legacy services retain their original integer key and collision behavior.
+#[derive(Clone, Eq, Hash, PartialEq)]
+enum UploadKey {
+    Legacy(UuidKey),
+    Fixed(Arc<FixedUploadIdentity>),
+}
+
+impl Debug for UploadKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Legacy(uuid) => write!(f, "{uuid:032x}"),
+            Self::Fixed(identity) => f
+                .debug_struct("FixedUploadIdentity")
+                .field("uuid_bytes", &identity.uuid.len())
+                .field("digest_function", &identity.digest_function)
+                .field("digest", &identity.digest)
+                .finish(),
+        }
+    }
+}
+
 /// Parse a UUID string to a u128 for use as a `HashMap` key.
 /// This avoids heap allocation for String keys and improves `HashMap` performance.
 /// Falls back to hashing the string if it's not a valid hex UUID.
@@ -248,10 +277,8 @@ pub struct InstanceInfo {
     store: Store,
     // Max number of bytes to send on each grpc stream chunk.
     max_bytes_per_stream: usize,
-    /// Active uploads keyed by UUID as u128 for better performance.
-    /// Using u128 keys instead of String reduces heap allocations
-    /// and improves `HashMap` lookup performance.
-    active_uploads: Arc<Mutex<HashMap<UuidKey, BytesWrittenAndIdleStream>>>,
+    /// Each fixed upload is keyed by its full identity within this instance.
+    active_uploads: Arc<Mutex<HashMap<UploadKey, BytesWrittenAndIdleStream>>>,
     /// How long to keep idle streams before timing them out.
     idle_stream_timeout: Duration,
     metrics: Arc<ByteStreamMetrics>,
@@ -279,13 +306,15 @@ impl Debug for InstanceInfo {
 
 struct CompressedUploadGuard {
     uuid_key: u128,
-    active_uploads: Arc<Mutex<HashMap<UuidKey, BytesWrittenAndIdleStream>>>,
+    active_uploads: Arc<Mutex<HashMap<UploadKey, BytesWrittenAndIdleStream>>>,
     metrics: Arc<ByteStreamMetrics>,
 }
 
 impl Drop for CompressedUploadGuard {
     fn drop(&mut self) {
-        self.active_uploads.lock().remove(&self.uuid_key);
+        self.active_uploads
+            .lock()
+            .remove(&UploadKey::Legacy(self.uuid_key));
         self.metrics.active_uploads.fetch_sub(1, Ordering::Relaxed);
     }
 }
@@ -298,13 +327,13 @@ impl InstanceInfo {
         let bytes_received = Arc::new(AtomicU64::new(0));
         let uuid_key = {
             let mut active_uploads = self.active_uploads.lock();
-            match active_uploads.entry(uuid_key) {
+            match active_uploads.entry(UploadKey::Legacy(uuid_key)) {
                 Entry::Occupied(entry) => {
                     // Another upload already owns this UUID; rekey instead of
                     // clobbering its entry (which would break its QueryWriteStatus
                     // visibility and double-decrement the metric on guard drop).
                     // Mirrors create_or_join_upload_stream's collision handling.
-                    let original_key = *entry.key();
+                    let original_key = uuid_key;
                     let unique_key = ByteStreamServer::generate_unique_uuid_key(original_key);
                     warn!(
                         msg = "UUID collision detected on compressed upload, generating unique UUID to prevent conflict",
@@ -314,13 +343,15 @@ impl InstanceInfo {
                     self.metrics.uuid_collisions.fetch_add(1, Ordering::Relaxed);
                     // Release the Occupied entry's borrow so we can insert on the same guard.
                     let _ = entry;
-                    active_uploads.insert(unique_key, (bytes_received.clone(), None));
+                    active_uploads.insert(
+                        UploadKey::Legacy(unique_key),
+                        (bytes_received.clone(), None),
+                    );
                     unique_key
                 }
                 Entry::Vacant(entry) => {
-                    let key = *entry.key();
                     entry.insert((bytes_received.clone(), None));
-                    key
+                    uuid_key
                 }
             }
         };
@@ -395,7 +426,7 @@ type ReadStream = Pin<Box<dyn Stream<Item = Result<ReadResponse, Status>> + Send
 type StoreUpdateFuture = Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'static>>;
 
 struct StreamState {
-    uuid: UuidKey,
+    uuid: UploadKey,
     tx: DropCloserWriteHalf,
     store_update_fut: StoreUpdateFuture,
     digest_function: DigestHasherFunc,
@@ -404,7 +435,7 @@ struct StreamState {
 impl Debug for StreamState {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("StreamState")
-            .field("uuid", &format!("{:032x}", self.uuid))
+            .field("uuid", &self.uuid)
             .finish()
     }
 }
@@ -415,7 +446,7 @@ impl Debug for StreamState {
 struct ActiveStreamGuard {
     stream_state: Option<StreamState>,
     bytes_received: Arc<AtomicU64>,
-    active_uploads: Arc<Mutex<HashMap<UuidKey, BytesWrittenAndIdleStream>>>,
+    active_uploads: Arc<Mutex<HashMap<UploadKey, BytesWrittenAndIdleStream>>>,
     metrics: Arc<ByteStreamMetrics>,
 }
 
@@ -436,11 +467,11 @@ impl Drop for ActiveStreamGuard {
             return; // If None it means we don't want it put back into an IdleStream.
         };
         let mut active_uploads = self.active_uploads.lock();
-        let uuid = stream_state.uuid; // u128 is Copy, no clone needed
+        let uuid = stream_state.uuid.clone();
         let Some(active_uploads_slot) = active_uploads.get_mut(&uuid) else {
             error!(
                 err = "Failed to find active upload. This should never happen.",
-                uuid = format!("{:032x}", uuid),
+                ?uuid,
             );
             return;
         };
@@ -549,6 +580,23 @@ impl ByteStreamServer {
         }
     }
 
+    fn upload_key(
+        &self,
+        uuid: &str,
+        digest_function: DigestHasherFunc,
+        digest: DigestInfo,
+    ) -> UploadKey {
+        if self.authority_admission {
+            UploadKey::Fixed(Arc::new(FixedUploadIdentity {
+                uuid: uuid.into(),
+                digest_function,
+                digest,
+            }))
+        } else {
+            UploadKey::Legacy(parse_uuid_to_key(uuid))
+        }
+    }
+
     pub fn new_with_timeout(
         config: &WithInstanceName<ByteStreamConfig>,
         store_manager: &StoreManager,
@@ -564,7 +612,7 @@ impl ByteStreamServer {
             config.max_bytes_per_stream
         };
 
-        let active_uploads: Arc<Mutex<HashMap<UuidKey, BytesWrittenAndIdleStream>>> =
+        let active_uploads: Arc<Mutex<HashMap<UploadKey, BytesWrittenAndIdleStream>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let metrics = Arc::new(ByteStreamMetrics::default());
 
@@ -593,10 +641,7 @@ impl ByteStreamServer {
                         if let Some(idle_stream) = maybe_idle
                             && now.duration_since(idle_stream.idle_since) >= idle_stream_timeout
                         {
-                            info!(
-                                msg = "Sweeping expired idle stream",
-                                uuid = format!("{:032x}", uuid)
-                            );
+                            info!(msg = "Sweeping expired idle stream", ?uuid);
                             expired_count += 1;
                             return false; // Remove this entry
                         }
@@ -634,17 +679,10 @@ impl ByteStreamServer {
         Server::new(self)
     }
 
-    /// Creates or joins an upload stream for the given UUID.
-    ///
-    /// This function handles three scenarios:
-    /// 1. UUID doesn't exist - creates a new upload stream
-    /// 2. UUID exists but is idle - resumes the existing stream
-    /// 3. UUID exists and is active - generates a unique UUID by appending a nanosecond
-    ///    timestamp to avoid collision, then creates a new stream with that UUID
-    ///
-    /// The nanosecond timestamp ensures virtually zero probability of collision since
-    /// two concurrent uploads would need to both collide on the original UUID AND
-    /// generate the unique UUID in the exact same nanosecond.
+    /// Creates or resumes an upload under this instance's identity policy.
+    /// Fixed uploads require an exact idle identity to resume, reject an active
+    /// identity, and start a missing identity only at offset zero. Legacy uploads
+    /// retain UUID-based lookup and timestamp collision rekeying.
     fn create_or_join_upload_stream(
         &self,
         uuid_str: &str,
@@ -658,8 +696,7 @@ impl ByteStreamServer {
         // depend on the context of whichever request polls it next.
         let store_update_context = make_ctx_for_hash_func(digest_function)?;
 
-        // Parse UUID string to u128 key for efficient HashMap operations
-        let uuid_key = parse_uuid_to_key(uuid_str);
+        let uuid_key = self.upload_key(uuid_str, digest_function, digest);
 
         let (uuid, bytes_received, is_collision) = {
             let mut active_uploads = instance.active_uploads.lock();
@@ -680,7 +717,7 @@ impl ByteStreamServer {
                         let bytes_received = maybe_idle_stream.0.clone();
                         info!(
                             msg = "Joining existing stream",
-                            uuid = format!("{:032x}", entry.key())
+                            uuid = ?entry.key()
                         );
                         // Track resumed upload
                         instance
@@ -688,6 +725,12 @@ impl ByteStreamServer {
                             .resumed_uploads
                             .fetch_add(1, Ordering::Relaxed);
                         return Ok(idle_stream.into_active_stream(bytes_received, instance));
+                    }
+                    if self.authority_admission {
+                        return Err(make_err!(
+                            Code::Unavailable,
+                            "Upload identity is still active; retry after the previous write becomes idle"
+                        ));
                     }
                     // Case 3a: Stream is active and the client is resuming (non-zero
                     // offset). Only the owner of this UUID resumes it: the client has
@@ -704,7 +747,7 @@ impl ByteStreamServer {
                     }
                     // Case 3b: Stream is active - generate a unique UUID to avoid collision.
                     // Using nanosecond timestamp makes collision probability essentially zero.
-                    let original_key = *entry.key();
+                    let original_key = parse_uuid_to_key(uuid_str);
                     let unique_key = Self::generate_unique_uuid_key(original_key);
                     warn!(
                         msg = "UUID collision detected, generating unique UUID to prevent conflict",
@@ -714,13 +757,19 @@ impl ByteStreamServer {
                     // Release the Occupied entry's borrow so we can insert on the same guard.
                     let _ = entry;
                     let bytes_received = Arc::new(AtomicU64::new(0));
-                    active_uploads.insert(unique_key, (bytes_received.clone(), None));
+                    let unique_key = UploadKey::Legacy(unique_key);
+                    active_uploads.insert(unique_key.clone(), (bytes_received.clone(), None));
                     (unique_key, bytes_received, true)
                 }
                 Entry::Vacant(entry) => {
+                    if self.authority_admission && write_offset != 0 {
+                        return Err(make_input_err!(
+                            "Cannot resume an upload identity without retained progress"
+                        ));
+                    }
                     // Case 1: UUID doesn't exist, create new stream
                     let bytes_received = Arc::new(AtomicU64::new(0));
-                    let uuid = *entry.key();
+                    let uuid = entry.key().clone();
                     // Our stream is "in use" if the key is in the map, but the value is None.
                     entry.insert((bytes_received.clone(), None));
                     (uuid, bytes_received, false)
@@ -1401,6 +1450,22 @@ impl ByteStreamServer {
 
         let digest = DigestInfo::try_new(resource_info.hash.as_ref(), resource_info.expected_size)?;
 
+        // Fixed queries validate every identity component before any progress
+        // lookup. Legacy active-upload queries retain their original shortcut.
+        let fixed_digest_function = if self.authority_admission {
+            let digest_function = resource_info.digest_function.as_deref().map_or_else(
+                || Ok(self.default_digest_function()),
+                DigestHasherFunc::try_from,
+            )?;
+            crate::wire_compression::resolve_wire_compressor(
+                resource_info.compressor.as_deref(),
+                instance.remote_cache_compression_enabled,
+            )?;
+            Some(digest_function)
+        } else {
+            None
+        };
+
         // If we are a GrpcStore we shortcut here, as this is a special store.
         if !self.authority_admission
             && let Some(grpc_store) = store_clone.downcast_ref::<GrpcStore>(Some(digest.into()))
@@ -1414,7 +1479,10 @@ impl ByteStreamServer {
             .uuid
             .take()
             .ok_or_else(|| make_input_err!("UUID must be set if querying write status"))?;
-        let uuid_key = parse_uuid_to_key(&uuid_str);
+        let uuid_key = match fixed_digest_function {
+            Some(digest_function) => self.upload_key(&uuid_str, digest_function, digest),
+            None => UploadKey::Legacy(parse_uuid_to_key(&uuid_str)),
+        };
 
         {
             let active_uploads = instance.active_uploads.lock();
@@ -1431,9 +1499,14 @@ impl ByteStreamServer {
             }
         }
 
-        let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(self.default_digest_function()),
-            DigestHasherFunc::try_from,
+        let digest_function = fixed_digest_function.map_or_else(
+            || {
+                resource_info.digest_function.as_deref().map_or_else(
+                    || Ok(self.default_digest_function()),
+                    DigestHasherFunc::try_from,
+                )
+            },
+            Ok,
         )?;
         let has_fut = store_clone
             .has(digest)
@@ -1588,7 +1661,25 @@ impl ByteStream for ByteStreamServer {
     ) -> Result<Response<WriteResponse>, Status> {
         let start_time = Instant::now();
 
-        let request = grpc_request.into_inner();
+        let enforce_resource_name = self.authority_admission;
+        let mut first_resource_name = None;
+        let request = grpc_request.into_inner().map(move |message| {
+            let message = message?;
+            if enforce_resource_name {
+                match &first_resource_name {
+                    None => first_resource_name = Some(message.resource_name.clone()),
+                    Some(first)
+                        if !message.resource_name.is_empty() && &message.resource_name != first =>
+                    {
+                        return Err(Status::invalid_argument(
+                            "Every nonempty resource name in a Write RPC must equal the first",
+                        ));
+                    }
+                    Some(_) => {}
+                }
+            }
+            Ok(message)
+        });
         let stream = WriteRequestStreamWrapper::from(request)
             .await
             .err_tip(|| "Could not unwrap first stream message")
@@ -1703,7 +1794,8 @@ impl ByteStream for ByteStreamServer {
         // The oneshot path cannot be used for multi-message streams because:
         // - QueryWriteStatus won't work (no progress tracking)
         // - Resumed streams won't work (no partial progress)
-        let use_oneshot = if store.optimized_for(StoreOptimizations::SubscribesToUpdateOneshot)
+        let use_oneshot = if !self.authority_admission
+            && store.optimized_for(StoreOptimizations::SubscribesToUpdateOneshot)
             && expected_size <= 64 * 1024 * 1024
             && let Some(ref resource_uuid) = stream.resource_info.uuid
         {
@@ -1711,7 +1803,7 @@ impl ByteStream for ByteStreamServer {
             let is_single_shot = stream.is_first_msg_complete();
 
             if is_single_shot {
-                let uuid_key = parse_uuid_to_key(resource_uuid);
+                let uuid_key = UploadKey::Legacy(parse_uuid_to_key(resource_uuid));
                 // Only use oneshot if this UUID is not already being tracked
                 !instance.active_uploads.lock().contains_key(&uuid_key)
             } else {

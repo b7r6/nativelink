@@ -345,7 +345,7 @@ async fn active_identity(case: Difference) {
     drop(sender);
     assert_eq!(
         result(task).await.unwrap().committed_size,
-        DATA.len() as i64
+        i64::try_from(DATA.len()).unwrap()
     );
     assert_eq!(spy.value(DigestHasherFunc::Sha256, &digest).unwrap(), DATA);
     runtime.shutdown().await;
@@ -434,7 +434,7 @@ async fn idle_identity(case: Difference) {
         .await
         .unwrap()
         .committed_size,
-        DATA.len() as i64
+        i64::try_from(DATA.len()).unwrap()
     );
     assert_eq!(spy.value(DigestHasherFunc::Sha256, &digest).unwrap(), DATA);
     runtime.shutdown().await;
@@ -553,7 +553,7 @@ async fn absent_nonzero_resume_cannot_hide_a_completed_blob() {
         Bytes::from_static(DATA),
     );
     let complete = QueryWriteStatusResponse {
-        committed_size: DATA.len() as i64,
+        committed_size: i64::try_from(DATA.len()).unwrap(),
         complete: true,
     };
     assert_eq!(
@@ -602,7 +602,7 @@ async fn single_message_tracks_identity_until_backend_completion() {
     assert_eq!(
         status(runtime.client.clone(), name.clone()).await.unwrap(),
         QueryWriteStatusResponse {
-            committed_size: DATA.len() as i64,
+            committed_size: i64::try_from(DATA.len()).unwrap(),
             complete: false,
         }
     );
@@ -619,7 +619,7 @@ async fn single_message_tracks_identity_until_backend_completion() {
     assert_eq!(
         status(runtime.client.clone(), name).await.unwrap(),
         QueryWriteStatusResponse {
-            committed_size: DATA.len() as i64,
+            committed_size: i64::try_from(DATA.len()).unwrap(),
             complete: true,
         }
     );
