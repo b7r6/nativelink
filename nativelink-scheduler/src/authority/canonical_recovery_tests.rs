@@ -39,6 +39,7 @@ const WAIT: Duration = Duration::from_secs(10);
 type Starting = JoinHandle<Result<LifecycleOwner, RecoveryError>>;
 type Stopping = JoinHandle<Result<(), RecoveryError>>;
 type Records = (Vec<(String, Vec<u8>)>, Vec<(u64, Vec<u8>)>);
+type CaptureHook = Box<dyn FnOnce(Instant) + Send>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::authority::journal::canonical_owner) enum Stage {
@@ -86,7 +87,7 @@ struct Control {
     reject_acceptance: AtomicBool,
     raft_probe: Mutex<Option<oneshot::Sender<Raft<TypeConfig>>>>,
     clock_audit: Mutex<Option<Box<dyn FnOnce() + Send>>>,
-    clock_capture: Mutex<Option<Box<dyn FnOnce(Instant) + Send>>>,
+    clock_capture: Mutex<Option<CaptureHook>>,
     clock_origin: Mutex<Option<Instant>>,
 }
 

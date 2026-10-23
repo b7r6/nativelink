@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Staged final storage custody for a future supervised recovery owner.
+//! Final storage custody under the permanent canonical recovery supervisor.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,10 +45,6 @@ pub(super) struct DropGate {
 /// to finish. Atomic transfer also excludes a late clone racing the last holder.
 /// A blocked worker may keep cleanup pending. Completion is not a durability
 /// acknowledgement and does not release unrelated external Ownership aliases.
-#[allow(
-    dead_code,
-    reason = "Sealed recovery supervision must be qualified before adding a production caller"
-)]
 pub(super) async fn drain_database(
     mut database: Arc<Database>,
     #[cfg(test)] hooks: Hooks,

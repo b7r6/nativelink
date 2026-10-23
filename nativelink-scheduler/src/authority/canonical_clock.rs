@@ -70,7 +70,22 @@ pub(super) struct Clock {
 
 impl Clock {
     fn capture(facts: ReadFacts) -> Result<Self, ClockError> {
+        Self::capture_inner(
+            facts,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    fn capture_inner(
+        facts: ReadFacts,
+        #[cfg(test)] after_origin: Option<Box<dyn FnOnce(Instant) + Send>>,
+    ) -> Result<Self, ClockError> {
         let origin = Instant::now();
+        #[cfg(test)]
+        if let Some(hook) = after_origin {
+            hook(origin);
+        }
         Self::finish_capture(facts, origin, Instant::now())
     }
 
@@ -132,6 +147,8 @@ pub(super) async fn recover(
         journal,
         #[cfg(test)]
         None,
+        #[cfg(test)]
+        None,
     )
     .await
 }
@@ -140,6 +157,7 @@ async fn recover_inner(
     raft: &Raft<TypeConfig>,
     journal: &Journal,
     #[cfg(test)] during_audit: Option<Box<dyn FnOnce() + Send>>,
+    #[cfg(test)] after_origin: Option<Box<dyn FnOnce(Instant) + Send>>,
 ) -> Result<Clock, ClockError> {
     let barrier = raft
         .ensure_linearizable()
@@ -158,7 +176,14 @@ async fn recover_inner(
     let facts = ReadFacts::after_barrier(barrier, applied)?;
     // The origin follows the completed validated read. Downtime and the old
     // clock's fractional remainder are deliberately absent from recovery.
-    Clock::capture(facts)
+    #[cfg(not(test))]
+    {
+        Clock::capture(facts)
+    }
+    #[cfg(test)]
+    {
+        Clock::capture_inner(facts, after_origin)
+    }
 }
 
 #[cfg(test)]
@@ -167,7 +192,17 @@ pub(super) async fn recover_with_audit_hook(
     journal: &Journal,
     hook: Box<dyn FnOnce() + Send>,
 ) -> Result<Clock, ClockError> {
-    recover_inner(raft, journal, Some(hook)).await
+    recover_inner(raft, journal, Some(hook), None).await
+}
+
+#[cfg(test)]
+pub(super) async fn recover_with_hooks(
+    raft: &Raft<TypeConfig>,
+    journal: &Journal,
+    during_audit: Option<Box<dyn FnOnce() + Send>>,
+    after_origin: Option<Box<dyn FnOnce(Instant) + Send>>,
+) -> Result<Clock, ClockError> {
+    recover_inner(raft, journal, during_audit, after_origin).await
 }
 
 #[cfg(test)]

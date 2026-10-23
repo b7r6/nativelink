@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Inert preparation of a namespace-bound journal. No runtime is started.
+//! Closed preparation and supervised recovery of a namespace-bound journal.
 
 use std::fmt;
 use std::sync::{Arc, OnceLock};
@@ -29,15 +29,10 @@ use super::{
 
 #[path = "canonical_cleanup.rs"]
 mod canonical_cleanup;
-#[path = "canonical_recovery.rs"]
-mod canonical_recovery;
-// Private staged recovery component; the supervised public owner is separate.
-#[allow(
-    dead_code,
-    reason = "private clock awaits qualified supervisor composition"
-)]
 #[path = "canonical_clock.rs"]
 mod canonical_clock;
+#[path = "canonical_recovery.rs"]
+mod canonical_recovery;
 
 #[path = "canonical_temporal.rs"]
 mod temporal;
@@ -90,6 +85,91 @@ impl fmt::Display for OwnerError {
 }
 impl std::error::Error for OwnerError {}
 
+/// Bounded recovery or shutdown failure. Errors do not promise storage rollback
+/// or release of independently retained namespace ownership.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RecoveryError {
+    Phase,
+    Storage,
+    Runtime,
+    Panic,
+    Task,
+    Handoff,
+    ClockRead,
+    ClockRange,
+    ClockBackward,
+}
+
+impl fmt::Display for RecoveryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Phase => "canonical recovery requires an existing sealed journal",
+            Self::Storage => "canonical recovery storage validation failed",
+            Self::Runtime => "canonical recovery runtime failed",
+            Self::Panic => "canonical recovery task panicked",
+            Self::Task => "canonical recovery ownership task failed",
+            Self::Handoff => "canonical recovery ownership handoff failed",
+            Self::ClockRead => "canonical recovery clock read failed",
+            Self::ClockRange => "canonical recovery clock exceeded its range",
+            Self::ClockBackward => "canonical recovery clock moved backward",
+        })
+    }
+}
+impl std::error::Error for RecoveryError {}
+
+/// Historical facts captured after an applied read barrier and validated read.
+/// These facts do not promise current runtime health or future clock samples.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RecoveryDiagnostic {
+    pub owner: OwnerDiagnostic,
+    pub applied_term: u64,
+    pub applied_node_id: u64,
+    pub applied_index: u64,
+    pub base_tick: u64,
+    pub first_tick: u64,
+}
+
+/// A privately supervised, recovered Sealed singleton and checked clock.
+///
+/// This handle exposes no application operations, clock samples, driver, or
+/// serving adapter. Drop requests independent cleanup; explicit shutdown waits
+/// for final storage destruction. Async cleanup requires the runtime to remain
+/// alive and cannot acknowledge process or runtime destruction.
+pub struct RecoveredCanonicalOwner {
+    lifecycle: canonical_recovery::LifecycleOwner,
+}
+
+impl fmt::Debug for RecoveredCanonicalOwner {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("RecoveredCanonicalOwner")
+            .field(&self.diagnostic())
+            .finish()
+    }
+}
+
+impl RecoveredCanonicalOwner {
+    pub const fn diagnostic(&self) -> RecoveryDiagnostic {
+        let clock = self.lifecycle.clock_diagnostic();
+        RecoveryDiagnostic {
+            owner: self.lifecycle.diagnostic(),
+            applied_term: clock.applied.leader_id.term,
+            applied_node_id: clock.applied.leader_id.node_id,
+            applied_index: clock.applied.index,
+            base_tick: clock.base_tick,
+            first_tick: clock.first_tick,
+        }
+    }
+
+    /// Stop the private runtime, drain its storage holders, and await blocking
+    /// final database destruction. Cancellation preserves supervisor custody.
+    /// Completion is not a new durability acknowledgement; independent lower
+    /// level Ownership aliases can continue retaining namespace locks.
+    pub async fn shutdown(self) -> Result<(), RecoveryError> {
+        self.lifecycle.shutdown().await
+    }
+}
+
 /// An inert, privately bound journal retaining all four namespace locks.
 ///
 /// This is not a running authority: no Raft, clock, store adapter, worker or
@@ -135,6 +215,33 @@ impl PreparedCanonicalOwner {
 
     pub const fn diagnostic(&self) -> OwnerDiagnostic {
         self.diagnostic
+    }
+
+    /// Consume an existing Sealed journal into supervised recovery. Preparing
+    /// refuses before Raft creation. Success follows actual applied recovery,
+    /// a validated read, fresh monotonic origin, and checked first sample.
+    /// It confers no serving readiness or periodic time progress.
+    pub async fn recover_sealed(self) -> Result<RecoveredCanonicalOwner, RecoveryError> {
+        self.recover_sealed_with_hooks(
+            #[cfg(test)]
+            tests::recovery::Hooks::default(),
+        )
+        .await
+    }
+
+    async fn recover_sealed_with_hooks(
+        self,
+        #[cfg(test)] hooks: tests::recovery::Hooks,
+    ) -> Result<RecoveredCanonicalOwner, RecoveryError> {
+        let lifecycle = canonical_recovery::start(
+            self,
+            #[cfg(test)]
+            hooks,
+        )
+        .await?;
+        // The private handle is already armed and accepted. Construct and return
+        // this wrapper in the same poll without introducing another handoff.
+        Ok(RecoveredCanonicalOwner { lifecycle })
     }
 
     /// Wait for blocking destruction and custody release. Redb Drop can suppress

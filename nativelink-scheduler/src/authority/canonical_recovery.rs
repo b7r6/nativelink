@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Private supervised resource lifecycle. This does not establish a recovered
-//! clock or permission to serve; composition with that boundary remains staged.
-
-#![allow(
-    dead_code,
-    reason = "qualify private supervision before exposing a recovered authority"
-)]
+//! Private supervised resource lifecycle and validated recovery clock custody.
+//! Recovery establishes a historical capture, not permission to serve.
 
 use std::fmt;
 use std::panic::AssertUnwindSafe;
@@ -34,21 +29,21 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use super::super::{Journal, SingletonNetwork, TypeConfig};
+pub(super) use super::RecoveryError;
 #[cfg(test)]
 use super::tests::recovery::{Hooks, Stage};
 use super::{
     AuthorityDomain, CanonicalBootstrap, CanonicalContract, CanonicalProfile, ClusterEpoch,
-    OwnerDiagnostic, OwnerPhase, PreparedCanonicalOwner, canonical_cleanup, temporal,
+    OwnerDiagnostic, OwnerPhase, PreparedCanonicalOwner, canonical_cleanup, canonical_clock,
+    temporal,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum RecoveryError {
-    Phase,
-    Storage,
-    Runtime,
-    Panic,
-    Task,
-    Handoff,
+const fn clock_error(error: canonical_clock::ClockError) -> RecoveryError {
+    match error {
+        canonical_clock::ClockError::Read => RecoveryError::ClockRead,
+        canonical_clock::ClockError::Range => RecoveryError::ClockRange,
+        canonical_clock::ClockError::Backward => RecoveryError::ClockBackward,
+    }
 }
 
 // This record lives outside the caught startup/session future. In particular,
@@ -57,6 +52,7 @@ pub(super) enum RecoveryError {
 struct Resources {
     journal: Option<Journal>,
     raft: Option<Raft<TypeConfig>>,
+    clock: Option<canonical_clock::Clock>,
     database: Arc<Database>,
     diagnostic: OwnerDiagnostic,
 }
@@ -85,7 +81,13 @@ impl Control {
 
 pub(super) struct LifecycleOwner {
     diagnostic: OwnerDiagnostic,
+    clock: canonical_clock::Diagnostic,
     control: Control,
+}
+
+struct Offer {
+    owner: OwnerDiagnostic,
+    clock: canonical_clock::Diagnostic,
 }
 
 impl fmt::Debug for LifecycleOwner {
@@ -100,6 +102,10 @@ impl fmt::Debug for LifecycleOwner {
 impl LifecycleOwner {
     pub(super) const fn diagnostic(&self) -> OwnerDiagnostic {
         self.diagnostic
+    }
+
+    pub(super) const fn clock_diagnostic(&self) -> canonical_clock::Diagnostic {
+        self.clock
     }
 
     pub(super) async fn shutdown(mut self) -> Result<(), RecoveryError> {
@@ -119,6 +125,7 @@ pub(super) async fn start(
         database: journal.database.clone(),
         journal: Some(journal),
         raft: None,
+        clock: None,
         diagnostic,
     };
     let (stop, stopped) = oneshot::channel();
@@ -146,7 +153,11 @@ pub(super) async fn start(
         control.stop_and_join().await?;
         return Err(error);
     }
-    let Ok(diagnostic) = offered.await else {
+    let Ok(Offer {
+        owner: diagnostic,
+        clock,
+    }) = offered.await
+    else {
         // Even a startup failure cannot be returned before real cleanup.
         control.stop_and_join().await?;
         return Err(RecoveryError::Handoff);
@@ -158,6 +169,7 @@ pub(super) async fn start(
     }
     let owner = LifecycleOwner {
         diagnostic,
+        clock,
         control,
     };
     #[cfg(test)]
@@ -178,7 +190,7 @@ pub(super) async fn start(
 
 async fn supervise(
     mut resources: Resources,
-    offer: oneshot::Sender<OwnerDiagnostic>,
+    offer: oneshot::Sender<Offer>,
     accepted: oneshot::Receiver<()>,
     mut stop: oneshot::Receiver<()>,
     #[cfg(test)] hooks: Hooks,
@@ -215,7 +227,7 @@ fn stop_requested(stop: &mut oneshot::Receiver<()>) -> bool {
 
 async fn run(
     resources: &mut Resources,
-    offer: oneshot::Sender<OwnerDiagnostic>,
+    offer: oneshot::Sender<Offer>,
     mut accepted: oneshot::Receiver<()>,
     stop: &mut oneshot::Receiver<()>,
     #[cfg(test)] hooks: &Hooks,
@@ -304,19 +316,58 @@ async fn run(
         return Ok(());
     }
     #[cfg(test)]
+    {
+        hooks.publish_raft(raft);
+        hooks.at(Stage::BeforeClock).await?;
+    }
+    if stop_requested(stop) {
+        return Ok(());
+    }
+    #[cfg(test)]
+    hooks.observe(Stage::ClockReadStarted);
+    // Both borrowed resources belong to this permanent supervisor. Do not
+    // cancel their required read on consumer stop: retain custody until the
+    // actual barrier/audit finishes or fails, then converge on cleanup.
+    #[cfg(not(test))]
+    let recovered_clock = canonical_clock::recover(raft, journal).await;
+    #[cfg(test)]
+    let recovered_clock = {
+        let capture = hooks.clone();
+        canonical_clock::recover_with_hooks(
+            raft,
+            journal,
+            hooks.take_clock_audit(),
+            Some(Box::new(move |origin| capture.clock_capture(origin))),
+        )
+        .await
+    };
+    // Store the returned clock before any later hook or suspension point.
+    resources.clock = Some(recovered_clock.map_err(clock_error)?);
+    #[cfg(test)]
+    hooks.at(Stage::ClockStored).await?;
+    if stop_requested(stop) {
+        return Ok(());
+    }
+    #[cfg(test)]
     hooks.at(Stage::BeforeOffer).await?;
     if stop_requested(stop) {
         return Ok(());
     }
     #[cfg(test)]
-    {
-        hooks.publish_raft(raft);
-        if hooks.reject_acceptance() {
-            // Close the actual channel: the consumer must observe send failure.
-            accepted.close();
-        }
+    if hooks.reject_acceptance() {
+        // Close the actual channel: the consumer must observe send failure.
+        accepted.close();
     }
-    offer.send(diagnostic).map_err(|_| RecoveryError::Handoff)?;
+    offer
+        .send(Offer {
+            owner: diagnostic,
+            clock: resources
+                .clock
+                .as_ref()
+                .ok_or(RecoveryError::Task)?
+                .diagnostic(),
+        })
+        .map_err(|_| RecoveryError::Handoff)?;
     #[cfg(test)]
     hooks.observe(Stage::Offered);
     tokio::select! {
@@ -357,6 +408,7 @@ async fn cleanup(
     } else {
         Ok(())
     };
+    resources.clock = None;
     drop(resources.raft.take());
     drop(resources.journal.take());
     #[cfg(test)]

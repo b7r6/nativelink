@@ -70,7 +70,10 @@ use canonical_binding::{CanonicalBootstrap, CanonicalContract, validate_metadata
 #[path = "canonical_owner.rs"]
 mod canonical_owner;
 #[cfg(target_os = "linux")]
-pub use canonical_owner::{OwnerDiagnostic, OwnerError, OwnerPhase, PreparedCanonicalOwner};
+pub use canonical_owner::{
+    OwnerDiagnostic, OwnerError, OwnerPhase, PreparedCanonicalOwner, RecoveredCanonicalOwner,
+    RecoveryDiagnostic, RecoveryError,
+};
 
 #[path = "snapshot_buffer.rs"]
 mod snapshot_buffer;
