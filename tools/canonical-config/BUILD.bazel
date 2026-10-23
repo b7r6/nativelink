@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
+exports_files(["fixtures/canonical.json"])
+
 rust_library(
     name = "nativelink-canonical-config",
     srcs = [

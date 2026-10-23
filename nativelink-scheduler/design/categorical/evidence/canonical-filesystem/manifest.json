@@ -1,0 +1,149 @@
+{
+  "base_commit": "b30e7b718bfc796ef7d6fbcbf24b0d9550d16140",
+  "commands": {
+    "clippy": "CARGO_TARGET_DIR=/tmp/nativelink-authority-namespace-target CARGO_INCREMENTAL=0 /nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo clippy --manifest-path tools/canonical-filesystem/Cargo.toml --locked --offline --profile smol --all-targets --all-features -j4 -- -D warnings",
+    "test": "CARGO_TARGET_DIR=/tmp/nativelink-authority-namespace-target CARGO_INCREMENTAL=0 /nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo test --manifest-path tools/canonical-filesystem/Cargo.toml --locked --offline --profile smol -j4",
+    "tree": "CARGO_TARGET_DIR=/tmp/nativelink-authority-namespace-target /nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo tree --manifest-path tools/canonical-filesystem/Cargo.toml --locked --offline --all-features --target x86_64-unknown-linux-gnu"
+  },
+  "dependency_source_sha256": {
+    "tools/canonical-config/fixtures/canonical.json": "9b20a7b9642ec2a6f6954002e8c360cca366e0a6c13372b4aca9de817015a7f3",
+    "tools/canonical-config/src/lib.rs": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+    "tools/canonical-config/src/parse.rs": "89dbbc2078525156e73bba6377bdaacd79568e6f9208536fd78147aa4d979943",
+    "tools/canonical-config/src/schema.rs": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764"
+  },
+  "deployment_qualified": false,
+  "earlier_attempts": [
+    {
+      "log": "cargo-initial.log.gz",
+      "outcome": "10 pass, 1 failed: partial-init fixture observed lock unavailable during concurrent process spawn; no library lock weakening."
+    },
+    {
+      "log": "cargo-serial.log.gz",
+      "outcome": "11 pass serially. Test fixtures later serialized around subprocess creation to avoid inherited lock descriptors before exec."
+    },
+    {
+      "log": "clippy-final.log.gz",
+      "outcome": "Test MutexGuard lifetime triggered significant_drop_tightening; scoped test-only annotation documents why lifetime must span fixture."
+    },
+    {
+      "log": "precommit-initial.log.gz",
+      "outcome": "Five README Vale findings; wording corrected."
+    }
+  ],
+  "kind": "experimental_canonical_filesystem_namespace_ownership",
+  "limitations": [
+    "No comprehensive bind-mount alias proof; source-side ancestry can be hidden.",
+    "Uncooperative processes and namespace mutation remain outside advisory locking guarantees.",
+    "Root FDs and instantaneous path verification do not make the existing string-path FilesystemStore constructor safe.",
+    "Reopen does not certify descendants, migrate data, restore a journal, or fence previous owners.",
+    "Persistent crash-shape tests are not power-loss or filesystem durability qualification.",
+    "Partial records fail closed and require explicit review; no rollback deletion or auto-adoption.",
+    "Worker incarnation is excluded from namespace binding and no registration or resurrection is authorized."
+  ],
+  "old_domain_fenced": false,
+  "qualification": {
+    "all_registry_versions_and_checksums_match_root_lock": true,
+    "bazel_run": false,
+    "cargo_failed": 0,
+    "cargo_ignored": 0,
+    "cargo_log": "cargo-qualified.log.gz",
+    "cargo_tests": 13,
+    "clippy_log": "clippy-corrected.log.gz",
+    "clippy_passed": true,
+    "locked_registry_packages": 33,
+    "precommit_log": "precommit-final.log.gz",
+    "precommit_passed": true
+  },
+  "records": [
+    {
+      "compressed_bytes": 611,
+      "compressed_sha256": "b91ff3574b40702d1443972ed770a4fc814f4cbbae9fb0f3dedf5befe991c064",
+      "file": "cargo-final.log.gz",
+      "raw_bytes": 1441,
+      "raw_sha256": "d8afc10a209dc1d4744ac94147dfb910eeedf3b00165a3880877a24d3878bb58"
+    },
+    {
+      "compressed_bytes": 964,
+      "compressed_sha256": "4613595e8169ac7b2626602d78a812b07bfd8bb8d2ed67556f112eb7204f9163",
+      "file": "cargo-initial.log.gz",
+      "raw_bytes": 2354,
+      "raw_sha256": "ceedf4b14bfdf6fb8538b0ceaefbb7e623d1c9a77f450944ab25268c332af9e9"
+    },
+    {
+      "compressed_bytes": 610,
+      "compressed_sha256": "69b21d50d67891bc383a1f7eb913cbe30d00faefc2db3b635a95e194aff2189b",
+      "file": "cargo-qualified.log.gz",
+      "raw_bytes": 1441,
+      "raw_sha256": "d91a0574761b494322f5bfb180adbaee607e4e287370f8ca0024a19760b0f1a2"
+    },
+    {
+      "compressed_bytes": 533,
+      "compressed_sha256": "547c111953670facb0100e857a5fa2b2de53b6f407b0df1c635f222ca156d266",
+      "file": "cargo-serial.log.gz",
+      "raw_bytes": 1177,
+      "raw_sha256": "c35a4b378b482dca89387efc7e28a9a0e67dcd0cea271738c64c48f9e8d6bff5"
+    },
+    {
+      "compressed_bytes": 147,
+      "compressed_sha256": "f965481c872664c9d8ae2d63695680ace1e15d5a61e2fb2cbb76a73cdc97d970",
+      "file": "clippy-corrected.log.gz",
+      "raw_bytes": 176,
+      "raw_sha256": "166bf10d2bcf2417538a84157b5a9756e803067a79bd3937648e2c869d2c43bf"
+    },
+    {
+      "compressed_bytes": 1262,
+      "compressed_sha256": "9106b4a3ef9daaf66eda77f1967b88525d32de1dbbeec44c51a8b67dda6ceaff",
+      "file": "clippy-final.log.gz",
+      "raw_bytes": 5375,
+      "raw_sha256": "6d1888279ef4d4ee293ed7cb86661439125a8850c9bc9f0bac80433cce69362d"
+    },
+    {
+      "compressed_bytes": 281,
+      "compressed_sha256": "959d359bba8b18d1f5dd1d9ac3763f523fa4f13712bfc3caf867267662c88d94",
+      "file": "clippy-initial.log.gz",
+      "raw_bytes": 636,
+      "raw_sha256": "f8cc3102285ade459b4906f128233838b0bdf24a484505377c6ddbb2c1171fa1"
+    },
+    {
+      "compressed_bytes": 587,
+      "compressed_sha256": "c2c5d9a5af4bcf865084d476ca23444766b0d45f94e88248aec448c179f177f2",
+      "file": "dependency-tree.log.gz",
+      "raw_bytes": 2604,
+      "raw_sha256": "f305428b719a940d821c13c9cc14c7ef8b33ece33fadccabea4eab09559461d7"
+    },
+    {
+      "compressed_bytes": 341,
+      "compressed_sha256": "96c54dba7dfd133f2a93933fd93620f2d8f84c1fe6a3e23ead6b8f9c1b038a17",
+      "file": "precommit-final.log.gz",
+      "raw_bytes": 2160,
+      "raw_sha256": "edd7b320f13ee091fc19cc1b0a32a1deb8f576ac5863c7d8351d39144b62a4e3"
+    },
+    {
+      "compressed_bytes": 592,
+      "compressed_sha256": "fa360cfb4c63992e491ff007902f6e2cff69674150ac618b13daed34d9a1dc6c",
+      "file": "precommit-initial.log.gz",
+      "raw_bytes": 2727,
+      "raw_sha256": "90d4fb86452161f08d8c16600ed2c4d46b6e5501f072bec7138fdd410d574495"
+    },
+    {
+      "compressed_bytes": 170,
+      "compressed_sha256": "c645e53dd1ac6888957d75932ed2a617c808c552083ca38fc617575b0be5b01a",
+      "file": "rustc.log.gz",
+      "raw_bytes": 196,
+      "raw_sha256": "b2bdf493bcf6d1dc55181a0efc2774b6d9cf7bf5c8dcc5bed592c994b2ad38c4"
+    }
+  ],
+  "runtime_exposed": false,
+  "scope": "Four pre-existing Linux directories, cooperative advisory ownership, cold records and exact identity reopening; no store construction.",
+  "source_sha256": {
+    "tools/canonical-config/BUILD.bazel": "1db5d4dcfeef148425396a0a702197b9847d974199228bf084c147dafbfbc03a",
+    "tools/canonical-filesystem/BUILD.bazel": "97e289db5e8fcc38c8ab5893f0847fb5c4b5b2952da94e1ee769d475d6a615f0",
+    "tools/canonical-filesystem/Cargo.lock": "1e5b39409e628a26973f5757cc79c49ea14a140d1ea06f0526ecb579c03e6cf0",
+    "tools/canonical-filesystem/Cargo.toml": "76e070d2ed7802838dd06eff9d92d21df99c72a7fe2e8632d8484d4a589031bf",
+    "tools/canonical-filesystem/README.md": "b3aa72c69799b5d76c109fff74367b70cd3c493cf4a5dea80e61ea0ecfed2a30",
+    "tools/canonical-filesystem/src/lib.rs": "e64d69404346b2520e19a06e84f3a57c94a3e02d2242362ebf21f7249ce880d1",
+    "tools/canonical-filesystem/src/tests.rs": "248c8869dbc7e7dfb13787f47b2150c63ef1cb65b50b9389250e430b6b857430",
+    "typos.toml": "8bdba05118b96e2f103b2cba79060f8ad77b1d18fd07775161ad5576d1236517"
+  },
+  "worker_incarnation_authorized": false
+}

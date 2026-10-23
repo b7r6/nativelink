@@ -7,6 +7,8 @@ intoto = "intoto"
 [default.extend-identifiers]
 # POSIX ancillary-message control-buffer length; this is a libc field.
 msg_controllen = "msg_controllen"
+# rustix's POSIX write-only open flag.
+WRONLY = "WRONLY"
 
 [default]
 # Old wrong spelling support

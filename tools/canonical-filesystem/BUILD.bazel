@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "nativelink-canonical-filesystem",
+    srcs = ["src/lib.rs"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/canonical-config:nativelink-canonical-config",
+        "@crates//:rustix-1.1.2",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "ownership_test",
+    srcs = ["src/tests.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    crate = ":nativelink-canonical-filesystem",
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
