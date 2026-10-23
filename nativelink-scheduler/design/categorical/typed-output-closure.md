@@ -123,6 +123,7 @@ The integration fixtures cover both digest functions, typed and opaque edges,
 embedded directories, inline mismatch, omitted/malformed/missing outputs,
 symlink aliases, canonical encoding limits, pre-decode allocation budgets,
 physical corruption before decode, partial-batch invisibility, role-sensitive
-deduplication, explicit retained roots, graph/path limits, and shared DAGs.
+deduplication, explicit retained roots, graph/path limits, and shared directed
+acyclic graphs.
 They do not establish serving protection, retirement fencing, Azure semantics,
 production workload capacity, or acceptance atomicity.

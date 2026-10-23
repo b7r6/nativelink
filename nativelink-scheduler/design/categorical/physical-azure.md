@@ -132,7 +132,7 @@ synchronous test owns a two-thread Tokio runtime for SDK calls; no runtime is
 entered from an existing async task.
 
 The fixture uploads an ActionResult, Tree, and file/stream blob, verifies all
-three through actual provider GETs, and acquires publication and serving roots.
+three through actual provider GET requests, and acquires publication and serving roots.
 It removes the head, reopens the authority and provider adapter, and reads all
 three objects through the original serving grant. Retirement while protected
 changes neither checkpoint nor state and issues no DELETE. A wrong descriptor
