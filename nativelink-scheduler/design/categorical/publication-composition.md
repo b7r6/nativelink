@@ -18,6 +18,16 @@ the correction binds preparation intervals and fences, accepted terminal time,
 and the final actual attempt. Initial mutation survivors and their later
 isolated regressions remain in the evidence.
 
+A [second correction](evidence/publication-capacity/manifest.json) prevents
+invalid staging from consuming the only candidate slot reserved for an execution.
+It checks the complete scheduler payload encoding, the distinct cached response,
+the actual action and receipt identity, and current authority through a discarded
+real `Complete` preview. Publication checks authority again. The independent
+comparison reproduced the wrong-action case before this fix; a late predecessor
+also cannot consume a replacement attempt's slot. Retained stages still survive
+later revocation. Canonical snapshot admission bounds each proposed state, while
+a general reserve for future outer metadata remains unqualified.
+
 The [comparison adapter](../../tests/publication_differential_test.rs) owns its
 protobuf fixtures and typed member sets. It translates execution and attempt
 identities explicitly, drives actual registration and running transitions, and
@@ -56,6 +66,17 @@ refusal. Original and corrected evidence remain separate under
 [v2 receipts](evidence/publication-activation-v2/manifest.json) and
 [bounded-admission receipts](evidence/publication-activation-bounded/manifest.json).
 Neither establishes a real M4-to-M6 activation boundary.
+
+The [retained inventory adapter](../../tests/activation_inventory/README.md) now
+reads actual State, retains its exact snapshot and captured bytes, and validates
+that its projected public fields still match that source. Sixteen Cargo/Bazel
+cases cover distinct operation terminals, accepted history, explicit identity
+bindings, physical preparation, and snapshot/suffix cuts; twelve compiled faults
+are detected. Result and history roles in one physical CAS cannot acquire
+different namespace identities, and an external principal cannot contradict the
+captured request. [Receipts](evidence/activation-inventory/manifest.json) retain
+the original sources, failures and exact limits. This inventories retained owners;
+it does not execute a durable activation or convert unfinished executions.
 
 Remaining promotion work includes actual request normalization, active accepted
 history, terminals without an ActionResult, resource failures, cancellation and expiry,

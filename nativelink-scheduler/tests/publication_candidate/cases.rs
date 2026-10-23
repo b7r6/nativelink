@@ -745,3 +745,6 @@ fn snapshot_rejects_preparation_without_bounded_fences_and_sufficient_interval()
         "accepted forged preparations: {accepted:?}"
     );
 }
+
+#[path = "capacity.rs"]
+mod capacity;

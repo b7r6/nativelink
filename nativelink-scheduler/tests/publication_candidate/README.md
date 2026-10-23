@@ -56,3 +56,36 @@ lease intervals must still permit live protection at acceptance.
 Cache hits construct and capture a fresh ExecuteResponse with cached_result=true
 from the verified immutable ActionResult. They preserve the original accepted
 worker response byte for byte and never select via the disposable index.
+
+The actual scheduler prepays its own complete JSON result payloads and lifecycle
+rows. Stage checks that full payload ceiling, including the distinct cached-result
+projection for an eligible head, before spending execution credit. Worker stages
+must name the actual execution's qualified action; retained stages do not require
+a currently authorized attempt on restore.
+
+Every accepted outer mutation also serializes its canonical snapshot before the
+swap and refuses snapshots above the unchanged 2 MiB ceiling. This is a bound on
+the proposed state, not a reservation for every future outer byte. The scheduler's
+credit does not cover the extra outer copies of results, closures, operation
+payloads, nested child encoding, or Coarse capture records. A complete residual
+byte reserve for those fields remains unqualified.
+
+The finite capacity histories fill 8 stages, 16 operations, 64 generations,
+8 workers, all 128 write rows, and (for successful results) all 112 root rows and
+16 serving grants. They use 256-byte qualified action strings with JSON escaping,
+4094-byte property maps, near-limit complete result payloads, wide numeric IDs,
+repeated scheduler progress, and all 64 cohort capture transitions. Every exposed
+state snapshots and restores canonically. The largest measured snapshots after
+payload qualification are 1,082,981 bytes for success and 1,039,398 bytes for error;
+these witnesses are not a worst-case proof for all histories. No aggregate
+snapshot overflow was reproduced. Advance changes the two clocks only; it does
+not synthesize excluded last-interest expiry or cancellation transitions.
+
+A worker Stage previews actual Complete on a discarded scheduler clone before
+spending the current execution's single stage credit. A late predecessor cannot
+poison that credit. Stable receipt identity and action bindings also validate on
+restore, while old staged writes survive later revocation. Publish repeats the
+actual authority check at acceptance. This stricter Stage admission follows from
+the candidate's per-execution row credit; it does not claim equivalence to the
+reference's entire Stage alphabet with a global stage budget. Preview cloning and
+snapshot serialization costs are test-only; production performance is unqualified.

@@ -148,7 +148,9 @@ impl PublicationAuthority {
         let mut next = self.clone();
         next.metadata.commit = next.metadata.commit.checked_add(1).ok_or(Error::Bounds)?;
         let reply = apply(&mut next)?;
-        next.validate()?;
+        // This is a current-state byte admission gate, not a reservation for
+        // every future outer-metadata transition of an admitted execution.
+        next.snapshot()?;
         *self = next;
         Ok(reply)
     }
@@ -501,9 +503,7 @@ impl PublicationAuthority {
                 let publication = next.metadata.heads.get(&next.metadata.operations[&operation].action).copied().filter(|id| next.protected_head(*id, until));
                 let payload = if let Some(id) = publication {
                     next.install_operation_root(operation, id)?;
-                    let candidate = next.candidate(id)?;
-                    let result = ActionResult::decode(candidate.result_bytes.as_slice()).map_err(|_| Error::Invalid)?;
-                    let captured = a::ResultPayload::from_response(&ExecuteResponse { result: Some(result), cached_result: true, ..ExecuteResponse::default() }, MAX_PAYLOAD).map_err(|_| Error::Invalid)?;
+                    let captured = Self::cached_payload(next.candidate(id)?)?;
                     let record = next.metadata.operations.get_mut(&operation).unwrap();
                     record.cached = true;
                     record.payload = Some(captured.clone());
@@ -551,6 +551,20 @@ impl PublicationAuthority {
         })
     }
 
+    fn cached_payload(candidate: &Candidate) -> Result<a::ResultPayload, Error> {
+        let result =
+            ActionResult::decode(candidate.result_bytes.as_slice()).map_err(|_| Error::Invalid)?;
+        a::ResultPayload::from_response(
+            &ExecuteResponse {
+                result: Some(result),
+                cached_result: true,
+                ..ExecuteResponse::default()
+            },
+            MAX_PAYLOAD,
+        )
+        .map_err(|_| Error::Invalid)
+    }
+
     fn validate_candidate(&self, candidate: &Candidate) -> Result<(), Error> {
         if !self.metadata.actions.contains_key(&candidate.action)
             || candidate.result_bytes.len() > MAX_PAYLOAD
@@ -563,7 +577,12 @@ impl PublicationAuthority {
             .response
             .require_response()
             .map_err(|_| Error::Invalid)?;
-        if payload.encoded().len() > MAX_PAYLOAD {
+        if payload.encoded().len() > MAX_PAYLOAD
+            || serde_json::to_vec(&candidate.response)
+                .map_err(|_| Error::Invalid)?
+                .len()
+                > self.scheduler.payload_limit_bytes()
+        {
             return Err(Error::Bounds);
         }
         let response = payload.decode().map_err(|_| Error::Invalid)?;
@@ -593,6 +612,45 @@ impl PublicationAuthority {
                 return Err(Error::Incomplete);
             }
         }
+        if let Publisher::Worker {
+            execution,
+            attempt,
+            worker,
+            incarnation,
+        } = candidate.publisher
+        {
+            let scheduler = self.scheduler.view();
+            let receipt = scheduler
+                .attempts
+                .iter()
+                .find(|row| row.id == attempt)
+                .ok_or(Error::Unauthorized)?;
+            if receipt.execution != execution
+                || receipt.worker != worker
+                || receipt.incarnation != incarnation
+            {
+                return Err(Error::Unauthorized);
+            }
+            let request = &scheduler
+                .executions
+                .iter()
+                .find(|row| row.id == execution)
+                .ok_or(Error::Unauthorized)?
+                .request;
+            if request.action.instance != candidate.action {
+                return Err(Error::Unauthorized);
+            }
+        }
+        if !self.metadata.actions[&candidate.action]
+            && candidate.response.exit_code == 0
+            && candidate.response.error.is_none()
+            && serde_json::to_vec(&Self::cached_payload(candidate)?)
+                .map_err(|_| Error::Invalid)?
+                .len()
+                > self.scheduler.payload_limit_bytes()
+        {
+            return Err(Error::Bounds);
+        }
         if let Publisher::Client { principal } = candidate.publisher {
             if !self.metadata.clients.contains(&principal) {
                 return Err(Error::Unauthorized);
@@ -603,6 +661,34 @@ impl PublicationAuthority {
                 || response.cached_result
             {
                 return Err(Error::Invalid);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_worker_stage(&self, candidate: &Candidate) -> Result<(), Error> {
+        if let Publisher::Worker {
+            attempt,
+            worker,
+            incarnation,
+            ..
+        } = candidate.publisher
+        {
+            // Admission must not let a stale publisher spend the current
+            // execution's single stage credit. Reuse the actual reducer's
+            // authority check; this preview and every effect it emits are
+            // discarded. Publish repeats Complete on its outer commit clone.
+            let mut preview = self.scheduler.clone();
+            if let a::Reply::Rejected(reason) = preview.apply(a::RecordedEvent {
+                epoch: EPOCH,
+                event: a::Event::Complete {
+                    attempt,
+                    worker,
+                    incarnation,
+                    result: candidate.response.clone(),
+                },
+            }) {
+                return Err(Error::Scheduler(reason));
             }
         }
         Ok(())
@@ -626,6 +712,7 @@ impl PublicationAuthority {
                 return Err(Error::Bounds);
             }
             next.validate_candidate(&candidate)?;
+            next.validate_worker_stage(&candidate)?;
             match candidate.publisher {
                 Publisher::Worker { execution, .. } => {
                     let credit = next

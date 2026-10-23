@@ -346,6 +346,10 @@ struct Pair {
 impl Pair {
     fn new(algorithm: r::Algorithm) -> Self {
         let (scenario, facts) = scenario(algorithm);
+        Self::from_scenario(scenario, facts)
+    }
+
+    fn from_scenario(scenario: r::Scenario, facts: r::Facts) -> Self {
         let mut actual = PublicationAuthority::new(scenario.actions.clone()).unwrap();
         for row in &facts.physical {
             actual
@@ -789,6 +793,40 @@ impl Pair {
             }
         }
     }
+}
+
+#[test]
+fn worker_stage_cannot_consume_credit_for_another_qualified_action() {
+    let (mut scenario, facts) = scenario(r::Algorithm::Sha256);
+    scenario.candidates.get_mut(&1).unwrap().action = OTHER.into();
+    let mut pair = Pair::from_scenario(scenario, facts);
+    pair.register();
+    pair.admit(1, ACTION, true, 1);
+    pair.assign(1, 1);
+    let actual_before = pair.actual.snapshot().unwrap();
+    let expected_before = pair.expected.snapshot().unwrap();
+    pair.position += 1;
+    assert!(
+        pair.expected
+            .apply(
+                pair.position,
+                &r::Event::Stage {
+                    id: 1,
+                    candidate: 1,
+                    until: 8,
+                    writes: BTreeMap::new(),
+                },
+                &pair.facts
+            )
+            .is_err()
+    );
+    assert_eq!(pair.expected.snapshot().unwrap(), expected_before);
+    assert!(
+        pair.actual
+            .stage(1, pair.candidate(1), 8, BTreeMap::new())
+            .is_err()
+    );
+    assert_eq!(pair.actual.snapshot().unwrap(), actual_before);
 }
 
 #[test]

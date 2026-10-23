@@ -490,6 +490,12 @@ impl RequestPayload {
         })
     }
 
+    /// Principal supplied by the trusted ingress boundary at capture time.
+    /// Request metadata does not authenticate or replace this value.
+    pub fn principal(&self) -> &str {
+        &self.principal
+    }
+
     pub fn action_bytes(&self) -> &[u8] {
         &self.action
     }

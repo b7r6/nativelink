@@ -380,8 +380,48 @@ atomic acceptance obligations, original terminals, current-worker authorization,
 ordered heads, request-policy distinctions, and retained serving coverage. The
 [response audit](publication-head-response-scope.md) limits its opaque response
 model: concrete cached ExecuteResponse projection needs separate expected bytes.
-The actual-State/Coarse candidate and differential comparison remain separate
-work; this reference does not activate M6.
+The later [publication composition](publication-composition.md) now combines real
+State and Coarse retention. Its independently authored comparison checks accepted
+order, stable terminals, cache projection, request policy, live coverage, and
+recovery under an explicit common lease alphabet. The comparison exposed a
+wrong-action staging admission that consumed another execution's reserved slot.
+That and a late-predecessor variant are fixed before credit consumption. Complete
+payload and cache-projection limits now match the actual scheduler's encoding.
+Twenty-two focused candidate cases pass; finite capacity witnesses fit below
+2 MiB, without a general future-byte reserve claim.
+
+[Physical composition](publication-physical.md) now stages real filesystem
+generations before writes, verifies exact reads through typed closure preparation,
+and preserves old operation and serving reads after head replacement. Eight new
+SHA256/BLAKE3 scenarios and the imported retention regression pass in Cargo and
+Bazel. These variants qualify physical object algorithms; the original fixture
+still uses a synthetic scheduler request and does not establish production ingress.
+
+The activation-v2 successor retains separate operation/execution terminals and
+unknown provenance. A valid transition exceeded its 512 KiB snapshot cap; an
+additive guarded wrapper now refuses such transitions atomically, with original
+frozen evidence preserved. The [actual-State inventory](../../tests/activation_inventory/README.md)
+retains exact source snapshots and payloads, checks captured principal and complete
+namespace identity, and projects independently prepared terminal/history roots.
+Sixteen Cargo/Bazel cases and twelve detected compiled faults cover this adapter.
+It does not perform durable activation, convert unfinished work, or infer that
+old requests stopped.
+
+Real BLAKE3 process histories also exposed a missing action-scoped digest context
+in the authority worker. Verified inputs launched, but result upload inherited
+SHA256 and failed verification. The worker now scopes its action lifecycle to the
+request algorithm. Both algorithms pass noncacheable-success and nonzero-exit
+process histories, serially and concurrently, plus the integrated worker/RPC
+regressions. [Receipts](evidence/worker-history-blake3/manifest.json) retain the
+failing process run and exact correction. Production factories remain unchanged.
+
+The [publication workspace checkpoint](evidence/publication-workspace/manifest.json)
+passes the complete Cargo workspace with 1,866 tests, zero failures and ten ignored
+cases, and all 160 Bazel targets. All 431 recorded source and build files remain
+unchanged across those runs. Independent review then found that the inventory
+and new real-request adapter must also validate each joined operation's original
+request. That correction and a real-to-synthetic snapshot-mode refusal are being
+qualified separately; these workspace totals do not include those later changes.
 
 ## Decisions made provisionally
 

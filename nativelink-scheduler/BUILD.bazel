@@ -459,6 +459,7 @@ rust_test(
     name = "publication_candidate_test",
     srcs = ["tests/publication_candidate_test.rs"],
     compile_data = [
+        "tests/publication_candidate/capacity.rs",
         "tests/publication_candidate/cases.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/types.rs",
@@ -528,6 +529,28 @@ rust_test(
     crate_root = "tests/publication_activation_v2_reference_test.rs",
     deps = [
         "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "activation_inventory_test",
+    srcs = ["tests/activation_inventory_test.rs"],
+    compile_data = [
+        "tests/activation_inventory/adapter.rs",
+        "tests/publication_activation_v2/bounded.rs",
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:sha2",

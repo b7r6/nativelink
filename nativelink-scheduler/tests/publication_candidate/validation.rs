@@ -27,6 +27,7 @@ impl PublicationAuthority {
         let meta = &self.metadata;
         if self.scheduler.accepted_history_enabled()
             || self.scheduler.receipt_retirement_enabled()
+            || self.scheduler.payload_limit_bytes() != MAX_PAYLOAD
             || scheduler.epoch != EPOCH
             || scheduler.now != retention.now
             || scheduler.executions.len() > MAX_STAGES
