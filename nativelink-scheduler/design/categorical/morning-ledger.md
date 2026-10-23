@@ -446,6 +446,14 @@ The [additive receipts](evidence/publication-real-differential/manifest.json)
 retain both source boundaries. The frozen oracle is unchanged, and physical
 readiness remains an explicit fixture assumption in this comparison.
 
+An additive [revoked-worker case](evidence/publication-worker-late/manifest.json)
+now prepares real outputs before revocation, then proves unchanged publication
+refusal for both algorithms. The old reservation remains charged until the
+identity-checked quiescent report supplies Cleanup. A fresh attempt owns a
+distinct reservation; old stage/write records survive that retry and checkpoint
+reopen. All eight worker bridge cases pass in Cargo and Bazel with no skipped
+process case. No second process or worker acknowledgment is implied.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

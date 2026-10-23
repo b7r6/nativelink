@@ -408,3 +408,6 @@ async fn actual_sha256_worker_outputs_publish_with_physical_retention() {
 async fn actual_blake3_worker_outputs_publish_with_physical_retention() {
     worker_publication(Algorithm::Blake3, DigestHasherFunc::Blake3).await;
 }
+
+#[path = "late.rs"]
+mod late;

@@ -54,3 +54,25 @@ unavailable namespaces prints `SKIP` and does not qualify the process boundary.
 Qualifying receipts require both `PUBLICATION_WORKER_PASS` markers and no such
 skip. The existing candidate and physical implementations are reused unchanged
 through a test-only Bazel `filegroup`.
+
+
+## Prepared output after revocation
+
+A separate case runs the same process under both digest algorithms, stages its
+actual output, completes the physical writes, and prepares the typed closure.
+It then applies WorkerUnavailable to the actual worker session before Publish.
+The result is refused with the entire outer snapshot unchanged. Neither the
+completed head nor any operation terminal or result root is installed.
+
+The actual scheduler returns the execution to its queue, revokes the old
+attempt, and retains its charged reservation and cancellation effect. Only
+cleanup backed by the exact quiescent report releases that reservation. A fresh
+session can obtain a distinct retry attempt and reservation; this case places
+that retry without launching a second process. The old candidate still cannot
+publish. Its issued stage writes, outcomes, staging protection, and physical
+bytes survive checkpoint reopen. The worker report remains unacknowledged and
+the temporary CAS boundary described above still applies.
+
+Qualifying receipts contain `PUBLICATION_REVOKED_WORKER_PASS` for both algorithms
+without a namespace skip. This is an additive experiment; the original positive
+worker-publication receipts remain frozen separately.

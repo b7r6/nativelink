@@ -95,6 +95,7 @@ rust_test_suite(
     compile_data = [
         "tests/authority_history_rpc/cases.rs",
         "tests/authority_publication/cases.rs",
+        "tests/authority_publication/late.rs",
         "//nativelink-scheduler:publication_fixture_sources",
         "tests/utils/local_worker_test_utils.rs",
         "tests/utils/mock_running_actions_manager.rs",
