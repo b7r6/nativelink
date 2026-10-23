@@ -54,23 +54,18 @@ same constructor also refuses compressed ByteStream reads and writes. The
 separate canonical-store generic-service tests that enable compressed reads
 do not qualify compressed reads on these fixed roles.
 
-The current Capabilities response advertises a 64 KiB batch total. That total
-fits the new message ceilings with ordinary digest envelopes, but the generic
-CAS handler does not enforce a batch byte or entry count limit. Empty blobs
-and large per-entry envelopes also consume message bytes independently of
-the advertised data total. `BatchReadBlobs` collects all selected results
-before response encoding; a small request can select many large objects.
-Canonical-store admission limits four reads at once but does not bound the
-total retained batch response. The new encode refusal happens after this
-work. `FindMissingBlobs` reaches the canonical backend's existing 64-key limit.
+The fixed constructor now installs separate
+[CAS admission](authority-cas-admission.md): a shared advertised/enforced
+64 KiB batch content total, 64 entries, verified whole reads and a bounded
+GetTree walk before pagination. Those checks precede backend calls or Directory
+decoding where applicable. Empty blobs and per-entry envelopes consume bytes
+independently of content. The legacy generic CAS constructor still has its
+original aggregation behavior.
 
-`GetTree` traverses and accumulates directories without a total traversal
-budget. Its shared decode helper requests at most 10 MiB of each stored
-Directory; that per-object read limit does not bound the number of directories
-or their decoded aggregate. Action Cache reads use the same 10 MiB helper for
-an ActionResult. The helper and protobuf decode run before the 1 MiB outgoing
-message check. A canonical read still verifies the complete object before
-returning the requested range.
+Action Cache reads retain the shared 10 MiB helper for an ActionResult. The
+helper and protobuf decode run before the 1 MiB outgoing message check.
+A canonical read verifies the complete object before returning that requested
+range, but this does not bound protobuf expansion or all concurrent requests.
 
 Capabilities currently reports `max_cas_blob_size_bytes = 0`. The local REAPI
 schema explicitly defines zero as no limit and allows clients to assume
@@ -78,9 +73,8 @@ arbitrarily large objects. That advertisement does not describe the canonical
 backend's 64 MiB ceiling. It is preserved here because `AuthorityListeners`
 accepts arbitrary existing stores and does not yet carry a canonical storage
 profile. A later canonical construction needs one source of truth for the
-backend limit and its advertisement, plus service-level batch/traversal
-admission if those aggregate bounds are claimed. Changing the reported
-number cannot establish that admission.
+backend limit and its advertisement. The fixed per-request CAS limits do not
+resolve that storage-profile gap or establish aggregate service admission.
 
 ## Qualification
 
@@ -96,11 +90,11 @@ TCP with the canonical CAS and sink. For SHA-256 and BLAKE3 it transfers a
 upload chunks and verifies all returned chunks are at most 64 KiB. Oversized
 CAS, ByteStream and Action Cache requests, malformed requests, and disabled
 compression requests leave both canonical content and temporary directories
-empty. A separate response test establishes that existing large CAS and AC
-values can be read internally and then refused by the outgoing encoder. It
-does not relabel that late refusal as allocation admission.
+empty. A separate response test now rejects large CAS batches at admission;
+large AC values can still be read internally and then refused by the outgoing
+encoder. That AC refusal remains a late allocation check.
 
 The fixture uses a separate ordinary journal test file. It does not qualify
 canonical journal construction, process isolation, TLS credentials, metadata
-limits, concurrent request admission, service aggregation or production
+limits, concurrent request admission, aggregate memory admission or production
 selection. Those retain their separate evidence and open obligations.

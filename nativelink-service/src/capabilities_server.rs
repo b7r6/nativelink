@@ -37,7 +37,7 @@ use tracing::{Level, instrument};
 
 use crate::wire_compression::RemoteCacheCompressionInstances;
 
-const MAX_BATCH_TOTAL_SIZE: i64 = 64 * 1024;
+pub(crate) const MAX_BATCH_TOTAL_SIZE: i64 = 64 * 1024;
 
 #[derive(Debug, Default)]
 pub struct CapabilitiesServer {

@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use futures::stream;
 use nativelink_config::cas_server::{
-    AcStoreConfig, ByteStreamConfig, CasStoreConfig, WithInstanceName,
+    AcStoreConfig, ByteStreamConfig, WithInstanceName,
 };
 use nativelink_proto::build::bazel::remote::execution::v2::execution_server::ExecutionServer;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
@@ -94,17 +94,7 @@ impl AuthorityListeners {
             stores.add_store("authority_objects", config.cas.clone())?;
             stores.add_store("authority_sink", config.publication_sink.clone())?;
             let compression = RemoteCacheCompressionInstances::default();
-            let cas = CasServer::new(
-                &[WithInstanceName {
-                    instance_name: config.instance.clone(),
-                    config: CasStoreConfig {
-                        cas_store: "authority_objects".to_owned(),
-                        experimental_chunking: None,
-                    },
-                }],
-                &stores,
-                &compression,
-            )?;
+            let cas = CasServer::new_authority(config.instance.clone(), config.cas.clone());
             let bytestream = ByteStreamServer::new(
                 &[WithInstanceName {
                     instance_name: config.instance.clone(),

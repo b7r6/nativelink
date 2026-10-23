@@ -54,6 +54,8 @@ use tracing::{Instrument, Level, debug, error_span, instrument, warn};
 
 use crate::wire_compression::RemoteCacheCompressionInstances;
 
+mod authority;
+
 /// Metrics for the experimental `SplitBlob`/`SpliceBlob` chunking RPCs.
 /// The split hit rate (`split_hits` / `split_requests_total`) indicates how
 /// often chunked downloads could be served; the spliced/split byte totals
@@ -172,6 +174,7 @@ impl ChunkingInstance {
 
 #[derive(Debug)]
 pub struct CasServer {
+    authority_admission: bool,
     stores: HashMap<InstanceName, Store>,
     remote_cache_compression_instances: RemoteCacheCompressionInstances,
     chunking_instances: HashMap<InstanceName, ChunkingInstance>,
@@ -272,6 +275,7 @@ impl CasServer {
             stores.insert(config.instance_name.clone(), store);
         }
         Ok(Self {
+            authority_admission: false,
             stores,
             remote_cache_compression_instances: remote_cache_compression_instances.clone(),
             chunking_instances,
@@ -292,6 +296,9 @@ impl CasServer {
         &self,
         request: FindMissingBlobsRequest,
     ) -> Result<Response<FindMissingBlobsResponse>, Error> {
+        if self.authority_admission {
+            authority::check_entries(request.blob_digests.len())?;
+        }
         let instance_name = &request.instance_name;
         let store = self
             .stores
@@ -322,6 +329,12 @@ impl CasServer {
         &self,
         request: BatchUpdateBlobsRequest,
     ) -> Result<Response<BatchUpdateBlobsResponse>, Error> {
+        if self.authority_admission {
+            return self
+                .authority_batch_update(request)
+                .await
+                .map(Response::new);
+        }
         let instance_name = &request.instance_name;
 
         let store = self
@@ -395,6 +408,9 @@ impl CasServer {
         &self,
         request: BatchReadBlobsRequest,
     ) -> Result<Response<BatchReadBlobsResponse>, Error> {
+        if self.authority_admission {
+            return self.authority_batch_read(request).await.map(Response::new);
+        }
         let instance_name = &request.instance_name;
 
         let store = self
@@ -495,6 +511,12 @@ impl CasServer {
         &self,
         request: GetTreeRequest,
     ) -> Result<impl Stream<Item = Result<GetTreeResponse, Status>> + Send + use<>, Error> {
+        if self.authority_admission {
+            let response = self.authority_get_tree(request).await?;
+            return Ok(futures::stream::once(async { Ok(response) })
+                .left_stream()
+                .left_stream());
+        }
         let instance_name = &request.instance_name;
 
         let store = self
@@ -511,7 +533,7 @@ impl CasServer {
                 .get_tree(Request::new(request))
                 .await?
                 .into_inner();
-            return Ok(stream.left_stream());
+            return Ok(stream.right_stream().left_stream());
         }
         let root_digest: DigestInfo = request
             .root_digest
@@ -741,6 +763,12 @@ impl CasServer {
         &self,
         request: SplitBlobRequest,
     ) -> Result<Response<SplitBlobResponse>, Error> {
+        if self.authority_admission {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Fixed CAS chunking is disabled"
+            ));
+        }
         // If we are a GrpcStore we forward the RPC to the backend, which
         // owns chunking and the layout index for proxied instances.
         if let Some(grpc_store) = self.grpc_store_for_instance(&request.instance_name) {
@@ -920,6 +948,12 @@ impl CasServer {
         &self,
         request: SpliceBlobRequest,
     ) -> Result<Response<SpliceBlobResponse>, Error> {
+        if self.authority_admission {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Fixed CAS chunking is disabled"
+            ));
+        }
         // If we are a GrpcStore we forward the RPC to the backend, which
         // owns chunking and the layout index for proxied instances.
         if let Some(grpc_store) = self.grpc_store_for_instance(&request.instance_name) {

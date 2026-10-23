@@ -21,6 +21,7 @@ rust_library(
         "src/bytestream_server.rs",
         "src/capabilities_server.rs",
         "src/cas_server.rs",
+        "src/cas_server/authority.rs",
         "src/execution_server.rs",
         "src/fetch_server.rs",
         "src/health_server.rs",

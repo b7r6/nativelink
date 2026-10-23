@@ -286,9 +286,14 @@ async fn fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_fi
                     requests: vec![batch_update_blobs_request::Request::default()],
                 })
                 .await
-                .unwrap_err()
-                .code(),
-                RpcCode::Internal,
+                .unwrap()
+                .into_inner()
+                .responses[0]
+                    .status
+                    .as_ref()
+                    .unwrap()
+                    .code,
+                RpcCode::InvalidArgument as i32,
             );
             assert_eq!(
                 bytestream
@@ -302,18 +307,25 @@ async fn fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_fi
                     .code(),
                 RpcCode::Internal,
             );
-            assert_compression_disabled(
-                &cas.batch_update_blobs(BatchUpdateBlobsRequest {
+            let compressed = cas
+                .batch_update_blobs(BatchUpdateBlobsRequest {
                     instance_name: INSTANCE.to_owned(),
                     digest_function: algorithm.proto_digest_func().into(),
                     requests: vec![batch_update_blobs_request::Request {
-                        digest: Some(key.into()),
+                        digest: Some(digest(algorithm, b"x").into()),
                         data: Bytes::from_static(b"not a zstd frame"),
                         compressor: compressor::Value::Zstd as i32,
                     }],
                 })
                 .await
-                .unwrap_err(),
+                .unwrap()
+                .into_inner();
+            let status = compressed.responses[0].status.as_ref().unwrap();
+            assert_eq!(status.code, RpcCode::InvalidArgument as i32);
+            assert!(
+                status
+                    .message
+                    .contains("Remote cache compression is not supported by this instance")
             );
             assert_compression_disabled(
                 &bytestream
@@ -386,7 +398,7 @@ async fn fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_fi
 }
 
 #[nativelink_macro::nativelink_test]
-async fn fixed_roles_refuse_large_encoded_responses_after_backend_reads() {
+async fn fixed_roles_refuse_large_cas_batches_before_reads_and_ac_after_reads() {
     let (fixture, stores) = Fixture::new().await;
     let rpc = FixedRpc::new(&fixture, &stores).await;
     for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
@@ -402,10 +414,10 @@ async fn fixed_roles_refuse_large_encoded_responses_after_backend_reads() {
                 })
                 .await
             else {
-                panic!("oversized CAS response must fail during encoding");
+                panic!("oversized CAS batch must fail before backend reads");
             };
-            assert_eq!(error.code(), RpcCode::OutOfRange);
-            assert!(error.message().contains("encoded message length too large"));
+            assert_eq!(error.code(), RpcCode::InvalidArgument);
+            assert!(error.message().contains("Fixed CAS batch content limit"));
         }
         let result = ActionResult {
             stdout_raw: bytes.into(),
