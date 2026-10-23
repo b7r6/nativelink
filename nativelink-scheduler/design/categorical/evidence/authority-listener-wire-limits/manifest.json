@@ -1,0 +1,273 @@
+{
+  "source_commit": "51f817367782ce49b67be550d85bea22209ff2e2",
+  "root_source_commit": "d4ebc806c307ada826de54fa95b3aec5ee23196a",
+  "scope": "Explicit protobuf message limits on experimental fixed listeners, compatible canonical-store chunk transfers and bounded request refusal. Production constructors unchanged; no preencoding or global memory admission bound.",
+  "archives": {
+    "author": {
+      "path": "author-evidence.tar.gz",
+      "bytes": 40756892,
+      "sha256": "ab26107aed0bad01fe1944d598a39bb040245e84cde534929d73270033104715",
+      "files_sha256": {
+        "baseline/authority_listener.rs": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "baseline/cargo.log": "691efaa48d3e8a13939d57e0d9820c71f4a44a9adde7208f91722427cbd1ebc7",
+        "baseline/test-binary": "a8b18fbc2d7da6905f7be22ea955e8e252559e768f6103661795ced4b9f6318f",
+        "canonical-clippy-final.log": "2a5c4e0d687942fbbbc8d5ffe11cdf21457f43161036a285eac0cc89dce6b6be",
+        "canonical-clippy.log": "f9c50a51636d68dba923ec564f8467a88a74ab9ac2bf8e3a7663f959d9b365a8",
+        "canonical-tests-first.log": "62d0caf58dc518430270cbecde0a244fcb7b1bc63c42953d06976cbcb7aff360",
+        "canonical-tests.log": "ef0af0b60c6aa0ec490c95d980bc45f67f414dc2bcc53af52cec3edd61d7349b",
+        "change.patch": "bd750c80d5b601c9bbeffa996cecaa403c60af929b63752f0a90925f85fd6234",
+        "compression-mutant/authority_listener.rs": "b6584c73eff333767b4152b250eccb39eaa14837bbe0f9d74983d33e5d23d13f",
+        "compression-mutant/cargo.log": "3efc705b7693b205617606f95be42466f512b2a15c3c2e21e176aacb743d5187",
+        "compression-mutant/test-binary": "9f4d89d4af9381e6c671e5fa0f72ea36d0d002e9386638b6382998192998f9ae",
+        "decode-mutant/authority_listener.rs": "381471d638175b1b030dbc8f5b73140c08f5340e36a5465cc210381642569038",
+        "decode-mutant/cargo.log": "1728be7645553c4b82b28fd5b1b58d99ec458563c4c95634e9616a7575c2b2cb",
+        "decode-mutant/test-binary": "74b6bb96a63f6bea98082c0667f435c30f445865d5c39021b0f0b4d3f557c53d",
+        "encode-mutant/authority_listener.rs": "40d8c0588070fe1207b2bd3946b78c77b7a75f750f62f5860fa465c3ee150611",
+        "encode-mutant/cargo.log": "1d4bbed458290a999fd4b491ed72d1ba9badc9212b11d0dee2b93ced9390bdfd",
+        "encode-mutant/test-binary": "55ba899e11a762cfd4a3f9d82ff190a058c31d34e86f714e1ef4565d3b463356",
+        "frozen-source/nativelink-scheduler/design/categorical/authority-listener-wire-limits.md": "66af50942b0b1ed8370a7fcdff8bd04fcf221d0a8ca65877b08134b547b43d6c",
+        "frozen-source/nativelink-service/BUILD.bazel": "b847438b557c5b9cacaf026e77e2836194902dfb83a860aff0793d07ba119b80",
+        "frozen-source/nativelink-service/src/authority_listener.rs": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "frozen-source/nativelink-service/tests/authority_listener/limits.rs": "316c84bee75d20b354394390caa702bc102b8799bd11ae85aae407448c02efb3",
+        "frozen-source/nativelink-service/tests/authority_listener_test.rs": "fd8db28ae3a65d2478b418e7064f3858b6b9cde5757a67e8fd60e48697b77fdd",
+        "frozen-source/tools/canonical-store/BUILD.bazel": "51ac3295130c7e480831a4dd47ed10f908ef7b3286276b514597cb3cc36c1c39",
+        "frozen-source/tools/canonical-store/Cargo.lock": "9eb225ceeed121036f7cb282451eeaf6c03fa4eebea68165ea7a51704c81293c",
+        "frozen-source/tools/canonical-store/Cargo.toml": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+        "frozen-source/tools/canonical-store/README.md": "cde6ea5c53cbd1819447800cc1afb4f13541971f4a2ab59f5401cc937dd687cb",
+        "frozen-source/tools/canonical-store/src/tests.rs": "f8fd728232203e1aa9e631ff3dad9eb119abbd9048de9b7e53b57d2339cd49cc",
+        "frozen-source/tools/canonical-store/src/tests/listener.rs": "860d17da4634859cf939d33e5690d82580ecec46add31ea0e67f37d0b486892e",
+        "independent-review/review.json": "58d3935c0e4ead1d360734e73b98541bdddb35469397e5c032ac59c64151fb6e",
+        "independent-review/reviewed-source.json": "43f97ac1199a17960c2f583c7bb6cd4187ab7ef10b88bed6eeaf3dea2cfeaa36",
+        "independent-review/reviewed-source/nativelink-scheduler/design/categorical/authority-listener-wire-limits.md": "66af50942b0b1ed8370a7fcdff8bd04fcf221d0a8ca65877b08134b547b43d6c",
+        "independent-review/reviewed-source/nativelink-service/src/authority_listener.rs": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "independent-review/reviewed-source/nativelink-service/tests/authority_listener/limits.rs": "316c84bee75d20b354394390caa702bc102b8799bd11ae85aae407448c02efb3",
+        "independent-review/reviewed-source/tools/canonical-store/src/tests/listener.rs": "860d17da4634859cf939d33e5690d82580ecec46add31ea0e67f37d0b486892e",
+        "manifest.json": "145c19405f5e11027c203e3e69b1c447ab6df99987543286db04331e38c377ff",
+        "mutation-results.json": "56aa7ef479a60248eb03edfafedcb1f122112c446add001c6e3954c993ed5b41",
+        "pre-commit-delta.log": "f6d1497100041677832198a4f770a0e0c13309cfbc794d198c60ade8420e3b6d",
+        "pre-commit-final.log": "edd7b320f13ee091fc19cc1b0a32a1deb8f576ac5863c7d8351d39144b62a4e3",
+        "pre-commit.log": "a80540002e92b2e3229485190947b090bba60e458357e161834ca50849a49881",
+        "qualification.json": "77a74dc2c7fc95f82e59da43d963f009a61fbe7d055edbe60060172e07dd8a0b",
+        "restored/authority_listener.rs": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "restored/cargo.log": "d5824aa83f1b4c1ab6b8f4039eba335bdff770f66ae45c6842e0e1dd11a2307f",
+        "restored/test-binary": "a8b18fbc2d7da6905f7be22ea955e8e252559e768f6103661795ced4b9f6318f",
+        "run-mutations.py": "095a9c12e202c0ca0ac0a74ebd883d441ea7ef7f03bdbc7140037ba2729a6284",
+        "service-clippy.log": "3d3e3f9ca324dc44338c0fc3f6abeb7916459260845356eb0d092bc64306127b",
+        "service-test-binary": "5e4fcac84cd7cad8063b7d60bd5d37d83d291229a857cd1c9ec548f56f983c0a",
+        "service-tests-final.log": "f95822ac35a7f9ca340ddda8b98f280810dc79f1c815da18308bc6c6d497b179",
+        "service-tests.log": "9738056103682496168daa4466abcb40d4139729bbbb740d093d31632b1e0e81",
+        "source-manifest.json": "f13bbbff868ba86dca712ff20eb103f260948ee178b05529ae3fa8c2aa5ee4ab",
+        "tonic-0.14.6/decode.rs": "433ce180e5ee34a271f352ecad70aec31f87b5827ec31292d6a727004e6fe518",
+        "tonic-0.14.6/encode.rs": "ecda7904e0b103187118d1034f90c60729c29db438a95652595f9106f63e3ad2",
+        "tonic-0.14.6/mod.rs": "75fce3c65ce80d41bae1a61a8656ac077e908805c7f6a36e8610e98fe0bac99c",
+        "vale.log": "f10c81ff63126b6213590a94251971b3715cbe861ddf8d496f7893cb29a8833c"
+      }
+    },
+    "root_integration": {
+      "path": "root-integration.tar.gz",
+      "bytes": 58047,
+      "sha256": "2156525ab8d98d7007386c347a6ac58260ea4fade0cc9417be825e9e30f9ce84",
+      "files_sha256": {
+        "bazel.log": "b43145649cda94ca1e141414c30fc1818c376c8870deca7fdc320d9568722c91",
+        "command.json": "b307cbe716019a85606deb67b96af6034dbe2afb3cbd26382299babb5043eaaf",
+        "head.txt": "8470eadd6a4cc6514205dfa5a3ed3b76779d348591c30cd579436d2fad803149",
+        "run.py": "dc7578c3d3f2d7ecdba6ef60e28900bec7a7330899b44563211cff8284a18f27",
+        "sources-after.json": "99904689852c801a79e57104cca4fa5227fc860971fd90ee128d60afd786e0ba",
+        "sources-before.json": "99904689852c801a79e57104cca4fa5227fc860971fd90ee128d60afd786e0ba",
+        "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "48c1775f67f1c680de62e75bd63c04ed2282ba9a15513c365c26d8d57af1ce9d",
+        "testlogs/tools/canonical-store/canonical_store_test/test.log": "61c472d70aa3d7d96ba2e1a8e8bd2428273411b53aaa7af7b1a85e0f7f6b1302",
+        "tls/manifest.json": "0bf1301110645cff49aad8c1d4227020bf372cbe1411d47ea396e2dc3ca39fb0",
+        "tls/observations.json": "906c91c2c76dcf885d65466d529569768de8765b23c0cb03f635d9f3dd2b60de",
+        "tls/test.log": "ce01f004cc1be338d5c114f699acd5767b86b90c6b1a2f6687e6dbc9bc9c9531",
+        "tls-command.json": "c10acd974aa16f8a22b1816ef29c7fe823dbd1f12c2fdd2adff31109aae92e9d",
+        "tls-driver.log": "a6e63012966b19c748b2331c94ba77be4d233525f85921005430c6a3e7b30374"
+      }
+    }
+  },
+  "qualification": {
+    "kind": "author qualification of experimental fixed authority listener protobuf ceilings",
+    "commit": "51f817367782ce49b67be550d85bea22209ff2e2",
+    "base": "039c80950e51bc85c13774545e9a79b7b31a7af1",
+    "production_selection": false,
+    "source_manifest_sha256": "f13bbbff868ba86dca712ff20eb103f260948ee178b05529ae3fa8c2aa5ee4ab",
+    "runtime_sha256": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+    "tests": {
+      "service": {
+        "passed": 6,
+        "ignored": 1,
+        "ignored_reason": "TLS fixture requires disposable certificates; not run by this change",
+        "log": "service-tests-final.log",
+        "binary_sha256": "5e4fcac84cd7cad8063b7d60bd5d37d83d291229a857cd1c9ec548f56f983c0a"
+      },
+      "canonical_store": {
+        "passed": 20,
+        "log": "restored/cargo.log",
+        "binary_sha256": "a8b18fbc2d7da6905f7be22ea955e8e252559e768f6103661795ced4b9f6318f"
+      },
+      "strict_clippy": [
+        "service-clippy.log",
+        "canonical-clippy-final.log"
+      ],
+      "hooks": "pre-commit-final.log"
+    },
+    "negative_controls": [
+      {
+        "name": "baseline",
+        "command": [
+          "cargo",
+          "test",
+          "--manifest-path",
+          "tools/canonical-store/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j8",
+          "--lib"
+        ],
+        "exit_code": 0,
+        "runtime_sha256": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "binary_sha256": "a8b18fbc2d7da6905f7be22ea955e8e252559e768f6103661795ced4b9f6318f"
+      },
+      {
+        "name": "decode-mutant",
+        "command": [
+          "cargo",
+          "test",
+          "--manifest-path",
+          "tools/canonical-store/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j8",
+          "--lib",
+          "tests::listener::fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_files",
+          "--",
+          "--exact"
+        ],
+        "exit_code": 101,
+        "runtime_sha256": "381471d638175b1b030dbc8f5b73140c08f5340e36a5465cc210381642569038",
+        "binary_sha256": "74b6bb96a63f6bea98082c0667f435c30f445865d5c39021b0f0b4d3f557c53d",
+        "expected_marker_seen": true
+      },
+      {
+        "name": "encode-mutant",
+        "command": [
+          "cargo",
+          "test",
+          "--manifest-path",
+          "tools/canonical-store/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j8",
+          "--lib",
+          "tests::listener::fixed_roles_refuse_large_encoded_responses_after_backend_reads",
+          "--",
+          "--exact"
+        ],
+        "exit_code": 101,
+        "runtime_sha256": "40d8c0588070fe1207b2bd3946b78c77b7a75f750f62f5860fa465c3ee150611",
+        "binary_sha256": "55ba899e11a762cfd4a3f9d82ff190a058c31d34e86f714e1ef4565d3b463356",
+        "expected_marker_seen": true
+      },
+      {
+        "name": "compression-mutant",
+        "command": [
+          "cargo",
+          "test",
+          "--manifest-path",
+          "tools/canonical-store/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j8",
+          "--lib",
+          "tests::listener::fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_files",
+          "--",
+          "--exact"
+        ],
+        "exit_code": 101,
+        "runtime_sha256": "b6584c73eff333767b4152b250eccb39eaa14837bbe0f9d74983d33e5d23d13f",
+        "binary_sha256": "9f4d89d4af9381e6c671e5fa0f72ea36d0d002e9386638b6382998192998f9ae",
+        "expected_marker_seen": true
+      },
+      {
+        "name": "restored",
+        "command": [
+          "cargo",
+          "test",
+          "--manifest-path",
+          "tools/canonical-store/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--profile",
+          "smol",
+          "-j8",
+          "--lib"
+        ],
+        "exit_code": 0,
+        "runtime_sha256": "2f2cdef73bb38ccf1dfdb79e1b1b0b0966696e5f27350925e195128c365cdd3e",
+        "binary_sha256": "a8b18fbc2d7da6905f7be22ea955e8e252559e768f6103661795ced4b9f6318f"
+      }
+    ],
+    "independent_review": {
+      "file": "independent-review/review.json",
+      "sha256": "58d3935c0e4ead1d360734e73b98541bdddb35469397e5c032ac59c64151fb6e",
+      "scope": "source-only, final four reviewed files; no independent execution counts"
+    },
+    "initial_failures_resolved": [
+      "Initial malformed request test expected InvalidArgument; existing missing-field/resource paths return Internal. Test expectation corrected, runtime unchanged.",
+      "Strict Clippy rejected err().expect(); response-negative-control test uses let Err to avoid formatting oversized success bodies.",
+      "Review corrected before-dispatch wording for streaming handlers and strengthened compression assertions to require the disabled-compression guard message."
+    ],
+    "claims": [
+      "All nine fixed service/role bindings reject oversized raw protobuf messages at configured decoder ceilings; malformed short messages reach protobuf validation.",
+      "A valid Capabilities request padded with unknown bytes to exactly 64KiB succeeds.",
+      "Actual fixed listener roles and canonical CAS/sink transfer 2MiB+17-byte objects with 64KiB chunks in both directions under SHA256 and BLAKE3.",
+      "Oversized and malformed CAS/ByteStream/AC writes plus disabled compression requests leave both canonical temporary and content directories empty.",
+      "CAS and AC responses above1MiB are refused after backend reads/encoding; this is a late wire refusal.",
+      "Three compiled decoder/encoder/compression mutations fail at intended assertions; exact restored canonical binary equals baseline binary."
+    ],
+    "limits": [
+      "No production factory or runtime knobs; legacy constructors unchanged.",
+      "No global memory, connection, metadata, request concurrency, protobuf expansion, aggregate CAS batch, GetTree traversal or lifetime disk bound.",
+      "Generic CAS batch aggregation and GetTree traversal precede encode limits; AC helper reads up to10MiB before protobuf decode and1MiB encode refusal.",
+      "Capabilities still advertises64KiB batch without generic handler enforcement and max_cas_blob_size_bytes0 despite canonical64MiB backend; documented open mismatch.",
+      "Fixed roles keep all remote cache compression disabled.",
+      "Canonical fixture uses an ordinary separate journal file, not canonical journal construction; no TLS or process isolation qualification.",
+      "Bazel integration and final archive owned by parent; not run by this author."
+    ]
+  },
+  "root_qualification": {
+    "bazel": {
+      "command": "command.json",
+      "passed": 26,
+      "listener": 6,
+      "canonical_store": 20,
+      "ignored": 1,
+      "server_built": true,
+      "executed_targets": 2,
+      "elapsed_seconds": 26.168
+    },
+    "tls": {
+      "harness": "tools/test-authority-listener-tls.py",
+      "cases": 4,
+      "passed": true,
+      "scope": "Disposable local certificates, actual fixed listeners, both digest algorithms; shared trust negative control",
+      "manifest": "tls/manifest.json"
+    },
+    "unchanged_source_inputs": 548,
+    "author_packet_checked_files": 52,
+    "integrated_frozen_source_delta": "Service BUILD.bazel additionally contains root execution-deadline unit-test openraft dependency; all other 10 author source files match."
+  },
+  "remaining": [
+    "Outgoing length checked after handler accumulation and protobuf encoding.",
+    "CAS BatchReadBlobs and GetTree aggregate admission/traversal still unbounded by these wire constants.",
+    "Capabilities advertises unlimited blob size while canonical store ceiling is64MiB; constructor accepts arbitrary stores and lacks canonical storage profile.",
+    "No production bootstrap, namespace fencing, global connection/metadata/stream memory envelope, or deployment trust qualification."
+  ]
+}

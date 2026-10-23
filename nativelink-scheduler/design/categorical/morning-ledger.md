@@ -7,10 +7,12 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add the capability-backed CAS/sink, checked clock
-failure path and local authority memory-breach receipts. Their receipts below
-separate standalone, syscall and integrated tests. Production construction,
-wire classification and the complete canonical clock contract remain open.
+Latest focused checkpoints add the capability-backed CAS/sink, descriptor-backed
+Singleton construction, checked clock failure path, strict execution expiry
+boundary and local authority memory-breach receipts. Their receipts below
+separate standalone, syscall and integrated tests. Fixed listener message limits
+are integrated; their combined qualification is recorded separately. Production
+construction, wire classification and the complete canonical clock contract remain open.
 
 Latest full integration at `4876ddd48c`: Cargo passed 2,007 tests with zero failures
 and eleven ignored cases; all 166 Bazel targets passed, including the two manual
@@ -805,12 +807,55 @@ heuristic evidence and receipt loss on upload failure.
 independent reviews. Wire versioning and coordinator MemoryFailure classification
 are the next step; receipt presence alone proves neither closure nor acceptance.
 
+The descriptor journal now reaches the real Singleton constructor through
+`open_from_factory`. After first poll, an owned preparation task retains the
+journal through startup and any required Raft shutdown. Sending the result is not
+handoff: a private acknowledgment distinguishes accepted ownership from an
+unobserved result. Four portable cases and four descriptor cases cover successful
+handoff, held factory and parent sync, cancellation, an unacknowledged result,
+renamed roots, all four directory locks and refusal to adopt an uninitialized
+existing journal. Cargo passed all 84 scheduler units, strict Clippy and two
+compiled negative controls; root Bazel executed those 84 units and all eleven
+manual bridge cases. The [receipt](evidence/descriptor-singleton/manifest.json)
+archives 34 files, all independently checked, with three exact integrated Rust
+source hashes. Its baseline document differs from the receipt commit only by the
+added qualification paragraph. This constructor does not certify recovered
+membership, limit compatibility, canonical bootstrap or admission history.
+
+Execution expiry now waits strictly past its rounded deadline. Three real-journal
+boundary tests first failed against the inclusive comparison, then passed with
+the repair. Exact committed-event assertions distinguish execution expiry from
+independently due progress; equality after restart retains authorization, and
+expiry retains the reservation until cleanup. Two compiled faults caught a
+progress-path bypass and an unintended delay to progress expiry. The restored
+source passed 54 cases across seven executed Bazel targets plus a server build,
+with 546 unchanged source inputs. The
+[receipt](evidence/authority-quantized-deadline/manifest.json) preserves those
+boundaries and the independent review. These synthetic projected-duration
+fixtures do not qualify every Action duration, finite counter headroom or a
+persistently bound canonical clock.
+
+Every experimental fixed listener route now has explicit protobuf decode and
+encode ceilings, with 64 KiB ByteStream read chunks. Actual HTTP/2 tests cover
+all nine service/role bindings, the exact control-message boundary, both digest
+algorithms with objects larger than a message, malformed requests, disabled
+compression and outgoing size refusal. Three compiled faults were detected and
+the exact source restored. Cargo and strict Clippy passed; root Bazel executed
+six listener and twenty canonical-store tests and built the server. The separately
+invoked local mTLS fixture passed all four cases with fresh disposable identities,
+including its shared-trust negative control. The
+[receipt](evidence/authority-listener-wire-limits/manifest.json) distinguishes
+these checks and records 548 unchanged integrated inputs. Outgoing size checks
+occur after encoding; CAS batch accumulation, GetTree traversal and service-wide
+admission remain open. The generic capabilities advertisement still does not
+describe the canonical backend's finite object ceiling.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
 membership, supported format/admission history and the canonical clock contract;
 readable ownership records do not supply those facts. Descriptor-to-Singleton
-construction and explicit listener wire ceilings are proceeding independently.
+construction and explicit listener wire ceilings now have separate implementations.
 Generic CAS batch/traversal accumulation and AC value decoding still need their
 own bounds before a service memory claim is justified.
 
