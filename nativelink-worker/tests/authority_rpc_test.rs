@@ -44,12 +44,13 @@ use nativelink_store::fast_slow_store::FastSlowStore;
 use nativelink_store::filesystem_store::FilesystemStore;
 use nativelink_store::memory_store::MemoryStore;
 use nativelink_util::common::DigestInfo;
-use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
+use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, make_ctx_for_hash_func};
 use nativelink_util::store_trait::{Store, StoreLike};
 use nativelink_worker::authority_worker::AuthorityWorker;
 use nativelink_worker::authority_worker_transport::run_reconnecting;
 use nativelink_worker::namespace_utils;
 use nativelink_worker::running_actions_manager::{ExecutionConfiguration, PersistentWorkersSettings, RunningActionsManagerArgs, RunningActionsManagerImpl, UseNamespaces};
+use opentelemetry::context::FutureExt;
 use prost::Message;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
@@ -246,63 +247,81 @@ impl Context {
         command: Command,
         do_not_cache: bool,
     ) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
-        let command_digest = serialize_and_upload_message(
-            &command,
-            self.cas.as_pin(),
-            &mut DigestHasherFunc::Sha256.hasher(),
-        )
-        .await
-        .unwrap();
-        let input_root_digest = serialize_and_upload_message(
-            &Directory::default(),
-            self.cas.as_pin(),
-            &mut DigestHasherFunc::Sha256.hasher(),
-        )
-        .await
-        .unwrap();
-        let action = Action {
+        self.command_request_with_policy_and_algorithm(
+            timeout,
+            command,
             do_not_cache,
-            command_digest: Some(command_digest.into()),
-            input_root_digest: Some(input_root_digest.into()),
-            timeout: Some(prost_types::Duration {
-                seconds: timeout,
-                nanos: 0,
-            }),
-            platform: Some(Platform {
-                properties: vec![
-                    Property {
-                        name: "cpu_count".to_owned(),
-                        value: "1".to_owned(),
-                    },
-                    Property {
-                        name: "memory_kb".to_owned(),
-                        value: "1024".to_owned(),
-                    },
-                ],
-            }),
-            ..Action::default()
-        };
-        let mut bytes = action.encode_to_vec();
-        // A valid unknown protobuf field is retained in original CAS bytes.
-        bytes.extend_from_slice(&[0xf8, 0xf0, 0x04, 1]);
-        let mut hasher = DigestHasherFunc::Sha256.hasher();
-        hasher.update(&bytes);
-        let digest = hasher.finalize_digest();
-        self.cas
-            .update_oneshot(digest, bytes.clone().into())
+            DigestHasherFunc::Sha256,
+        )
+        .await
+    }
+
+    async fn command_request_with_policy_and_algorithm(
+        &self,
+        timeout: i64,
+        command: Command,
+        do_not_cache: bool,
+        algorithm: DigestHasherFunc,
+    ) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
+        let context = make_ctx_for_hash_func(algorithm).unwrap();
+        async {
+            let command_digest =
+                serialize_and_upload_message(&command, self.cas.as_pin(), &mut algorithm.hasher())
+                    .await
+                    .unwrap();
+            let input_root_digest = serialize_and_upload_message(
+                &Directory::default(),
+                self.cas.as_pin(),
+                &mut algorithm.hasher(),
+            )
             .await
             .unwrap();
-        (
-            ExecuteRequest {
-                instance_name: "rpc-test".to_owned(),
-                action_digest: Some(digest.into()),
-                digest_function: 1,
-                skip_cache_lookup: true,
-                ..ExecuteRequest::default()
-            },
-            digest,
-            bytes,
-        )
+            let action = Action {
+                do_not_cache,
+                command_digest: Some(command_digest.into()),
+                input_root_digest: Some(input_root_digest.into()),
+                timeout: Some(prost_types::Duration {
+                    seconds: timeout,
+                    nanos: 0,
+                }),
+                platform: Some(Platform {
+                    properties: vec![
+                        Property {
+                            name: "cpu_count".to_owned(),
+                            value: "1".to_owned(),
+                        },
+                        Property {
+                            name: "memory_kb".to_owned(),
+                            value: "1024".to_owned(),
+                        },
+                    ],
+                }),
+                ..Action::default()
+            };
+            let mut bytes = action.encode_to_vec();
+            // A valid unknown protobuf field is retained in original CAS bytes.
+            bytes.extend_from_slice(&[0xf8, 0xf0, 0x04, 1]);
+            let mut hasher = algorithm.hasher();
+            hasher.update(&bytes);
+            let digest = hasher.finalize_digest();
+            self.cas
+                .update_oneshot(digest, bytes.clone().into())
+                .await
+                .unwrap();
+            (
+                ExecuteRequest {
+                    instance_name: "rpc-test".to_owned(),
+                    action_digest: Some(digest.into()),
+                    digest_function: algorithm.proto_digest_func().into(),
+                    skip_cache_lookup: true,
+                    ..ExecuteRequest::default()
+                },
+                digest,
+                bytes,
+            )
+        }
+        .with_context(context)
+        .await
     }
 
     fn release(&self) {

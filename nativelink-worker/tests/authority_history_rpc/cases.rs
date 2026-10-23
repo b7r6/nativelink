@@ -19,7 +19,9 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
     HistoricalExecuteResponse, authority_attempt_report,
 };
 use nativelink_scheduler::authority::ExecutionId;
-use nativelink_scheduler::authority::accepted_history::{HistoryAssociation, HistoryStatus};
+use nativelink_scheduler::authority::accepted_history::{
+    HistoryAlgorithm, HistoryAssociation, HistoryStatus,
+};
 use nativelink_scheduler::authority::format::{ACCEPTED_HISTORY, accepted_history_namespace};
 use nativelink_store::verify_store::VerifyStore;
 
@@ -145,7 +147,7 @@ fn history_bytes(action: DigestInfo, response: &[u8]) -> Vec<u8> {
     bytes
 }
 
-async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
+async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool, exit_code: i32) {
     if !namespaces() {
         return;
     }
@@ -162,8 +164,8 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
         Context::with_slow_store(false, Store::new(verified), Duration::from_secs(10)).await;
     let marker = context.directory.path().join("executed");
     let release = context.directory.path().join("release");
-    let (request, action, _) = context
-        .command_request_with_policy(
+    let (request, action, action_bytes) = context
+        .command_request_with_policy_and_algorithm(
             30,
             Command {
                 arguments: vec![
@@ -179,8 +181,28 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
                 ..Command::default()
             },
             do_not_cache,
+            algorithm,
         )
         .await;
+    assert_eq!(
+        request.digest_function,
+        i32::from(algorithm.proto_digest_func())
+    );
+    let decoded_action = Action::decode(action_bytes.as_slice()).unwrap();
+    for digest in [
+        action,
+        DigestInfo::try_from(decoded_action.command_digest.unwrap()).unwrap(),
+        DigestInfo::try_from(decoded_action.input_root_digest.unwrap()).unwrap(),
+    ] {
+        let bytes = contents.get_part_unchunked(digest, 0, None).await.unwrap();
+        let mut hasher = algorithm.hasher();
+        hasher.update(&bytes);
+        assert_eq!(
+            hasher.finalize_digest(),
+            digest,
+            "uploaded input uses the requested digest function"
+        );
+    }
     let clock = Arc::new(AtomicU64::new(0));
     let faults = Arc::new(QualificationFaults::default());
     // Ordinary publication is held throughout, so an AC write can only have
@@ -219,6 +241,10 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
         })
         .await;
     let execution = running.attempts[0].execution;
+    assert_eq!(
+        running.executions[0].request.action.digest_function,
+        algorithm.to_string().to_lowercase()
+    );
     context.assert_once();
     runtime.shutdown().await;
     drop(stream);
@@ -260,6 +286,13 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
         (result.stdout_digest.as_ref().unwrap(), b"stdout".as_slice()),
         (result.stderr_digest.as_ref().unwrap(), b"stderr".as_slice()),
     ] {
+        let mut hasher = algorithm.hasher();
+        hasher.update(expected);
+        assert_eq!(
+            hasher.finalize_digest(),
+            DigestInfo::try_from(digest).unwrap(),
+            "worker output uses the requested digest function"
+        );
         assert_eq!(
             contents
                 .get_part_unchunked(DigestInfo::try_from(digest).unwrap(), 0, None)
@@ -299,7 +332,7 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
         .history_association(execution, HistoryStatus::Pending)
         .await;
     let expected = history_bytes(action, &captured.value);
-    let mut hasher = DigestHasherFunc::Sha256.hasher();
+    let mut hasher = algorithm.hasher();
     hasher.update(&expected);
     let digest = hasher.finalize_digest();
     assert_eq!(
@@ -307,6 +340,13 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
         accepted_history_namespace(DOMAIN)
     );
     assert_eq!(pending.recipe.object.hash, **digest.packed_hash());
+    assert_eq!(
+        pending.recipe.object.algorithm,
+        match algorithm {
+            DigestHasherFunc::Sha256 => HistoryAlgorithm::Sha256,
+            DigestHasherFunc::Blake3 => HistoryAlgorithm::Blake3,
+        }
+    );
     assert_eq!(pending.recipe.object.size_bytes, digest.size_bytes());
     assert_eq!(contents.has(digest).await.unwrap(), None);
     assert_eq!(context.history.len_for_test(), 0);
@@ -348,16 +388,26 @@ async fn actual_process_history(do_not_cache: bool, exit_code: i32) {
     supervisor.await.unwrap().unwrap();
     runtime.shutdown().await;
     eprintln!(
-        "AUTHORITY_REAL_PROCESS_HISTORY: namespaces executed; do_not_cache={do_not_cache}; exit_code={exit_code}; output/stdout/stderr verified in CAS; legacy Everything bypassed; feature2+3 accepted candidate preserved; pending history survived restart; exact captured response history verified in CAS; terminal unchanged"
+        "AUTHORITY_REAL_PROCESS_HISTORY: namespaces executed; algorithm={algorithm}; do_not_cache={do_not_cache}; exit_code={exit_code}; inputs/output/stdout/stderr verified in CAS; legacy Everything bypassed; feature2+3 accepted candidate preserved; pending history survived restart; exact captured response history verified in CAS; terminal unchanged"
     );
 }
 
 #[nativelink_test]
 async fn do_not_cache_real_process_publishes_accepted_history_after_restart() {
-    actual_process_history(true, 0).await;
+    actual_process_history(DigestHasherFunc::Sha256, true, 0).await;
 }
 
 #[nativelink_test]
 async fn nonzero_exit_real_process_publishes_accepted_history_after_restart() {
-    actual_process_history(false, 7).await;
+    actual_process_history(DigestHasherFunc::Sha256, false, 7).await;
+}
+
+#[nativelink_test]
+async fn blake3_do_not_cache_real_process_publishes_accepted_history_after_restart() {
+    actual_process_history(DigestHasherFunc::Blake3, true, 0).await;
+}
+
+#[nativelink_test]
+async fn blake3_nonzero_exit_real_process_publishes_accepted_history_after_restart() {
+    actual_process_history(DigestHasherFunc::Blake3, false, 7).await;
 }

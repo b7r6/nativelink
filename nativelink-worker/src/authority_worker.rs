@@ -43,7 +43,9 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
 };
 use nativelink_util::action_messages::{ActionResult, ActionStage, OperationId};
 use nativelink_util::background_spawn;
+use nativelink_util::digest_hasher::{DigestHasherFunc, make_ctx_for_hash_func};
 use nativelink_util::work_progress::{PhaseProgress, ProgressObserver, ProgressPhase};
+use opentelemetry::context::FutureExt;
 use parking_lot::Mutex;
 use prost::Message;
 use tokio::sync::{oneshot, watch};
@@ -812,57 +814,76 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         &self, target: AuthorityAttemptIdentity, dispatch: AuthorityDispatch,
         cancelled: watch::Receiver<bool>, observer: oneshot::Sender<u32>, progress: ProgressObserver,
     ) -> (Result<ActionResult, Error>, bool, Option<nativelink_proto::com::github::trace_machina::nativelink::remote_execution::ActionResourceUsage>){
-        let start = StartExecute {
-            execute_request: dispatch.execute_request,
-            operation_id: operation_id(&target),
-            queued_timestamp: dispatch.queued_timestamp,
-            platform: dispatch.platform,
-            worker_id: self.identity.worker_id.to_string(),
-            request_metadata: dispatch.request_metadata,
-        };
-        // Creation does not launch the action process. The launch seam below
-        // is the only observation that permits a Running report.
-        self.phase(target.attempt_id, AuthorityAttemptPhase::Preparing);
-        let action = match self
-            .manager
-            .create_and_add_authority_action_observed(
-                self.identity.worker_id.to_string(),
-                start,
-                progress,
-            )
-            .await
+        // Authority v1 fixes an omitted digest function to SHA256. Scope the
+        // whole action future so uploads and inherited task contexts use its
+        // algorithm, independently of the legacy process default.
+        let algorithm = match dispatch
+            .execute_request
+            .as_ref()
+            .map_or(0, |request| request.digest_function)
         {
-            Ok(action) => action,
+            0 => Ok(DigestHasherFunc::Sha256),
+            value => DigestHasherFunc::try_from(value),
+        };
+        let context = match algorithm.and_then(make_ctx_for_hash_func) {
+            Ok(context) => context,
             Err(error) => return (Err(error), true, None),
         };
-        let result = async {
-            action.observe_launch(observer)?;
-            if *cancelled.borrow() {
-                return Err(make_err!(
-                    Code::Cancelled,
-                    "Attempt cancelled before preparation"
-                ));
+        async {
+            let start = StartExecute {
+                execute_request: dispatch.execute_request,
+                operation_id: operation_id(&target),
+                queued_timestamp: dispatch.queued_timestamp,
+                platform: dispatch.platform,
+                worker_id: self.identity.worker_id.to_string(),
+                request_metadata: dispatch.request_metadata,
+            };
+            // Creation does not launch the action process. The launch seam below
+            // is the only observation that permits a Running report.
+            self.phase(target.attempt_id, AuthorityAttemptPhase::Preparing);
+            let action = match self
+                .manager
+                .create_and_add_authority_action_observed(
+                    self.identity.worker_id.to_string(),
+                    start,
+                    progress,
+                )
+                .await
+            {
+                Ok(action) => action,
+                Err(error) => return (Err(error), true, None),
+            };
+            let result = async {
+                action.observe_launch(observer)?;
+                if *cancelled.borrow() {
+                    return Err(make_err!(
+                        Code::Cancelled,
+                        "Attempt cancelled before preparation"
+                    ));
+                }
+                action.clone().prepare_action().await?;
+                if *cancelled.borrow() {
+                    return Err(make_err!(
+                        Code::Cancelled,
+                        "Attempt cancelled before launch"
+                    ));
+                }
+                self.phase(target.attempt_id, AuthorityAttemptPhase::LaunchUncertain);
+                action.clone().execute().await?;
+                self.phase(target.attempt_id, AuthorityAttemptPhase::Uploading);
+                action.clone().upload_results().await?;
+                action.clone().get_finished_result().await
             }
-            action.clone().prepare_action().await?;
-            if *cancelled.borrow() {
-                return Err(make_err!(
-                    Code::Cancelled,
-                    "Attempt cancelled before launch"
-                ));
+            .await;
+            let usage = action.resource_usage();
+            let quiescent = action.process_domain_quiescent();
+            match action.cleanup().await {
+                Ok(_) => (result, quiescent, usage),
+                Err(error) => (Err(error), false, usage),
             }
-            self.phase(target.attempt_id, AuthorityAttemptPhase::LaunchUncertain);
-            action.clone().execute().await?;
-            self.phase(target.attempt_id, AuthorityAttemptPhase::Uploading);
-            action.clone().upload_results().await?;
-            action.clone().get_finished_result().await
         }
-        .await;
-        let usage = action.resource_usage();
-        let quiescent = action.process_domain_quiescent();
-        match action.cleanup().await {
-            Ok(_) => (result, quiescent, usage),
-            Err(error) => (Err(error), false, usage),
-        }
+        .with_context(context)
+        .await
     }
 
     async fn drive(

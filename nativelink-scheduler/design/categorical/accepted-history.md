@@ -114,9 +114,18 @@ The eight receipt-retirement faults also remain detected on the composed source;
 [composition receipts](evidence/history-receipt-composition/manifest.json) preserve
 the restored fourteen-test baseline and exact source snapshot.
 
-Two [real worker histories](evidence/real-worker-history/manifest.json) also execute
-namespace processes for noncacheable success and a nonzero exit. They verify
-outputs, exact diagnostic bytes, pending delivery across restart, and unchanged
-terminals while deliberately configuring the unused legacy upload policies.
-These process cases use SHA256; the separate verifying-CAS RPC cases cover both
-algorithms.
+The original two [real worker histories](evidence/real-worker-history/manifest.json)
+execute namespace processes for noncacheable success and a nonzero exit. The
+[BLAKE3 extension](evidence/worker-history-blake3/manifest.json) runs both outcomes
+with SHA256 and BLAKE3 through a hash-verifying CAS. Each case independently checks
+the request algorithm, Action, Command, input root, outputs, stdout, stderr, and
+exact diagnostic bytes. Pending delivery survives restart without changing the
+accepted terminal, while the configured legacy upload policies remain unused.
+
+The BLAKE3 process cases exposed a missing action-scoped digest context in the
+authority worker: valid inputs launched successfully, but result upload presented
+BLAKE3 output digests to a verifier still using SHA256. The worker now scopes
+creation, preparation, execution, upload, and cleanup to the request algorithm;
+spawned tasks inherit that context. An omitted algorithm remains SHA256 under the
+authority protocol. No process-wide digest default changes. The receipts retain
+the failing process run, source snapshots, and the passing regression checks.

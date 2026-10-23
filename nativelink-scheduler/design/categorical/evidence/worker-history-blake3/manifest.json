@@ -1,0 +1,218 @@
+{
+  "scope": "Experimental authority worker action digest context; real SHA256 and BLAKE3 namespace-process histories. Production constructors remain unchanged.",
+  "patch_sha256": "cd7fc91f764374090a1f6abf54a4ecbe674b4063f3022215fc91e8088a27d186",
+  "original_manifest_sha256": "2b272ad59937d9950e688d70b0b26ccf707d20a22a978e855a709c7688aded02",
+  "integrated_source_sha256": {
+    "nativelink-scheduler/design/categorical/accepted-history.md": "4ac05c4683c487ebfbb09fc406afa8b7eb25969ac91454c6419fdedc29cb739c",
+    "nativelink-worker/BUILD.bazel": "b8207d4abdee4fc8df233942e5518b933d203b215b156f6ea2ec61206e395c02",
+    "nativelink-worker/src/authority_worker.rs": "a3b2829754a88db92702fb67d920f9e99cf5cd2b14f4c677a0a218f4c29cd53b",
+    "nativelink-worker/tests/authority_history_rpc/cases.rs": "5c13afeaa9aa46aa411897624bdda99092a56eb2e8fd73528de609d159bb5d60",
+    "nativelink-worker/tests/authority_rpc_test.rs": "354cf90ce7ab9f25185b94c433e7b8367be630fe3c6342771f734d51490e6fa4"
+  },
+  "validation": [
+    "Four algorithm/outcome histories pass serially and concurrently; retained failing process reproduction distinguishes actual missing digest context from prerequisite fixture failure.",
+    "Root Bazel history, receipt RPC, default authority RPC, authority scheduler and authority worker targets pass. The combined log also includes two scheduler experiment targets."
+  ],
+  "receipts": [
+    {
+      "file": "assemble_receipts.py.gz",
+      "source_sha256": "8c291d6ce08c6c24b96793ea943255e00ff5971b671097b103baf37042fe318a",
+      "archive_sha256": "af6370529dbedb3d9996dc9b32cf3c51d883d67e8930ffb37199c00a2c603549"
+    },
+    {
+      "file": "authority-worker-regressions.json.gz",
+      "source_sha256": "8068fd180b13840a606bc0bd3c8909e26a72fac4ba1a7bf3f1d98d1711d11855",
+      "archive_sha256": "2f5c510823e2daed11f3bb7537ec059de4c5896d0c077d2198cfd8c695e9dc73"
+    },
+    {
+      "file": "authority-worker-regressions.log.gz.gz",
+      "source_sha256": "92d60ff127368d6745e159701b4b25f3d16a94015de332bcd7282cad4e11da75",
+      "archive_sha256": "445d8d3482e4ffc72eeefc3d75c580b097335df02d743f67dbccbe044a5cc3e0"
+    },
+    {
+      "file": "buildifier-check.json.gz",
+      "source_sha256": "e9d7b6b59f0cc1b29c31be030839592ee62e5c61571611f84ee8907fd9ae32f6",
+      "archive_sha256": "a0e74fa522ffa95f9d282c73d0e280e55017e0255503fe9ef7332b7f6ff2e8fe"
+    },
+    {
+      "file": "buildifier-check.log.gz.gz",
+      "source_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "archive_sha256": "af709b5da6d1d594c94e4ac608ed43efc2bc90ad2fc1355d7da902b77db31935"
+    },
+    {
+      "file": "default-and-feature2-regressions.json.gz",
+      "source_sha256": "e7a7b32349b37b8801b8209450a200c34b2c5f50ed358c13361791143f9da2f9",
+      "archive_sha256": "e5dcc695c9e5482da0a0d8b06d74554810a4bd1e48a84cd076ac1cb09147f4b8"
+    },
+    {
+      "file": "default-and-feature2-regressions.log.gz.gz",
+      "source_sha256": "515627e0edbf8143945e5c16528db5d4d01d5a042135f457b928526441d97bb1",
+      "archive_sha256": "e15e25ef29eb1fde5f1b6f6581ce08c99c4d01ca5a91e3a2294188b64bade1d0"
+    },
+    {
+      "file": "fixed-source/nativelink-scheduler/design/categorical/accepted-history.md.gz.gz",
+      "source_sha256": "575726155c8b55f854303081ce2e25df8b00582c71edc651bc4089da1a924c92",
+      "archive_sha256": "53acd413b3f43da8ce3b0af215cbfb5c9b07f76e4ad001dddbb9d599be2b779b"
+    },
+    {
+      "file": "fixed-source/nativelink-worker/BUILD.bazel.gz.gz",
+      "source_sha256": "5b6ca5149f83947c6ef732c14577fc1b21f86ee3ab9a599923503fdb8637cef7",
+      "archive_sha256": "d0231d688e7f4104569bd1f5967af9a7a2bb6aa3b7a4a3349c26bba29068aacb"
+    },
+    {
+      "file": "fixed-source/nativelink-worker/src/authority_worker.rs.gz.gz",
+      "source_sha256": "c9a7c1e00a8c7178df24f61cc609a1eb216a320e6f3685b50d8bfe7d2d8600e0",
+      "archive_sha256": "837a408829c658df99fe7de7b4e674b16fec14ea7a93097cbd863b6cd0c6913e"
+    },
+    {
+      "file": "fixed-source/nativelink-worker/tests/authority_history_rpc/cases.rs.gz.gz",
+      "source_sha256": "f877780806ab0257aa263836acd14d40510d64c2fe9e375dad703a98b2d9fa06",
+      "archive_sha256": "2c774aaeb0922323356a67e0f5734228b5611160894a68a3a53edeadebe2fd4a"
+    },
+    {
+      "file": "fixed-source/nativelink-worker/tests/authority_rpc_test.rs.gz.gz",
+      "source_sha256": "1d05f523d37e3caadeb0af08341ac5074c8f0ad662a7c484f87c90cfb07417e1",
+      "archive_sha256": "5e38d8bd7da331eb9237284aba879a86ae08386978b43266efbc7081793c1eb7"
+    },
+    {
+      "file": "four-histories-parallel.json.gz",
+      "source_sha256": "4ea3c98e77381e77601c1820062c4edcdfb8899d1123a8326febb780b32b003c",
+      "archive_sha256": "80e68f82459566e7293c1406d3ce63f454edeccd912ed040e47569a5e26ade05"
+    },
+    {
+      "file": "four-histories-parallel.log.gz.gz",
+      "source_sha256": "41f32f7afd98443b1dc0a44b3a42c8d3e993ebed8ec60dcbfec7cc1a97e1ecdd",
+      "archive_sha256": "2afeac6f228d84238a706f160610a917d4ee8da4d6e13e8a38618e01bc53108f"
+    },
+    {
+      "file": "four-histories-serial.json.gz",
+      "source_sha256": "a035fe631677507c7242846eddfa5557794cc3b312a3e87ffb42c9e240883f73",
+      "archive_sha256": "eff307916b6a7a99e76914f6a4c9b122d01d032c9ffa80ceb107038b3fb32ed3"
+    },
+    {
+      "file": "four-histories-serial.log.gz.gz",
+      "source_sha256": "0fd0e54283420adb8c3930c22f33cfc7b8925cf11727c0a2aef18ab73f3dee01",
+      "archive_sha256": "0c82036b3a58fa5a0b1bacaf9f1d4eb9d6352c5b12c8164cf7d099cbbabdac1d"
+    },
+    {
+      "file": "git-diff-check.json.gz",
+      "source_sha256": "a3897ad6cbec3c11a66534da914470965215e465e8e5ef86ae587ef171c51a92",
+      "archive_sha256": "bb334a1b8cbdf85c37f5a26146645b53330d91a5214893b27bd96c11f8a120ed"
+    },
+    {
+      "file": "git-diff-check.log.gz.gz",
+      "source_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "archive_sha256": "af709b5da6d1d594c94e4ac608ed43efc2bc90ad2fc1355d7da902b77db31935"
+    },
+    {
+      "file": "input-context-gap-source/nativelink-worker/tests/authority_history_rpc/cases.rs.gz.gz",
+      "source_sha256": "64cc0c9e0986381d49bbf929b9a612b7daa10afc0a48777fdb32fbea4541b448",
+      "archive_sha256": "eca6e5e6e75fcfadf76e1ff5beedabb58fde845173b997635d453598cd5477f3"
+    },
+    {
+      "file": "input-context-gap-source/nativelink-worker/tests/authority_rpc_test.rs.gz.gz",
+      "source_sha256": "34e200c22d4a8c925fc85b360f598ef01c3faa316f101c0586e9529578e9b044",
+      "archive_sha256": "adca50d96b38ea41c0804a6ea400c77e74592f2fc345ec5ba37cb89cb3988bf4"
+    },
+    {
+      "file": "input-context-gap.json.gz",
+      "source_sha256": "7458d6f8f345050f2dfb855318fe657d4cb0cacd69ca6253c2412f2c5e3ed590",
+      "archive_sha256": "cf36c7e25c5088ac306c00b2bd1c5c3279467aece251de4416792390c99d8dc5"
+    },
+    {
+      "file": "input-context-gap.log.gz.gz",
+      "source_sha256": "aae57aff96b3e80c1561d8a5a13ca0dd87983b6d2fa395d805fbdb6fcfdbb737",
+      "archive_sha256": "9d05db76a7961bec9af6ccf7336e5c217257410edef5c29208e38ee1053dc6f7"
+    },
+    {
+      "file": "manifest.json.gz",
+      "source_sha256": "2b272ad59937d9950e688d70b0b26ccf707d20a22a978e855a709c7688aded02",
+      "archive_sha256": "007bb29396e0ede83ba86ee5d7670892dfcf4dd6b064381c5d1cea33ceafd780"
+    },
+    {
+      "file": "qualification.json.gz",
+      "source_sha256": "88df953d9f3d7ea5fa2c11bdbd705761a25c9ce0b9cf4262df900c111189f05e",
+      "archive_sha256": "cb816156d6129321675e40301b6a50ef093edff0d21dca3e4bfaf11923c73428"
+    },
+    {
+      "file": "rustfmt-check.json.gz",
+      "source_sha256": "40abd1268153a367f0bc3c6980e9a43f075cbc58e5617a5c8aacaa551e5e0d2e",
+      "archive_sha256": "35f0c045b4eee9907e0a53571bf4a0c1afb102032abb4ef012038375146e04e1"
+    },
+    {
+      "file": "rustfmt-check.log.gz.gz",
+      "source_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "archive_sha256": "af709b5da6d1d594c94e4ac608ed43efc2bc90ad2fc1355d7da902b77db31935"
+    },
+    {
+      "file": "strict-clippy.json.gz",
+      "source_sha256": "c49befbb3f426db5df9d5f1c1fcc4c5798fc8f40bdf09969054f8384e43a3c73",
+      "archive_sha256": "228f38cb2c4d4a8f1bbe10f85eaa797bde54e1c49d5dcfd08d173f790f9a7fdb"
+    },
+    {
+      "file": "strict-clippy.log.gz.gz",
+      "source_sha256": "0fb5ef18e84752fbbc3b0d10e75c1c8ba7da247c228f30e354d18e4aa1663ceb",
+      "archive_sha256": "8d9418fcbf3af00951aa2de6a4ff80c4458cba966732bd5fe8625c1182b2e54b"
+    },
+    {
+      "file": "typos-check.json.gz",
+      "source_sha256": "c04ae204552729491a2f32820893c42fc1fa848486d87163a2e2f17532aa3a2b",
+      "archive_sha256": "bb6d4cd6b1bb0ffaa1dcd8d1b92dd745edcaad11b311876079e81502d07bfa59"
+    },
+    {
+      "file": "typos-check.log.gz.gz",
+      "source_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "archive_sha256": "af709b5da6d1d594c94e4ac608ed43efc2bc90ad2fc1355d7da902b77db31935"
+    },
+    {
+      "file": "vale-check.json.gz",
+      "source_sha256": "c470caf21160f33a0cdb85040c11cb9119af4bf89eb91f91e128dc75c27f680c",
+      "archive_sha256": "ffaf4ea1bb554c3e22eb8a266fc53afb457f963b30c639b454cb0502ed958cc4"
+    },
+    {
+      "file": "vale-check.log.gz.gz",
+      "source_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da",
+      "archive_sha256": "4c6300ab6c6e65e69984b1d88a4fd4ac66b12a3ed4abb3bbf65f0b80a1da2f1e"
+    },
+    {
+      "file": "worker-context-gap-source/nativelink-worker/BUILD.bazel.gz.gz",
+      "source_sha256": "5b6ca5149f83947c6ef732c14577fc1b21f86ee3ab9a599923503fdb8637cef7",
+      "archive_sha256": "d0231d688e7f4104569bd1f5967af9a7a2bb6aa3b7a4a3349c26bba29068aacb"
+    },
+    {
+      "file": "worker-context-gap-source/nativelink-worker/src/authority_worker.rs.gz.gz",
+      "source_sha256": "a6caca6e31e314826c54e146e9cbab24587ff7530937aaa674eb8143c202d7e1",
+      "archive_sha256": "34f9e9816be56aa2c8785b34d3de3b6b50546f04878650a82f4b0d09ac86ff59"
+    },
+    {
+      "file": "worker-context-gap-source/nativelink-worker/tests/authority_history_rpc/cases.rs.gz.gz",
+      "source_sha256": "f877780806ab0257aa263836acd14d40510d64c2fe9e375dad703a98b2d9fa06",
+      "archive_sha256": "2c774aaeb0922323356a67e0f5734228b5611160894a68a3a53edeadebe2fd4a"
+    },
+    {
+      "file": "worker-context-gap-source/nativelink-worker/tests/authority_rpc_test.rs.gz.gz",
+      "source_sha256": "1d05f523d37e3caadeb0af08341ac5074c8f0ad662a7c484f87c90cfb07417e1",
+      "archive_sha256": "5e38d8bd7da331eb9237284aba879a86ae08386978b43266efbc7081793c1eb7"
+    },
+    {
+      "file": "worker-context-gap.json.gz",
+      "source_sha256": "f8cb0d7b909952289f83812f9a17d1f0731efdfe48da5717bbb01d7215799e0b",
+      "archive_sha256": "93f51b29a85cfd2f23f9793c1f4b301e8541c05a07bb8e138b7e97d82e5ddb13"
+    },
+    {
+      "file": "worker-context-gap.log.gz.gz",
+      "source_sha256": "2f36e5cae6ed8eb755ab979a1d8377084270e9170ad4c9386a950dd06b724d44",
+      "archive_sha256": "a16a3d64cc11dc25fc915d76e50af38d039dfcb079d926272418b7f92949f2df"
+    },
+    {
+      "file": "worker-history-blake3.patch.gz",
+      "source_sha256": "cd7fc91f764374090a1f6abf54a4ecbe674b4063f3022215fc91e8088a27d186",
+      "archive_sha256": "78a2a32aec350f7e023e93b83c68e5c7111a1149ef2051516e80af8717018611"
+    },
+    {
+      "file": "integrated-bazel.log.gz",
+      "source_sha256": "23b43f97a21b40c419f0ecd78eb3b9b2a75463c430d1fd041ccfeb350d06194e",
+      "archive_sha256": "661441f905c31af178ecc74bedd4eed8e2edef8b2a9e0f9ba54ca9b9f51587b1"
+    }
+  ]
+}
