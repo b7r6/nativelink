@@ -872,6 +872,22 @@ passed nine Bazel targets (eight executed, one cached) and built the server with
 preserves the initial surviving selection. This is constructor compatibility,
 not enforcement on live snapshot installation or a cluster-wide resize policy.
 
+The experimental worker protocol now requires version 2 and explicit memory
+evidence before registration or reconnect inventory. A matching original
+reservation, successful output capture, quiescence and cleanup allow the existing
+memory retry policy to run without changing the Action or Command. Actual process
+fixtures cover growth and final resource failure with retained output/history,
+both digests, capacity changes, stale/replayed reports, restart and malformed
+evidence. Six compiled faults were detected. Root integration executed all ten
+selected Bazel targets and built the server with 553 unchanged inputs; the fresh
+listener binary also passed the four-case local mTLS fixture. The
+[receipt](evidence/authority-memory-wire/manifest.json) separates author Cargo,
+independent reviews, corrected fixture prerequisites and root integration.
+Oversized worker reports still become an ordinary bounded size error and lose
+the full graph and automatic memory retry. This explicit gap remains open;
+bounded marked reports received by the coordinator cannot silently become
+ordinary completions when their committed representation is too large.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
