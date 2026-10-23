@@ -221,3 +221,23 @@ The standalone Cargo lock uses existing repository versions and checksums.
 The library adds no dependency to the server or pure parser. Bazel targets are
 manual and Linux-only. Root workspace Cargo commands do not discover this
 standalone package.
+
+## Optional journal backend
+
+The optional `redb` feature adds a fixed journal capability. Its private backend
+keeps all four ownership locks with redb's database and live transactions. It
+opens and syncs through the pinned journal root, distinguishes exclusive creation
+from reopening, and refuses existing empty files under redb's opening locks.
+The scheduler's portable factory initializes its existing metadata before the
+new-file parent sync. This is an experimental constructor bridge; bootstrap and
+closed-member recovery remain separate.
+
+```sh
+cargo test --locked --manifest-path tools/canonical-filesystem/Cargo.toml --features redb
+bazel test //tools/canonical-filesystem:journal_test //tools/canonical-filesystem:journal_bridge_test
+```
+
+The cross-crate `journal_bridge_test` is a manual Linux Bazel target. Standalone
+Cargo does not execute it. See the
+[journal bridge contract](../../nativelink-scheduler/design/categorical/descriptor-journal.md)
+for cancellation, parent-sync failures, source binding and evidence boundaries.

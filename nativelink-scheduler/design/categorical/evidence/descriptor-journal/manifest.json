@@ -1,0 +1,215 @@
+{
+  "archive": {
+    "bytes": 187871,
+    "files_sha256": {
+      "bridge-build-fix-commit.log": "a524635bd198551a0e67f1e0d1b49c3f56bbcaec11cc1e828756f482ea077b80",
+      "commands.json": "9a2947b29f7d396e9ca3804515ac657a0a9c91c52f44e752aa95503cdb22497d",
+      "dependency-check.json": "2e43e9e84c7bf48f0c15ddf5de9da836043d330996eb130c6e71a0eb719111ee",
+      "dependency-tree.log": "12ecb958b692cdc85c457a7f7af4bc723341011127432316ac5a2235f6d67802",
+      "docs-precommit-corrected.log": "d50a9b396c225b1cb7d45c37ab9e523606174a4a26c93eb4698dc12b831e59b0",
+      "docs-precommit.log": "4f825c39250f45ce531aa8070844d29be957fd70ef66e1e33b28db039c3b8407",
+      "executable-hashes.json": "ccd717cdfaa0313dd3a66164c3f807fa248c3ab83ac3ff61eac880c651e509a8",
+      "final-source/Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+      "final-source/nativelink-scheduler/BUILD.bazel": "7bb60e4d0df7906274970646380dabbff5fa6b10b2def0bb88a3adb0d3939d81",
+      "final-source/nativelink-scheduler/src/authority/journal.rs": "56ec7231e76f3e6379a5656885a6d36698bd8fcdc057c6df1fc77d1f1301b619",
+      "final-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "b4cc11b6923c216f791f5584dae70483cfb79386ddbda8544783ef0eceb77add",
+      "final-source/tools/canonical-config/Cargo.lock": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+      "final-source/tools/canonical-filesystem/BUILD.bazel": "c38ef1530ddb81f73da59dd9e8dd5e4ff7c3df7291b23b6f37a1acd8844dbd1f",
+      "final-source/tools/canonical-filesystem/Cargo.lock": "d56907b86b7405e9a1eb17d1a26f141d7345e2c6505139f217eaab2c96d7e58e",
+      "final-source/tools/canonical-filesystem/Cargo.toml": "44fb6630fd5539d71152d44cef5628aecc92f00871c78b9eefbcc96141b53a3d",
+      "final-source/tools/canonical-filesystem/journal_bridge_test.rs": "5cbba3a4804683d60f953f2d7fe0cf0072c3f6eb1150736f87f4f8c4881f9770",
+      "final-source/tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+      "final-source/tools/canonical-filesystem/src/journal_tests.rs": "1c94de47f7e1f9424e34a4bfb2e038dc3022dbd29b462830fe7609e72d418a8d",
+      "final-source/tools/canonical-filesystem/src/lib.rs": "aed4e290e0373afa7bc55cb43ee85e0fdafc3f9d17d5193c1d21f86592496f52",
+      "final-source/tools/canonical-filesystem/src/tests.rs": "121c04108e7487425b17befee383be28f1fcc0644ac118c062873a34e0843587",
+      "frozen-source/Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+      "frozen-source/nativelink-scheduler/BUILD.bazel": "7bb60e4d0df7906274970646380dabbff5fa6b10b2def0bb88a3adb0d3939d81",
+      "frozen-source/nativelink-scheduler/src/authority/journal.rs": "56ec7231e76f3e6379a5656885a6d36698bd8fcdc057c6df1fc77d1f1301b619",
+      "frozen-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "b4cc11b6923c216f791f5584dae70483cfb79386ddbda8544783ef0eceb77add",
+      "frozen-source/tools/canonical-config/Cargo.lock": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+      "frozen-source/tools/canonical-filesystem/BUILD.bazel": "535e73e3ca3d06cfe73489a026937b2217799670bde4d2bbdefeda610b4e0f28",
+      "frozen-source/tools/canonical-filesystem/Cargo.lock": "d56907b86b7405e9a1eb17d1a26f141d7345e2c6505139f217eaab2c96d7e58e",
+      "frozen-source/tools/canonical-filesystem/Cargo.toml": "44fb6630fd5539d71152d44cef5628aecc92f00871c78b9eefbcc96141b53a3d",
+      "frozen-source/tools/canonical-filesystem/journal_bridge_test.rs": "26d8e8c12a2797209a3d4531e184c0df90d14472f6cc07434883221d608fdd7f",
+      "frozen-source/tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+      "frozen-source/tools/canonical-filesystem/src/journal_tests.rs": "1c94de47f7e1f9424e34a4bfb2e038dc3022dbd29b462830fe7609e72d418a8d",
+      "frozen-source/tools/canonical-filesystem/src/lib.rs": "aed4e290e0373afa7bc55cb43ee85e0fdafc3f9d17d5193c1d21f86592496f52",
+      "frozen-source/tools/canonical-filesystem/src/tests.rs": "4a185d5abb62cb5d8cee6050f26bba3fd4f92ebcc2e523303388100cc4b04c5f",
+      "fs-clippy-final-visibility.log": "e07ab8a075f4fef56972620ae9fe7f91b0225e6d3ea85547cc727c11666ed36c",
+      "fs-clippy-final-with-sync-test.log": "2bcf52706edbc0cc943ec8c5b0c686f2010e89274a555c870aac9716eec5cbdb",
+      "fs-clippy-final.log": "3c46335f91739dd7f0be2afe6116a62ce4b68d3724e2775f2dee734e7f4392f8",
+      "fs-clippy-initial.log": "ac8e14bc9658f58dfb20602392ead1bce1e563f643dc53e6708067158c4d456a",
+      "fs-default-features.log": "1bc2f790552917f8e147da3a501ae09d7c4be6ff1ada84c19473e751561674c0",
+      "fs-final.log": "997cb3696ceee3c1a3d068b9b13b62a0d78a7e3e21a9a55bcb8075e85bb4cfbf",
+      "fs-first.log": "e139ac6c2f90fd640917e84782d1f81be5551842d403dca90ccb2dd31cd469fc",
+      "fs-restored.log": "a108c5682077c24a5b611c1269dd77e3cd3e0930f8eb40636ef37507dddbc33d",
+      "mutation-results.json": "cd562e42fceb5b2ff5df740566b64e18707a710ff2523b46c7ad5a8a86444d88",
+      "mutations-driver.log": "f515c31a4fccb85b3971070fdbd2391bf2716fa271baa631b9965aca2ee7292f",
+      "mutations.py": "3815ba6f6f74698f27087102fd3e754a23bc98694a95ae01cb5c1c06a2a5946d",
+      "mutations/backend_drops_namespace_custody/compile.log": "35d724e872330dda59db999ae355ed151b14b1a7643dfcf0a196cf23db7504fd",
+      "mutations/backend_drops_namespace_custody/journal.rs": "2e805c257421ceca45108554eae9e05fcaa712a6f63168440204eac014e58140",
+      "mutations/backend_drops_namespace_custody/test.log": "322610025771c4f5970048a4c42154e330ee455f123ab131b479fdb62ce6a3db",
+      "mutations/existing_empty_initializes/compile.log": "80197a63277468e1e6244734d3e9ddfe7b49cc33609cf3d1209523708be57cae",
+      "mutations/existing_empty_initializes/journal.rs": "d90f238a9edae36d327370e81cd3af27646d324d674a43a26ecaca11c2950705",
+      "mutations/existing_empty_initializes/test.log": "458922cab075ddd22c007fd0dc1ddccbd0ea446fb902ca63745d019225db0241",
+      "mutations/parent_sync_omitted/compile.log": "8fe834ad9d26503eec71e0826e8eb54058a6302597721116a9c3e614d6961d40",
+      "mutations/parent_sync_omitted/journal.rs": "49382096e041d1a99588ddd54fa7fce215961c6cb5526554e8c2dab9bc256eff",
+      "mutations/parent_sync_omitted/sync.strace": "08594a954417312cacc1e531c37f2944c7b67135db5c1aba0466a51e635eaecc",
+      "mutations/parent_sync_omitted/test.log": "050682f53ed44704c2265ecc191acfce9065a3436a045f3480930efae6cee610",
+      "parent-sync-baseline.log": "752e8e0ced1072d73c105c29fc7ef549921cc2e6a2f05276fea877ad24980305",
+      "parent-sync-baseline.strace": "e0c252f79b8679f4f4a1d28df9228a39918cb9e3af9f7b45adf27290e4bd2ac9",
+      "parent-sync-eio.log": "c099bca406281c79f12d9976d2d99e5389bd86bf358d0e7b9a6ef107740b427e",
+      "parent-sync-eio.strace": "565e21e4236ba1678518b85e196295f687175e7f6d9585650cbb04530ca495c8",
+      "redb-source-inspection.json": "13692f6ee9593262798e195fd2cb35a6901214cbf80b30418a60ffe356b7347e",
+      "scheduler-clippy-final.log": "a73a7d753f61de7fed835a99af39b93ab6637840f4fb73e38d4b93b0e3f60578",
+      "scheduler-clippy-initial.log": "b48c82a5c51dd634dface8365ad69a47d0754fe5a0333efe3015047b328248ab",
+      "scheduler-factory-final.log": "cd9d96cae7f942567adfb72efdec5951ce1a43f66bf2195980c6f63c993a2293",
+      "scheduler-factory-initial.log": "469f2b292c2e9f2c07f3d1761dc1142ba1a45727e5187cd67d960eb943683a11",
+      "source-before-mutations.json": "74f6f96ea5d72bf5a7e57ae0ebdf71982f66a0670b0e9c846b6ce8e7a2d74249",
+      "source-commit-formatted.log": "57194f6684721aa0841a0c1badce6ab8f98884c60283385c16ec9bf4a49e60ec",
+      "source-commit.log": "5d0c7d7e7615283c036b7de33872d409091bf01c5a99345c3b1ba5f802c6be6d",
+      "source-final.json": "e46fde6ff63fbd576f82a949115c82a32b76bc1941009d71b542c90b315fcc54"
+    },
+    "path": "author-evidence.tar.gz",
+    "sha256": "2531b11bdd10808307b595f06383373c62ae12e83589d862a8cef5fb1d500a02"
+  },
+  "author_validation": {
+    "actual_parent_fsync_eio": {
+      "expected_errno": 5,
+      "fsync_ordinal": 9,
+      "log": "parent-sync-eio.log",
+      "passed": 1,
+      "source_snapshot": "frozen-source",
+      "trace": "parent-sync-eio.strace"
+    },
+    "default_features_filesystem": {
+      "log": "fs-default-features.log",
+      "passed": 25,
+      "source_snapshot": "frozen-source"
+    },
+    "existing_validation_body": {
+      "byte_identical_to_base": true,
+      "bytes": 6602,
+      "sha256": "27f7a80ac65483e79a947082a20bb3ba22668206df37b4931794a8938df8e929"
+    },
+    "feature_enabled_filesystem": {
+      "log": "fs-final.log",
+      "passed": 35,
+      "restored_log": "fs-restored.log",
+      "source_snapshot": "frozen-source"
+    },
+    "portable_factory": {
+      "log": "scheduler-factory-final.log",
+      "passed": 3
+    },
+    "selected_mutations": {
+      "compiled": 3,
+      "detected_by_executed_assertions": 3,
+      "general_mutation_score": false,
+      "results": "mutation-results.json",
+      "source_restored": true
+    },
+    "strict_clippy": {
+      "filesystem": "fs-clippy-final-visibility.log",
+      "scheduler": "scheduler-clippy-final.log"
+    }
+  },
+  "base_commit": "05bbf430e8",
+  "bazel": {
+    "author_cargo_does_not_run_manual_bridge": true,
+    "evidence": "Root archives integrated Bazel results separately.",
+    "executed_by": "root in integrated checkout",
+    "root_reported_qualification": {
+      "bridge_and_scheduler_commit": "089f0b5e449354a4c4821860486088efdba62889",
+      "bridge_passed": 7,
+      "default_features_filesystem_passed": 25,
+      "feature_enabled_filesystem_passed": 35,
+      "final_filesystem_source_commit": "902a5e88144d4f6263fa172d1236a6d9a1bf61ef",
+      "logs_owned_by_root": "/tmp/nativelink-categorical-evidence/grant-journal-integration",
+      "runtime_sources_unchanged_since_author_source_commit": true,
+      "scheduler_unit_passed": 80
+    },
+    "targets": [
+      "//tools/canonical-filesystem:ownership_test",
+      "//tools/canonical-filesystem:journal_test",
+      "//tools/canonical-filesystem:journal_bridge_test",
+      "//nativelink-scheduler:unit_test"
+    ]
+  },
+  "boundaries": [
+    "No canonical runtime exposure, production format/schema/reducer change, bootstrap authorization or old-member fencing.",
+    "Factory binding/limits precede I/O; dynamic admission registration and full persisted-format validation retain their existing ordering.",
+    "The portable factory trusts its caller; only the concrete filesystem backend establishes owned descriptor custody.",
+    "Recover_admission remains an ambient-path API outside this bridge.",
+    "Parent fsync EIO and callback-error tests preserve readable artifacts; neither establishes power-loss durability or permission to auto-bootstrap.",
+    "Ownership is advisory and assumes cooperating participants; inode reuse, hostile same-user mutation and later hard links remain outside the claim.",
+    "Author executed test snapshots precede root-only test/helper/build qualification corrections; runtime Rust sources are unchanged. Final Clippy and root Bazel cover final test visibility.",
+    "The parent-sync-omission mutant is detected with the syscall-fault expectation; the ownership mutant uses two edits for one semantic fault."
+  ],
+  "commands": {
+    "fs_clippy": "cargo clippy --locked --offline --profile smol -j8 --manifest-path tools/canonical-filesystem/Cargo.toml --features redb --lib --tests -- -D warnings",
+    "fs_default": "cargo test --locked --offline --profile smol -j8 --manifest-path tools/canonical-filesystem/Cargo.toml --lib -- --test-threads=1",
+    "fs_enabled": "cargo test --locked --offline --profile smol -j8 --manifest-path tools/canonical-filesystem/Cargo.toml --features redb --lib -- --test-threads=1",
+    "fsync_injection": "NL_JOURNAL_TEST_EXPECT_PARENT_SYNC_EIO=1 strace -f -yy -e trace=fsync,fdatasync -e inject=fsync:error=EIO:when=9 -o parent-sync-eio.strace FS_TEST_EXECUTABLE --exact journal::tests::parent_sync_result_preserves_initialized_file --test-threads=1 --nocapture",
+    "mutations": "python3 mutations.py",
+    "scheduler_clippy": "cargo clippy --locked --offline --profile smol -j8 -p nativelink-scheduler --lib --tests -- -D warnings",
+    "scheduler_factory": "cargo test --locked --offline --profile smol -j8 -p nativelink-scheduler --lib authority::journal::factory_tests -- --test-threads=1 --nocapture"
+  },
+  "compiled_executables": {
+    "copies_retained_at": "/tmp/nativelink-journal-capability-evidence",
+    "portable_archive_contains_sources_commands_logs_hashes_not_executables": true,
+    "sha256": {
+      "fs-baseline-executable": "eb682ee15256f33761843d32e698df05cbcb5865dccb71cf2fe887176fa3728d",
+      "scheduler-final-executable": "4d26190c0bd9cdd859fac8198ab42a55673d8c2e394f6416b29449e9173b8fdd"
+    }
+  },
+  "dependency": {
+    "existing_standalone_versions_unchanged": true,
+    "identical": true,
+    "root_redb": {
+      "checksum": "39178e0a867f9e3eaa6292a4ab1dd3613f2519c5b564341e1e7b29b270736cc4",
+      "dependencies": [
+        "libc"
+      ],
+      "name": "redb",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "4.4.0"
+    },
+    "standalone_redb": {
+      "checksum": "39178e0a867f9e3eaa6292a4ab1dd3613f2519c5b564341e1e7b29b270736cc4",
+      "dependencies": [
+        "libc"
+      ],
+      "name": "redb",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "4.4.0"
+    }
+  },
+  "final_source_commit": "d8e3e1b459f6a57226dd9462b22d9ac6136c8f4b",
+  "root_test_build_corrections": [
+    "089f0b5e44",
+    "227110b5e6",
+    "f8a13747a8",
+    "902a5e8814"
+  ],
+  "source_commits": [
+    "b1c9c5d65114702bed68c411c214d279795e273e",
+    "abc6772420fac11d3c4294a1ec7f4cfd1a926c81"
+  ],
+  "source_files_sha256": {
+    "Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+    "nativelink-scheduler/BUILD.bazel": "7bb60e4d0df7906274970646380dabbff5fa6b10b2def0bb88a3adb0d3939d81",
+    "nativelink-scheduler/src/authority/journal.rs": "56ec7231e76f3e6379a5656885a6d36698bd8fcdc057c6df1fc77d1f1301b619",
+    "nativelink-scheduler/src/authority/journal_factory_tests.rs": "b4cc11b6923c216f791f5584dae70483cfb79386ddbda8544783ef0eceb77add",
+    "tools/canonical-config/Cargo.lock": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+    "tools/canonical-filesystem/BUILD.bazel": "c38ef1530ddb81f73da59dd9e8dd5e4ff7c3df7291b23b6f37a1acd8844dbd1f",
+    "tools/canonical-filesystem/Cargo.lock": "d56907b86b7405e9a1eb17d1a26f141d7345e2c6505139f217eaab2c96d7e58e",
+    "tools/canonical-filesystem/Cargo.toml": "44fb6630fd5539d71152d44cef5628aecc92f00871c78b9eefbcc96141b53a3d",
+    "tools/canonical-filesystem/journal_bridge_test.rs": "5cbba3a4804683d60f953f2d7fe0cf0072c3f6eb1150736f87f4f8c4881f9770",
+    "tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+    "tools/canonical-filesystem/src/journal_tests.rs": "1c94de47f7e1f9424e34a4bfb2e038dc3022dbd29b462830fe7609e72d418a8d",
+    "tools/canonical-filesystem/src/lib.rs": "aed4e290e0373afa7bc55cb43ee85e0fdafc3f9d17d5193c1d21f86592496f52",
+    "tools/canonical-filesystem/src/tests.rs": "121c04108e7487425b17befee383be28f1fcc0644ac118c062873a34e0843587"
+  },
+  "version": 1
+}
