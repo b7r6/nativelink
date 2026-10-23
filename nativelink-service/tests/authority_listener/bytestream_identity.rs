@@ -284,6 +284,20 @@ async fn active(runtime: &Runtime, name: &str) -> (mpsc::Sender<WriteRequest>, U
     (sender, task)
 }
 
+// Server progress records receipt into its channel. Wait separately for this
+// local fixture's backend before measuring update/byte counters or parking it.
+async fn settled_prefix(spy: &Spy) {
+    tokio::time::timeout(WAIT, async {
+        while spy.updates.load(Ordering::Relaxed) != 1
+            || spy.received.load(Ordering::Relaxed) != PREFIX
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("local backend did not consume the initial prefix");
+}
+
 #[derive(Clone, Copy)]
 enum Difference {
     Algorithm,
@@ -396,6 +410,7 @@ async fn idle_identity(case: Difference) {
     let digest = digest(DigestHasherFunc::Sha256, DATA);
     let name = resource(UUID, "sha256/", &digest);
     let (sender, task) = active(&runtime, &name).await;
+    settled_prefix(&spy).await;
     drop(sender);
     assert!(result(task).await.is_err());
     let before = spy.updates.load(Ordering::Relaxed);
@@ -442,24 +457,22 @@ async fn idle_resume_distinguishes_lossy_uuid_alias() {
     idle_identity(Difference::Uuid).await;
 }
 
-#[nativelink_test]
-async fn exact_active_collision_is_retryable_without_second_backend() {
+async fn exact_active_collision(offset: usize) {
     let (runtime, spy) = fixture(false, false).await;
     let digest = digest(DigestHasherFunc::Sha256, DATA);
     let name = resource(UUID, "sha256/", &digest);
     let (sender, task) = active(&runtime, &name).await;
-    for offset in [0, PREFIX] {
-        assert_eq!(
-            write(
-                runtime.worker.clone(),
-                frame(name.clone(), offset, true, &DATA[offset..])
-            )
-            .await
-            .unwrap_err()
-            .code(),
-            Code::Unavailable
-        );
-    }
+    settled_prefix(&spy).await;
+    assert_eq!(
+        write(
+            runtime.worker.clone(),
+            frame(name.clone(), offset, true, &DATA[offset..])
+        )
+        .await
+        .unwrap_err()
+        .code(),
+        Code::Unavailable
+    );
     assert_eq!(spy.updates.load(Ordering::Relaxed), 1);
     progress(runtime.client.clone(), &name, PREFIX).await;
     sender
@@ -472,16 +485,31 @@ async fn exact_active_collision_is_retryable_without_second_backend() {
 }
 
 #[nativelink_test]
-async fn same_uuid_different_blob_and_lossy_alias_uploads_are_independent() {
+async fn exact_active_collision_at_zero_is_retryable() {
+    exact_active_collision(0).await;
+}
+
+#[nativelink_test]
+async fn exact_active_collision_at_prefix_is_retryable() {
+    exact_active_collision(PREFIX).await;
+}
+
+async fn independent_upload(alias: bool) {
     let (runtime, spy) = fixture(false, false).await;
     let digest = digest(DigestHasherFunc::Sha256, DATA);
     let name = resource(UUID, "sha256/", &digest);
     let (sender, task) = active(&runtime, &name).await;
+    settled_prefix(&spy).await;
     drop(sender);
     assert!(result(task).await.is_err());
-    let other_data = b"a different blob";
+    let other_data = if alias { DATA } else { b"a different blob" };
     let other_digest = super::digest(DigestHasherFunc::Sha256, other_data);
-    let other_name = resource(UUID, "sha256/", &other_digest);
+    let other_uuid = if alias {
+        format!("{UUID}gg")
+    } else {
+        UUID.to_owned()
+    };
+    let other_name = resource(&other_uuid, "sha256/", &other_digest);
     write(
         runtime.worker.clone(),
         frame(other_name, 0, true, other_data),
@@ -493,11 +521,6 @@ async fn same_uuid_different_blob_and_lossy_alias_uploads_are_independent() {
         other_data
     );
     progress(runtime.client.clone(), &name, PREFIX).await;
-    let alias = resource(&format!("{UUID}gg"), "sha256/", &digest);
-    write(runtime.worker.clone(), frame(alias, 0, true, DATA))
-        .await
-        .unwrap();
-    progress(runtime.client.clone(), &name, PREFIX).await;
     write(
         runtime.worker.clone(),
         frame(name, PREFIX, true, &DATA[PREFIX..]),
@@ -505,6 +528,16 @@ async fn same_uuid_different_blob_and_lossy_alias_uploads_are_independent() {
     .await
     .unwrap();
     runtime.shutdown().await;
+}
+
+#[nativelink_test]
+async fn same_uuid_different_blob_upload_is_independent() {
+    independent_upload(false).await;
+}
+
+#[nativelink_test]
+async fn lossy_uuid_alias_upload_is_independent() {
+    independent_upload(true).await;
 }
 
 #[nativelink_test]
@@ -552,14 +585,18 @@ async fn single_message_tracks_identity_until_backend_completion() {
     runtime.shutdown().await;
 }
 
-async fn later_resource_name(case: Difference) {
+async fn later_resource_name(case: Option<Difference>) {
     let (runtime, spy) = fixture(false, false).await;
     let digest = digest(DigestHasherFunc::Sha256, DATA);
     let name = resource(UUID, "sha256/", &digest);
     let (sender, task) = active(&runtime, &name).await;
+    settled_prefix(&spy).await;
     sender
         .send(frame(
-            different(case, &digest),
+            case.map_or_else(
+                || resource(UUID, "", &digest),
+                |case| different(case, &digest),
+            ),
             PREFIX,
             true,
             &DATA[PREFIX..],
@@ -585,19 +622,24 @@ async fn later_resource_name(case: Difference) {
 
 #[nativelink_test]
 async fn later_frame_cannot_change_algorithm() {
-    later_resource_name(Difference::Algorithm).await;
+    later_resource_name(Some(Difference::Algorithm)).await;
 }
 #[nativelink_test]
 async fn later_frame_cannot_change_hash() {
-    later_resource_name(Difference::Hash).await;
+    later_resource_name(Some(Difference::Hash)).await;
 }
 #[nativelink_test]
 async fn later_frame_cannot_change_size() {
-    later_resource_name(Difference::Size).await;
+    later_resource_name(Some(Difference::Size)).await;
 }
 #[nativelink_test]
 async fn later_frame_cannot_change_uuid() {
-    later_resource_name(Difference::Uuid).await;
+    later_resource_name(Some(Difference::Uuid)).await;
+}
+
+#[nativelink_test]
+async fn later_frame_cannot_change_equivalent_digest_spelling() {
+    later_resource_name(None).await;
 }
 
 #[nativelink_test]

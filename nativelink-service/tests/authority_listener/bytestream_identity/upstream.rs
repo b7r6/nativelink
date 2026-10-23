@@ -174,12 +174,43 @@ async fn remote_fixture() -> (Runtime, Upstream, Arc<Spy>) {
     (runtime, upstream, spy)
 }
 
+// Observe entry into the real upstream update, without assuming any prefix
+// length has passed its transport. Query remains an explicit tested operation.
+async fn upstream_started(
+    runtime: &Runtime,
+    spy: &Spy,
+    name: &str,
+) -> (mpsc::Sender<WriteRequest>, UploadTask) {
+    let (sender, task) = writer(runtime.worker.clone());
+    sender
+        .send(frame(name.to_owned(), 0, false, &DATA[..PREFIX]))
+        .await
+        .unwrap();
+    tokio::time::timeout(WAIT, async {
+        while spy.updates.load(Ordering::Relaxed) != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("upstream backend update did not start");
+    (sender, task)
+}
+
 #[nativelink_test]
 async fn grpc_backed_query_uses_local_exact_upload_identity() {
     let (runtime, upstream, spy) = remote_fixture().await;
     let digest = digest(DigestHasherFunc::Sha256, DATA);
     let name = resource(UUID, "sha256/", &digest);
-    let (sender, task) = active(&runtime, &name).await;
+    let (sender, task) = upstream_started(&runtime, &spy, &name).await;
+    let exact = status(runtime.client.clone(), name.clone()).await.unwrap();
+    assert_eq!(upstream.queries.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        exact,
+        QueryWriteStatusResponse {
+            committed_size: PREFIX as i64,
+            complete: false
+        }
+    );
     assert_eq!(
         status(runtime.client.clone(), different(Difference::Hash, &digest))
             .await
@@ -218,7 +249,7 @@ async fn grpc_backed_write_preserves_exact_active_and_idle_identity() {
     let (runtime, upstream, spy) = remote_fixture().await;
     let digest = digest(DigestHasherFunc::Blake3, DATA);
     let name = resource(UUID, "blake3/", &digest);
-    let (sender, task) = active(&runtime, &name).await;
+    let (sender, task) = upstream_started(&runtime, &spy, &name).await;
     assert_eq!(
         write(runtime.worker.clone(), frame(name.clone(), 0, true, DATA))
             .await
@@ -228,11 +259,13 @@ async fn grpc_backed_write_preserves_exact_active_and_idle_identity() {
     );
     drop(sender);
     assert!(result(task).await.is_err());
+    let mut wrong_digest = digest.clone();
+    wrong_digest.hash = "aa".repeat(32);
     assert_eq!(
         write(
             runtime.worker.clone(),
             frame(
-                different(Difference::Hash, &digest),
+                resource(UUID, "blake3/", &wrong_digest),
                 PREFIX,
                 true,
                 &DATA[PREFIX..]
