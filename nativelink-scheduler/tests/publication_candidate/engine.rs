@@ -31,6 +31,9 @@ mod binding;
 mod direct_client;
 use direct_client::UpdateAuthorization;
 
+#[path = "terminal.rs"]
+mod terminal;
+
 #[path = "validation.rs"]
 mod validation;
 
@@ -56,6 +59,8 @@ struct Physical {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Credit {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    closed: bool,
     physical_remaining: usize,
     stage: Option<u64>,
     prior_stages: Vec<u64>,
@@ -74,6 +79,8 @@ struct Metadata {
     clients: BTreeSet<u64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     update_authorizations: BTreeMap<u64, UpdateAuthorization>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    terminal: Option<TerminalState>,
     namespaces: Vec<NamespaceBinding>,
     physical: Vec<Physical>,
     stages: BTreeMap<u64, Stage>,
@@ -139,6 +146,7 @@ impl PublicationAuthority {
                 credits: BTreeMap::new(),
                 clients: BTreeSet::new(),
                 update_authorizations: BTreeMap::new(),
+                terminal: None,
                 namespaces: Vec::new(),
                 physical: Vec::new(),
                 stages: BTreeMap::new(),
@@ -160,6 +168,17 @@ impl PublicationAuthority {
         let mut next = self.clone();
         next.metadata.commit = next.metadata.commit.checked_add(1).ok_or(Error::Bounds)?;
         let reply = apply(&mut next)?;
+        next.reconcile_terminal_credits();
+        if self.metadata.terminal.is_some() {
+            next.metadata.commit = self.metadata.commit;
+            if next.scheduler == self.scheduler
+                && next.retention == self.retention
+                && next.metadata == self.metadata
+            {
+                return Ok(reply);
+            }
+            next.metadata.commit = self.metadata.commit.checked_add(1).ok_or(Error::Bounds)?;
+        }
         // This is a current-state byte admission gate, not a reservation for
         // every future outer-metadata transition of an admitted execution.
         next.snapshot()?;
@@ -295,9 +314,10 @@ impl PublicationAuthority {
         self.metadata.commit
     }
 
-    /// Only nonterminal scheduler lifecycle traffic can enter this route.
+    /// Lifecycle events enter here; worker results require a publication or
+    /// the separately qualified no-graph report boundary.
     pub(crate) fn scheduler_event(&mut self, event: a::Event) -> Result<a::Reply, Error> {
-        if !matches!(
+        if !(matches!(
             &event,
             a::Event::Register { .. }
                 | a::Event::Capacity { .. }
@@ -308,7 +328,16 @@ impl PublicationAuthority {
                 | a::Event::Progress { .. }
                 | a::Event::Cleanup { .. }
                 | a::Event::EffectOutcome { .. }
-        ) {
+        ) || (self.metadata.terminal.is_some()
+            && matches!(
+                &event,
+                a::Event::Cancel { .. }
+                    | a::Event::RenewInterest { .. }
+                    | a::Event::ExpireInterest { .. }
+                    | a::Event::ExpireAttempt { .. }
+                    | a::Event::ExpireExecution { .. }
+            )))
+        {
             return Err(Error::Invalid);
         }
         self.transaction(|next| {
@@ -324,7 +353,7 @@ impl PublicationAuthority {
                         .metadata
                         .credits
                         .values()
-                        .filter(|row| row.stage.is_none())
+                        .filter(|row| row.stage.is_none() && !row.closed)
                         .count();
                     let physical = next.metadata.physical.len()
                         + next
@@ -557,12 +586,12 @@ impl PublicationAuthority {
             }
             let view = next.scheduler.view();
             if view.executions.iter().any(|row| row.id == execution && row.terminal.is_none()) && !next.metadata.credits.contains_key(&execution.0) {
-                let pending = next.metadata.credits.values().filter(|credit| credit.stage.is_none()).count();
+                let pending = next.metadata.credits.values().filter(|credit| credit.stage.is_none() && !credit.closed).count();
                 let physical = next.metadata.physical.len() + next.metadata.credits.values().map(|credit| credit.physical_remaining).sum::<usize>();
                 if next.metadata.stages.len() + pending >= MAX_STAGES || physical.checked_add(MAX_MEMBERS).is_none_or(|value| value > MAX_PHYSICAL) { return Err(Error::Bounds); }
                 // Each reserved stage also prepays MAX_MEMBERS stable writes and
                 // one accepted/result root; operation roots have separate caps.
-                next.metadata.credits.insert(execution.0, Credit { physical_remaining: MAX_MEMBERS, stage: None, prior_stages: Vec::new() });
+                next.metadata.credits.insert(execution.0, Credit { closed: false, physical_remaining: MAX_MEMBERS, stage: None, prior_stages: Vec::new() });
             }
             Ok(execution)
         })
@@ -788,7 +817,7 @@ impl PublicationAuthority {
                         .metadata
                         .credits
                         .values()
-                        .filter(|credit| credit.stage.is_none())
+                        .filter(|credit| credit.stage.is_none() && !credit.closed)
                         .count();
                     if next.metadata.stages.len() + pending >= MAX_STAGES {
                         return Err(Error::Bounds);
@@ -862,6 +891,12 @@ impl PublicationAuthority {
                     .any(|member| member.key == key && member.object == object)
             {
                 return Err(Error::Invalid);
+            }
+            // In private v4 an identical settled observation is a true no-op.
+            // Identity checks still precede this shortcut, and conflicting
+            // outcomes must pass the retention engine's rejection boundary.
+            if next.metadata.terminal.is_some() && row.outcomes.get(&write) == Some(&success) {
+                return Ok(());
             }
             let internal = *row.internal_writes.get(&write).ok_or(Error::Corrupt)?;
             next.retain(r::Event::WriteDone {

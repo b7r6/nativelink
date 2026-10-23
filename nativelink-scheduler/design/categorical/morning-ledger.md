@@ -479,6 +479,18 @@ No comparison against the successor candidate is claimed yet. Graph-bearing
 resource failures, active history, physical collection, durable publication
 formats and production cutover remain outside this checkpoint.
 
+The [private-v4 terminal candidate](publication-terminal.md) now accepts exact
+no-graph Complete and MemoryFailure reports while leaving retry classification
+and physical refunds to actual State. Cancellation, fenced expiry and exhaustion
+close unused logical credit while retaining stages, writes and uncertain charges.
+Review reproduced and fixed locally contradictory restore evidence, older-format
+downgrades, and duplicate write observations that invalidated preparation.
+The source was frozen before reading the new terminal oracle. Cargo passes
+54 candidate, eight existing comparison and nine physical cases; integrated
+Bazel also passes all eight worker cases. Candidate mutations, the corrected
+terminal-oracle comparison and the broad workspace refresh have separate pending
+receipts. Production role construction and every categorical gate remain open.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

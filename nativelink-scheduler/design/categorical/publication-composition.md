@@ -96,8 +96,15 @@ the original sources, failures and exact limits; the
 retains its own reproduced failure and receipts. This inventories retained owners;
 it does not execute a durable activation or convert unfinished executions.
 
+The explicit private-v4 [terminal successor](publication-terminal.md) adds
+no-graph Complete and MemoryFailure reports, cancellation and fenced expiry to
+the actual-State composition. Retry classification remains the scheduler's
+decision; accepted no-graph outcomes retain exact origin and operation
+associations without inventing a result object, root or head. Existing writes
+and uncertain reservations survive those lifecycle transitions.
+
 Remaining promotion work includes production request routing, active accepted
-history, terminals without an ActionResult, resource failures, cancellation and expiry,
-renewed protection, physical collection, durable publication sections and suffix
-replay, and production role construction. Conservative finite admission still
-needs the shared-authority workload budget. No M6 gate is declared complete.
+history, prepared graph-bearing resource failures, renewed protection, physical
+collection, durable publication sections and suffix replay, and production role
+construction. Conservative finite admission still needs the shared-authority
+workload budget. No M6 gate is declared complete.

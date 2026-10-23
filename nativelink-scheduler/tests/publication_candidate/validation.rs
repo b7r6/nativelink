@@ -22,6 +22,7 @@ impl PublicationAuthority {
             .check_invariants()
             .map_err(|_| Error::Corrupt)?;
         self.retention.snapshot().map_err(|_| Error::Corrupt)?;
+        self.validate_terminal_state()?;
         self.validate_bindings().map_err(|_| Error::Corrupt)?;
         self.validate_update_authorizations()
             .map_err(|_| Error::Corrupt)?;
@@ -36,6 +37,17 @@ impl PublicationAuthority {
             || scheduler.executions.len() > MAX_STAGES
             || scheduler.operations.len() > MAX_OPERATIONS
             || scheduler.workers.len() > MAX_STAGES
+            // Earlier private alphabets cannot cancel the last interest,
+            // classify a memory failure, or grow an execution's target. Do not
+            // accept removal of their private-v4 evidence as an older format.
+            || (meta.terminal.is_none()
+                && scheduler.executions.iter().any(|execution| {
+                    execution.reservation_target != execution.request.resources
+                        || matches!(
+                            execution.terminal,
+                            Some(a::TerminalResult::Cancelled | a::TerminalResult::ResourceFailed { .. })
+                        )
+                }))
             || scheduler.effects.len() > MAX_STAGES * 8
             || scheduler
                 .effects
@@ -80,7 +92,7 @@ impl PublicationAuthority {
         let pending = meta
             .credits
             .values()
-            .filter(|credit| credit.stage.is_none())
+            .filter(|credit| credit.stage.is_none() && !credit.closed)
             .count();
         if meta.stages.len() + pending > MAX_STAGES
             || meta.physical.len()
@@ -99,7 +111,9 @@ impl PublicationAuthority {
                 .iter()
                 .find(|row| row.id.0 == *execution)
                 .ok_or(Error::Corrupt)?;
-            if credit.physical_remaining > MAX_MEMBERS
+            if (credit.closed && (meta.terminal.is_none() || actual.terminal.is_none()))
+                || (meta.terminal.is_some() && credit.closed != actual.terminal.is_some())
+                || credit.physical_remaining > MAX_MEMBERS
                 || (actual.terminal.is_some() && credit.physical_remaining != 0)
             {
                 return Err(Error::Corrupt);
@@ -497,7 +511,8 @@ impl PublicationAuthority {
                 (None, None)
                     if operation.payload.is_none()
                         && !operation.cached
-                        && !matches!(actual.terminal, Some(a::TerminalResult::Completed(_))) => {}
+                        && (!matches!(actual.terminal, Some(a::TerminalResult::Completed(_)))
+                            || self.operation_has_no_graph(*id, actual.terminal.as_ref())) => {}
                 _ => return Err(Error::Corrupt),
             }
         }

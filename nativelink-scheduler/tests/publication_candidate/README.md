@@ -3,7 +3,8 @@
 This is a bounded test composition of the existing `authority::State` and
 `retention::Coarse`. It is not a production constructor, M6 activation, durable
 Raft boundary, provider adapter, or replacement implementation of either reducer.
-The publication-head reference implementation and its tests remain unread.
+The original graph candidate was implemented without reading the separately
+frozen publication-head reference reducer or its tests.
 
 Every public mutation runs on an outer clone. `Publish` checks current prepared
 physical identities and fences, passes the captured response to real
@@ -44,11 +45,12 @@ bounded encoding. Restoration validates cross-component identity, exact terminal
 bytes, provenance, protection roots and commit-order head selection. The derived
 index is disposable and rebuilt from current protected authoritative heads.
 
-The common alphabet requires a captured ExecuteResponse with an ActionResult.
-Error responses without an ActionResult, final MemoryFailure/ResourceFailed outcomes,
-last-interest cancellation/expiry, and active feature-3 history remain concrete
-promotion blockers. The fixture does not synthesize an empty ActionResult or
-route a memory failure through Complete. Fresh protection after an expired head,
+The original graph-publication alphabet requires a captured ExecuteResponse with
+an ActionResult. The explicit private-v4 extension below adds no-graph terminal
+outcomes, cancellation and expiry. Graph-bearing ResourceFailed outcomes and
+active feature-3 history remain concrete promotion blockers. The fixture does
+not synthesize an empty ActionResult or route a memory failure through Complete.
+Fresh protection after an expired head,
 provider retirement/deletion, production admission sizing, and persistent feature
 migration also remain separate qualification work. Physical preparation and live
 read barriers are trusted test inputs. Operation result deadlines and prepared
@@ -79,8 +81,8 @@ repeated scheduler progress, and all 64 cohort capture transitions. Every expose
 state snapshots and restores canonically. The largest measured snapshots after
 payload qualification are 1,082,981 bytes for success and 1,039,398 bytes for error;
 these witnesses are not a worst-case proof for all histories. No aggregate
-snapshot overflow was reproduced. Advance changes the two clocks only; it does
-not synthesize excluded last-interest expiry or cancellation transitions.
+snapshot overflow was reproduced. Advance changes the two clocks only; private
+v4 also requires explicit scheduler events for cancellation and expiry.
 
 A worker Stage previews actual Complete on a discarded scheduler clone before
 spending the current execution's single stage credit. A late predecessor cannot
@@ -118,3 +120,51 @@ retains the captured REAPI request and full trusted action binding without
 changing these frozen synthetic scenarios. Each joined operation is checked
 through its own original request. Real-mode direct publication now requires an explicit trusted grant as described
 above; provider readiness remains separately qualified.
+
+
+## No-graph terminal successor
+
+An explicit `enable_terminal_outcomes` transition selects private snapshot
+version 4. Older private formats omit the new section and the false `closed`
+credit field. Version 4 is unrelated to persistent feature activation; accepted
+history remains disabled. This is still a finite test composition.
+
+`report_no_graph` accepts a bounded report identity, the exact captured response,
+qualified action, epoch, execution, attempt, worker and incarnation. Both Complete
+and MemoryFailure require a validated response with no ActionResult. The actual
+State transition decides whether a memory failure retries or terminates, and
+selects the exact resource-failure reason. The outer layer records that observed
+decision, its commit position and logical time. A retry is a classified report,
+not a terminal acceptance. Reusing an identical report identity is a no-op;
+conflicting reuse refuses without mutation.
+
+Terminal acceptances have no publication ID, CAS object, graph closure or root.
+Only operations that the scheduler actually terminates with the accepted value
+receive its additive association. An independently canceled handle keeps its
+terminal. The accepted worker origin remains immutable after later revocation.
+Current scheduler authority is checked at report acceptance, not reauthorized
+when reading an already accepted record.
+
+Cancellation, interest renewal and fenced expiry use actual State events. Unused
+logical stage/member credit closes whenever the execution becomes terminal,
+including through worker loss or replacement. Physical reservations, cancellation
+intents, stage guards and write/outcome rows remain until their existing explicit
+transitions settle them. A final memory report requires its original charged
+vector and quiescence; cancellation or exhaustion alone cannot refund capacity.
+
+The successor admits at most three classified reports per execution, 24 reports
+and eight terminal acceptances overall. Operation associations fit the existing
+16-operation bound. Admission already reserves these finite row counts through
+the execution and operation caps; complete future outer-byte and retry-stage
+reserves remain unqualified. The complete proposed snapshot must fit 2 MiB before
+any transaction becomes visible. Ignored events preserve authoritative snapshot
+bytes even when the disposable index has been lost.
+
+The candidate author used the frozen terminal contract and actual State/Coarse
+APIs without reading the new terminal reference reducer or its tests. Separately
+written candidate scenarios were captured before the implementation was made
+available to their author. Qualification receipts distinguish the initial test
+accessor/coalescing corrections, candidate review fixes, restored baseline checks
+and compiled mutations. Neither these scenarios nor the separate reference
+qualify graph-bearing ResourceFailed preparation, history protection, production
+RPC routing, collectors or durable activation.

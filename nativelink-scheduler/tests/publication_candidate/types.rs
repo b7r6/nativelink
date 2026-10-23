@@ -24,6 +24,18 @@ use serde::{Deserialize, Serialize};
 mod real_request;
 pub(crate) use real_request::{ActionBinding, RealBindings, TrustedContext};
 
+#[path = "terminal_types.rs"]
+mod terminal_types;
+#[allow(
+    unused_imports,
+    reason = "Older shared fixtures do not construct terminal report origins."
+)]
+pub(crate) use terminal_types::WorkerOrigin;
+pub(crate) use terminal_types::{
+    ClassifiedReport, NoGraphAcceptance, NoGraphOutcome, NoGraphReport, ReportDisposition,
+    TerminalReportKind, TerminalState,
+};
+
 pub(crate) const MAX_STAGES: usize = 8;
 pub(crate) const MAX_OPERATIONS: usize = 16;
 pub(crate) const MAX_PHYSICAL: usize = 64;

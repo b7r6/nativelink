@@ -27,7 +27,9 @@ pub(super) struct UpdateAuthorization {
 
 impl Metadata {
     pub(super) fn snapshot_version(&self) -> u32 {
-        if !self.update_authorizations.is_empty() {
+        if self.terminal.is_some() {
+            4
+        } else if !self.update_authorizations.is_empty() {
             3
         } else if self.real.is_some() {
             2
@@ -262,6 +264,26 @@ impl PublicationAuthority {
             }
         }
         Ok(())
+    }
+
+    pub(super) fn retained_publication_positions(&self) -> BTreeSet<u64> {
+        self.metadata
+            .update_authorizations
+            .values()
+            .flat_map(|grant| std::iter::once(grant.issued_at).chain(grant.revoked_at))
+            .chain(
+                self.metadata
+                    .stages
+                    .values()
+                    .filter_map(|stage| stage.authorized_at),
+            )
+            .chain(
+                self.metadata
+                    .accepted
+                    .values()
+                    .map(|accepted| accepted.commit),
+            )
+            .collect()
     }
 
     pub(super) fn validate_update_stage(&self, stage: &Stage) -> Result<(), Error> {
