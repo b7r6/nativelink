@@ -1,0 +1,37 @@
+[package]
+name = "nativelink-canonical-config"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+# Deliberately independent of the server workspace and its legacy dependency
+# closure. The legacy DTO/converter is compiled into the offline binary only.
+[workspace]
+
+[profile.smol]
+inherits = "dev"
+debug = false
+opt-level = "z"
+strip = true
+
+[dependencies]
+serde = { version = "=1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "=1.0.150", default-features = false, features = ["std"] }
+serde_json5 = { version = "=0.2.1", default-features = false }
+
+[[bin]]
+name = "experimental-canonical-convert"
+path = "src/bin/convert.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"
+nursery = "deny"
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+must_use_candidate = { level = "allow", priority = 1 }
+too_many_lines = { level = "allow", priority = 1 }

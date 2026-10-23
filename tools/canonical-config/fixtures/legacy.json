@@ -1,0 +1,94 @@
+{
+  "stores": [
+    {
+      "name": "source-cas",
+      "filesystem": {
+        "content_path": "/source/cas/content",
+        "temp_path": "/source/cas/temp"
+      }
+    },
+    {
+      "name": "source-ac",
+      "filesystem": {
+        "content_path": "/source/ac/content",
+        "temp_path": "/source/ac/temp"
+      }
+    }
+  ],
+  "schedulers": [
+    {
+      "name": "source-scheduler",
+      "simple": {}
+    }
+  ],
+  "servers": [
+    {
+      "name": "source-client",
+      "listener": {
+        "http": {
+          "socket_address": "127.0.0.1:4100"
+        }
+      },
+      "services": {
+        "cas": [
+          {
+            "instance_name": "build",
+            "cas_store": "source-cas"
+          }
+        ],
+        "ac": [
+          {
+            "instance_name": "build",
+            "ac_store": "source-ac"
+          }
+        ],
+        "bytestream": [
+          {
+            "instance_name": "build",
+            "cas_store": "source-cas"
+          }
+        ],
+        "execution": [
+          {
+            "instance_name": "build",
+            "cas_store": "source-cas",
+            "scheduler": "source-scheduler"
+          }
+        ],
+        "capabilities": [
+          {
+            "instance_name": "build",
+            "remote_execution": {
+              "scheduler": "source-scheduler"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "source-worker",
+      "listener": {
+        "http": {
+          "socket_address": "127.0.0.1:4101"
+        }
+      },
+      "services": {
+        "worker_api": {
+          "scheduler": "source-scheduler"
+        },
+        "cas": [
+          {
+            "instance_name": "build",
+            "cas_store": "source-cas"
+          }
+        ],
+        "bytestream": [
+          {
+            "instance_name": "build",
+            "cas_store": "source-cas"
+          }
+        ]
+      }
+    }
+  ]
+}

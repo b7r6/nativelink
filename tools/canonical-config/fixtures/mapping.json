@@ -1,0 +1,81 @@
+{
+  "format": "experimental_filesystem_mapping_v1",
+  "source_bindings": {
+    "cas_store": "source-cas",
+    "ac_store": "source-ac",
+    "scheduler": "source-scheduler",
+    "instance_name": "build",
+    "client_listener": "source-client",
+    "worker_listener": "source-worker",
+    "worker_transfer_listener": "source-worker"
+  },
+  "candidate": {
+    "format": "experimental_singleton_filesystem_v1",
+    "instance_name": "build",
+    "authority": {
+      "node_id": 1,
+      "cluster_epoch": 2,
+      "namespace": 3,
+      "principal": "local-build-clients",
+      "journal_root": "/proposed/authority"
+    },
+    "cas": {
+      "namespace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "root": "/proposed/cas"
+    },
+    "temporary_action_cache": {
+      "namespace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "root": "/proposed/ac"
+    },
+    "listeners": {
+      "client": {
+        "bind_address": "127.0.0.1:5100",
+        "certificate_file": "/credentials/client-server.pem",
+        "key_file": "/credentials/client-server.key",
+        "client_ca_file": "/credentials/client-clients-ca.pem"
+      },
+      "worker": {
+        "bind_address": "127.0.0.1:5101",
+        "certificate_file": "/credentials/worker-server.pem",
+        "key_file": "/credentials/worker-server.key",
+        "client_ca_file": "/credentials/worker-clients-ca.pem"
+      }
+    },
+    "worker": {
+      "worker_id": 4,
+      "incarnation_id": 5,
+      "execution_configuration_id": "local-toolchain-v1",
+      "root": "/proposed/worker",
+      "capacity": {
+        "cpu_millis": 2000,
+        "memory_bytes": 1073741824,
+        "slots": 2
+      },
+      "transfer": {
+        "address": "127.0.0.1:5101",
+        "server_name": "worker.local",
+        "server_ca_file": "/credentials/worker-server-ca.pem",
+        "certificate_file": "/credentials/worker-client.pem",
+        "key_file": "/credentials/worker-client.key"
+      }
+    }
+  },
+  "declarations": {
+    "source_cas_namespace": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "source_ac_namespace": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "source_encoding_evidence_ref": "fixture:source-unwrapped-filesystem-layout",
+    "source_worker_credential_files": [],
+    "namespace_ownership_evidence_ref": "fixture:namespace-owner-declaration",
+    "listener_worker_exclusion_evidence_ref": "fixture:all-route-boundary-declaration",
+    "credential_placement_evidence_ref": "fixture:credential-placement-declaration",
+    "old_execution_domain": "source-domain",
+    "old_domain_fencing_evidence_ref": "fixture:old-domain-fence-declaration",
+    "new_worker_cohort_evidence_ref": "fixture:new-worker-cohort-declaration",
+    "external_worker_publication_and_template_retirement_evidence_ref": "fixture:external-worker-publication-retirement-declaration",
+    "data_disposition": "fresh_namespaces_leave_old_data_untouched",
+    "source_ac_owner": "fixture:legacy-ac-writer-cohort",
+    "source_collection_owner": "fixture:no-external-collector-declared",
+    "proposed_namespace_owner": "fixture:new-singleton-service-owner",
+    "source_data_encoding": "fixture:unwrapped-filesystem-digest-layout-version-unverified"
+  }
+}
