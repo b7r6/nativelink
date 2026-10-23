@@ -192,7 +192,7 @@ async fn producer_error_after_eof_remains_a_stream_error() {
         for chunks in [Vec::new(), vec![Bytes::from_static(b"abc")]] {
             let (server, reader) = fixture(chunks, finish);
             let error = collect(&server).await.unwrap_err();
-            assert_eq!(error.code(), tonic::Code::Unavailable);
+            assert_eq!(error.code(), Code::Unavailable);
             assert!(error.message().contains("read completion witness"));
             assert_eq!(reader.entered.load(Ordering::Relaxed), 1);
             assert_eq!(reader.dropped.load(Ordering::Relaxed), 1);
@@ -247,8 +247,8 @@ async fn successful_eof_keeps_empty_and_chunked_reads() {
 #[nativelink_macro::nativelink_test]
 async fn missing_eof_and_early_error_still_fail() {
     for (finish, expected) in [
-        (Finish::NoEof, tonic::Code::Internal),
-        (Finish::Error, tonic::Code::Unavailable),
+        (Finish::NoEof, Code::Internal),
+        (Finish::Error, Code::Unavailable),
     ] {
         for chunks in [Vec::new(), vec![Bytes::from_static(b"abc")]] {
             let (server, reader) = fixture(chunks, finish);
@@ -298,7 +298,7 @@ async fn http2_reports_late_backend_failure_after_delivered_bytes() {
         .await
         .unwrap()
         .unwrap_err();
-    assert_eq!(error.code(), tonic::Code::Unavailable);
+    assert_eq!(error.code(), Code::Unavailable);
     assert!(error.message().contains("read completion witness"));
     drop(response);
     drop(client);

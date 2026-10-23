@@ -812,8 +812,19 @@ impl ByteStreamServer {
                             match read_result {
                                 Ok(bytes) => {
                                     if bytes.is_empty() {
-                                        // EOF.
-                                        return None;
+                                        // EOF closes the channel, but the producer may still
+                                        // be completing storage work or returning an error.
+                                        let result = match state.maybe_get_part_result {
+                                            Some(result) => result,
+                                            None => state.get_part_fut.await,
+                                        };
+                                        return result.err().map(|mut err| {
+                                            if err.code == Code::NotFound {
+                                                err.messages.truncate(1);
+                                            }
+                                            error!(response = ?err);
+                                            (Err(err.into()), None)
+                                        });
                                     }
                                     if bytes.len() > state.max_bytes_per_stream {
                                         let err = make_err!(Code::Internal, "Returned store size was larger than read size");
