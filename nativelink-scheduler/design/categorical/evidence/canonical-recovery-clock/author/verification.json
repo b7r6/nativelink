@@ -1,0 +1,60 @@
+{
+  "source_commit": "4841fae0ed7b6901e976742daf7040c799634f93",
+  "source_freeze_sha256": "e98256beca49c75523d6a913a34d387be24fad8bb8e2e5ef391578cc1bfd3e9b",
+  "selected_source_inputs": 17,
+  "all_sources_restored": true,
+  "worktree_clean": true,
+  "restored_broad_passed": true,
+  "restored_strict_passed": true,
+  "qualified_test_results": [
+    "test result: ok. 167 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 19.57s",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s"
+  ],
+  "restored_test_results": [
+    "test result: ok. 167 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 19.57s",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s"
+  ],
+  "qualified_and_restored_executables_identical": true,
+  "restored_artifacts": [
+    {
+      "target": "canonical_owner_api_test",
+      "origin": "/home/b7r6/.cache/nativelink-categorical-active-cargo/smol/deps/canonical_owner_api_test-e5944a2e9dc6769b",
+      "copy": "restored-broad-canonical_owner_api_test-test-binary",
+      "sha256": "5941505aec7d30f839571361ad89db8615ae1aa641160ae1500c68e9ca749336",
+      "bytes": 8421752,
+      "compiler_fresh": false
+    },
+    {
+      "target": "nativelink_scheduler",
+      "origin": "/home/b7r6/.cache/nativelink-categorical-active-cargo/smol/deps/nativelink_scheduler-e2c98c6b95548faa",
+      "copy": "restored-broad-nativelink_scheduler-test-binary",
+      "sha256": "c3cb2c8098c913659361fa72bf053d87df94826f83bbfc7adf51f628bf96e49a",
+      "bytes": 13739632,
+      "compiler_fresh": false
+    }
+  ],
+  "compiled_logical_controls": 12,
+  "compiled_control_invocations": 14,
+  "direct_semantic_detections": 11,
+  "expected_survivors": 1,
+  "control_results_sha256": "6fa463b5ed5e357d5902f689fec5b95f44185004cefd6b2760b988a3c15dc0de",
+  "independent_final_review_sha256": "c542bbe5c55f99d92b3c2798abd5c20b6b564fe06f2ca8f4a0608f63e06269e1",
+  "earlier_boundaries": [
+    "Tests-first14cases plus source-reviewed2positioncases; no absent-API compiler error counted as negative evidence.",
+    "Original reviewedruntime focused16PASS with actualretained905096 ELF.",
+    "First broad command wrongauthority_api_test target exited101 withoutcompilation/tests.",
+    "Correctedtarget originalsource167libPASS1ignore, externalAPIneverexecuted ENOENT aftergeneratedcache disappearance; driverexit1 and numericCargoexitnotretained. Neitherbinary retained fromthatattempt. Cause/actor notestablished.",
+    "Strict-first8diagnostics6unique sourcepoints/3lintfamilies. Corrections deriveCloneCopy fornumericAppliedFacts, constaccessors andcheckedfixtureInstant subtraction; no oracle expectation change.",
+    "First fullhooks buildifier reordered2source entries; correctedfullhooksPASS before qualification/commit. No skipped applicablehooks.",
+    "12predeclaredcontrols explicitlyrebased ontoexactqualifiedsource; originalplans remainsealed andretained."
+  ],
+  "scope_limits": [
+    "Private clockcomponent; no public recoveredowner or productionroute, periodicdriver, sampleAPI or servingpermission.",
+    "Actual privateSingleton tests qualify actualRaftbarrier/read behavior, not composedsupervisor or automaticpairauthentication; supervisor mustown matchingRaft/Journal.",
+    "Auditprojectionreturns persisted appliedfacts only afterfullconsistentvalidation; unboundedretainedhistory means no totalwork/timebound.",
+    "FreshactualInstant origin followsaudit; checkedfloorsecondbaseaddition, finitecutoff, backwardrefusal andfalliblefirstsample. No downtime/fractionrestoration, saturation/rebase policy or progressguarantee.",
+    "C02 rawresultnotprinted: prematurecompletion proved, stale-successnotclaimed. C04 wrongresultvariantnotprinted. Loopcontrols only firstfailedcase; C06 twooraclesstillonecontrol.",
+    "C09 is observationally equivalent at resultboundary underretainedcutoff, not an undetected invalid result.",
+    "Source/ELF archives are actualqualification inputs/results, not hermetictoolchain closure."
+  ]
+}

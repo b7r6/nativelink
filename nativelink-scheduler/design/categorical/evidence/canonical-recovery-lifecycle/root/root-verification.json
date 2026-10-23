@@ -1,0 +1,54 @@
+{
+  "source_commit": "327d41eb37285192e0b249ac78fe5f6cacad9fdf",
+  "packet_commit": "7ea36ea27840d276f07dfa62ebaca2fe48a893dc",
+  "copied_files": [
+    {
+      "path": "README.md",
+      "bytes": 1822,
+      "sha256": "ee5e810f792617354da1b191708e5210e8165678afe361fb5d6d8e2272321ed7"
+    },
+    {
+      "path": "executables-000.tar.gz",
+      "bytes": 13631587,
+      "sha256": "69ff8ec4297e5a596e82a2254b34c8d83b4086c8473c569b7ba1e06a744edd5d"
+    },
+    {
+      "path": "executables-001.tar.gz",
+      "bytes": 15838414,
+      "sha256": "c7dd2966483d2810702a9a79d3c559c0ba8356145a76b121d1ae740d95015340"
+    },
+    {
+      "path": "executables-002.tar.gz",
+      "bytes": 15839216,
+      "sha256": "ce67d82724641111280df63b8a1e1466334bce311fac9c964711ceaeb0cc9e6c"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 253887,
+      "sha256": "a11f6987db1ce562ecc9ef2aad18eb6ca1dc7eecdf7372298bf0525750aed5c1"
+    },
+    {
+      "path": "source-logs-and-reviews.tar.gz",
+      "bytes": 6539586,
+      "sha256": "318ced51e593948ff3bdcc73cf3baa80991d9ed6a26cd9d35e81711de3c75a88"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 1501,
+      "sha256": "af4541dbbd7d6af967c8aa99ceea4770e86bc07d1459a82ec4f753fe6b2833ed"
+    },
+    {
+      "path": "verify-bundle.py",
+      "bytes": 6587,
+      "sha256": "f4982453ecce0e177c3efb81c113059a85b37a24c18505f277cb658654f51485"
+    }
+  ],
+  "command": [
+    "python3",
+    "/tmp/nativelink-canonical-recovery-lifecycle-root-verification/verify-bundle.py"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"verified_archives\": 4,\n  \"verified_archive_members\": 1034,\n  \"verified_distinct_executables\": 9,\n  \"verified_retained_executable_paths\": 26,\n  \"verified_attempt_receipt_bindings\": 14,\n  \"extracted_to\": null\n}\n",
+  "stderr": "",
+  "scope": "Independent root packet-byte, archive-member, attempt-source/log and actual ELF verification; no Rust execution at root integration yet."
+}

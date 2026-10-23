@@ -1192,6 +1192,24 @@ build. This source boundary leaves the existing inert release API unchanged.
 Permanent supervision and the recovered clock are being qualified separately;
 the helper alone does not make caller cancellation safe or establish serving.
 
+The subsequent [private recovery supervisor](canonical-recovery-lifecycle.md)
+retains cleanup responsibility after caller cancellation and separates an offered
+owner from an accepted handoff. Its 21 new fixtures pass; the qualified and
+restored author runs pass 184 library tests and one API test, with one ignore.
+Six compiled controls fail reached assertions, and restored strict checks pass.
+Root verifies the complete archived packet and matches all 21 selected author
+sources at `c3beca65f8`. Combined root execution and composition with the clock
+remain pending. No public recovery constructor or production route is enabled.
+
+The [private recovered clock](canonical-recovery-clock.md) now passes its sixteen
+numeric and real Raft fixtures. Qualified and restored author runs pass 167
+library tests plus one API test, with one ignore; strict checks pass and restored
+binaries match. Twelve compiled controls produce eleven direct detections and
+one expected equivalent survivor. All earlier command, environment, lint, and
+formatting attempts remain in the sealed packet. Root integrates the clock with
+the private supervisor at `94350bda62`; their combined execution and the closed
+public owner are the next separate checks. No production constructor changes.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions
