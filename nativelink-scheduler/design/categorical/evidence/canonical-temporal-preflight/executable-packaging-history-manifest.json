@@ -1,0 +1,67 @@
+{
+  "scope": "First split-gzip packaging passed byte verification but commit hooks rejected binary fragment extensions. Repacked as four independently valid tar.gz archives with the same nineteen distinct ELF contents. No hook was skipped and no Rust source changed. The initial-split files are historical packaging attempts, not current manifests.",
+  "archive": "executable-packaging-history.tar.gz",
+  "archive_sha256": "68032c6f0a47582cb18be729ca028360c8a176f079fad7281e97274a122ac1df",
+  "members": [
+    {
+      "path": "initial-split-executables-manifest.json",
+      "bytes": 9765,
+      "sha256": "9336355a3151aa7842caddfea2a08f2de01930bdcd1827cac290cc64171ff42a"
+    },
+    {
+      "path": "initial-split-executables-receipt.json",
+      "bytes": 5916,
+      "sha256": "f8de29d9c186b3f5cb48ffa6a2a9cfdd408db4ca934bc543e5c756c92c5783c0"
+    },
+    {
+      "path": "initial-split-verify-executables.py",
+      "bytes": 5380,
+      "sha256": "3a18fba7ce7e41b94de8bdfcb964bbfd57917e5e588d16d9269b285ecf567861"
+    },
+    {
+      "path": "build-executable-bundle-initial.py",
+      "bytes": 3400,
+      "sha256": "2d2577d0c3d6f09ca4465af6ecd2cbd2a2f59f8c2fc946d14809ee6aafcd123a"
+    },
+    {
+      "path": "executable-supplement-commit.log",
+      "bytes": 2653,
+      "sha256": "e6a76b967c3d166bd476acdbe94b426f48e20a3e310460e799ac50e05a9c505f"
+    },
+    {
+      "path": "executable-bundle-build.log",
+      "bytes": 746,
+      "sha256": "ccc7de8c214b2f6885c65f89187dc04ad48879abccee5f2a9c31126bf2d813a2"
+    },
+    {
+      "path": "executable-bundle-verification.log",
+      "bytes": 231,
+      "sha256": "47902a0c1906b3f3bf528e00598dbed7630440ae2f745f4c503d351ce660a7e8"
+    },
+    {
+      "path": "executable-relocated-bundle-verification.log",
+      "bytes": 187,
+      "sha256": "573e29ef32beeb0a7808cb20a203e7d5322e1fd6858d6ee02fda345e1919d90a"
+    },
+    {
+      "path": "build-executable-bundle.py",
+      "bytes": 3331,
+      "sha256": "2473f176940447e85af2c93cc38252c577b81e82de61892363caad442cae31d5"
+    },
+    {
+      "path": "executable-bundle-repack.log",
+      "bytes": 2451,
+      "sha256": "7b95900f47b0dc07aa06115500928a81e0851ef693a8fdc30cba1cc6007fb33d"
+    },
+    {
+      "path": "executable-repacked-verification.log",
+      "bytes": 456,
+      "sha256": "0b69757411410428f3a5e3ca770272045b0d33618b6db7732b53b0320c98b30a"
+    },
+    {
+      "path": "executable-repacked-relocated-verification.log",
+      "bytes": 413,
+      "sha256": "a1932c0475d624df8818289adb9f43443db55276b61d4b129d29b60a1c7f87e2"
+    }
+  ]
+}

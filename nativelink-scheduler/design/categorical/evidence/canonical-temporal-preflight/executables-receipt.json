@@ -1,0 +1,169 @@
+{
+  "scope": "Executable byte preservation and reconstruction; no new Rust test execution and no host-independent runtime portability claim. The original source/log packet remains unchanged.",
+  "source_manifest_sha256": "93ce38abc64ffdbae0e028e62c5b0bb389858d5216e7041c8b4b5b3df57f628c",
+  "source_archive_sha256": "57f022a25f295de5549e091084d0b1fe058b82f5e7574178f766766218e1b3bd",
+  "executables_manifest_sha256": "f20dc1c7b07198b0036209740159c9248cc1509fd41365f7bbbdc2f66e9370f5",
+  "verifier_sha256": "8864cbe3f8ef978a0c4d25b8a82464a224aa3ad53f131f0a0d726fa0cac102de",
+  "root_review_manifest_sha256": "1fe79fac4833f2007a8de34ae4bb0f7792cb052b760c1971b5bff4742228fd65",
+  "root_review_archive_sha256": "d6d1a1fa4470a96db67c621443d6c55f1aaa9420b491d8ad05e3eb43cf4dcc07",
+  "packaging_history_manifest_sha256": "aca536e9dfcf37002a290721b8385630ece6ee9ece23cca9c52620c65de434c2",
+  "packaging_history_archive_sha256": "68032c6f0a47582cb18be729ca028360c8a176f079fad7281e97274a122ac1df",
+  "verification": {
+    "verified_distinct_executables": 19,
+    "verified_retained_paths": 22,
+    "archive_sha256": [
+      "2bfbd0c88fa7fb2c0f2ee5d65b835fa6378616da6ee2289936016d39b1e3a887",
+      "045054a11ab26a4a3f6406274632fb2b88d3a7c78fbcbed474a323ce3daf0c4e",
+      "e8fca3d4d059c9ccb5602de5b8f8a2f04a4f52ed97ec44f34fc83783f5fe0a94",
+      "7acd37b38a694fb0ce5ec9fc0527aab574eca91eabfd73db8f0261ea330cfdc1"
+    ],
+    "extracted_to": "/tmp/nativelink-temporal-repacked-executables"
+  },
+  "wholly_relocated_bundle_verification": {
+    "verified_distinct_executables": 19,
+    "verified_retained_paths": 22,
+    "archive_sha256": [
+      "2bfbd0c88fa7fb2c0f2ee5d65b835fa6378616da6ee2289936016d39b1e3a887",
+      "045054a11ab26a4a3f6406274632fb2b88d3a7c78fbcbed474a323ce3daf0c4e",
+      "e8fca3d4d059c9ccb5602de5b8f8a2f04a4f52ed97ec44f34fc83783f5fe0a94",
+      "7acd37b38a694fb0ce5ec9fc0527aab574eca91eabfd73db8f0261ea330cfdc1"
+    ],
+    "extracted_to": null
+  },
+  "reconstructed_paths_verified": [
+    {
+      "path": "fixed-focused-initial-test-binary",
+      "bytes": 13389608,
+      "sha256": "8883076434e0b4de0649c9ff05993b0a19c12d08b92956839cdfa1e281c57169",
+      "mode": "0o755"
+    },
+    {
+      "path": "fixed-regression-canonical_owner_api_test-test-binary",
+      "bytes": 8421648,
+      "sha256": "f6836e2c544e7d4b32493bab83bf6ada67d1d56a1aa33f2567b1fdf235f33f2b",
+      "mode": "0o755"
+    },
+    {
+      "path": "fixed-regression-test-binary",
+      "bytes": 13389608,
+      "sha256": "2dc1dde815e6c0a938357c203b2bf6f780b8a64647962e70d161389fd13dac4a",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-drop-io-queue-guard-test-binary",
+      "bytes": 13389032,
+      "sha256": "c66ff38c3275b2671c94dd927b7cf8ac110e985ebc11df81370addb84ee6ea86",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-omit-omitted-sentinel-test-binary",
+      "bytes": 13389992,
+      "sha256": "0377401f3e55b64a4c15fdc675c10fd0ad2d45bb61f98025c0a8869f7bdfa4ad",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-raise-clock-cutoff-test-binary",
+      "bytes": 13389608,
+      "sha256": "90987fb1825463571a078565f3cf87df3ae9d7fd9eb21218b5c26ec6f8f61bb3",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-redundant-finite-max-guard-test-binary",
+      "bytes": 13389608,
+      "sha256": "76d93be2c10373251b3babdd1e07ddc5e4861715896f4ba443c5e1008a4df24c",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-redundant-intermediate-state-test-binary",
+      "bytes": 13390280,
+      "sha256": "f4c818242ae781b3152fbad64d8420672fc99d8128b22f8a670368ef94d69d41",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-redundant-stateless-submit-test-binary",
+      "bytes": 13389608,
+      "sha256": "a081ab1d6f5a179a3b5fb0da5df68e4e0ed8f8204e3d59ca24e78c3d549d9bd4",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-attempt-interval-test-binary",
+      "bytes": 13390088,
+      "sha256": "50c88d053e70ad444653e1413f9930c177d76bec26d6c6877173aa5ac3872294",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-cooldown-interval-test-binary",
+      "bytes": 13390280,
+      "sha256": "55cef54893830ffff6cbc8c579a1cb1e50e9ce61ac13656ebc443ac5dc23d97f",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-covered-log-events-test-binary",
+      "bytes": 13389768,
+      "sha256": "7a2cbf746da66a5ea8fd802bcac4d5554eb54547358be5219795c3d5d6f9a33d",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-execution-payload-test-binary",
+      "bytes": 13390088,
+      "sha256": "dc11052530ddf6845db5c04c69bbd9572f7f4e6afc0e951d0a6ceef3fc8b1cb8",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-finite-running-anchor-test-binary",
+      "bytes": 13390088,
+      "sha256": "cc7c67c6154842863e5615b7f39dec24688555516559bb02646905cd403a520d",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-interest-interval-corrected-test-binary",
+      "bytes": 13390152,
+      "sha256": "9b524d650627269cc883e79e63f0400fd698d1447610622445802fdd2a186bf6",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-operation-payload-test-binary",
+      "bytes": 13390152,
+      "sha256": "1e99bb1fa9ee3a51832eed2aff4bbcb96f04d4c7178a77f4455b6887a5ef8401",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-snapshot-temporal-test-binary",
+      "bytes": 13389768,
+      "sha256": "47f6637377aab2925cb07aa242081a405d6a591d3ed1bd9b4cd9e98053610734",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-stateless-submit-test-binary",
+      "bytes": 13389608,
+      "sha256": "a081ab1d6f5a179a3b5fb0da5df68e4e0ed8f8204e3d59ca24e78c3d549d9bd4",
+      "mode": "0o755"
+    },
+    {
+      "path": "mutant-skip-uncommitted-log-rows-test-binary",
+      "bytes": 13390024,
+      "sha256": "d75ec6162dc8a67de627dbc7563895b3b91a0ecfdc184b54e0e87186ee983cb8",
+      "mode": "0o755"
+    },
+    {
+      "path": "original-test-binary",
+      "bytes": 13309488,
+      "sha256": "f2308919edd676fb557d5e7e25341554bcdac52e51c6fa722caee178e0252d3d",
+      "mode": "0o755"
+    },
+    {
+      "path": "restored-regression-canonical_owner_api_test-test-binary",
+      "bytes": 8421648,
+      "sha256": "f6836e2c544e7d4b32493bab83bf6ada67d1d56a1aa33f2567b1fdf235f33f2b",
+      "mode": "0o755"
+    },
+    {
+      "path": "restored-regression-test-binary",
+      "bytes": 13389608,
+      "sha256": "2dc1dde815e6c0a938357c203b2bf6f780b8a64647962e70d161389fd13dac4a",
+      "mode": "0o755"
+    }
+  ],
+  "source_commit": "694f67741c3150247548236bcedef586b554aeac",
+  "prior_source_packet_commit": "72db82a28d06ffff63dbd44639ef4fced5a8c35e"
+}
