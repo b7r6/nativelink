@@ -124,7 +124,7 @@ fixed layout, **not non-reused physical generations or collector authorization**
 descriptor-relative `renameat2(RENAME_NOREPLACE)` into the same role's content
 directory. An existing destination is conflict without overwrite. The mutable
 `SinkDirectory::replace` consumes the same kind of handle and atomically replaces
-a regular destination. The returned handle supports read and seek only; staging
+a regular destination. The returned handle supports read, seek and explicit file sync; staging
 handles cannot be cloned or converted into writable aliases. A capability from
 another layout instance or role cannot publish the handle.
 
@@ -160,6 +160,13 @@ power-loss qualification or new persistent generation basis. The earlier
 inode-reuse and final-sync counterexamples still apply.
 
 ## Future store bridge
+
+The separate [`canonical-store`](../canonical-store) experiment now implements
+a bounded CAS and mutable sink `StoreDriver` bridge for actual RPC tests. Its
+read handles can synchronize existing objects through `ReadHandle::sync_all`
+without exposing writable files or descriptors. That bridge does not provide
+worker materialization, listing, cleanup, physical generations or a production
+factory. The broader integration requirements below remain open.
 
 A future capability implementation of `StoreDriver` can retain `CasDirectory`
 or `SinkDirectory` in its shared context, use typed leaves in `FileEntry`, move a

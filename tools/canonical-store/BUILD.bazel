@@ -1,0 +1,47 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "nativelink-canonical-store",
+    srcs = ["src/lib.rs"],
+    proc_macro_deps = ["@crates//:async-trait"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//nativelink-error",
+        "//nativelink-metric",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem",
+        "@crates//:bytes",
+        "@crates//:futures",
+        "@crates//:tokio",
+        "@crates//:uuid",
+    ],
+)
+
+rust_test(
+    name = "canonical_store_test",
+    compile_data = [
+        "src/tests.rs",
+        "src/tests/rpc.rs",
+        "//tools/canonical-config:fixtures/canonical.json",
+    ],
+    crate = ":nativelink-canonical-store",
+    proc_macro_deps = ["//nativelink-macro"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//nativelink-config",
+        "//nativelink-proto",
+        "//nativelink-service",
+        "//nativelink-store",
+        "@crates//:hyper-util",
+        "@crates//:opentelemetry",
+        "@crates//:tokio-stream",
+        "@crates//:tonic",
+        "@crates//:tower",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
+)

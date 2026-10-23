@@ -464,6 +464,15 @@ pub struct ReadHandle {
     _directories: Arc<Directories>,
 }
 
+impl ReadHandle {
+    /// Synchronize an existing object without exposing a writable file or FD.
+    /// A caller acknowledging an existing CAS object must also synchronize its
+    /// containing directories; this alone is not a publication barrier.
+    pub fn sync_all(&self) -> io::Result<()> {
+        self.file.sync_all()
+    }
+}
+
 impl Read for ReadHandle {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         self.file.read(bytes)
