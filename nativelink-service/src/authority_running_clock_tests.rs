@@ -71,6 +71,40 @@ impl Fixture {
     }
 
     async fn with_timeout(phase: Phase, initial_time: u64, execution_timeout: u64) -> Self {
+        let resources = Resources {
+            cpu_millis: 1,
+            memory_bytes: 1,
+            slots: 1,
+        };
+        let request = AuthorityRequest {
+            action: ActionKey {
+                instance: "running-clock".into(),
+                digest_function: "sha256".into(),
+                digest: "a".repeat(64),
+                digest_size_bytes: 1,
+            },
+            execution_scope: None,
+            do_not_cache: true,
+            skip_cache_lookup: true,
+            priority: 0,
+            properties: BTreeMap::new(),
+            resources,
+            execution_timeout,
+            payload: None,
+        };
+        Self::with_request(phase, initial_time, request).await
+    }
+
+    async fn with_request(phase: Phase, initial_time: u64, request: AuthorityRequest) -> Self {
+        Self::with_request_at(phase, initial_time, request, 0).await
+    }
+
+    async fn with_request_at(
+        phase: Phase,
+        initial_time: u64,
+        request: AuthorityRequest,
+        admission_time: u64,
+    ) -> Self {
         let directory =
             std::env::temp_dir().join(format!("authority-running-clock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&directory).await.unwrap();
@@ -82,38 +116,34 @@ impl Fixture {
         )
         .await
         .unwrap();
-        let resources = Resources {
-            cpu_millis: 1,
-            memory_bytes: 1,
-            slots: 1,
-        };
+        let resources = request.resources;
+        if admission_time != 0 {
+            assert_eq!(
+                authority
+                    .write(RecordedEvent {
+                        epoch: EPOCH,
+                        event: Event::AdvanceTime {
+                            now: admission_time
+                        },
+                    })
+                    .await
+                    .unwrap()
+                    .data,
+                Reply::Applied,
+            );
+        }
         for event in [
             Event::Register {
                 worker: WorkerId(1),
                 incarnation: IncarnationId(1),
                 session: SessionId(1),
-                properties: BTreeMap::new(),
+                properties: request.properties.clone(),
                 capacity: resources,
                 available: resources,
             },
             Event::Submit {
                 operation: OperationId(1),
-                request: AuthorityRequest {
-                    action: ActionKey {
-                        instance: "running-clock".into(),
-                        digest_function: "sha256".into(),
-                        digest: "a".repeat(64),
-                        digest_size_bytes: 1,
-                    },
-                    execution_scope: None,
-                    do_not_cache: true,
-                    skip_cache_lookup: true,
-                    priority: 0,
-                    properties: BTreeMap::new(),
-                    resources,
-                    execution_timeout,
-                    payload: None,
-                },
+                request,
             },
             Event::Match,
             // Prevent a replacement after cleanup from hiding the old charge.
@@ -878,3 +908,6 @@ async fn backward_phase_running_and_backward_clock_do_not_invent_a_start() {
     assert_eq!(running.attempts[0].running_deadline, Some(14));
     backward.close().await;
 }
+
+#[path = "authority_timeout_tests.rs"]
+mod captured_timeouts;

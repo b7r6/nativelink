@@ -439,6 +439,127 @@ fn fixed_algorithms_digest_size_hash_and_timeout_validation() {
 }
 
 #[test]
+fn captured_timeout_boundaries_survive_restore_and_reject_changed_projection() {
+    fn replace_timeout(value: &mut serde_json::Value, replacement: u64) -> usize {
+        match value {
+            serde_json::Value::Object(map) => {
+                let changed = usize::from(
+                    map.contains_key("payload") && map.contains_key("execution_timeout"),
+                );
+                if changed != 0 {
+                    map.insert("execution_timeout".into(), replacement.into());
+                }
+                changed
+                    + map
+                        .values_mut()
+                        .map(|value| replace_timeout(value, replacement))
+                        .sum::<usize>()
+            }
+            serde_json::Value::Array(values) => values
+                .iter_mut()
+                .map(|value| replace_timeout(value, replacement))
+                .sum(),
+            _ => 0,
+        }
+    }
+
+    for algorithm in [1, 9] {
+        for (timeout, expected) in [
+            (None, u64::MAX),
+            (
+                Some(Duration {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                1,
+            ),
+            (
+                Some(Duration {
+                    seconds: 0,
+                    nanos: 1,
+                }),
+                1,
+            ),
+            (
+                Some(Duration {
+                    seconds: 1,
+                    nanos: 123_456_789,
+                }),
+                2,
+            ),
+            (
+                Some(Duration {
+                    seconds: 315_576_000_000,
+                    nanos: 0,
+                }),
+                315_576_000_000,
+            ),
+            (
+                Some(Duration {
+                    seconds: 315_576_000_000,
+                    nanos: 999_999_999,
+                }),
+                315_576_000_001,
+            ),
+        ] {
+            let mut fixture = Fixture::new();
+            fixture.execute.digest_function = algorithm;
+            fixture.action.timeout = timeout;
+            let payload = fixture.capture().unwrap();
+            let request = Request::from_payload(payload.clone()).unwrap();
+            assert_eq!(request.execution_timeout, expected);
+            let wrong = if expected == u64::MAX {
+                315_576_000_001
+            } else {
+                expected + 1
+            };
+            let mut state = State::new(ClusterEpoch(1), Limits::default()).unwrap();
+            let mut invalid = request.clone();
+            invalid.execution_timeout = wrong;
+            assert_eq!(
+                state.apply(record(Event::Submit {
+                    operation: OperationId(1),
+                    request: invalid
+                })),
+                Reply::Rejected(Rejection::Invalid)
+            );
+            assert!(matches!(
+                state.apply(record(Event::Submit {
+                    operation: OperationId(1),
+                    request: request.clone()
+                })),
+                Reply::Submitted { .. }
+            ));
+            let snapshot = state.snapshot().unwrap();
+            let restored = State::restore(&snapshot).unwrap();
+            let view = restored.view();
+            assert_eq!(view.executions[0].request, request);
+            assert_eq!(
+                view.executions[0].request.require_payload().unwrap(),
+                &payload
+            );
+            assert_eq!(
+                Action::decode(
+                    view.executions[0]
+                        .request
+                        .require_payload()
+                        .unwrap()
+                        .action_bytes()
+                )
+                .unwrap()
+                .timeout,
+                timeout
+            );
+            let mut forged: serde_json::Value = serde_json::from_slice(&snapshot).unwrap();
+            // Change every duplicated projection consistently while retaining
+            // the captured Action. Restore must rederive the original timeout.
+            assert!(replace_timeout(&mut forged, wrong) >= 2);
+            assert!(State::restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+        }
+    }
+}
+
+#[test]
 fn buck2_scope_is_principal_length_delimited_and_metadata_presence_is_preserved() {
     let mut fixture = Fixture::new();
     let payload = fixture.capture().unwrap();

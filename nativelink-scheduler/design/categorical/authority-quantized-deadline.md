@@ -36,6 +36,11 @@ expiry, while retaining its original no-reanchoring and cleanup assertions.
 These fixtures inject ticks and projected durations; they do not measure elapsed
 process execution or qualify every protobuf duration projection.
 
+The [captured timeout fixtures](authority-captured-timeouts.md) additionally
+exercise real Action captures, committed submission and grant replay, restoration
+of zero and omitted timeouts, and the maximum finite projection. Their saturation
+diagnostic records the remaining headroom gap without changing counter policy.
+
 The [canonical clock proposal](authority-clock-proposal.md) still requires a
 persistent binding for units, sampling and proposal rules, plus checked headroom
 for finite deadlines. The checked monotonic source deliberately discards downtime

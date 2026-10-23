@@ -17,6 +17,7 @@ rust_library(
         "src/authority_running_clock_tests.rs",
         "src/authority_server.rs",
         "src/authority_server/operations.rs",
+        "src/authority_timeout_tests.rs",
         "src/bep_server.rs",
         "src/bytestream_server.rs",
         "src/capabilities_server.rs",
