@@ -541,6 +541,47 @@ async fn lossy_uuid_alias_upload_is_independent() {
 }
 
 #[nativelink_test]
+async fn absent_nonzero_resume_cannot_hide_a_completed_blob() {
+    let (runtime, spy) = fixture(false, false).await;
+    let digest = digest(DigestHasherFunc::Sha256, DATA);
+    let name = resource(UUID, "sha256/", &digest);
+    spy.values.lock().unwrap().insert(
+        (
+            DigestHasherFunc::Sha256,
+            DigestInfo::try_from(&digest).unwrap(),
+        ),
+        Bytes::from_static(DATA),
+    );
+    let complete = QueryWriteStatusResponse {
+        committed_size: DATA.len() as i64,
+        complete: true,
+    };
+    assert_eq!(
+        status(runtime.client.clone(), name.clone()).await.unwrap(),
+        complete
+    );
+    assert_eq!(
+        write(
+            runtime.worker.clone(),
+            frame(name.clone(), PREFIX, true, &DATA[PREFIX..])
+        )
+        .await
+        .unwrap_err()
+        .code(),
+        Code::InvalidArgument
+    );
+    assert_eq!(spy.updates.load(Ordering::Relaxed), 0);
+    // Even an unpolled backend future must not leave an idle registry entry
+    // that takes precedence over the independently completed CAS object.
+    assert_eq!(
+        status(runtime.client.clone(), name).await.unwrap(),
+        complete
+    );
+    assert_eq!(spy.value(DigestHasherFunc::Sha256, &digest).unwrap(), DATA);
+    runtime.shutdown().await;
+}
+
+#[nativelink_test]
 async fn single_message_tracks_identity_until_backend_completion() {
     let (runtime, spy) = fixture(true, true).await;
     let digest = digest(DigestHasherFunc::Sha256, DATA);
