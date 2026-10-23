@@ -31,6 +31,8 @@ use super::super::{AppliedState, RecordedEvent, Singleton, decode, encode};
 use super::*;
 use crate::authority::Event;
 
+#[path = "canonical_custody_tests.rs"]
+mod custody;
 #[path = "canonical_temporal_tests.rs"]
 mod temporal;
 
