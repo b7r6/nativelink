@@ -70,6 +70,7 @@ Qwik
 [Uu]psert
 Verilator
 Verilog
+Zipf
 Zstandard
 alex
 [Ee]xecution

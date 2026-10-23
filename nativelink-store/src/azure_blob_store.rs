@@ -17,6 +17,7 @@ use core::time::Duration;
 use core::{cmp, mem};
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use azure_core::credentials::TokenCredential;
@@ -75,6 +76,37 @@ const DEFAULT_BLOB_ENDPOINT_SUFFIX: &str = "blob.core.windows.net";
 
 /// Successful reads in a row before the adaptive read limit grows by one.
 const READ_LIMIT_GROW_AFTER: usize = 16;
+
+static NEXT_DOWNLOAD_READ: AtomicU64 = AtomicU64::new(1);
+
+/// Observation metadata carried by the SDK context of one outer download.
+///
+/// The SDK copies this context to every partition, including tasks that outlive
+/// the consuming stream. Read IDs are process-local; attempts start at one.
+/// Ordinary clients ignore it. Diagnostic HTTP policies can use it to attribute
+/// requests without changing retry decisions or inferring ownership from time.
+#[derive(Clone, Copy, Debug)]
+pub struct AzureDownloadAttempt {
+    pub read_id: u64,
+    pub attempt: u64,
+    pub sent: u64,
+    pub writer_broken: bool,
+}
+
+impl AzureDownloadAttempt {
+    fn record_failed_send(self, writer: &DropCloserWriteHalf, stage: &'static str) {
+        event!(
+            target: "nativelink_store::azure_blob_store::download",
+            Level::DEBUG,
+            event = "send_failed",
+            read_id = self.read_id,
+            attempt = self.attempt,
+            sent = writer.get_bytes_written(),
+            writer_broken = writer.is_pipe_broken(),
+            stage,
+        );
+    }
+}
 
 #[derive(MetricsComponent)]
 pub struct AzureBlobStore<NowFn> {
@@ -984,8 +1016,23 @@ where
         };
         let max_bytes = length;
 
-        self.retrier
-            .retry(unfold(writer, move |writer| {
+        let read_id = NEXT_DOWNLOAD_READ.fetch_add(1, Ordering::Relaxed);
+        let attempts = AtomicU64::new(0);
+        let attempts = &attempts;
+        event!(
+            target: "nativelink_store::azure_blob_store::download",
+            Level::DEBUG,
+            event = "read_started",
+            read_id,
+            attempt = 0_u64,
+            sent = writer.get_bytes_written(),
+            writer_broken = writer.is_pipe_broken(),
+            blob = %blob_path,
+        );
+
+        let result = self
+            .retrier
+            .retry(unfold(&mut *writer, move |writer| {
                 // Resumes where the writer stopped, so a retry continues the
                 // read instead of starting it again and appending a second
                 // copy of what the consumer already has. The S3 store does
@@ -1018,12 +1065,31 @@ where
                         }
                     };
 
+                    // Allocate identity only when an SDK download will start.
+                    // A failed filesystem-permit acquisition is not a GET.
+                    let observation = AzureDownloadAttempt {
+                        read_id,
+                        attempt: attempts.fetch_add(1, Ordering::Relaxed) + 1,
+                        sent: writer.get_bytes_written(),
+                        writer_broken: writer.is_pipe_broken(),
+                    };
+                    event!(
+                        target: "nativelink_store::azure_blob_store::download",
+                        Level::DEBUG,
+                        event = "attempt_started",
+                        read_id,
+                        attempt = observation.attempt,
+                        sent = observation.sent,
+                        writer_broken = observation.writer_broken,
+                    );
+
                     // The error carries the wait a throttled response asked for.
                     let result: Result<(), (Error, Option<Duration>)> = async {
-                        let options = BlobClientDownloadOptions {
+                        let mut options = BlobClientDownloadOptions {
                             range,
                             ..Default::default()
                         };
+                        options.method_options.context.insert(observation);
                         let response = client
                             .blob_client(&blob_path)
                             .download(Some(options))
@@ -1075,6 +1141,7 @@ where
                                 None => chunk,
                             };
                             writer.send(chunk).await.map_err(|e| {
+                                observation.record_failed_send(writer, "data");
                                 (
                                     make_err!(
                                         Code::Aborted,
@@ -1106,6 +1173,7 @@ where
                             ));
                         }
                         writer.send_eof().map_err(|e| {
+                            observation.record_failed_send(writer, "eof");
                             (
                                 make_err!(Code::Aborted, "Failed to send EOF to writer: {e:?}"),
                                 None,
@@ -1132,7 +1200,20 @@ where
                     }
                 }
             }))
-            .await
+            .await;
+
+        event!(
+            target: "nativelink_store::azure_blob_store::download",
+            Level::DEBUG,
+            event = "read_finished",
+            read_id,
+            attempt = attempts.load(Ordering::Relaxed),
+            sent = writer.get_bytes_written(),
+            writer_broken = writer.is_pipe_broken(),
+            outcome = if result.is_ok() { "ok" } else { "error" },
+            error_code = %result.as_ref().err().map_or_else(String::new, |e| format!("{:?}", e.code)),
+        );
+        result
     }
 
     fn inner_store(&self, _digest: Option<StoreKey>) -> &'_ dyn StoreDriver {

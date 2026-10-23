@@ -672,6 +672,138 @@ async fn test_get_with_retries() -> Result<(), Error> {
     Ok(())
 }
 
+struct DestinationFailureCase {
+    name: &'static str,
+    retries: usize,
+    initial_origin_failures: usize,
+    final_origin_failure: bool,
+}
+
+async fn observe_destination_failure(
+    case: &DestinationFailureCase,
+) -> Result<(bool, String), Error> {
+    const VALUE: &[u8] = b"test_content";
+
+    let mock = MockTransport::new();
+    for attempt in 0..=case.retries {
+        if attempt < case.initial_origin_failures
+            || (case.final_origin_failure && attempt == case.retries)
+        {
+            mock.push_download(error_response(StatusCode::ServiceUnavailable));
+        } else {
+            mock.push_download(download_ok(StatusCode::Ok, VALUE.to_vec()));
+        }
+    }
+
+    let store = create_test_store_with_common(
+        Arc::clone(&mock),
+        CommonObjectSpec {
+            // Count each 503 against the stated attempt budget. The separate
+            // wall-clock throttle budget would otherwise admit extra attempts.
+            throttle_retry_budget_s: 0.0,
+            retry: Retry {
+                max_retries: case.retries,
+                delay: 0.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )?;
+    let digest = DigestInfo::try_new(TEST_HASH, VALUE.len())?;
+
+    // Closing the reader is only observable by the writer on its first send.
+    // Origin failures before that send still permit their ordinary retries.
+    let (mut writer, reader) = make_buf_channel_pair();
+    drop(reader);
+    let result = store.get_part(digest, &mut writer, 0, Some(12)).await;
+
+    // One small range means one GET per outer attempt, with no speculative
+    // partition requests. The first usable origin response must end the read.
+    let expected_downloads = case.initial_origin_failures + 1;
+    let expected_range = format!("bytes=0-{}", VALUE.len() - 1);
+    let ranges = mock.download_ranges();
+    let bytes_written = writer.get_bytes_written();
+    let broken = writer.is_pipe_broken();
+    let preserved_delivery_error = result.as_ref().is_err_and(|error| {
+        error.code == Code::Aborted && error.to_string().contains("Failed to send data to writer")
+    });
+    let passed = preserved_delivery_error
+        && broken
+        && bytes_written == 0
+        && ranges.len() == expected_downloads
+        && ranges
+            .iter()
+            .all(|range| range.as_deref() == Some(expected_range.as_str()));
+
+    Ok((
+        passed,
+        format!(
+            "{}: passed={passed}, retry_budget={}, expected_downloads={expected_downloads}, \
+             ranges={ranges:?}, bytes_written={bytes_written}, broken={broken}, result={result:?}",
+            case.name, case.retries,
+        ),
+    ))
+}
+
+/// Once delivery fails, another origin read cannot repair the same writer.
+/// Negative controls distinguish an exhausted budget from an actual retry
+/// after closure. The final error alone cannot identify that forbidden retry.
+#[nativelink_test(start_paused = true)]
+async fn a_failed_download_destination_is_not_retried() -> Result<(), Error> {
+    let cases = [
+        DestinationFailureCase {
+            name: "no retry available after failed send",
+            retries: 0,
+            initial_origin_failures: 0,
+            final_origin_failure: false,
+        },
+        DestinationFailureCase {
+            name: "one retry available after failed send",
+            retries: 1,
+            initial_origin_failures: 0,
+            final_origin_failure: false,
+        },
+        DestinationFailureCase {
+            name: "six retries available after failed send",
+            retries: 6,
+            initial_origin_failures: 0,
+            final_origin_failure: false,
+        },
+        DestinationFailureCase {
+            name: "legitimate 503 before failed send",
+            retries: 6,
+            initial_origin_failures: 1,
+            final_origin_failure: false,
+        },
+        DestinationFailureCase {
+            name: "final 503 masks a forbidden retry",
+            retries: 1,
+            initial_origin_failures: 0,
+            final_origin_failure: true,
+        },
+        DestinationFailureCase {
+            name: "first failed send on the last allowed attempt",
+            retries: 6,
+            initial_origin_failures: 6,
+            final_origin_failure: false,
+        },
+    ];
+
+    // Run the entire matrix before asserting so RED shows both negative
+    // controls alongside the excess requests and the masking final error.
+    let mut all_passed = true;
+    let mut observations = Vec::new();
+    for case in &cases {
+        let (passed, observation) = observe_destination_failure(case).await?;
+        all_passed &= passed;
+        observations.push(observation);
+    }
+    assert!(all_passed, "{}", observations.join("\n"));
+
+    Ok(())
+}
+
 // Paused tokio time: the only thing that advances the clock is the store's
 // own sleep, so the elapsed time is exactly what the retrier waited.
 #[nativelink_test(start_paused = true)]
@@ -1206,6 +1338,64 @@ async fn throttled_reads_halve_the_read_limit_and_successes_regrow_it() -> Resul
             .await?;
     }
     assert_eq!(store.read_limit(), Some(5));
+    Ok(())
+}
+
+/// A failed downstream send must not count as an answered read when deciding
+/// whether to grow the adaptive limit. The next healthy read still gets credit.
+#[nativelink_test(start_paused = true)]
+async fn failed_downstream_send_does_not_grow_the_adaptive_read_limit() -> Result<(), Error> {
+    const VALUE: &[u8] = b"test_content";
+
+    let mock = MockTransport::new();
+    mock.push_download(error_response(StatusCode::ServiceUnavailable));
+    let store = create_test_store_with_common(
+        Arc::clone(&mock),
+        CommonObjectSpec {
+            retry: Retry {
+                // The first throttle can use the normal throttle budget, but
+                // a failed send gets no retries. This isolates limit accounting.
+                max_retries: 0,
+                delay: 0.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
+            max_concurrent_reads: 16,
+            adaptive_read_concurrency: true,
+            min_concurrent_reads: 2,
+            ..Default::default()
+        },
+    )?;
+    let digest = DigestInfo::try_new(TEST_HASH, VALUE.len())?;
+
+    // The throttle cuts the limit to eight. Stop one successful download short
+    // of the sixteen needed for regrowth, then exercise a failed destination.
+    for _ in 0..15 {
+        mock.push_download(download_ok(StatusCode::Ok, VALUE.to_vec()));
+        assert_eq!(store.get_part_unchunked(digest, 0, None).await?, VALUE);
+    }
+    assert_eq!(store.read_limit(), Some(8));
+
+    mock.push_download(download_ok(StatusCode::Ok, VALUE.to_vec()));
+    let (mut writer, reader) = make_buf_channel_pair();
+    drop(reader);
+    let error = store
+        .get_part(digest, &mut writer, 0, None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, Code::Aborted);
+    assert!(error.to_string().contains("Failed to send data to writer"));
+    assert!(writer.is_pipe_broken());
+    assert_eq!(writer.get_bytes_written(), 0);
+    assert_eq!(
+        store.read_limit(),
+        Some(8),
+        "a failed destination must not earn origin-success credit"
+    );
+
+    mock.push_download(download_ok(StatusCode::Ok, VALUE.to_vec()));
+    assert_eq!(store.get_part_unchunked(digest, 0, None).await?, VALUE);
+    assert_eq!(store.read_limit(), Some(9));
     Ok(())
 }
 
