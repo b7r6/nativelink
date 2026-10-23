@@ -9,10 +9,11 @@ logical scheduler state and pending effects. Format 2 and earlier prototypes are
 rejected. No conversion from them, released-binary compatibility, production
 format stability, or deployment qualification is claimed.
 
-The tests use immutable reader profiles in one executable. They exercise actual
-file/RAM journals and real single-member and three-member OpenRaft clusters.
-Separately compiled frozen-reader compatibility remains an open gate, as do the
-M0 representation/workload gates and deployed transport/admission prerequisites.
+The journal tests use actual file/RAM journals and real single-member and
+three-member OpenRaft clusters. A separately compiled, source-pinned Base
+executable also qualifies seven artifact and recovery cases. The M0
+representation/workload gates and deployed transport/admission prerequisites
+remain open.
 
 ## The base reader must understand activation
 
@@ -255,11 +256,16 @@ recover an admission service independently of the members, or reconcile deployed
 membership. Its storage-level membership refusal can stop a Raft member; a
 production coordinator must reject conflicting requests before proposing them.
 
-The remaining binary-compatibility gate requires a separately compiled base fixture
-that must restore artifacts produced by the upgraded executable before
-activation. Passing two modes through one permissive decoder is not sufficient
-rollback evidence. This establishes only the declared experimental baseline,
-not compatibility with a previously released NativeLink binary.
+The [frozen Base fixture](../../tests/format_compatibility/README.md) compiles
+separate executables from pinned source archives. Its Base overlay removes the
+upgraded scheduler grammar from the actual journal decoder. Seven subprocess
+cases cover compatible journal recovery and quorum reading, snapshot
+installation, unresolved control decoding, unresolved admission refusal,
+commit before apply, and activated journal/snapshot refusal. Full state
+comparison includes pending effects and charged reservations. Sources, binaries,
+artifacts, commands, compiler versions, and the initial stale build-cache failure
+have recorded hashes and raw receipts. This establishes only the declared
+experimental baseline, not compatibility with a released NativeLink binary.
 
 The complete qualification matrix must cover:
 
@@ -279,7 +285,8 @@ The complete qualification matrix must cover:
 - Unsupported active features, unknown authority sections, feature-epoch gaps,
   mismatched domains, and downgrade refusal after committed activation.
 
-Journal integration now exercises the transaction, read, and membership boundaries
-above. The complete matrix still needs a frozen separately compiled reader
-and deployed transport, admission, and membership procedures. This remains an experimental
-format protocol and does not qualify canonical ingress or all of M3a.
+Journal integration and the frozen reader exercise the transaction, read,
+membership, and experimental binary-compatibility boundaries above. Deployed
+transport, admission, and membership procedures remain unqualified. This remains
+an experimental format protocol and does not qualify canonical ingress or all
+of M3a.

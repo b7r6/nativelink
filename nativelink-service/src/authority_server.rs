@@ -45,7 +45,7 @@ use nativelink_scheduler::authority::request::RequestPayload;
 use nativelink_scheduler::authority::{
     ActionKey, Effect, EffectId, EffectKind, Event, IncarnationId, ObservableState,
     OperationId, Phase, RecordedEvent, Reply, Request as AuthorityRequest, Resources,
-    ResultPayload, SessionId, TERMINAL_RETENTION, TerminalResult, WorkerId,
+    ResultPayload, SessionId, INTEREST_TIMEOUT, TERMINAL_RETENTION, TerminalResult, WorkerId,
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::background_spawn;
@@ -58,6 +58,8 @@ use tokio::time::{Instant, interval};
 use tonic::{Request, Response, Status, Streaming};
 
 const FRAME_BYTES: usize = 64 * 1024;
+const OPERATION_BYTES: usize = 2 * FRAME_BYTES;
+const INTEREST_RENEWAL_TICKS: u64 = INTEREST_TIMEOUT / 3;
 const QUEUE: usize = 64;
 const VERSION: u32 = 1;
 const CAPABILITIES: [i32; 5] = [
@@ -120,6 +122,7 @@ impl CoordinatorTask {
 enum Input {
     Submit(Box<AuthorityRequest>, ReplyTo<OperationId>),
     Observe(OperationId, ReplyTo<()>),
+    RenewInterest(OperationId, ReplyTo<()>),
     Register(
         Box<AuthorityRegistration>,
         WorkerSender,
@@ -128,6 +131,13 @@ enum Input {
     ),
     Worker(AuthoritySession, Box<AuthorityWorkerUpdate>),
     Disconnected(AuthoritySession),
+}
+
+struct Observation {
+    receiver: watch::Receiver<Arc<ObservableState>>,
+    _permit: OwnedSemaphorePermit,
+    previous: Option<Operation>,
+    heartbeat_at: u64,
 }
 
 struct Connection {
@@ -148,6 +158,7 @@ struct Driver {
     effects: JoinSet<(EffectId, Result<Event, String>)>,
     in_flight: BTreeSet<EffectId>,
     retry_at: BTreeMap<EffectId, Instant>,
+    restore_deadlines: bool,
 }
 
 impl AuthorityService {
@@ -192,6 +203,7 @@ impl AuthorityService {
             effects: JoinSet::new(),
             in_flight: BTreeSet::new(),
             retry_at: BTreeMap::new(),
+            restore_deadlines: true,
         };
         let task = background_spawn!(
             "experimental_authority_coordinator",
@@ -235,20 +247,80 @@ impl AuthorityService {
 
     fn stream(&self, operation: OperationId, permit: OwnedSemaphorePermit) -> OperationStream {
         let name = self.name(operation);
+        let commands = self.commands.clone();
         Box::pin(stream::unfold(
-            Some((self.committed.clone(), true, permit)),
+            Some(Observation {
+                receiver: self.committed.clone(),
+                _permit: permit,
+                previous: None,
+                heartbeat_at: 0,
+            }),
             move |state| {
                 let name = name.clone();
+                let commands = commands.clone();
                 async move {
-                    let (mut receiver, first, permit) = state?;
-                    if !first && receiver.changed().await.is_err() {
-                        return Some((Err(Status::unavailable("Coordinator stopped")), None));
+                    let mut observation = state?;
+                    loop {
+                        if commands.is_closed() || observation.receiver.has_changed().is_err() {
+                            return Some((Err(Status::unavailable("Coordinator stopped")), None));
+                        }
+                        let mut view = observation.receiver.borrow_and_update().clone();
+                        let mut response = match operation_response(&view, operation, name.clone())
+                        {
+                            Ok(response) => response,
+                            Err(error) => return Some((Err(error), None)),
+                        };
+                        let first = observation.previous.is_none();
+                        let heartbeat = !first && view.now >= observation.heartbeat_at;
+                        if first {
+                            observation.heartbeat_at = view
+                                .operations
+                                .iter()
+                                .find(|value| value.id == operation)
+                                .map_or(view.now, |value| renewal_at(value.interest_deadline.at));
+                        } else if heartbeat && !response.done {
+                            // This future is polled by the response body. There is no
+                            // detached renewal task when downstream capacity is absent.
+                            let (reply, renewed) = oneshot::channel();
+                            if commands
+                                .send(Input::RenewInterest(operation, reply))
+                                .await
+                                .is_err()
+                            {
+                                return Some((
+                                    Err(Status::unavailable("Coordinator stopped")),
+                                    None,
+                                ));
+                            }
+                            match renewed.await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(error)) => return Some((Err(error), None)),
+                                Err(_) => {
+                                    return Some((
+                                        Err(Status::unavailable("Renewal interrupted")),
+                                        None,
+                                    ));
+                                }
+                            }
+                            view = observation.receiver.borrow_and_update().clone();
+                            response = match operation_response(&view, operation, name.clone()) {
+                                Ok(response) => response,
+                                Err(error) => return Some((Err(error), None)),
+                            };
+                            observation.heartbeat_at =
+                                view.now.saturating_add(INTEREST_RENEWAL_TICKS);
+                        }
+                        if first || heartbeat || observation.previous.as_ref() != Some(&response) {
+                            if response.done {
+                                return Some((Ok(response), None));
+                            }
+                            observation.previous = Some(response.clone());
+                            return Some((Ok(response), Some(observation)));
+                        }
+                        if observation.receiver.changed().await.is_err() {
+                            return Some((Err(Status::unavailable("Coordinator stopped")), None));
+                        }
                     }
-                    let view = receiver.borrow_and_update().clone();
-                    let response = operation_response(&view, operation, name);
-                    let finished = response.as_ref().is_ok_and(|response| response.done);
-                    let next = (!finished && response.is_ok()).then_some((receiver, false, permit));
-                    Some((response, next))
                 }
             },
         ))
@@ -492,11 +564,14 @@ impl Driver {
     }
 
     async fn time(&mut self) -> Result<bool, String> {
-        let now = (self.config.now)();
-        if now <= self.state.now {
+        let now = (self.config.now)().max(self.state.now);
+        let advanced = now > self.state.now;
+        if !advanced && !self.restore_deadlines {
             return Ok(false);
         }
-        self.commit(Event::AdvanceTime { now }).await?;
+        if advanced {
+            self.commit(Event::AdvanceTime { now }).await?;
+        }
         let mut due = Vec::new();
         for attempt in &self.state.attempts {
             if !attempt.authorized {
@@ -534,10 +609,15 @@ impl Driver {
                 });
             }
         }
+        let changed = advanced || !due.is_empty();
         for event in due {
             self.commit(event).await?;
         }
-        Ok(true)
+        // A restored journal may end after AdvanceTime but before its expiry
+        // proposals. Sweep it once even if the local clock has not advanced.
+        // Rejected retirement proposals do not spin at an unchanged clock.
+        self.restore_deadlines = false;
+        Ok(changed)
     }
 
     async fn input(&mut self, input: Input) -> Result<(), String> {
@@ -573,6 +653,25 @@ impl Driver {
                     Err(Status::not_found("Operation is not retained"))
                 };
                 let _ignored = reply.send(result);
+            }
+            Input::RenewInterest(operation, reply) => {
+                if reply.is_closed() {
+                    return Ok(());
+                }
+                // Account for the current clock before considering renewal. A
+                // queued delivery opportunity cannot revive an expired interest.
+                self.time().await?;
+                let due = self.state.operations.iter().any(|value| {
+                    value.id == operation
+                        && value.interested
+                        && value.terminal.is_none()
+                        && self.state.now < value.interest_deadline.at
+                        && self.state.now >= renewal_at(value.interest_deadline.at)
+                });
+                if due && !reply.is_closed() {
+                    self.commit(Event::RenewInterest { operation }).await?;
+                }
+                let _ignored = reply.send(Ok(()));
             }
             Input::Register(registration, sender, stop, reply) => {
                 let result = self.register(*registration, sender, stop).await;
@@ -1163,7 +1262,7 @@ fn operation_response(
         )),
         None => None,
     };
-    Ok(Operation {
+    let response = Operation {
         name,
         metadata: Some(Any {
             type_url:
@@ -1173,7 +1272,19 @@ fn operation_response(
         }),
         done: operation.terminal.is_some(),
         result,
-    })
+    };
+    if response.encoded_len() > OPERATION_BYTES {
+        return Err(Status::resource_exhausted(
+            "Operation exceeds delivery bound",
+        ));
+    }
+    Ok(response)
+}
+
+const fn renewal_at(deadline: u64) -> u64 {
+    deadline
+        .saturating_sub(INTEREST_TIMEOUT)
+        .saturating_add(INTEREST_RENEWAL_TICKS)
 }
 
 impl std::fmt::Debug for QualificationConfig {

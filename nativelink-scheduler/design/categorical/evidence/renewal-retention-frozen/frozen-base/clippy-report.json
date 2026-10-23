@@ -1,0 +1,50 @@
+[
+  {
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-scheduler",
+      "--bin",
+      "authority-base-compatibility-fixture",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "cwd": "/tmp/nativelink-frozen-base-normalized/base-source",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/base-a69f9203bfd96eb5c40e0d784e1a48943d23e7e33b2331198a8e7e93a88fcde4"
+    },
+    "log": "base-clippy.log",
+    "returncode": 0,
+    "role": "base",
+    "seconds": 63.060731776000466
+  },
+  {
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-scheduler",
+      "--bin",
+      "authority-upgraded-compatibility-fixture",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "cwd": "/tmp/nativelink-frozen-base-normalized/upgraded-source",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+    },
+    "log": "upgraded-clippy.log",
+    "returncode": 0,
+    "role": "upgraded",
+    "seconds": 65.42961064499104
+  }
+]

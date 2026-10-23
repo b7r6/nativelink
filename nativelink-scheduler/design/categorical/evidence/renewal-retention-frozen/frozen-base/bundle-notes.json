@@ -1,0 +1,14 @@
+{
+  "initial_failed_experiment": "initial-build-cache-failure/report.json",
+  "initial_failure_classification": "Shared Cargo package cache reused the frozen Base scheduler library in the upgraded executable. Startup capability assertions caught this. Corrected builds use physically separate source/fixture/overlay-hash-keyed targets.",
+  "primary_report": "report.json",
+  "raw_final_extracted_trees_retained_at": "/tmp/nativelink-frozen-base-normalized",
+  "raw_initial_sources_and_binaries_retained_at": "/tmp/nativelink-frozen-base-initial",
+  "scope": "Synthesized Base envelope3/core5; not a historical released executable or format2/core4 compatibility claim",
+  "source_archive_sha256": "11a6fad2e9b54a2314a82e367c5d1bdcca44cc7c4d161a845617767f58517f91",
+  "source_archives": {
+    "base": "base-source.tar",
+    "upgraded": "base-source.tar"
+  },
+  "upgraded_archive_has_identical_bytes": true
+}

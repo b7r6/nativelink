@@ -1,0 +1,8 @@
+{
+  "classification": "stale shared Cargo scheduler artifact; failed experiment, not protocol qualification",
+  "observation": "upgraded producer reported target feature unsupported although its captured source supports feature1; Base build immediately preceded it in the same target directory with source archive mtimes older than compiled artifacts",
+  "correction": "physically separate per-role source-hash-keyed target directories; explicit compiled capability assertions in both executables",
+  "raw_report": "report.json",
+  "raw_producer_log": "upgraded-produce.log",
+  "cache_clean_log": "/tmp/nativelink-categorical-evidence/frozen-stale-cache-clean.log"
+}

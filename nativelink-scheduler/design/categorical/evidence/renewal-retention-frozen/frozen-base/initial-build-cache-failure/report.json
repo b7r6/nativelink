@@ -1,0 +1,199 @@
+{
+  "base_binary_sha256": "978d155671ea09c55e468f0d1013e0b3505fe0c17b4fef4be300b39e673c67bb",
+  "base_compiled_fixture_sha256": "aa1088df4aa0f02353a777ce76b51979c76ce974505ac3aa52253b1e15525849",
+  "base_compiled_sources_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "db1804889f1cade952304ce62ae945ff396c49a5d5cd636d33635d39ef2d880b",
+    "nativelink-scheduler/src/authority/format.rs": "00d3ff1e7ac5027c1c98e69feeec3aa8ca958ea73ff3ab22f358f0e558a0a7b2",
+    "nativelink-scheduler/src/authority/journal.rs": "594879da0c157754e4caaaf697d0d4239204fed8f03ace3c1528b3a5265e4f88",
+    "nativelink-scheduler/src/authority/mod.rs": "e5e7a1a657942416e4e1155554933f4529d622050fee29ac71d93a318e5e7063",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "base_source_archive_sha256": "ef43f53c692c84e5131a34ba597557981d7284be376c31b8d20f32c2deb36a28",
+  "cases": [],
+  "commands": [
+    {
+      "argv": [
+        "rustc",
+        "-Vv"
+      ],
+      "cwd": "/tmp/nativelink-categorical-format",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "rustc-version.log",
+      "returncode": 0,
+      "seconds": 0.007759267988149077
+    },
+    {
+      "argv": [
+        "cargo",
+        "-Vv"
+      ],
+      "cwd": "/tmp/nativelink-categorical-format",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "cargo-version.log",
+      "returncode": 0,
+      "seconds": 0.007959144946653396
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/nativelink-categorical-format/nativelink-scheduler/tests/format_compatibility/base-only.patch"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-initial/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "base-overlay-check.log",
+      "returncode": 0,
+      "seconds": 0.0038924560067243874
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "/tmp/nativelink-categorical-format/nativelink-scheduler/tests/format_compatibility/base-only.patch"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-initial/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "base-overlay.log",
+      "returncode": 0,
+      "seconds": 0.004462076991330832
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--bin",
+        "authority-base-compatibility-fixture"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-initial/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "base-build.log",
+      "returncode": 0,
+      "seconds": 85.35726726002758
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--bin",
+        "authority-upgraded-compatibility-fixture"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-initial/upgraded-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "upgraded-build.log",
+      "returncode": 0,
+      "seconds": 6.787447326001711
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-initial/authority-upgraded-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-initial/artifacts"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-initial",
+      "environment": {
+        "CARGO_TARGET_DIR": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/categorical-mutations"
+      },
+      "log": "upgraded-produce.log",
+      "returncode": 1,
+      "seconds": 0.3651774089667015
+    }
+  ],
+  "failure": "upgraded-produce failed with status 1; see /tmp/nativelink-frozen-base-initial/upgraded-produce.log",
+  "fixture_source_sha256": {
+    "base-only.patch": "f91c7081c2c6fc9466f8060d0f4be107821756a4b1045e633c0addc0bce0aaca",
+    "base_reader.rs": "aa1088df4aa0f02353a777ce76b51979c76ce974505ac3aa52253b1e15525849",
+    "run.py": "ea12263b55fa89f468c1ca492c6dbca1b29d2179fa5c4b6247e899d73b16d5fb",
+    "upgraded_writer.rs": "195a10f860ea8845c0bb1dd9bd993eda14bb593d7273044cd86a954ee8826e46"
+  },
+  "pin": {
+    "description": "Synthesized Base envelope3/core5 fixture; not a historical released binary",
+    "format_relevant_sources_sha256": {
+      "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+      "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "nativelink-scheduler/Cargo.toml": "1e5f10e36f7a8ce633d9079f65180cf1aefbda07b1448db70987819ae68217fd",
+      "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+      "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+      "nativelink-scheduler/src/authority/mod.rs": "e5e7a1a657942416e4e1155554933f4529d622050fee29ac71d93a318e5e7063",
+      "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+      "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+      "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+      "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+      "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+      "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+      "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+    },
+    "frozen_fixture_sha256": {
+      "base-only.patch": "f91c7081c2c6fc9466f8060d0f4be107821756a4b1045e633c0addc0bce0aaca",
+      "base_reader.rs": "aa1088df4aa0f02353a777ce76b51979c76ce974505ac3aa52253b1e15525849"
+    },
+    "revision": "272aac77986e7bec22b2c9045f6020bc6156da89",
+    "source_archive_sha256": "ef43f53c692c84e5131a34ba597557981d7284be376c31b8d20f32c2deb36a28",
+    "tree": "394c43e978290239811ba15603e17207cdc13b0a"
+  },
+  "scope": "Synthesized frozen Base executable, envelope3/core5; no released format2/core4 compatibility",
+  "status": "failed",
+  "upgraded_binary_sha256": "48836668053264cd0d9ce2c90caf3d46fb58c2c74d9c99ca442d24477749659d",
+  "upgraded_compiled_fixture_sha256": "195a10f860ea8845c0bb1dd9bd993eda14bb593d7273044cd86a954ee8826e46",
+  "upgraded_compiled_sources_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "e40b441621c3cd3c6a0ea160ac32b4f931c131d5537574ec055a54e8ed11b29e",
+    "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+    "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+    "nativelink-scheduler/src/authority/mod.rs": "e5e7a1a657942416e4e1155554933f4529d622050fee29ac71d93a318e5e7063",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "upgraded_source_archive_sha256": "ef43f53c692c84e5131a34ba597557981d7284be376c31b8d20f32c2deb36a28",
+  "writer_format_relevant_sources_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "1e5f10e36f7a8ce633d9079f65180cf1aefbda07b1448db70987819ae68217fd",
+    "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+    "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+    "nativelink-scheduler/src/authority/mod.rs": "e5e7a1a657942416e4e1155554933f4529d622050fee29ac71d93a318e5e7063",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "writer_revision": "272aac77986e7bec22b2c9045f6020bc6156da89"
+}

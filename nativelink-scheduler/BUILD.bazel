@@ -156,6 +156,26 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "typed_physical_retention_test",
+    timeout = "moderate",
+    srcs = ["tests/typed_physical_retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/retention/typed_bridge.rs",
+    ],
+    deps = [
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
+    ],
+)
+
 rust_test_suite(
     name = "integration",
     timeout = "short",

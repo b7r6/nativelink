@@ -65,12 +65,58 @@ wire test must pass unchanged and fail at runtime for each mutant; compiler
 failures and unmatched filters do not count. These checks do not establish
 production authentication, process closure, or capacity.
 
+## Observation interest and bounded transport opportunities
+
+Execute and WaitExecution observe one retained operation interest. Observe and
+the first body item do not renew it. Later response-body polls may submit a
+renewal every 100 experimental ticks against the 300-tick interest window. A
+quiet operation emits the same Operation as a heartbeat. State changes otherwise
+emit only when the projected Operation changes. The driver checks the current
+clock and applies due expiry before renewal, then checks the persisted deadline
+again. Concurrent observers share that deadline and cannot multiply renewals
+within the cadence or add interests. Restart preserves the deadline and its
+generation. Dropping a stream leaves the retained window; it does not cancel the
+operation synchronously. One renewal already handed to the coordinator can
+finish as the stream closes, but no detached task continues renewing it.
+Startup rechecks due deadlines once even at an unchanged persisted clock. This
+recovers a journal that committed AdvanceTime just before expiry proposals were
+interrupted; it does not repeatedly propose rejected retirement at a fixed time.
+
+Each stream retains one previous Operation and one pending body item. The whole
+encoded Operation, including its name, metadata and terminal response, is limited
+to 128 KiB. The shared 64-stream/handler limit and 64-command queue also cover
+renewal. Committed watch updates coalesce without a stream-local notification
+queue. A closed coordinator/watch returns Unavailable before another renewal.
+
+The observation is a transport delivery opportunity, not proof that the remote
+application consumed a message. In the pinned tonic 0.14.6 encoder, a pending
+source flushes the current batch; continuously ready messages accumulate until
+the 32 KiB yield threshold, plus at most one bounded message and its five-byte
+gRPC header. Hyper 1.7.0 checks h2 send capacity before polling that body, so it
+can queue one such bounded chunk beyond the remaining peer-advertised credit.
+These dependency facts are checked in `tonic/src/codec/{mod,encode}.rs` and
+`hyper/src/proto/h2/mod.rs`; they require review when those dependencies change.
+The server's receive-window settings cannot bound outbound credit granted by a
+peer. A peer that continues reading or advertising credit can keep an interest
+alive even if its application ignores the data. No stronger claim is made.
+
+The paused-reader fixture fixes its stream receive credit at 512 bytes and
+connection credit at 4096 bytes, disables adaptive windows, consumes one message,
+then stops polling. Quiet heartbeat batches contain one message each. It checks
+that the finite buffered messages exhaust credit and interest expires; its
+receipt records message bytes, last deadline and renewal generation. This is a
+qualification of that explicit client profile, not a universal bound from an
+application's last read for arbitrary HTTP/2 clients. A separate actual RPC
+fixture consumes quiet heartbeats for four interest windows and checks duplicate
+streams, reconnect and restart. Precisely controlled body polling additionally
+checks first-item behavior, shutdown, stale expiry generations and a clock jump
+past the retained deadline. A durable clock-before-expiry cutpoint verifies
+automatic expiry on restart when the observed clock equals the restored clock.
+
 Important remaining limitations:
 
-- Observe does not renew interest. Even an attached client expires after the
-  current interest interval. Renewal tied to actual bounded delivery and
-  backpressure, long-lived observation and serving-window qualification remain
-  future work. Dropping an observation does not synchronously cancel interest.
+- The qualified observation envelope above is local and experimental. General
+  client buffering profiles and publication serving windows remain unqualified.
 - Clock ticks, bounded matching scans and storage retries are experimental. This
   loop has no production throughput, latency or clock-recovery qualification.
 - The local principal and worker identities are fixture facts. This service does

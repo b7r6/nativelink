@@ -21,21 +21,21 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use futures::stream;
+use futures::{StreamExt, stream};
 use nativelink_util::background_spawn;
 use nativelink_config::cas_server::{UploadActionResultConfig, UploadCacheResultsStrategy};
 use nativelink_config::stores::{FastSlowSpec, FilesystemSpec, MemorySpec, StoreDirection, StoreSpec};
 use nativelink_macro::nativelink_test;
 use nativelink_proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
-use nativelink_proto::build::bazel::remote::execution::v2::execution_server::ExecutionServer;
+use nativelink_proto::build::bazel::remote::execution::v2::execution_server::{Execution, ExecutionServer};
 use nativelink_proto::build::bazel::remote::execution::v2::action_cache_client::ActionCacheClient;
 use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
-use nativelink_proto::build::bazel::remote::execution::v2::{Action, ActionResult, Command, Directory, ExecuteRequest, ExecuteResponse, Platform, RequestMetadata, UpdateActionResultRequest, WaitExecutionRequest};
+use nativelink_proto::build::bazel::remote::execution::v2::{Action, ActionResult, Command, Directory, ExecuteOperationMetadata, ExecuteRequest, ExecuteResponse, Platform, RequestMetadata, UpdateActionResultRequest, WaitExecutionRequest};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{AuthorityAttemptPhase, AuthorityResources, AuthorityWorkerIdentity};
 use nativelink_proto::google::longrunning::{Operation, operation};
 use nativelink_scheduler::authority::journal::Singleton;
-use nativelink_scheduler::authority::{ClusterEpoch, EffectKind, Limits, ObservableState, Phase, Resources};
+use nativelink_scheduler::authority::{ClusterEpoch, EffectKind, Event, Limits, ObservableState, Phase, RecordedEvent, Reply, Resources};
 use nativelink_service::authority_server::{AuthorityService, CoordinatorTask, QualificationConfig, QualificationFaults};
 use nativelink_store::ac_utils::serialize_and_upload_message;
 use nativelink_store::fast_slow_store::FastSlowStore;
@@ -265,6 +265,7 @@ struct Runtime {
     client: ExecutionClient<Channel>,
     worker_channel: Channel,
     worker_address: SocketAddr,
+    client_address: SocketAddr,
     servers: Vec<JoinHandle<Result<(), tonic::transport::Error>>>,
 }
 
@@ -324,7 +325,9 @@ impl Runtime {
         let client_server = background_spawn!(
             "authority_rpc_fixture",
             Server::builder()
-                .add_service(ExecutionServer::new(service.clone()))
+                .add_service(
+                    ExecutionServer::new(service.clone()).max_encoding_message_size(128 * 1024)
+                )
                 .serve_with_incoming(incoming),
         );
         let client = ExecutionClient::new(
@@ -346,6 +349,7 @@ impl Runtime {
             client,
             worker_channel,
             worker_address,
+            client_address,
             servers: vec![worker_server, client_server],
         }
     }
@@ -1025,4 +1029,315 @@ async fn undersized_core_payload_refuses_rpc_constructor_and_closes_journal() {
         .shutdown()
         .await
         .unwrap();
+}
+
+#[nativelink_test]
+async fn quiet_rpc_reader_renews_one_interest_across_reconnect_and_restart() {
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    let mut runtime = Runtime::start(&context, clock.clone(), faults.clone(), None).await;
+    let (request, _, _) = context.request(30).await;
+    let mut stream = runtime.client.execute(request).await.unwrap().into_inner();
+    let mut queued = next_operation(&mut stream).await;
+    let name = queued.name.clone();
+    runtime
+        .wait(|view| view.executions[0].phase == Phase::Queued)
+        .await;
+    // Drain any queued-stage notification before measuring identical heartbeats.
+    while ExecuteOperationMetadata::decode(queued.metadata.as_ref().unwrap().value.as_slice())
+        .unwrap()
+        .stage
+        != 2
+    {
+        queued = next_operation(&mut stream).await;
+    }
+    for now in (100..=1000).step_by(100) {
+        clock.store(now, Ordering::Relaxed);
+        assert_eq!(next_operation(&mut stream).await, queued);
+        let live = runtime
+            .wait(|view| view.operations[0].interest_deadline.at == now + 300)
+            .await;
+        assert_eq!(live.operations.len(), 1);
+        assert!(live.operations[0].interested);
+        assert!(live.operations[0].terminal.is_none());
+    }
+    let before = runtime.service.subscribe().borrow().operations[0].clone();
+    let mut duplicate = runtime
+        .client
+        .wait_execution(WaitExecutionRequest { name: name.clone() })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(next_operation(&mut duplicate).await, queued);
+    assert_eq!(runtime.service.subscribe().borrow().operations[0], before);
+    clock.store(1100, Ordering::Relaxed);
+    let (original, reattached) =
+        tokio::join!(next_operation(&mut stream), next_operation(&mut duplicate));
+    assert_eq!(original, queued);
+    assert_eq!(reattached, queued);
+    let renewed = runtime
+        .wait(|view| view.operations[0].interest_deadline.at == 1400)
+        .await;
+    assert_eq!(renewed.operations.len(), 1);
+    assert_eq!(
+        renewed.operations[0].interest_deadline.generation,
+        before.interest_deadline.generation + 1
+    );
+    let retained = renewed.operations[0].clone();
+    drop(stream);
+    drop(duplicate);
+    runtime.shutdown().await;
+
+    runtime = Runtime::start(&context, clock.clone(), faults, None).await;
+    let mut stream = runtime
+        .client
+        .wait_execution(WaitExecutionRequest { name })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(next_operation(&mut stream).await, queued);
+    assert_eq!(runtime.service.subscribe().borrow().operations[0], retained);
+    clock.store(1200, Ordering::Relaxed);
+    assert_eq!(next_operation(&mut stream).await, queued);
+    runtime
+        .wait(|view| view.operations[0].interest_deadline.at == 1500)
+        .await;
+    drop(stream);
+    // Disconnect itself leaves the persisted window intact. A jump past the
+    // whole window must expire before any queued renewal can be considered.
+    assert!(runtime.service.subscribe().borrow().operations[0].interested);
+    clock.store(1501, Ordering::Relaxed);
+    runtime
+        .wait(|view| view.operations[0].terminal.is_some())
+        .await;
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_INTEREST: identical queued-operation heartbeats preserve one interest for four windows; duplicate streams, reconnect and restart retain identity and persisted cadence"
+    );
+}
+
+#[nativelink_test]
+async fn paused_rpc_reader_exhausts_fixed_credit_and_interest_expires() {
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let runtime = Runtime::start(
+        &context,
+        clock.clone(),
+        Arc::new(QualificationFaults::default()),
+        None,
+    )
+    .await;
+    let channel = Endpoint::from_shared(format!("http://{}", runtime.client_address))
+        .unwrap()
+        .initial_stream_window_size(512)
+        .initial_connection_window_size(4096)
+        .http2_adaptive_window(false)
+        .connect()
+        .await
+        .unwrap();
+    let mut client = ExecutionClient::new(channel);
+    let (request, _, _) = context.request(30).await;
+    let mut stream = client.execute(request).await.unwrap().into_inner();
+    let first = next_operation(&mut stream).await;
+    assert!(!first.done);
+    let heartbeat_bytes = first.encoded_len() + 5;
+    let mut terminal = None;
+    for now in (100..=2000).step_by(100) {
+        clock.store(now, Ordering::Relaxed);
+        runtime.wait(|view| view.now >= now).await;
+        // Let actual TCP/h2 delivery settle without polling the response body.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let view = runtime.service.subscribe().borrow().clone();
+        assert_eq!(view.operations.len(), 1);
+        if view.operations[0].terminal.is_some() {
+            terminal = Some(view.operations[0].clone());
+            break;
+        }
+    }
+    let terminal = terminal.expect("Paused bounded-credit response kept renewing indefinitely");
+    assert!(!terminal.interested);
+    // Quiet heartbeats flush a single message at each cadence. Permit the
+    // initial decoder batch, finite stream credit and one server body chunk.
+    let allowance = 512 / heartbeat_bytes + 4;
+    assert!(terminal.interest_deadline.generation <= u64::try_from(allowance).unwrap());
+    eprintln!(
+        "AUTHORITY_INTEREST: paused reader expired; peer_stream_credit=512 peer_connection_credit=4096 adaptive=false heartbeat_bytes={heartbeat_bytes} last_deadline={} generation={} renewal_allowance={allowance}",
+        terminal.interest_deadline.at, terminal.interest_deadline.generation
+    );
+    drop(stream);
+    runtime.shutdown().await;
+}
+
+#[nativelink_test]
+async fn stream_polling_cadence_shutdown_and_stale_expiry_are_fenced() {
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    let mut runtime = Runtime::start(&context, clock.clone(), faults.clone(), None).await;
+    let (request, _, _) = context.request(30).await;
+    // Direct trait calls give exact control over body polling, independently of
+    // the actual h2 finite-credit fixture above.
+    let mut stream = Execution::execute(&runtime.service, Request::new(request))
+        .await
+        .unwrap()
+        .into_inner();
+    let name = stream.next().await.unwrap().unwrap().name;
+    runtime
+        .wait(|view| view.executions[0].phase == Phase::Queued)
+        .await;
+    clock.store(250, Ordering::Relaxed);
+    runtime.wait(|view| view.now == 250).await;
+    let initial = runtime.service.subscribe().borrow().operations[0].clone();
+    assert_eq!(initial.interest_deadline.at, 300);
+    let mut attached = Execution::wait_execution(
+        &runtime.service,
+        Request::new(WaitExecutionRequest { name: name.clone() }),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert_eq!(attached.next().await.unwrap().unwrap().name, name);
+    assert_eq!(runtime.service.subscribe().borrow().operations[0], initial);
+    assert!(!attached.next().await.unwrap().unwrap().done);
+    let renewed = runtime
+        .wait(|view| view.operations[0].interest_deadline.at == 550)
+        .await;
+    let retained = renewed.operations[0].clone();
+    assert_eq!(
+        retained.interest_deadline.generation,
+        initial.interest_deadline.generation + 1
+    );
+    drop(attached);
+    runtime.shutdown().await;
+    assert_eq!(
+        stream.next().await.unwrap().unwrap_err().code(),
+        tonic::Code::Unavailable
+    );
+    drop(stream);
+
+    // Inject a delayed timer from the old generation after a restart boundary.
+    // It targets its original deadline, now due, while the renewed one is live.
+    let authority = Singleton::open(
+        context.directory.path().join("authority.redb"),
+        1,
+        EPOCH,
+        Limits::default(),
+    )
+    .await
+    .unwrap();
+    authority
+        .write(RecordedEvent {
+            epoch: EPOCH,
+            event: Event::AdvanceTime { now: 300 },
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        authority
+            .write(RecordedEvent {
+                epoch: EPOCH,
+                event: Event::ExpireInterest {
+                    operation: initial.id,
+                    generation: initial.interest_deadline.generation
+                }
+            })
+            .await
+            .unwrap()
+            .data,
+        Reply::Ignored
+    );
+    let restored = authority.read().await.unwrap().view();
+    assert_eq!(restored.operations[0], retained);
+    authority.shutdown().await.unwrap();
+    clock.store(300, Ordering::Relaxed);
+    runtime = Runtime::start(&context, clock.clone(), faults, None).await;
+    let mut stream = Execution::wait_execution(
+        &runtime.service,
+        Request::new(WaitExecutionRequest { name }),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(!stream.next().await.unwrap().unwrap().done);
+    assert_eq!(runtime.service.subscribe().borrow().operations[0], retained);
+    clock.store(600, Ordering::Relaxed);
+    let terminal = tokio::time::timeout(Duration::from_secs(20), stream.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(terminal.done);
+    let expired = runtime.service.subscribe().borrow().operations[0].clone();
+    assert!(!expired.interested);
+    assert_eq!(expired.interest_deadline, retained.interest_deadline);
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_INTEREST: Observe and first poll do not renew; later polling renews; shutdown stops polling; persisted generation rejects delayed expiry; clock jump expires before renewal"
+    );
+}
+
+#[nativelink_test]
+async fn restart_replays_due_interest_after_committed_clock_before_expiry() {
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    let runtime = Runtime::start(&context, clock.clone(), faults.clone(), None).await;
+    let (request, _, _) = context.request(30).await;
+    let mut stream = Execution::execute(&runtime.service, Request::new(request))
+        .await
+        .unwrap()
+        .into_inner();
+    let name = stream.next().await.unwrap().unwrap().name;
+    runtime
+        .wait(|view| view.executions[0].phase == Phase::Queued)
+        .await;
+    let initial = runtime.service.subscribe().borrow().operations[0].clone();
+    drop(stream);
+    runtime.shutdown().await;
+    let authority = Singleton::open(
+        context.directory.path().join("authority.redb"),
+        1,
+        EPOCH,
+        Limits::default(),
+    )
+    .await
+    .unwrap();
+    // Durable crash cutpoint: the clock committed, but the driver's separate
+    // expiry proposals did not. Recovery receives the exact same clock value.
+    authority
+        .write(RecordedEvent {
+            epoch: EPOCH,
+            event: Event::AdvanceTime { now: 300 },
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        authority.read().await.unwrap().view().operations[0],
+        initial
+    );
+    authority.shutdown().await.unwrap();
+    clock.store(300, Ordering::Relaxed);
+    let runtime = Runtime::start(&context, clock, faults, None).await;
+    let expired = runtime
+        .wait(|view| view.operations[0].terminal.is_some())
+        .await;
+    assert_eq!(expired.now, 300);
+    assert!(!expired.operations[0].interested);
+    assert_eq!(
+        expired.operations[0].interest_deadline,
+        initial.interest_deadline
+    );
+    let mut stream = Execution::wait_execution(
+        &runtime.service,
+        Request::new(WaitExecutionRequest { name }),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(stream.next().await.unwrap().unwrap().done);
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_INTEREST: equal-clock restart replays due expiry after durable AdvanceTime cutpoint without renewing or postponing the retained deadline"
+    );
 }

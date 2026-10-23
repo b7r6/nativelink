@@ -133,8 +133,9 @@ The [format activation experiment](format-activation.md) now selects compatible
 writers from committed feature state and refuses unsupported committed recovery.
 Ten new tests cover real quorum activation, mixed pending authority, committed
 suffixes, snapshot cutpoints, and reconstruction of the trusted admission
-fixture. Its synthesized, separately compiled Base reader is a further check;
-this checkpoint uses immutable reader profiles in one executable.
+fixture. That checkpoint used immutable reader profiles in one executable;
+the later separately compiled Base fixture qualifies the declared experimental
+binary boundary.
 
 The [automatic coordinator](automatic-coordinator.md) drives actual Execution and
 worker RPCs, matching, deadlines, reconciliation, and accepted-only publication.
@@ -158,12 +159,23 @@ Failed checks remain in the receipts alongside the corrected runs. Cargo reports
 passes all 141 targets. The later filesystem corrections also pass their focused
 Cargo checks.
 
+The next focused checkpoint adds nine RPC histories for active observation
+renewal, including paused-reader transport backpressure and recovery after a
+committed clock advance precedes expiry. Seven separately compiled frozen Base
+cases pass against the pinned envelope-3/core-5 baseline. The typed retention
+bridge passes eleven tests and composes complete manifests with durable cohort
+protection and separate serving roots. Six compiled semantic mutations of that
+bridge fail their assertions; a later cross-namespace grant test also failed
+before the namespace binding was repaired. [Focused receipts](evidence/renewal-retention-frozen/manifest.json)
+retain these results and the exact source boundaries. The bridge is a bounded
+singleton test wrapper, and transport renewal does not prove that a remote
+application consumed a message.
+
 Remaining engineering includes finite recipient-ledger compaction,
 replacement-incarnation fencing, deployed format admission, canonical
-construction and authenticated listeners, active observation renewal,
-qualified physical stores and their authority integration, actual typed closure
-protection, sustained collection, migration/cutover, and deletion of the legacy
-construction paths. Experimental envelope 3 rejects earlier prototypes; its
+construction and authenticated listeners, qualified physical stores and their
+replicated authority integration, sustained collection, migration/cutover, and
+deletion of the legacy construction paths. Experimental envelope 3 rejects earlier prototypes; its
 activation protocol does not migrate released deployments. None of M0 through
 M9 is declared fully qualified by this checkpoint.
 
@@ -202,9 +214,10 @@ worker candidate after coordinator death. The summary records a 3,663-second
 recovery, but its restart timestamp conflicts with the narrative notes and the
 archived raw logs end before the final retry. These are incident reports from
 several legacy binaries, not a Lane B identification, a new benchmark, or evidence
-that this branch repaired the running fleet. Mounted reconnect, automatic
-candidate resubmission, timer reconstruction, and scheduling wakeup still need
-real runtime fixtures.
+that this branch repaired the running fleet. The later automatic coordinator
+fixtures exercise reconnect, candidate resubmission, timer reconstruction, and
+scheduling wakeup over actual local RPCs; production construction and the active
+fleet still use the legacy runtime.
 
 The plan's pinned public commit was initially absent, then fetched by root.
 [source-map.md](source-map.md) records the observed listing/test drift against

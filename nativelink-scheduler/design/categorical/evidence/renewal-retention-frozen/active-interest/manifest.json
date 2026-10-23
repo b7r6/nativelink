@@ -1,0 +1,189 @@
+{
+  "patch": "/tmp/nativelink-active-interest.patch",
+  "patch_sha256": "91487f4031876bbea79bd0b084633a84deb6dd185de8bb035888fdbedb815b85",
+  "base_blobs": {
+    "nativelink-service/src/authority_server.rs": "d9d854ce618d9f28b03c471f41dc213f5771f53a",
+    "nativelink-worker/tests/authority_rpc_test.rs": "9aec8fd6e8a7decd9623e3dd091e8212db6608e7",
+    "nativelink-scheduler/design/categorical/automatic-coordinator.md": "b0c2322f515e279c747f070799ece90b2eb7da4f"
+  },
+  "commands": [
+    {
+      "label": "rpc-first",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 73.66815423965454,
+      "test_body_seconds": 45.03,
+      "passed": 8
+    },
+    {
+      "label": "service-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 5.4117584228515625
+    },
+    {
+      "label": "service-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 6.392036437988281
+    },
+    {
+      "label": "worker-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 7.92839503288269
+    }
+  ],
+  "logs": {
+    "service-clippy.log": {
+      "bytes": 266,
+      "sha256": "97a4d9adb27e9b2300dc66b665b81d269c1eaac7ca8c01110da8db6fecf18846"
+    },
+    "service-tests.log": {
+      "bytes": 766,
+      "sha256": "0fc4b18c9a9912fac762e7674fecb6153de0335007217a95e5c3636927657fe6"
+    },
+    "rpc-first.log": {
+      "bytes": 29419662,
+      "sha256": "047737accf98e4e3e548b9b93cb7b6d53ecb9750f6808149f133de1263fdec08"
+    },
+    "worker-clippy.log": {
+      "bytes": 360,
+      "sha256": "e1f05b799c173da23c93a26c3ba9e9a5ea863da29951cc6728859446d03f978f"
+    },
+    "rpc-final.log": {
+      "bytes": 20018455,
+      "sha256": "2044c984e37ffd36e080311681f8418e3ba06e7fde7d3a99d2d2dfcb7367e895"
+    },
+    "service-clippy-final.log": {
+      "bytes": 266,
+      "sha256": "60290a3c592ce9a494c93686fdddf9b375d10df4a7a3a684776617d007c75ebd"
+    },
+    "worker-clippy-final.log": {
+      "bytes": 360,
+      "sha256": "116005384c940098163647b867dd0c7720754dafaf7ea5c607b279c4501bb82b"
+    }
+  },
+  "claims": [
+    "transport delivery opportunities, not remote application consumption",
+    "explicit512byte stream/4096byte connection credit paused-reader profile",
+    "quiet reader survives four300tick windows",
+    "firstpoll/Observe no renewal, persisted100tick cadence dedup",
+    "stale generation and clockjump cannot revive expiredinterest",
+    "equal-persisted-clock startup expiry sweep recovers clock-before-expiry durable cutpoint"
+  ],
+  "limits": [
+    "experimental service/testconstruction only",
+    "arbitrary peer buffering and deployment clocks unqualified"
+  ],
+  "final_commands": [
+    {
+      "label": "rpc-final",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 29.906145811080933
+    },
+    {
+      "label": "service-clippy-final",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 5.91960072517395
+    },
+    {
+      "label": "worker-clippy-final",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 6.898084402084351
+    }
+  ],
+  "final_rpc_tests_passed": 9,
+  "final_rpc_test_body_seconds": 11.91
+}
