@@ -1,0 +1,858 @@
+{
+  "base_commit": "b2d9202526022c2451b9df32b5a4e549f1d8b02f",
+  "scope": "Experimental integration and emulator evidence; no production construction, cloud durability, deployed routing, or M4/M5 gate completion. Frozen Base remains the previously pinned synthesized executable, not a released binary.",
+  "source_sha256": {
+    "Cargo.lock": "9ebb885d18f4ef44f5d9326361d952bea1a4029e221c9e40648ad6f2b4b317c4",
+    "nativelink-worker/Cargo.toml": "10ea69e971c615081bd5a187f269d5ec5a7c344af1a29e59704e2049f671f6c9",
+    "nativelink-worker/BUILD.bazel": "46170eb32654f30509d132da9d96860074f70af2a411380d5cc61d356121a426",
+    "nativelink-worker/tests/authority_replicated_rpc_test.rs": "96f99831f34d70620a184a4c0c16701139398f3023a6e8ca88877ac87351c939",
+    "nativelink-service/src/authority_server.rs": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+    "nativelink-worker/src/authority_worker.rs": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "nativelink-worker/src/authority_worker_transport.rs": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377",
+    "nativelink-store/BUILD.bazel": "8742fe00c234e5e29582c36658a9c3145456e8df06b1ef2f6f4e204ea887974b",
+    "nativelink-store/src/physical_filesystem.rs": "f0105d835138b1b40e8f75b9d39cd47fa6eaeb315b9296dfd2a21c87633c5e0d",
+    "nativelink-store/tests/physical_azure/adapter.rs": "d6041f7b807c94f52421c7adb113554c1571a5719a8abe3529e17d5bdef6f758",
+    "nativelink-store/tests/physical_azure_test.rs": "fbd1ec74a6561898082da96347811720b6d83b70a27f23c894e5f245d6ce8dee",
+    "nativelink-store/tests/azurite_runner/mod.rs": "c3f5c16a62b6cd9f34bdb1af580a0dd955654e81dd848d65d5812b6f92410f0e",
+    "nativelink-store/tests/azurite_runner/bun.lock": "2a418f7c526179761b000dc29b2a7b771864358f691f505d04172cfc7997434f"
+  },
+  "validation": [
+    {
+      "command": "CARGO_BUILD_JOBS=8 python3 nativelink-scheduler/tests/format_compatibility/run.py run --writer-revision b2d9202526022c2451b9df32b5a4e549f1d8b02f --writer-mode receipt --output /tmp/nativelink-frozen-receipt-checkpoint --cargo-target-dir /tmp/nativelink-frozen-build-cache",
+      "result": "7 cases passed; exact immutable writer, unchanged Base pin and overlay",
+      "report": "frozen-receipt/report.json.gz"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=8 python3 nativelink-scheduler/tests/format_compatibility/run.py run --writer-revision b2d9202526022c2451b9df32b5a4e549f1d8b02f --writer-mode both --output /tmp/nativelink-frozen-both-checkpoint --cargo-target-dir /tmp/nativelink-frozen-build-cache",
+      "result": "7 cases passed; exact immutable writer, unchanged Base pin and overlay",
+      "report": "frozen-both/report.json.gz"
+    },
+    {
+      "command": "bazel test --jobs=8 --nocache_test_results --test_strategy=standalone --test_env=NATIVELINK_AZURITE_TEST_RUNNER_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/nativelink-store/tests/azurite_runner --test_env=PATH --test_arg=--ignored --test_arg=--exact --test_arg=local_azurite_exact_generation_contract //nativelink-store:integration_tests/physical_azure_test_test",
+      "result": "actual local Azurite fixture passed in7.3s; prerequisite dependency install bun install --frozen-lockfile",
+      "log": "azure/integrated-bazel-runner-override.log.gz"
+    },
+    {
+      "command": "bazel test --jobs=8 //nativelink-worker:authority_replicated_rpc_test //nativelink-store:integration_tests/physical_azure_test_test",
+      "result": "both passed: replicated4.7s, ordinary Azure0.7s (emulator ignored in ordinary run)",
+      "log": "replicated-and-azure-integrated-bazel.log.gz"
+    },
+    {
+      "command": "pre-commit run",
+      "result": "all applicable hooks passed after formatting the new dependency declaration and correcting documentation spelling",
+      "log": "replicated-azure-precommit-formatted.log.gz"
+    }
+  ],
+  "provenance_notes": [
+    "Azurite source/qualification manifests describe the original agent tree; root added only the runner path override and corrected documentation. Original provider adapter bytes match.",
+    "First root Bazel emulator invocation rejected unavailable local strategy. Second compiled but failed because rules_rust overrode CARGO_MANIFEST_DIR. Both failures retained.",
+    "Agent replicated RPC baseline, two compiled semantic mutations and restored baseline are separately pinned. Root integrated target passed with unchanged runtime dependencies.",
+    "Frozen writer report hashes complete source archives and binaries retained in the /tmp output directories. Compressed reports and fixtures are committed here; source archives can be regenerated from the pinned commits."
+  ],
+  "receipts": [
+    {
+      "file": "azure/baseline-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/baseline-compile.log",
+      "source_sha256": "53a13fff7b45d741ab9ed4545359b67108bd4b5bcedc6a1f4c1c9f83d4c28e28",
+      "archive_sha256": "75ab547290f63073ad252c71026167f23adf52a262dab5b8fc131ade4b20afde"
+    },
+    {
+      "file": "azure/baseline-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/baseline-live.log",
+      "source_sha256": "2ec239b67a2343aae5b94c6e8f89fbd1e97f303e2b1fa7bf9ad5c173c4e04c81",
+      "archive_sha256": "e56c43e68ceb99cfc962540378188a3d95a0edc2b218b802b24fe6d41056e885"
+    },
+    {
+      "file": "azure/buildifier.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/buildifier.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "azure/clippy-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/clippy-final.log",
+      "source_sha256": "35086b8a0b992d37c5b2c3257b614678823f6638a91a3d194bec182e10fa25d2",
+      "archive_sha256": "770e342172d722c76e7c1ba338a57ce2e4c481f91e4911fd1a2742abc3c1aa91"
+    },
+    {
+      "file": "azure/clippy.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/clippy.log",
+      "source_sha256": "8cdd466bebf49ebc4806880198da66741389bdcaacf37deb787829c487aec82f",
+      "archive_sha256": "c29d7e71f52e69fe380560fdc6a871854bbff685b56d039f5499702f3d9b1a33"
+    },
+    {
+      "file": "azure/compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/compile.log",
+      "source_sha256": "46bf628e7705828b8b8c45963b89aecf321dfeed75143bcefc4ce87ea391ed17",
+      "archive_sha256": "d605260342af8d1815cf882a5f5bc57152246f5d245e7c755c1a100ddc1ecffe"
+    },
+    {
+      "file": "azure/container404-is-missing-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/container404-is-missing-compile.log",
+      "source_sha256": "05a5368f0c5b1145b0bf27cfaa87b00f74cc85ef57aba2ec49af62caa21807bd",
+      "archive_sha256": "df98366c3fcacda2d527c75a05d21727d1ba81b3a11b543ddf39ae39c01a2c7b"
+    },
+    {
+      "file": "azure/container404-is-missing-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/container404-is-missing-live.log",
+      "source_sha256": "6d3c03afa1d57868a6f55f230a9cf11bec0cc1768280de91b2239275b6279d90",
+      "archive_sha256": "b82a01ec1f0e720afc646e62ae79169bb1b662dfb08b2aaa9dede94295b97ade"
+    },
+    {
+      "file": "azure/dependencies.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/dependencies.log",
+      "source_sha256": "0735c30fd4c7eacf24838f27374cecdee0991f3f98f29d6e6afec25dad63fec2",
+      "archive_sha256": "ec35b8c9b53dcf43abf889d3b1eecec0f3f7b4ca135e70962d1aea8a877af46e"
+    },
+    {
+      "file": "azure/fmt.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/fmt.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "azure/foreign-incarnation-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/foreign-incarnation-compile.log",
+      "source_sha256": "0653d0c3b3e2c2e2eab94bcd831d9b5eddb9b3afd9d42746378830392f4abb89",
+      "archive_sha256": "5c990c64eb55c0cad1b4e2579d64d9c7f2397cf1f196e35c324976997bfcae09"
+    },
+    {
+      "file": "azure/foreign-incarnation-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/foreign-incarnation-live.log",
+      "source_sha256": "ef42d00167d4360b17c8ac2bf16779e85f962053cb219f456b1b9d37541f444b",
+      "archive_sha256": "941860e349dd366165b2de8d875c6f05fe8399634bee63d4f7cae0c47d7705f5"
+    },
+    {
+      "file": "azure/incarnation-prefix-alias-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/incarnation-prefix-alias-compile.log",
+      "source_sha256": "edb4ec7d2591b50a6769d492d836951e2e6f0e55c3f58fed2d282a35b4e5bf19",
+      "archive_sha256": "7e7508fb3a6d592d5c1e204f59c20cbcd17a7b63d3066b58d26742797946cbed"
+    },
+    {
+      "file": "azure/incarnation-prefix-alias-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/incarnation-prefix-alias-live.log",
+      "source_sha256": "d47c49d7b427a88955357bc60e5fb7a73850073c01c7ff1aba01b2613e0a7d12",
+      "archive_sha256": "7a43c95b381528757aaf509c17b461454317f5a5cf2bcd9437504e2e1540c0da"
+    },
+    {
+      "file": "azure/install.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/install.log",
+      "source_sha256": "ff456455de32a45f1e26985d3591a0f652116dcbdcf626c2e469edc3615151fb",
+      "archive_sha256": "943f9421db453b9505ee370cf3a86922f80a646a08051186b17673265f864a9d"
+    },
+    {
+      "file": "azure/integrated-bazel-runner-override.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/integrated-bazel-runner-override.log",
+      "source_sha256": "ccc19fc514d7f88d9353ee4e4e7b18994945bccb6eae8dbede349166eb34b327",
+      "archive_sha256": "1de1b25328ed0c132c1a99715ba6aca4b710955e920345269cb676915e1d5d4f"
+    },
+    {
+      "file": "azure/integrated-bazel-standalone.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/integrated-bazel-standalone.log",
+      "source_sha256": "200ad1f60f1c708744e6859f8647fdb75a2e28fc88519c92bf0bed296b063885",
+      "archive_sha256": "ec12938a0fba00590e660fca4a06844b61c22c47b5ef32ab2213e05a0a5758ec"
+    },
+    {
+      "file": "azure/integrated-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/integrated-bazel.log",
+      "source_sha256": "ab3b68ebcd44d578847733da3c7a406bfa628da9b746034be339fa210ddf354a",
+      "archive_sha256": "1971cb9871a30a9535a31ab4de5ff7ef23dd838c8576f716555a19213df4b6ab"
+    },
+    {
+      "file": "azure/live-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/live-final.log",
+      "source_sha256": "c8a1815693b6195c9a48775aef9713a49fbdc7b1743d0b85d00c3ea727e3be6e",
+      "archive_sha256": "6a96e01aa1cfa01dfda80005beefd5f73f4917d2d3872aa712929e51b791d8be"
+    },
+    {
+      "file": "azure/live-first.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/live-first.log",
+      "source_sha256": "ee9fad8a07831221c1a5ba2630df4a92cdd12068e61a0ca171df713d47dd180b",
+      "archive_sha256": "6eb4ce4da5103f8816026db2a350278f50728f3a558b7851b1eae510acea962f"
+    },
+    {
+      "file": "azure/live-qualified.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/live-qualified.log",
+      "source_sha256": "7ecbefb7a70d98f80b1b63fe768743013672d02ddc62de0c78f4acb7b47c7a32",
+      "archive_sha256": "f03c278b9a39513d3b8653230ba2779dc5a002fc4e796bf06b327ab5e879bbc7"
+    },
+    {
+      "file": "azure/live-second.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/live-second.log",
+      "source_sha256": "4dc4dd1681d41420aed6bbcc2bfd7b801ecee89c5883e616a8cfe467684a7770",
+      "archive_sha256": "0cb77d2d7220a36467440a0bb61d48c6e08bac37cac98c7773daec18d4d18e2f"
+    },
+    {
+      "file": "azure/missing-emulator.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/missing-emulator.log",
+      "source_sha256": "e35453ba9932eac1b310f838419bd56eaaf4995b6196594c0d2faf4363abffb3",
+      "archive_sha256": "eb7179cc0a657ed19b54b4bd22350c95163fc2259b408ca906565c27678b887b"
+    },
+    {
+      "file": "azure/mutation-results.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/mutation-results.json",
+      "source_sha256": "3a6f8810b66c440699e563ec8e00b53f5d8bf9411d2535196d82fc6f20404c37",
+      "archive_sha256": "eb7a81ec1dc815c762b2d8fdb8da7179e69eee5fcd75c06842b11f605a6abf77"
+    },
+    {
+      "file": "azure/mutation-run.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/mutation-run.log",
+      "source_sha256": "113b27946217eebe20e782e08647243458b74e2b57a788cab93d407550aff6b8",
+      "archive_sha256": "ab434539e0698f5100788eae77b0e309c3ed0dc5c0ec02da0e3b5d163ada3abe"
+    },
+    {
+      "file": "azure/mutations.py.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/mutations.py",
+      "source_sha256": "72b51feec367ec1123f9bf1c1dc5a8736fbebb4912861fffc523fb7b2656f388",
+      "archive_sha256": "2ac848eeb79641a9bd8290c1fe4ae1d688f8d1fa36270b59d9052aa23833a7a5"
+    },
+    {
+      "file": "azure/ordinary-suite.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/ordinary-suite.log",
+      "source_sha256": "1a259a936704b5c50144662da58d2510c508daac9addf452c84fedf352ad1e78",
+      "archive_sha256": "abd02e0b6fc3e9ba7d621d5cebac41be9bbe42b2ab9d58a3ec9b3b68d2e27cca"
+    },
+    {
+      "file": "azure/overwrite-immutable-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/overwrite-immutable-compile.log",
+      "source_sha256": "bcc77617f0d26410e6ff615218cfec38ceef36f289fcf3ff91cb2a9a5ec31767",
+      "archive_sha256": "826e48bd14e84ce1c99b0cec2f802c761123e7f9c505eb4f3feabd1dd98e083c"
+    },
+    {
+      "file": "azure/overwrite-immutable-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/overwrite-immutable-live.log",
+      "source_sha256": "6fa4dfcff46dab27d9007e104eb79bc2345d04e7600821161570acd81233f813",
+      "archive_sha256": "6c7ffdc4e1252f2b9c224e9e3f6184d21b2ea67a02b193e7d8e6f720bb0a5841"
+    },
+    {
+      "file": "azure/physical-azure.patch.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/physical-azure.patch",
+      "source_sha256": "1d8af101b4461b92fac3ee0c3bcea71c1f9a439d796ffe89b119fe55f2080fe4",
+      "archive_sha256": "4ca98eaefb53687ecaebb645cb6ab0ac892ea775420ac30eee0f823490c965a3"
+    },
+    {
+      "file": "azure/restored-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/restored-compile.log",
+      "source_sha256": "42f4b8ca457c3c31bb63b1c3279f8cdeb2149e6d2e168698f4ab92a69e3cb89f",
+      "archive_sha256": "890948eba35d3e132d378c1a6b703ddf42cba31e352c19b0fa6a43eb6143c995"
+    },
+    {
+      "file": "azure/restored-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/restored-live.log",
+      "source_sha256": "a426015db94bf8be73fa598b88dafc9cc9ca1b0ec477793ebdca19441853ca23",
+      "archive_sha256": "49614d5938f8e24252917011ac7aa21bbfdb6dfc96ccb5e84e7f09ead6b75ac0"
+    },
+    {
+      "file": "azure/skip-whole-object-digest-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/skip-whole-object-digest-compile.log",
+      "source_sha256": "0925264d44fb3737b9a0d82fde417877d35b85f0aa3b97ad8ae865a531c246d0",
+      "archive_sha256": "01c350e51535ae7185a56cb5e8f4932d297986affd40c85f67a91541024513bc"
+    },
+    {
+      "file": "azure/skip-whole-object-digest-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/skip-whole-object-digest-live.log",
+      "source_sha256": "82380d761123cdbc25e420d11b6622c7fb84f0f1ee46eb9e59a9110caf09e5f5",
+      "archive_sha256": "6eb6aaa90bb765a424c4aa71fc89a07681af9b4c43905bac59bcf3e15081df07"
+    },
+    {
+      "file": "azure/source-hashes.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/source-hashes.json",
+      "source_sha256": "6c3dce833f7cae90bf23055bb5ef3fd9e1dbb054435f30d76a466d650b5543db",
+      "archive_sha256": "e1ff68bda73955a34833b221bbe4230e47981f65ed7d457832602edcc62fa9ee"
+    },
+    {
+      "file": "azure/typos.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/typos.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "azure/unconditional-delete-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/unconditional-delete-compile.log",
+      "source_sha256": "f4ed6cb34b3198a43d24fa35af3b1176e37c1d8a43c1361034296c544ad024d6",
+      "archive_sha256": "f61c565ca1c8fb822c3f6b1e95877fa5e55e9928816f7821525de5a9ee862af0"
+    },
+    {
+      "file": "azure/unconditional-delete-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/unconditional-delete-live.log",
+      "source_sha256": "04190b381414bf8be8d965f5164d60954de13be2261158967a56bc6e462a8e55",
+      "archive_sha256": "4d5f76bed34a9832beccf4bb8e18a58c967ecd0780dc8885cdaea3eba28be2f9"
+    },
+    {
+      "file": "azure/vale.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/physical-azurite/vale.log",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "replicated/baseline.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/baseline.log",
+      "source_sha256": "1975abe62cce6e379886deda98cbd4838a36414f88c49a9f4b32bd97ea68917e",
+      "archive_sha256": "85b8dcf09af1449edc7cb165bdc4a25f2aed911712384860d47e4d66d3affd36"
+    },
+    {
+      "file": "replicated/clippy.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/clippy.log",
+      "source_sha256": "a24219e486f8b34a692c9b9722fc283641e05c502aefbe8a32c221eea2cb228f",
+      "archive_sha256": "840a417e048380ec7b19afb806aee7e22a2384f07d50bde479a425fd84715d81"
+    },
+    {
+      "file": "replicated/compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/compile.log",
+      "source_sha256": "592996f8c721fc8378d328179f513e35ad621ad710244dd201a66a2921577236",
+      "archive_sha256": "3b708dbfec874e2bec275b54a07f1dfd67d6c4bc380b019bee752936ba77f41a"
+    },
+    {
+      "file": "replicated/first.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/first.log",
+      "source_sha256": "f431e34e7ea24d8c22bdb9f850503a0bda1603478647f4e52d86433d8a85fe72",
+      "archive_sha256": "8ff7c3be3adeb599c743ef441681c3d2850d5e0c059c21cc9053ebde1f7a07ee"
+    },
+    {
+      "file": "replicated/frozen-source/nativelink-scheduler/design/categorical/replicated-rpc.md.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/frozen-source/nativelink-scheduler/design/categorical/replicated-rpc.md",
+      "source_sha256": "72f6d7ee96732f2d2959e3a4cfd97b0dea3fb32701b7ec9b7aab2dce737bf974",
+      "archive_sha256": "52680f3d5e78300b2c109df0da3df3954edad8e1ff4189e7a73274b625996b64"
+    },
+    {
+      "file": "replicated/frozen-source/nativelink-worker/tests/authority_replicated_rpc_test.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/frozen-source/nativelink-worker/tests/authority_replicated_rpc_test.rs",
+      "source_sha256": "96f99831f34d70620a184a4c0c16701139398f3023a6e8ca88877ac87351c939",
+      "archive_sha256": "54876908dd87872b0b9adf6c85c85b51305eecc360e06249ab13c0fca1003494"
+    },
+    {
+      "file": "replicated/manifest.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/manifest.json",
+      "source_sha256": "854ca713f6c9d1d3c2aa8a8048a9ad1f7051f71da4ef019615a3b99063c8530e",
+      "archive_sha256": "c036e7b30d5a4f25a492767065fb291a5ce9b082fe1493cd95a249c73bca6378"
+    },
+    {
+      "file": "replicated/mutation-altered-candidate.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/mutation-altered-candidate.log",
+      "source_sha256": "acd8afc8b86d36793a56658070a9050d21481314ef4f6dc0505f588f42d39884",
+      "archive_sha256": "683b2dfc5cef1f6ce4ff98db794f89dc8fbe71f46705bc38a07b439ba86b4e88"
+    },
+    {
+      "file": "replicated/mutation-reused-session.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/mutation-reused-session.log",
+      "source_sha256": "21b11094d6a1e5da9877878702f7e8f386536cd73553b4d56c451ea7ea37116a",
+      "archive_sha256": "f79497eea139bfbfcbf564a0d16513001272535f8dd2749b09eed98c5f5dac90"
+    },
+    {
+      "file": "replicated/mutations.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/mutations.json",
+      "source_sha256": "5bd4c98a3b014fb79724a20c8aa335266b70949daaefaf5fd2ed596d2ab1b091",
+      "archive_sha256": "33244c24ea0513d90386d9ffe69b8feb41ddb3efbd2457b0d4bebc36294cca37"
+    },
+    {
+      "file": "replicated/nativelink-replicated-rpc.patch.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/nativelink-replicated-rpc.patch",
+      "source_sha256": "7008657da2361095deebb28eff30581b479a8ad4852d93cb429e5acf08395b4c",
+      "archive_sha256": "bf9be0173c7d0cd258b2242b8782e92301a3a8196f835d9f21fa6ec393c472bf"
+    },
+    {
+      "file": "replicated/qualified-baseline.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-baseline.log",
+      "source_sha256": "1327210e613e5ca0b12333d6b1ec0a51cb0fdc6e073329bc78cfa062e5449ba0",
+      "archive_sha256": "eaba31869b52ccc3a8422a15fac0837f5deb7c1c5b9bb9b24b541f4c1fa7ab51"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-scheduler/src/authority/format.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-scheduler/src/authority/format.rs",
+      "source_sha256": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+      "archive_sha256": "9759e392ad62d2348c62c9ca8e82a55be9cfa73f5e9fae88d89facd3dfe89552"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-scheduler/src/authority/journal.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-scheduler/src/authority/journal.rs",
+      "source_sha256": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+      "archive_sha256": "0a57c28c194f1c43a15697d0ff576dea8229fc80bcc341c9e928a819f9086f87"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-scheduler/src/authority/mod.rs",
+      "source_sha256": "6f55ef35dbb3147dc84433c8b7d481730175dbbad24cfab0ae8933dc85f0f854",
+      "archive_sha256": "58f70e88a30f91485a22486132f7ec579ad5108650863a8de9943fc4368e79b9"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-scheduler/src/authority/receipt_retirement.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-scheduler/src/authority/receipt_retirement.rs",
+      "source_sha256": "0bca43334752740ab2375c42852a1cb95ec06fd0871dd877cd6d37f52145a591",
+      "archive_sha256": "52629f4800382e7e7d72ef034809093c04b051fa32bd5236d9d4a9c48308d565"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-scheduler/src/authority/types.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-scheduler/src/authority/types.rs",
+      "source_sha256": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661",
+      "archive_sha256": "b83d41fda9e07deedecfd695689caad4c9d3a8a42c5cb64c2f3a3be902288d24"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-service/src/authority_server.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-service/src/authority_server.rs",
+      "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+      "archive_sha256": "fa69a1bd45fa9b6cb5d256918042fa176154c8b656703f8bbfb71f8245b43f27"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-worker/src/authority_worker.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-worker/src/authority_worker.rs",
+      "source_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+      "archive_sha256": "a6caca6e31e314826c54e146e9cbab24587ff7530937aaa674eb8143c202d7e1"
+    },
+    {
+      "file": "replicated/qualified-dependencies/nativelink-worker/src/authority_worker_transport.rs.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-dependencies/nativelink-worker/src/authority_worker_transport.rs",
+      "source_sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377",
+      "archive_sha256": "619db60e16aabc447b8624e94efaeafaf365de60bae15d9525b8f323f9d883bc"
+    },
+    {
+      "file": "replicated/qualified-restored.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/qualified-restored.log",
+      "source_sha256": "0773e318343c0d81c121e5cb4bfdf7b757833fdfad93f7e1462dd30ca435e4f6",
+      "archive_sha256": "0a1a82baa3495217ca2a433fdf4471a82944fc7481f58a5fb0e00c73460f4163"
+    },
+    {
+      "file": "replicated/runner.py.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/runner.py",
+      "source_sha256": "3711b42ab8fa85ee5b5169a49afa47c5925c6677ff53a0844a1b803eb5f758ce",
+      "archive_sha256": "2a4ed8ffa68ba851540c54226c6191fd27dd04b6765ca662c8156be1590fabb3"
+    },
+    {
+      "file": "replicated/runs.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/runs.json",
+      "source_sha256": "fecd05d4042c8f255a8b06b14ebff41ffb1e018190a0d6b3eb8ca661b499c703",
+      "archive_sha256": "37daf068f986a4cdcaaaf413fb33258249143662d85705b4e6e5461314d52ae0"
+    },
+    {
+      "file": "replicated/source-manifest.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/source-manifest.json",
+      "source_sha256": "639c595a74b4e552cff3b37c519e58223bc8ff35480662418ec157dd33f6aa2d",
+      "archive_sha256": "4f70d1bef4514f4407d460d4de437dbcde52e083f3d3dae1d36be0b7ef457dda"
+    },
+    {
+      "file": "replicated/strict-clippy.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-rpc/strict-clippy.log",
+      "source_sha256": "afd34219c2bd9603cfb9c5c4448fc540d9bc0a66b42d5b7bdddae7c97bff4d6c",
+      "archive_sha256": "02d4b32d5583a02d040c498c638fcfbdea1cd07692c180b449d7cfebdc6f2755"
+    },
+    {
+      "file": "frozen-receipt/activated-journal/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/activated-journal/request.json",
+      "source_sha256": "5ec6ae46b462d4b777d1ec2fad1d040698df36d08394bc6d2b8e98f961954707",
+      "archive_sha256": "1b67ef72e6953e7a653621e2056c3a61a51211ce66d9c24233bb6932d040a4b4"
+    },
+    {
+      "file": "frozen-receipt/activated-journal.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/activated-journal.log",
+      "source_sha256": "67ae91d944218ec0a0a7f4b8dcd3b73563bda59f03e949948df468950fb3c90d",
+      "archive_sha256": "d638a856dee3f48bf622074a96c047e9c28faa3b83ef6478240725102ee78cbb"
+    },
+    {
+      "file": "frozen-receipt/activated-snapshot/activated.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/activated-snapshot/activated.snapshot.json",
+      "source_sha256": "6ae3531cb6101f5dec9b261031c5c6908bc9e02cb1bbd173395cbc0fc230d9b0",
+      "archive_sha256": "0c1ff99709c78880d471dc84fe6636726c2da54dc6223cb21eb1b2cb4ebd45fb"
+    },
+    {
+      "file": "frozen-receipt/activated-snapshot/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/activated-snapshot/request.json",
+      "source_sha256": "bd7bebae2386269bb53105f185e0b31fb6febbf26cb048089187cd27b6d8ee78",
+      "archive_sha256": "4953d94ce7c10492519dad4baea24d9c5fa63c32c45d0f89b8b1ae91a241b0d3"
+    },
+    {
+      "file": "frozen-receipt/activated-snapshot.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/activated-snapshot.log",
+      "source_sha256": "448d9441ab0ca018a51802ea901ff30da90fa9f62c6ecdbff6c3f8244c9b7acf",
+      "archive_sha256": "5db2364f342dddb6f72b778639fa299c1cbeefcdd97af042acd941337c3c78ef"
+    },
+    {
+      "file": "frozen-receipt/artifacts/activated.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/artifacts/activated.snapshot.json",
+      "source_sha256": "6ae3531cb6101f5dec9b261031c5c6908bc9e02cb1bbd173395cbc0fc230d9b0",
+      "archive_sha256": "0c1ff99709c78880d471dc84fe6636726c2da54dc6223cb21eb1b2cb4ebd45fb"
+    },
+    {
+      "file": "frozen-receipt/artifacts/artifacts.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/artifacts/artifacts.json",
+      "source_sha256": "948dec56442bc954e82e898b312e8531811ca40570da6c83a32a15fd590539e0",
+      "archive_sha256": "ebf1880fe11fc495c753b0fc870b30b432b74cb8c8712c3ba796ff7d11120964"
+    },
+    {
+      "file": "frozen-receipt/artifacts/preactivation.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/artifacts/preactivation.snapshot.json",
+      "source_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+      "archive_sha256": "24db5e504bb7ec6dc92f0a6d92c501e1d794eb107cdc5f2d7cac82bedd2d0fa3"
+    },
+    {
+      "file": "frozen-receipt/base-build.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/base-build.log",
+      "source_sha256": "7b50fb88e9b49a532b76fc7fe0dd4dce125ee65c745d846808614479d70857d2",
+      "archive_sha256": "dc6d348824f2c3b4254d31f2d65328eb4c1afb3186483799bda11314b9f8b385"
+    },
+    {
+      "file": "frozen-receipt/base-only.patch.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/base-only.patch",
+      "source_sha256": "405c4cb222ff4b9fab212ec3e0e75b1becbcd9f5106843afe1818f30f27e41e2",
+      "archive_sha256": "f2f68e62c1b493d1462f31b581f22150a7f26852c539f4cccf895cf080157774"
+    },
+    {
+      "file": "frozen-receipt/base-overlay-check.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/base-overlay-check.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "frozen-receipt/base-overlay.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/base-overlay.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "frozen-receipt/base_reader.rs.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/base_reader.rs",
+      "source_sha256": "0efe65c72f5f8827a03bd6e14eaed35ae80fb14cc41363f27d8384c0667b8355",
+      "archive_sha256": "5c13d845d4a0f8ca8b11e382989ba702f4df6987058f6999abbd43f1c6ed519d"
+    },
+    {
+      "file": "frozen-receipt/cargo-version.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/cargo-version.log",
+      "source_sha256": "58f3acdcb24b66a358ed6691712a64c30b9338c538715b0b1bc8aef79a6e040e",
+      "archive_sha256": "74490e57e9ecc53434d60b47d0f4812b4c695b4a1531a402ee5ab4c0659e64f9"
+    },
+    {
+      "file": "frozen-receipt/committed-before-apply/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/committed-before-apply/request.json",
+      "source_sha256": "6e41367435f0d5e921f3c0a9a5005a9919d104731a91131275e0a88de5572aa9",
+      "archive_sha256": "9ae9b5ccf84f81a3e34f70966e48fa0ee3a47454f8e1f71394647955880ce769"
+    },
+    {
+      "file": "frozen-receipt/committed-before-apply.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/committed-before-apply.log",
+      "source_sha256": "e955b9d25a35ee5a81a15ee1e5002c6359719219a145cf7e1cb15b268c247b77",
+      "archive_sha256": "f219ae52baccb179215b9f20ed4dfa304ddbdcef1e071a4f018a069d552dea8c"
+    },
+    {
+      "file": "frozen-receipt/frozen-base.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/frozen-base.json",
+      "source_sha256": "b1da51bef312ef6ac344ed4de99cb909dde86bf4b9c956b91bbffc19afb72e28",
+      "archive_sha256": "a2baf96703432e92451524511f5e2207e440bffd141fbee01f3285c8b40832b5"
+    },
+    {
+      "file": "frozen-receipt/preactivation-journal/base-rebuilt.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-journal/base-rebuilt.snapshot.json",
+      "source_sha256": "2b79c13b01df0cfba8c380fabb9a865d2df27ce529bba88172d4180d04fd323e",
+      "archive_sha256": "164691370c54f093c68f9928f82af0c1a27b88c41adf83207d74e9c43c08816c"
+    },
+    {
+      "file": "frozen-receipt/preactivation-journal/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-journal/request.json",
+      "source_sha256": "57ec98d21dd2bdc0da9874f06e889ea2a1997392d63713a17cf9b748e8908b74",
+      "archive_sha256": "16f9510794b93de50d1c1506c90bb4c51d0a9b68d2bbd2b655b4ce0c0be1e046"
+    },
+    {
+      "file": "frozen-receipt/preactivation-journal.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-journal.log",
+      "source_sha256": "4dd9ed3cfd245bc7f6a6d4bad7e022e27bc4a6e2af6287f2ae39386f608fabc0",
+      "archive_sha256": "28318029c68fd3823c083d5686030f73a99c6772ea2bdc771bb57d0661028f35"
+    },
+    {
+      "file": "frozen-receipt/preactivation-snapshot/preactivation.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-snapshot/preactivation.snapshot.json",
+      "source_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+      "archive_sha256": "24db5e504bb7ec6dc92f0a6d92c501e1d794eb107cdc5f2d7cac82bedd2d0fa3"
+    },
+    {
+      "file": "frozen-receipt/preactivation-snapshot/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-snapshot/request.json",
+      "source_sha256": "741d4c75ea50ebdc44ca86c9202b50457390b9ce496a82ad619406e0a58f0ed5",
+      "archive_sha256": "e89b5ed400982b373ad43ee645cfbc7aa1b39bf1f928e3a1e29474712f2a7e4c"
+    },
+    {
+      "file": "frozen-receipt/preactivation-snapshot.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/preactivation-snapshot.log",
+      "source_sha256": "f8a5aae66b35c3eee82736f20a776b9a295ca42e6cfa93aa9d71411f7e1b2871",
+      "archive_sha256": "4a32753e9eb658a8d545d6d580a28bfc9bca458efb4a4c24b3d6079994d8be37"
+    },
+    {
+      "file": "frozen-receipt/report.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/report.json",
+      "source_sha256": "0ccb07bc2f7551ddb672e83a898b98ff8a81d3c9e4c6e29ba669eedc33622ab8",
+      "archive_sha256": "7b4074000e3103fbbd499e453d914b6405455ce2569c44394d17e89827bd4dd3"
+    },
+    {
+      "file": "frozen-receipt/run.py.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/run.py",
+      "source_sha256": "567203095cc2225f40cf444c75c4896e44fbfcd3c69136358d93a895c6139c6d",
+      "archive_sha256": "91b835d314e4d9c118c7796939a0b98348f99a8bd05c52af4e1fcc3923150f54"
+    },
+    {
+      "file": "frozen-receipt/rustc-version.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/rustc-version.log",
+      "source_sha256": "b2bdf493bcf6d1dc55181a0efc2774b6d9cf7bf5c8dcc5bed592c994b2ad38c4",
+      "archive_sha256": "c645e53dd1ac6888957d75932ed2a617c808c552083ca38fc617575b0be5b01a"
+    },
+    {
+      "file": "frozen-receipt/uncommitted-control-admission/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/uncommitted-control-admission/request.json",
+      "source_sha256": "4146ffd8dee2f528baec3604258f3ed6dcc209e44c31a84bfe1e1b4a0d7b8091",
+      "archive_sha256": "4cf9e720e6993c884e53e368f201f49e5a545b0f93796ee40b676db3a01e3d1f"
+    },
+    {
+      "file": "frozen-receipt/uncommitted-control-admission.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/uncommitted-control-admission.log",
+      "source_sha256": "e1afc2f74b83e8223fddc60e71dd09078b3a3547465095bae472ae6d7de56d34",
+      "archive_sha256": "1ede6d272c7809f0245c163920aec54994301576e43a1463a74e72b85ac52ccd"
+    },
+    {
+      "file": "frozen-receipt/uncommitted-control-decode/request.json.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/uncommitted-control-decode/request.json",
+      "source_sha256": "234b620697201dce7e131fd1191d892b6908bbc7c6f66510d92ab5ae8d4cc25f",
+      "archive_sha256": "204753f05c1020ea512ec5e00d5e850fb8d3ce37612d4513c5d81559547a4d3f"
+    },
+    {
+      "file": "frozen-receipt/uncommitted-control-decode.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/uncommitted-control-decode.log",
+      "source_sha256": "cd7e53339d6e11e652d5fa8c3ad05e656560abbf9e86c84814390a1c67305458",
+      "archive_sha256": "05a5ef877053798be2b4a459c6982c99514c7bf23cade4bc80b71cc21dfaa892"
+    },
+    {
+      "file": "frozen-receipt/upgraded-build.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/upgraded-build.log",
+      "source_sha256": "584229baf7011880a18ccc12408fb9ac66f652539f963e2e4fae8b950adeb2dc",
+      "archive_sha256": "874b1bd414e1f2018005eab6ed66e872d1eb5a43fa4bb3b7145bd26239e750f0"
+    },
+    {
+      "file": "frozen-receipt/upgraded-produce.log.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/upgraded-produce.log",
+      "source_sha256": "1827105703f36afc44fae10cdd7d5e46012356129c1e932112b1789b60162380",
+      "archive_sha256": "8506620b6bed91213a5350520058b4db926ee4d58ed4b28f94ad361244a30fe1"
+    },
+    {
+      "file": "frozen-receipt/upgraded_writer.rs.gz",
+      "source": "/tmp/nativelink-frozen-receipt-checkpoint/upgraded_writer.rs",
+      "source_sha256": "8411646f41c4c389b30649d88a411bb3a7d0b121317c2d1c96f714355a505a05",
+      "archive_sha256": "3cf17fa81d65d6e2bdcbf2e477dd1b9f3991cfc5caf54b13b59c2c19ce331539"
+    },
+    {
+      "file": "frozen-both/activated-journal/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/activated-journal/request.json",
+      "source_sha256": "044cc20751551a8b2aa0f2feed6b94eea1cc1540080765ec0d435c36e1cf9e14",
+      "archive_sha256": "134821493ef1544a8dd42521c4e4e5b8e553e561958793b78875fefc0da0f46e"
+    },
+    {
+      "file": "frozen-both/activated-journal.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/activated-journal.log",
+      "source_sha256": "d7cf5f87ae93207cfc6305757164975f428809cea2bd77451f03cd29d2c7872e",
+      "archive_sha256": "cf9e70025248ac7d2985967605eb7598c9bd64428624891bee041575e54c2d23"
+    },
+    {
+      "file": "frozen-both/activated-snapshot/activated.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/activated-snapshot/activated.snapshot.json",
+      "source_sha256": "b794ecbcb19c74e0042e6ea9df0b4e8d0e086842c8524a3fb85eadc4536ac30e",
+      "archive_sha256": "39e222eea3c3f4118880ea18049afdc1bd69eea8848fcbf85a013b9ebc499876"
+    },
+    {
+      "file": "frozen-both/activated-snapshot/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/activated-snapshot/request.json",
+      "source_sha256": "295013a15b8228094d3d9e311d1b46c50624efd96a1ff7a956fdb7a4a9425a57",
+      "archive_sha256": "d6e76f03f6f7fa5bbf98176cc207cbd5a80001220c347ec49c6139b34fc9b1cb"
+    },
+    {
+      "file": "frozen-both/activated-snapshot.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/activated-snapshot.log",
+      "source_sha256": "a40074052e64bf572a77ee8a27b15942e029dd999d0ef75c13c446e65e2dba88",
+      "archive_sha256": "5a1e681a31f709ad2d035022b9731f65b4772c6bd7d66f00214ca8ceb2cb850b"
+    },
+    {
+      "file": "frozen-both/artifacts/activated.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/artifacts/activated.snapshot.json",
+      "source_sha256": "b794ecbcb19c74e0042e6ea9df0b4e8d0e086842c8524a3fb85eadc4536ac30e",
+      "archive_sha256": "39e222eea3c3f4118880ea18049afdc1bd69eea8848fcbf85a013b9ebc499876"
+    },
+    {
+      "file": "frozen-both/artifacts/artifacts.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/artifacts/artifacts.json",
+      "source_sha256": "7311657290b1ea661a07c11db73de3a5c68ac76aa4b5b044b0381830906ff941",
+      "archive_sha256": "10349ad41c7a4b23de48a3a8a913b9cd9fbb7a043675d4c3860c3928b57a9383"
+    },
+    {
+      "file": "frozen-both/artifacts/preactivation.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/artifacts/preactivation.snapshot.json",
+      "source_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+      "archive_sha256": "24db5e504bb7ec6dc92f0a6d92c501e1d794eb107cdc5f2d7cac82bedd2d0fa3"
+    },
+    {
+      "file": "frozen-both/base-build.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/base-build.log",
+      "source_sha256": "17defd0fd1308d173f8aa5152a4ac870745c0eee41bf92cf57754cc5a79c08f1",
+      "archive_sha256": "d36259fb1a03bcc7945ad87bc207efb61f5daa8a8c7a1263f6dee94fa38add9b"
+    },
+    {
+      "file": "frozen-both/base-only.patch.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/base-only.patch",
+      "source_sha256": "405c4cb222ff4b9fab212ec3e0e75b1becbcd9f5106843afe1818f30f27e41e2",
+      "archive_sha256": "f2f68e62c1b493d1462f31b581f22150a7f26852c539f4cccf895cf080157774"
+    },
+    {
+      "file": "frozen-both/base-overlay-check.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/base-overlay-check.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "frozen-both/base-overlay.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/base-overlay.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "frozen-both/base_reader.rs.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/base_reader.rs",
+      "source_sha256": "0efe65c72f5f8827a03bd6e14eaed35ae80fb14cc41363f27d8384c0667b8355",
+      "archive_sha256": "5c13d845d4a0f8ca8b11e382989ba702f4df6987058f6999abbd43f1c6ed519d"
+    },
+    {
+      "file": "frozen-both/cargo-version.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/cargo-version.log",
+      "source_sha256": "58f3acdcb24b66a358ed6691712a64c30b9338c538715b0b1bc8aef79a6e040e",
+      "archive_sha256": "74490e57e9ecc53434d60b47d0f4812b4c695b4a1531a402ee5ab4c0659e64f9"
+    },
+    {
+      "file": "frozen-both/committed-before-apply/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/committed-before-apply/request.json",
+      "source_sha256": "9872d6ffb33dbeace466423fdd025d44e0719863cf53c7c1d8689f80d0eea383",
+      "archive_sha256": "beb0b53eb12f75a7361703a463ad9bb6c7009d4f4dbe63bc39d63f4041b80a8f"
+    },
+    {
+      "file": "frozen-both/committed-before-apply.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/committed-before-apply.log",
+      "source_sha256": "e955b9d25a35ee5a81a15ee1e5002c6359719219a145cf7e1cb15b268c247b77",
+      "archive_sha256": "f219ae52baccb179215b9f20ed4dfa304ddbdcef1e071a4f018a069d552dea8c"
+    },
+    {
+      "file": "frozen-both/frozen-base.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/frozen-base.json",
+      "source_sha256": "b1da51bef312ef6ac344ed4de99cb909dde86bf4b9c956b91bbffc19afb72e28",
+      "archive_sha256": "a2baf96703432e92451524511f5e2207e440bffd141fbee01f3285c8b40832b5"
+    },
+    {
+      "file": "frozen-both/preactivation-journal/base-rebuilt.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-journal/base-rebuilt.snapshot.json",
+      "source_sha256": "2b79c13b01df0cfba8c380fabb9a865d2df27ce529bba88172d4180d04fd323e",
+      "archive_sha256": "164691370c54f093c68f9928f82af0c1a27b88c41adf83207d74e9c43c08816c"
+    },
+    {
+      "file": "frozen-both/preactivation-journal/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-journal/request.json",
+      "source_sha256": "e0b665145ffa6a7cee7b1509b4c6f952c4dc44ce7ffb2e9e2f7e07e21900388c",
+      "archive_sha256": "4bd296dd9ab14ec102d97f359bb55ffab02f82d9b0ed821fb97fd5e9e596051d"
+    },
+    {
+      "file": "frozen-both/preactivation-journal.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-journal.log",
+      "source_sha256": "4dd9ed3cfd245bc7f6a6d4bad7e022e27bc4a6e2af6287f2ae39386f608fabc0",
+      "archive_sha256": "28318029c68fd3823c083d5686030f73a99c6772ea2bdc771bb57d0661028f35"
+    },
+    {
+      "file": "frozen-both/preactivation-snapshot/preactivation.snapshot.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-snapshot/preactivation.snapshot.json",
+      "source_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+      "archive_sha256": "24db5e504bb7ec6dc92f0a6d92c501e1d794eb107cdc5f2d7cac82bedd2d0fa3"
+    },
+    {
+      "file": "frozen-both/preactivation-snapshot/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-snapshot/request.json",
+      "source_sha256": "b3dd2eca71ce96b967665460d6cba966e9c9f20dd83aa18a40b24f8287fbf7ea",
+      "archive_sha256": "573bbe3d6541c606adb6a11fdc47cd6f69c42004fcab3de686483b5172e172fa"
+    },
+    {
+      "file": "frozen-both/preactivation-snapshot.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/preactivation-snapshot.log",
+      "source_sha256": "f8a5aae66b35c3eee82736f20a776b9a295ca42e6cfa93aa9d71411f7e1b2871",
+      "archive_sha256": "4a32753e9eb658a8d545d6d580a28bfc9bca458efb4a4c24b3d6079994d8be37"
+    },
+    {
+      "file": "frozen-both/report.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/report.json",
+      "source_sha256": "2dce76c800991532bb7faecaddbca11e7516d3abfc408f2c17aa10a14f0ca8fc",
+      "archive_sha256": "9b084aa7a093ac208fd2703a83dd967a0b273a9788799f0a3fe248610c7cbdf5"
+    },
+    {
+      "file": "frozen-both/run.py.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/run.py",
+      "source_sha256": "567203095cc2225f40cf444c75c4896e44fbfcd3c69136358d93a895c6139c6d",
+      "archive_sha256": "91b835d314e4d9c118c7796939a0b98348f99a8bd05c52af4e1fcc3923150f54"
+    },
+    {
+      "file": "frozen-both/rustc-version.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/rustc-version.log",
+      "source_sha256": "b2bdf493bcf6d1dc55181a0efc2774b6d9cf7bf5c8dcc5bed592c994b2ad38c4",
+      "archive_sha256": "c645e53dd1ac6888957d75932ed2a617c808c552083ca38fc617575b0be5b01a"
+    },
+    {
+      "file": "frozen-both/uncommitted-control-admission/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/uncommitted-control-admission/request.json",
+      "source_sha256": "cda8444336cc01d7cb5c6fa2b8bcd4a7cdfef786c1bddd69a500dac438379f52",
+      "archive_sha256": "f2b177eb7310e69f85415fbefe5c3b57e428712d33c95f19c8e3feff48e20bf1"
+    },
+    {
+      "file": "frozen-both/uncommitted-control-admission.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/uncommitted-control-admission.log",
+      "source_sha256": "e1afc2f74b83e8223fddc60e71dd09078b3a3547465095bae472ae6d7de56d34",
+      "archive_sha256": "1ede6d272c7809f0245c163920aec54994301576e43a1463a74e72b85ac52ccd"
+    },
+    {
+      "file": "frozen-both/uncommitted-control-decode/request.json.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/uncommitted-control-decode/request.json",
+      "source_sha256": "a2952609c12a1bc9049f888732f35b70df3c205e48ff936df55519bc38cb266b",
+      "archive_sha256": "8583abb228ded71785f8086ce4e277c0355a3354c78fa60959837b311118ce32"
+    },
+    {
+      "file": "frozen-both/uncommitted-control-decode.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/uncommitted-control-decode.log",
+      "source_sha256": "cd7e53339d6e11e652d5fa8c3ad05e656560abbf9e86c84814390a1c67305458",
+      "archive_sha256": "05a5ef877053798be2b4a459c6982c99514c7bf23cade4bc80b71cc21dfaa892"
+    },
+    {
+      "file": "frozen-both/upgraded-build.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/upgraded-build.log",
+      "source_sha256": "28806c53fa64abcac31fa84aebe3d18ae8a14687b3cd2d40b2eb58fe174614f7",
+      "archive_sha256": "d1b7cbfcbd7eae0b4c984dab1057147ae9e13ba23f33481a1c3253da09613dbd"
+    },
+    {
+      "file": "frozen-both/upgraded-produce.log.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/upgraded-produce.log",
+      "source_sha256": "1827105703f36afc44fae10cdd7d5e46012356129c1e932112b1789b60162380",
+      "archive_sha256": "8506620b6bed91213a5350520058b4db926ee4d58ed4b28f94ad361244a30fe1"
+    },
+    {
+      "file": "frozen-both/upgraded_writer.rs.gz",
+      "source": "/tmp/nativelink-frozen-both-checkpoint/upgraded_writer.rs",
+      "source_sha256": "8411646f41c4c389b30649d88a411bb3a7d0b121317c2d1c96f714355a505a05",
+      "archive_sha256": "3cf17fa81d65d6e2bdcbf2e477dd1b9f3991cfc5caf54b13b59c2c19ce331539"
+    },
+    {
+      "file": "replicated-and-azure-integrated-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-and-azure-integrated-bazel.log",
+      "source_sha256": "101a016330cd8590e0f6332b4cf5a51bf9ab09815acf7f60aef27fa02a25f054",
+      "archive_sha256": "e91e4e103ae9a4457134f964afe0f2c6d960de08b1ec383b1bc9c1672a0a0814"
+    },
+    {
+      "file": "replicated-azure-precommit.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-azure-precommit.log",
+      "source_sha256": "439cf75146aa92b95d23cc71b704f9c7894e312c1f202a9e9a5869bd695b072a",
+      "archive_sha256": "119e7386200770bc2d2a031725e262790ab4feac1aa304b6878ef59939d56fd3"
+    },
+    {
+      "file": "replicated-azure-precommit-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-azure-precommit-final.log",
+      "source_sha256": "4c1420fa0c19f725909039e8757a1f26ef9ba8c935258a32a46f09045facfb5e",
+      "archive_sha256": "62152ccf2369f88b0a0d5dd3129d702f7577c35ad26aee2ef50a9249e568cc58"
+    },
+    {
+      "file": "replicated-azure-precommit-formatted.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/replicated-azure-precommit-formatted.log",
+      "source_sha256": "edd7b320f13ee091fc19cc1b0a32a1deb8f576ac5863c7d8351d39144b62a4e3",
+      "archive_sha256": "96c54dba7dfd133f2a93933fd93620f2d8f84c1fe6a3e23ead6b8f9c1b038a17"
+    }
+  ]
+}

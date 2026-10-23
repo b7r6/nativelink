@@ -3407,6 +3407,7 @@ dependencies = [
  "nativelink-service",
  "nativelink-store",
  "nativelink-util",
+ "openraft",
  "opentelemetry",
  "parking_lot",
  "pathdiff",

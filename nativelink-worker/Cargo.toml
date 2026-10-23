@@ -71,6 +71,10 @@ nativelink-service = { path = "../nativelink-service" }
 
 async-trait = { version = "0.1.88", default-features = false }
 hyper = { version = "1.6.0", default-features = false }
+openraft = { version = "=0.9.25", features = [
+  "serde",
+  "storage-v2",
+], default-features = false }
 pathdiff = { version = "0.2.3", default-features = false }
 pretty_assertions = { version = "1.4.1", features = [
   "std",

@@ -109,12 +109,18 @@ fn find_azurite_binary() -> Result<PathBuf, Error> {
         "azurite-blob"
     };
 
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-        .map_err(|e| make_err!(Code::Internal, "CARGO_MANIFEST_DIR not set at runtime: {e}"))?;
-
-    let test_path = Path::new(&manifest_dir)
-        .join("tests")
-        .join("azurite_runner");
+    // rules_rust supplies its own relative CARGO_MANIFEST_DIR at runtime. An
+    // explicit local qualification may point at preinstalled emulator files;
+    // ordinary tests keep their crate-relative prerequisite behavior.
+    let test_path = if let Some(path) = env::var_os("NATIVELINK_AZURITE_TEST_RUNNER_DIR") {
+        PathBuf::from(path)
+    } else {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| make_err!(Code::Internal, "CARGO_MANIFEST_DIR not set at runtime: {e}"))?;
+        Path::new(&manifest_dir)
+            .join("tests")
+            .join("azurite_runner")
+    };
 
     if !test_path.exists() {
         return Err(Error::new(

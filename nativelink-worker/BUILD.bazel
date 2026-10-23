@@ -212,6 +212,34 @@ rust_test(
 )
 
 rust_test(
+    name = "authority_replicated_rpc_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_replicated_rpc_test.rs"],
+    proc_macro_deps = ["//nativelink-macro"],
+    deps = [
+        ":nativelink-worker",
+        "//nativelink-config",
+        "//nativelink-proto",
+        "//nativelink-scheduler",
+        "//nativelink-service",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:futures",
+        "@crates//:openraft",
+        "@crates//:parking_lot",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tonic",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
+)
+
+rust_test(
     name = "unit_test",
     timeout = "short",
     crate = ":nativelink-worker",

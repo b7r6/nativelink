@@ -206,6 +206,32 @@ accepted worker effect. Original terminal Operations remain stable. The controll
 sink models an external ambiguous request; this is not M6 ordered-head behavior
 or accepted-history relocation.
 
+The committed receipt writer `b2d92025` passes seven frozen Base cases with
+feature 2 alone and seven with features 1 and 2 together. The Base revision and
+decoder-removal overlay remain unchanged. Before activation, the old executable
+recovers exact state and can perform a quorum read; after activation it refuses
+authority participation before reading a vote. This qualifies the experimental
+envelope-3/core-5 compatibility contract, not released deployments.
+
+The [replicated RPC fixture](replicated-rpc.md) now runs the same coordinator over
+three durable journals. A minority cannot return a committed operation handle;
+the successor preserves an accepted terminal and exact pending publication, and
+the same live worker reconnects with its full completion candidate. Both selected
+adapter mutations compile and fail; the restored run and integrated Bazel target
+pass. Routing is explicit fixture forwarding, not fleet leader discovery.
+
+The [Azure physical fixture](physical-azure.md) exercises the existing SDK against
+Azurite 3.37 with immutable generation names and conditional requests. Six compiled
+mutations fail, and the explicit integrated Bazel emulator run passes. It covers
+lost upload acknowledgment, verified ranges, incarnation isolation, stale `ETag` values,
+and missing-object versus missing-container errors. An emulator DELETE with a
+wildcard absence condition proved unsafe; the adapter issues DELETE only with an
+observed `ETag`. A test-only runner override fixes Bazel's relative crate path.
+Ordinary suites intentionally ignore emulator qualification. These results do
+not qualify a cloud account, distributed ownership, or retention authority.
+[Integration receipts](evidence/replicated-azure-frozen/manifest.json) preserve the
+source hashes, prerequisite failures, and successful runs.
+
 Remaining engineering includes canonical integration of recipient compaction,
 replacement-incarnation fencing, deployed format admission, canonical
 construction and authenticated listeners, qualified physical stores and their

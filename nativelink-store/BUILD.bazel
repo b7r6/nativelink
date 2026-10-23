@@ -164,6 +164,7 @@ rust_test_suite(
         "tests/oci_store_test.rs",
         "tests/ontap_s3_existence_cache_store_test.rs",
         "tests/ontap_s3_store_test.rs",
+        "tests/physical_azure_test.rs",
         "tests/physical_closure_test.rs",
         "tests/physical_filesystem_test.rs",
         "tests/r2_store_test.rs",
@@ -184,6 +185,7 @@ rust_test_suite(
         "tests/azurite_runner/mod.rs",
         "tests/azurite_runner/process.rs",
         "tests/azurite_runner/sas.rs",
+        "tests/physical_azure/adapter.rs",
     ],
     # FIXME(palfrey): we should be including this in Bazel, but the azurite_runner program makes a
     # bunch of assumptions about it's environment (mainly regarding programs it can run) that are

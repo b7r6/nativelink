@@ -125,6 +125,10 @@ impl Incarnation {
     pub fn directory_name(self) -> String {
         format!("incarnation-{}", hex::encode(self.0))
     }
+
+    pub const fn as_bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
