@@ -24,14 +24,14 @@ verification and retirement fences, not untrusted worker assertions or provider 
 
 | Command | Contract |
 | --- | --- |
-| `Admit` | Capture each operation's original request; bind full action, principal, execution configuration and immutable selected platform. Reserve stage credit for a new execution. The common alphabet fixes operation retention to absolute tick 100. |
+| `Admit` | Capture each operation's original request; bind full action, principal, execution configuration and immutable selected platform. Refuse a reused operation ID and resolve an absent AC head within the same command. Reserve stage credit for a new execution. The common alphabet fixes operation retention to absolute tick 100. |
 | `Scheduler` | Forward the listed lifecycle, capacity and timer controls to the unchanged M1 relation. Raw Complete and MemoryFailure are refused here. |
 | `Stage` | Bind stage ID, scenario candidate, independent report ID, epoch, exact worker identity/classification/response, lease and stable write IDs. Validate a cloned memory-failure transition without retaining its retry decision. |
 | `Observe` | Record a matching authoritative write receipt. Identical repetition changes nothing; conflicting identity/outcome refuses. Late outcomes remain valid after classification or abandonment. |
-| `Prepare` | Verify exact result, typed closure, protected generations, current catalogue revision, namespace fences and physical readiness. Preparation remains separate from worker authority at acceptance. |
+| `Prepare` | Verify exact result, typed closure, protected generations, current catalogue revision, namespace fences and physical readiness. Coverage must end within 100 ticks of the current time. Preparation remains separate from worker authority at acceptance. |
 | `Accept` | Revalidate stage/proof/authority and apply MemoryFailure against current worker capacity. Record either RetryScheduled with its target or the exact ResourceFailed reason and original payload. |
 | `NoGraph` | Accept existing Complete or MemoryFailure reports only when the captured ExecuteResponse has no result. Share report and attempt identity reservations with graph staging. |
-| `Abandon` | Release the stage guard while retaining stage and write records. This does not establish that physical writes stopped. |
+| `Abandon` | Release an open stage guard while retaining stage and write records. Repeating abandonment refuses. This does not establish that physical writes stopped. |
 
 The candidate contract has no proof ID or caller-supplied complete/verified
 flags. The reused neutral preparation vocabulary fixes its ID to the stage and
@@ -44,6 +44,10 @@ one globally shared report ID and one report per attempt. Reusing a stage ID
 refuses, including identical staged replay. A different report ID for the same attempt, or conflicting reuse
 across graph and no-graph paths, refuses atomically. At most three distinct reports
 belong to one execution.
+
+External write IDs belong to their stage. The same number can identify a different
+write in a later stage; receipt identity always includes the stage, write, physical
+key and object. A late receipt for an earlier stage cannot settle the later write.
 
 Acceptance arguments are `(stage, publication, until)`. A first acceptance needs a
 nonzero publication ID absent from accepted publications and a valid lease even
@@ -86,7 +90,7 @@ or reconciling production operation lifetime with storage retention.
 
 ## Recovery and finite limits
 
-The private `independent-prepared-memory-history-v1` snapshot stores initial
+The private `independent-prepared-memory-history-v2` snapshot stores initial
 scenario/context/seed facts and the complete sequence of changing commands with
 their observed physical facts. Restore replays that sequence and requires exact
 canonical encoding. It reconstructs earlier capacity decisions from their original
@@ -130,3 +134,23 @@ History feature 3, direct client publication, collector progress, provider write
 real RPCs, production format activation and deployment qualification remain
 outside this alphabet. Neither the fixture nor a later differential closes those
 gates.
+
+## Post-freeze contract audit
+
+The original independent reference and its tests remain frozen in commit
+`8b0dc3f3bf`. After both implementations were frozen, review exposed five command
+differences: preparation beyond its 100-tick coverage limit, external write IDs
+reused across stages, repeated abandonment, repeated admission, and admission
+whose cache lookup finds no head. Additive tests exercised each command against
+both unchanged engines. All five passed against the candidate and failed at the
+expected assertions against the original reference.
+
+This successor aligns those reference transitions with the existing candidate
+command contract. The M1 relation, candidate engine, production code and caps are
+unchanged. Missing heads resolve through the independent M1 LookupResult event.
+The private history format advances to v2 because command interpretation changed;
+the original v1 receipts retain their original meaning and the v2 reader refuses
+v1 frames. These audit regressions
+are comparison counterexamples, not compiled semantic mutations. The successor is
+a collaborative correction after independent source freezes, not a new claim of
+unseen independent authorship.

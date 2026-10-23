@@ -92,11 +92,8 @@ fn audit_write_identity_is_local_to_its_stage() {
         fixture.facts.receipts.insert(receipt.clone());
         fixture.apply(Command::Observe(receipt));
     }
-    assert_eq!(fixture.model.view().stages[&first_stage].outcomes[&7], true);
-    assert_eq!(
-        fixture.model.view().stages[&(300 + second.id.0)].outcomes[&7],
-        true
-    );
+    assert!(fixture.model.view().stages[&first_stage].outcomes[&7]);
+    assert!(fixture.model.view().stages[&(300 + second.id.0)].outcomes[&7]);
     let bytes = fixture.model.snapshot().unwrap();
     assert_eq!(Model::restore(&bytes).unwrap().view(), fixture.model.view());
 }
@@ -193,4 +190,12 @@ fn audit_admission_resolves_an_absent_cache_head_atomically() {
     assert!(model.view().scheduler.effects.is_empty());
     let bytes = model.snapshot().unwrap();
     assert_eq!(Model::restore(&bytes).unwrap().view(), model.view());
+    let current = String::from_utf8(bytes).unwrap();
+    let old = current.replacen(
+        "independent-prepared-memory-history-v2",
+        "independent-prepared-memory-history-v1",
+        1,
+    );
+    assert_ne!(old, current, "the test must replace the current format");
+    assert!(Model::restore(old.as_bytes()).is_err());
 }

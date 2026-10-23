@@ -29,7 +29,7 @@ use super::head::{reference as graph, types as h};
 use super::m1;
 use super::types::*;
 
-const FORMAT: &str = "independent-prepared-memory-history-v1";
+const FORMAT: &str = "independent-prepared-memory-history-v2";
 const EPOCH: a::ClusterEpoch = a::ClusterEpoch(1);
 
 #[derive(Clone, Debug)]
@@ -155,7 +155,9 @@ impl Model {
             Command::Admit { operation, request } => {
                 self.deadline(OPERATION_UNTIL, h::LEASE_TICKS)?;
                 let qualified = binding(&self.context, request)?;
-                let previous = self.originals.get(operation).cloned();
+                if self.originals.contains_key(operation) {
+                    return Err(Refusal::Conflict);
+                }
                 let reply = self.schedule(a::Event::Submit {
                     operation: *operation,
                     request: request.clone(),
@@ -163,8 +165,16 @@ impl Model {
                 let a::Reply::Submitted { execution, .. } = reply else {
                     return Ok((Reply::Scheduler(reply), false));
                 };
-                if previous.is_some() {
-                    return Ok((Reply::Scheduler(reply), false));
+                // This alphabet has no selected AC heads. Resolve the miss
+                // inside the same outer admission, through independent M1.
+                let lookup = self.scheduler.view().effects.iter().find_map(|effect| {
+                    matches!(effect.kind, a::EffectKind::Lookup { execution: id, .. } if id == execution).then_some(effect.id)
+                });
+                if let Some(effect) = lookup {
+                    self.schedule(a::Event::LookupResult {
+                        effect,
+                        result: None,
+                    })?;
                 }
                 if let Some(old) = self.actions.get(&execution) {
                     if old != &qualified {
@@ -281,10 +291,6 @@ impl Model {
                 if writes.len() > h::MAX_MEMBERS
                     || writes.contains_key(&0)
                     || writes.values().any(|key| !members.contains(key))
-                    || self
-                        .stages
-                        .values()
-                        .any(|old| old.writes.keys().any(|key| writes.contains_key(key)))
                 {
                     return Err(Refusal::Conflict);
                 }
@@ -366,7 +372,7 @@ impl Model {
             Command::Abandon(id) => {
                 let row = self.stages.get_mut(id).ok_or(Refusal::Invalid)?;
                 if row.abandoned {
-                    return Ok((Reply::Ignored, false));
+                    return Err(Refusal::Stale);
                 }
                 if self
                     .accepted
@@ -642,6 +648,9 @@ impl Model {
             || !proof.fences.is_subset(&facts.fences)
             || proof.until < until
             || proof.until <= now
+            || now
+                .checked_add(h::LEASE_TICKS)
+                .is_none_or(|limit| proof.until > limit)
         {
             return Err(Refusal::Stale);
         }
@@ -656,7 +665,7 @@ impl Model {
 
     fn deadline(&self, until: u64, maximum: u64) -> Result<(), Refusal> {
         let now = self.scheduler.view().now;
-        if until <= now || until.checked_sub(now).is_none_or(|ticks| ticks > maximum) {
+        if until <= now || now.checked_add(maximum).is_none_or(|limit| until > limit) {
             return Err(Refusal::Invalid);
         }
         Ok(())

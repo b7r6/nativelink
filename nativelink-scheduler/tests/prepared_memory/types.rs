@@ -115,7 +115,6 @@ pub(crate) enum Command {
 pub(crate) enum Reply {
     Scheduler(a::Reply),
     Applied,
-    Ignored,
     Duplicate,
     Classified(Disposition),
 }

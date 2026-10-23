@@ -63,8 +63,8 @@ fn audit_write_identity_is_local_to_its_stage() {
         .unwrap();
     assert!(state.stages()[&2].outcomes.is_empty());
     state.observe(2, 7, key(2), value.result, true).unwrap();
-    assert_eq!(state.stages()[&1].outcomes[&7], true);
-    assert_eq!(state.stages()[&2].outcomes[&7], true);
+    assert!(state.stages()[&1].outcomes[&7]);
+    assert!(state.stages()[&2].outcomes[&7]);
     recover(&mut state);
 }
 
