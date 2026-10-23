@@ -779,17 +779,22 @@ impl ByteStreamServer {
             rx,
             max_bytes_per_stream: instance.max_bytes_per_stream,
             maybe_get_part_result: None,
-            get_part_fut: Box::pin(async move {
-                store
-                    .get_part(
-                        digest,
-                        tx,
-                        u64::try_from(read_request.read_offset)
-                            .err_tip(|| "Could not convert read_offset to u64")?,
-                        read_limit,
-                    )
-                    .await
-            }),
+            // The response stream is polled after the read handler's context
+            // scope ends. Keep the requested digest function on backend polls.
+            get_part_fut: Box::pin(
+                async move {
+                    store
+                        .get_part(
+                            digest,
+                            tx,
+                            u64::try_from(read_request.read_offset)
+                                .err_tip(|| "Could not convert read_offset to u64")?,
+                            read_limit,
+                        )
+                        .await
+                }
+                .with_current_context(),
+            ),
         });
 
         let read_stream_span = error_span!("read_stream");
@@ -1254,12 +1259,15 @@ impl ByteStreamServer {
         let (compressed_tx, compressed_rx) = make_buf_channel_pair();
 
         let store = instance.store.clone();
-        let get_part_fut = Box::pin(async move {
-            store
-                .get_part(digest, raw_tx, read_offset, None)
-                .await
-                .err_tip(|| "Failed to read blob for wire compression")
-        });
+        let get_part_fut = Box::pin(
+            async move {
+                store
+                    .get_part(digest, raw_tx, read_offset, None)
+                    .await
+                    .err_tip(|| "Failed to read blob for wire compression")
+            }
+            .with_current_context(),
+        );
         // The encode runs as a plain async future: it must not occupy a
         // blocking-pool thread for the stream's lifetime, because it only
         // progresses at the client's drain rate. Dropping the returned
@@ -1388,7 +1396,13 @@ impl ByteStreamServer {
             }
         }
 
-        let has_fut = store_clone.has(digest);
+        let digest_function = resource_info.digest_function.as_deref().map_or_else(
+            || Ok(default_digest_hasher_func()),
+            DigestHasherFunc::try_from,
+        )?;
+        let has_fut = store_clone
+            .has(digest)
+            .with_context(make_ctx_for_hash_func(digest_function)?);
         let Some(item_size) = has_fut.await.err_tip(|| "Failed to call .has() on store")? else {
             // We lie here and say that the stream needs to start over, even though
             // it was never started. This can happen when the client disconnects

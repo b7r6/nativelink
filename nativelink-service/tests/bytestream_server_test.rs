@@ -59,6 +59,9 @@ use tower::service_fn;
 const INSTANCE_NAME: &str = "foo_instance_name";
 const HASH1: &str = "0123456789abcdef000000000000000000000000000000000123456789abcdef";
 
+#[path = "bytestream_server/digest_context.rs"]
+mod digest_context;
+
 async fn make_store_manager() -> Result<Arc<StoreManager>, Error> {
     let store_manager = Arc::new(StoreManager::new());
     store_manager.add_store(
