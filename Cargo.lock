@@ -3163,6 +3163,7 @@ version = "1.8.0"
 dependencies = [
  "async-lock",
  "async-trait",
+ "blake3",
  "bytes",
  "futures",
  "humantime",
@@ -3188,6 +3189,7 @@ dependencies = [
  "scopeguard",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "static_assertions",
  "tokio",
  "tokio-stream",

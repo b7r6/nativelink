@@ -232,6 +232,25 @@ not qualify a cloud account, distributed ownership, or retention authority.
 [Integration receipts](evidence/replicated-azure-frozen/manifest.json) preserve the
 source hashes, prerequisite failures, and successful runs.
 
+Workspace verification of `552aaa89` passes 1,690 Cargo tests with zero failures
+and eight ignored tests, across 154 result summaries. The broad Bazel run passes
+146 of 148 targets. One format fixture's 50 ms quorum read fails transiently and
+the worker-manager suite exceeds its unchanged short timeout. Focused reruns with
+eight test threads and one concurrent test target pass both, in 3.8 and 25.7
+seconds respectively. This is combined coverage from the broad run and focused
+reruns, not a single 148-target pass. [Workspace receipts](evidence/receipt-workspace/manifest.json)
+retain both failures and the passing commands.
+
+An independently written [accepted-history reference](../../tests/accepted_history/README.md)
+now specifies fixed publication policy, exact diagnostic bytes, qualified logical
+namespace, prepaid metadata and effect identities, and pending retirement pins.
+Fourteen tests pass under Cargo and Bazel; eight compiled oracle mutations fail,
+and the restored baseline passes. The final contract preserves zero-valued caller
+identities while requiring nonzero allocated IDs and exact authority epoch.
+[Reference receipts](evidence/accepted-history-reference/manifest.json) identify
+the frozen source. Actual reducer comparison, journal activation, and scheduler
+effect delivery remain separate work.
+
 Remaining engineering includes canonical integration of recipient compaction,
 replacement-incarnation fencing, deployed format admission, canonical
 construction and authenticated listeners, qualified physical stores and their

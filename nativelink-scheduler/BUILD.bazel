@@ -157,6 +157,21 @@ rust_test(
 )
 
 rust_test(
+    name = "accepted_history_reference_test",
+    srcs = ["tests/accepted_history_reference_test.rs"],
+    compile_data = [
+        "tests/accepted_history/reference.rs",
+        "tests/accepted_history/types.rs",
+    ],
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
     name = "retention_test",
     timeout = "moderate",
     srcs = ["tests/retention_test.rs"],

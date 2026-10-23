@@ -144,6 +144,8 @@ in {
     description = "Format Starlark";
     enable = true;
     entry = "${pkgs.bazel-buildtools}/bin/buildifier -lint=fix";
+    # identify also classifies archived BUILD.bazel.gz as Starlark.
+    excludes = ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     name = "buildifier format";
     types = ["bazel"];
   };
@@ -151,7 +153,10 @@ in {
     description = "Lint Starlark";
     enable = true;
     entry = "${pkgs.bazel-buildtools}/bin/buildifier -lint=warn";
-    excludes = ["local-remote-execution/generated-cc/cc/cc_toolchain_config.bzl"];
+    excludes = [
+      "local-remote-execution/generated-cc/cc/cc_toolchain_config.bzl"
+      "^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"
+    ];
     name = "buildifier lint";
     types = ["bazel"];
   };
