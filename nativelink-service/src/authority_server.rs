@@ -1976,7 +1976,12 @@ impl std::fmt::Debug for QualificationConfig {
 
 async fn bounded_blob(store: &Store, digest: DigestInfo) -> Result<Bytes, Error> {
     let (mut writer, mut reader) = make_buf_channel_pair();
-    let download = store.get_part(digest, &mut writer, 0, Some(65_537));
+    let download = async move {
+        let result = store.get_part(digest, &mut writer, 0, Some(65_537)).await;
+        // Producer completion must close the channel even if EOF was omitted.
+        drop(writer);
+        result
+    };
     let collect = async move {
         let mut bytes = Vec::new();
         loop {
