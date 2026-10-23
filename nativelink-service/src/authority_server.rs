@@ -29,7 +29,7 @@ use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_proto::build::bazel::remote::execution::v2::execution_server::Execution;
 use nativelink_proto::build::bazel::remote::execution::v2::{
     Action, ActionResult, Digest, ExecuteOperationMetadata, ExecuteRequest, ExecuteResponse,
-    RequestMetadata, WaitExecutionRequest,
+    RequestMetadata, WaitExecutionRequest, digest_function,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApi;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
@@ -490,6 +490,20 @@ impl AuthorityService {
                 "Unknown instance or oversized request",
             ));
         }
+        // Match RequestPayload's fixed default, independently of the process
+        // default or any ambient context inherited by the HTTP/2 task.
+        let algorithm = match digest_function::Value::try_from(execute.digest_function) {
+            Ok(digest_function::Value::Unknown | digest_function::Value::Sha256) => {
+                DigestHasherFunc::Sha256
+            }
+            Ok(digest_function::Value::Blake3) => DigestHasherFunc::Blake3,
+            _ => {
+                return Err(Status::invalid_argument(
+                    "Unsupported authority digest function",
+                ));
+            }
+        };
+        let context = make_ctx_for_hash_func(algorithm).map_err(Status::from)?;
         let queued = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| Status::internal("Clock precedes epoch"))?;
@@ -507,6 +521,7 @@ impl AuthorityService {
             &self.cas,
             DigestInfo::try_from(digest).map_err(Status::from)?,
         )
+        .with_context(context.clone())
         .await
         .map_err(Status::from)?;
         if action_bytes.len() > FRAME_BYTES {
@@ -522,6 +537,7 @@ impl AuthorityService {
             &self.cas,
             DigestInfo::try_from(command_digest).map_err(Status::from)?,
         )
+        .with_context(context)
         .await
         .map_err(Status::from)?;
         let payload = RequestPayload::capture(
@@ -1809,10 +1825,24 @@ fn digest(action: &ActionKey) -> Result<DigestInfo, String> {
     .map_err(|error| error.to_string())
 }
 
+// Effects outlive their originating RPC and may be replayed after restart.
+// Select the namespace from committed action identity on every attempt.
+fn action_context(action: &ActionKey) -> Result<opentelemetry::Context, String> {
+    let algorithm = match action.digest_function.as_str() {
+        "sha256" => DigestHasherFunc::Sha256,
+        "blake3" => DigestHasherFunc::Blake3,
+        _ => return Err("Unsupported committed action digest function".to_owned()),
+    };
+    make_ctx_for_hash_func(algorithm).map_err(|error| error.to_string())
+}
+
 async fn storage_effect(sink: &Store, effect: &Effect) -> Result<Event, String> {
     match &effect.kind {
         EffectKind::Lookup { action, .. } => {
-            let result = match bounded_blob(sink, digest(action)?).await {
+            let result = match bounded_blob(sink, digest(action)?)
+                .with_context(action_context(action)?)
+                .await
+            {
                 Ok(bytes) if bytes.len() <= FRAME_BYTES => {
                     let result = ActionResult::decode(bytes).map_err(|error| error.to_string())?;
                     Some(ResultPayload::from_response(
@@ -1839,6 +1869,7 @@ async fn storage_effect(sink: &Store, effect: &Effect) -> Result<Event, String> 
                 .ok_or("Missing publication result")?
                 .encode_to_vec();
             sink.update_oneshot(digest(action)?, bytes.into())
+                .with_context(action_context(action)?)
                 .await
                 .map_err(|error| error.to_string())?;
             Ok(Event::EffectOutcome {
