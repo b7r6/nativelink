@@ -1,0 +1,6 @@
+{
+  "path": "nativelink-store/src/physical_filesystem.rs",
+  "before_sha256": "75534e8779ae5d9e9eb1c53d60d80a037bbeae6ce32471f3fbc331e4810cc189",
+  "after_sha256": "f697dfb772c9c400cf8311870c8c8c8ae9c8a5ae5ca6547c1b37db96771157eb",
+  "change": "Bazel Clippy box_default: Box::new(blake3::Hasher::new()) to Box::default(); same initial hasher state. Full Cargo compilation preceded this source-only correction; final Bazel run covers corrected source."
+}

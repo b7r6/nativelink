@@ -72,6 +72,7 @@ rust_test_suite(
     name = "integration",
     timeout = "short",
     srcs = [
+        "tests/authority_rpc_test.rs",
         "tests/authority_scheduler_test.rs",
         "tests/authority_worker_test.rs",
         "tests/capacity_test.rs",
@@ -98,6 +99,7 @@ rust_test_suite(
         "//nativelink-metric",
         "//nativelink-proto",
         "//nativelink-scheduler",
+        "//nativelink-service",
         "//nativelink-store",
         "//nativelink-util",
         "@crates//:async-lock",

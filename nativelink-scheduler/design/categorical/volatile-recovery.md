@@ -94,8 +94,9 @@ an overly broad sender cutpoint that also held an earlier membership catch-up;
 its failure is retained. The cutpoint now matches the intended final voter set.
 It delivers a valid preceding RPC prefix, not partially decoded wire bytes.
 
-Production membership allocation, durable bootstrap manifests, capability-aware
-peer admission, compatible persistent writers, and actual listener identity
-remain unimplemented. The explicit experimental format still rejects earlier
-prototype versions. This slice does not pass M3a/M3b as a whole or authorize a
+Production membership allocation, durable bootstrap manifests, authenticated
+peer admission, and actual listener identity remain unimplemented. The
+[format experiment](format-activation.md) adds compatible writers and a trusted
+in-process admission fixture, with their own declared recovery envelope. Its
+explicit experimental format still rejects earlier prototype versions. This slice does not pass M3a/M3b as a whole or authorize a
 production-format freeze.

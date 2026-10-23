@@ -29,7 +29,7 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::ops::RangeBounds;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -55,6 +55,11 @@ use serde::de::{DeserializeOwned, IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::Mutex;
 
+use super::format::{
+    ActiveFormat, AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, Features, FormatControl,
+    FormatDecision, JournalProfile, MAX_FORMAT_BYTES, MAX_FORMAT_MEMBERS, MemberLease,
+    ReaderCapabilities, RecoveryEvidence,
+};
 use super::{ClusterEpoch, Limits, RecordedEvent, Reply, State};
 
 #[path = "snapshot_buffer.rs"]
@@ -75,10 +80,10 @@ openraft::declare_raft_types!(
 
 const META: TableDefinition<&str, &[u8]> = TableDefinition::new("authority_meta");
 const LOGS: TableDefinition<u64, &[u8]> = TableDefinition::new("authority_logs");
-// Experimental v1 used one RecordedEvent per entry. This prototype intentionally
-// rejects that format rather than claiming a production migration mechanism.
-const FORMAT: u32 = 2;
-const REQUIRED_SECTION: &str = "experimental-scheduler-batch-v2";
+// This new experimental baseline understands stable feature controls. It does
+// not claim migration or rollback compatibility with prototypes 1 or 2.
+const FORMAT: u32 = 3;
+const REQUIRED_SECTION: &str = "experimental-authority-base-v3";
 type Result<T> = std::result::Result<T, StorageError<u64>>;
 
 pub const MAX_BATCH_EVENTS: usize = 64;
@@ -102,6 +107,10 @@ const BATCH_VERSION: u32 = 1;
 pub struct Batch {
     version: u32,
     events: Vec<RecordedEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    control: Option<FormatControl>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    feature_epoch: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +119,16 @@ struct BatchWire {
     version: u32,
     #[serde(deserialize_with = "deserialize_bounded_events")]
     events: Vec<RecordedEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    control: Option<FormatControl>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    feature_epoch: u64,
+}
+
+// Serde's skip predicate receives the serialized field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 fn deserialize_bounded_events<'de, D: Deserializer<'de>>(
@@ -150,6 +169,8 @@ impl<'de> Deserialize<'de> for Batch {
         let batch = Self {
             version: wire.version,
             events: wire.events,
+            control: wire.control,
+            feature_epoch: wire.feature_epoch,
         };
         batch.validate().map_err(serde::de::Error::custom)?;
         Ok(batch)
@@ -201,9 +222,28 @@ impl Batch {
         let batch = Self {
             version: BATCH_VERSION,
             events: bounded,
+            control: None,
+            feature_epoch: 0,
         };
         batch.validate()?;
         Ok(batch)
+    }
+
+    pub fn format(control: FormatControl) -> std::result::Result<Self, String> {
+        let batch = Self {
+            version: BATCH_VERSION,
+            events: Vec::new(),
+            control: Some(control),
+            feature_epoch: 0,
+        };
+        batch.validate()?;
+        Ok(batch)
+    }
+
+    #[must_use]
+    pub const fn at_feature_epoch(mut self, epoch: u64) -> Self {
+        self.feature_epoch = epoch;
+        self
     }
 
     pub fn events(&self) -> &[RecordedEvent] {
@@ -221,10 +261,14 @@ impl Batch {
 
     fn validate(&self) -> std::result::Result<(), String> {
         if self.version != BATCH_VERSION
-            || self.events.is_empty()
+            || (self.events.is_empty() != self.control.is_some())
             || self.events.len() > MAX_BATCH_EVENTS
+            || (self.control.is_some() && self.feature_epoch != 0)
         {
             return Err("unsupported batch version or invalid event count".to_owned());
+        }
+        if let Some(control) = &self.control {
+            control.validate()?;
         }
         self.encoded_bytes()?;
         Ok(())
@@ -376,14 +420,89 @@ struct Identity {
 struct AppliedState {
     last_applied: Option<LogId<u64>>,
     membership: StoredMembership<u64, BasicNode>,
-    scheduler: String,
+    scheduler: SchedulerSection,
+    format: ActiveFormat,
+}
+
+/// Both profiles recognize the base control structure. Only the upgraded
+/// profile can recover an activated direct scheduler section.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum SchedulerSection {
+    String(String),
+    Direct(serde_json::Value),
+}
+
+impl SchedulerSection {
+    fn bytes(&self) -> Result<Vec<u8>> {
+        match self {
+            Self::String(value) => {
+                if value.len() > super::MAX_STATE_BYTES {
+                    return Err(failure(
+                        ErrorVerb::Read,
+                        "scheduler section exceeds byte bound",
+                    ));
+                }
+                Ok(value.as_bytes().to_vec())
+            }
+            Self::Direct(value) => {
+                let mut size = BoundedEncodedSize {
+                    used: 0,
+                    limit: super::MAX_STATE_BYTES,
+                };
+                serde_json::to_writer(&mut size, value).map_err(|e| failure(ErrorVerb::Read, e))?;
+                serde_json::to_vec(value).map_err(|e| failure(ErrorVerb::Read, e))
+            }
+        }
+    }
+
+    fn from_state(state: &State, format: &ActiveFormat) -> Result<Self> {
+        let bytes = state.snapshot().map_err(|e| failure(ErrorVerb::Write, e))?;
+        if format.required.contains(&DIRECT_SCHEDULER) {
+            Ok(Self::Direct(
+                serde_json::from_slice(&bytes).map_err(|e| failure(ErrorVerb::Write, e))?,
+            ))
+        } else {
+            Ok(Self::String(
+                String::from_utf8(bytes).map_err(|e| failure(ErrorVerb::Write, e))?,
+            ))
+        }
+    }
 }
 
 impl AppliedState {
-    fn state(&self, epoch: ClusterEpoch) -> Result<State> {
+    fn state(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<State> {
+        self.format
+            .validate(reader)
+            .map_err(|e| failure(ErrorVerb::Read, e))?;
+        let mut format_size = BoundedEncodedSize {
+            used: 0,
+            limit: MAX_FORMAT_BYTES,
+        };
+        serde_json::to_writer(&mut format_size, &self.format)
+            .map_err(|e| failure(ErrorVerb::Read, e))?;
+        if self.format.domain.epoch != epoch
+            || self.format.activated_at > self.last_applied
+            || self
+                .format
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| !prepared.matches_membership(&self.membership))
+            || self
+                .format
+                .decision
+                .is_some_and(|decision| Some(decision.position) > self.last_applied)
+            || matches!(self.scheduler, SchedulerSection::Direct(_))
+                != self.format.required.contains(&DIRECT_SCHEDULER)
+        {
+            return Err(failure(
+                ErrorVerb::Read,
+                "scheduler section disagrees with activated domain/format",
+            ));
+        }
         validate_membership(self.membership.membership(), ErrorVerb::Read)?;
         let state =
-            State::restore(self.scheduler.as_bytes()).map_err(|e| failure(ErrorVerb::Read, e))?;
+            State::restore(&self.scheduler.bytes()?).map_err(|e| failure(ErrorVerb::Read, e))?;
         if state.view().epoch != epoch {
             return Err(failure(
                 ErrorVerb::Read,
@@ -413,9 +532,9 @@ struct SavedSnapshot {
 }
 
 impl SavedSnapshot {
-    fn validate(&self, epoch: ClusterEpoch) -> Result<()> {
+    fn validate(&self, epoch: ClusterEpoch, reader: ReaderCapabilities) -> Result<()> {
         validate_snapshot_meta(&self.meta)?;
-        self.applied.state(epoch)?;
+        self.applied.state(epoch, reader)?;
         if self.meta.last_log_id != self.applied.last_applied
             || self.meta.last_membership != self.applied.membership
         {
@@ -423,6 +542,81 @@ impl SavedSnapshot {
         }
         Ok(())
     }
+}
+
+fn replay_format(
+    active: &mut ActiveFormat,
+    membership: &mut StoredMembership<u64, BasicNode>,
+    entry: &Entry<TypeConfig>,
+    reader: ReaderCapabilities,
+) -> Result<()> {
+    match &entry.payload {
+        EntryPayload::Normal(batch) => {
+            if let Some(control) = &batch.control {
+                active
+                    .apply(control, membership, reader, entry.log_id)
+                    .map_err(|e| failure(ErrorVerb::Read, e))?;
+            } else if batch.feature_epoch != active.feature_epoch {
+                return Err(failure(
+                    ErrorVerb::Read,
+                    "application command feature epoch mismatch",
+                ));
+            }
+        }
+        EntryPayload::Membership(value) => {
+            *membership = StoredMembership::new(Some(entry.log_id), value.clone());
+            active.membership_changed();
+        }
+        EntryPayload::Blank => {}
+    }
+    Ok(())
+}
+
+/// Determine the committed format even when state-machine application trails
+/// the durable commit marker. This is also the startup participation gate.
+fn committed_format(
+    tx: &WriteTransaction,
+    epoch: ClusterEpoch,
+    reader: ReaderCapabilities,
+) -> Result<ActiveFormat> {
+    let meta = tx
+        .open_table(META)
+        .map_err(|e| failure(ErrorVerb::Read, e))?;
+    let applied: AppliedState = decode(
+        epoch,
+        meta.get("applied")
+            .map_err(|e| failure(ErrorVerb::Read, e))?
+            .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
+            .value(),
+    )?;
+    applied.state(epoch, reader)?;
+    let committed: Option<LogId<u64>> = meta
+        .get("committed")
+        .map_err(|e| failure(ErrorVerb::Read, e))?
+        .map(|value| decode(epoch, value.value()))
+        .transpose()?
+        .flatten();
+    let mut active = applied.format;
+    let mut membership = applied.membership;
+    if let Some(committed) = committed {
+        let logs = tx
+            .open_table(LOGS)
+            .map_err(|e| failure(ErrorVerb::Read, e))?;
+        let start = applied
+            .last_applied
+            .map_or(0, |id| id.index.saturating_add(1));
+        if start <= committed.index {
+            for row in logs
+                .range(start..=committed.index)
+                .map_err(|e| failure(ErrorVerb::Read, e))?
+            {
+                let (key, value) = row.map_err(|e| failure(ErrorVerb::Read, e))?;
+                let entry = decode_log(epoch, key.value(), value.value())?;
+                replay_format(&mut active, &mut membership, &entry, reader)?;
+            }
+        }
+    }
+    Ok(active)
 }
 
 fn state_json(state: &State) -> Result<String> {
@@ -533,6 +727,10 @@ pub struct Journal {
     epoch: ClusterEpoch,
     created: bool,
     persistence: JournalPersistence,
+    domain: AuthorityDomain,
+    reader: ReaderCapabilities,
+    profile: Option<JournalProfile>,
+    _admission: Option<Arc<MemberLease>>,
 }
 
 impl Debug for Journal {
@@ -551,6 +749,7 @@ impl Journal {
         node_id: u64,
         epoch: ClusterEpoch,
         initial: &State,
+        domain: AuthorityDomain,
     ) -> Result<()> {
         let mut tx = database
             .begin_write()
@@ -570,7 +769,8 @@ impl Journal {
                 &AppliedState {
                     last_applied: None,
                     membership: StoredMembership::default(),
-                    scheduler: state_json(initial)?,
+                    scheduler: SchedulerSection::String(state_json(initial)?),
+                    format: ActiveFormat::base(domain),
                 },
             )?;
             table
@@ -588,8 +788,25 @@ impl Journal {
         epoch: ClusterEpoch,
         created: bool,
         persistence: JournalPersistence,
-    ) -> Self {
-        Self {
+        profile: Option<JournalProfile>,
+        committed_format: &ActiveFormat,
+    ) -> Result<Self> {
+        let admission = profile
+            .as_ref()
+            .map(|profile| {
+                profile
+                    .admission
+                    .register(
+                        profile.domain,
+                        node_id,
+                        profile.incarnation,
+                        profile.reader,
+                        committed_format,
+                    )
+                    .map_err(|e| failure(ErrorVerb::Read, e))
+            })
+            .transpose()?;
+        Ok(Self {
             database: Arc::new(database),
             queue: Arc::new(Mutex::new(())),
             fault: Arc::new(AtomicU8::new(0)),
@@ -598,7 +815,13 @@ impl Journal {
             epoch,
             created,
             persistence,
-        }
+            domain: committed_format.domain,
+            reader: profile
+                .as_ref()
+                .map_or(ReaderCapabilities::Base, |p| p.reader),
+            profile,
+            _admission: admission,
+        })
     }
 
     /// Allocate a pristine RAM journal, with no vote, log, membership or applied
@@ -615,23 +838,49 @@ impl Journal {
     /// Redb's RAM backend has no durable sync operation. The shared transaction
     /// path preserves atomicity and callback order only while this backend lives.
     pub async fn fresh_volatile(node_id: u64, epoch: ClusterEpoch, limits: Limits) -> Result<Self> {
+        Self::fresh_volatile_inner(node_id, epoch, limits, None).await
+    }
+
+    pub async fn fresh_volatile_with_profile(
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+    ) -> Result<Self> {
+        Self::fresh_volatile_inner(node_id, profile.domain.epoch, limits, Some(profile)).await
+    }
+
+    async fn fresh_volatile_inner(
+        node_id: u64,
+        epoch: ClusterEpoch,
+        limits: Limits,
+        profile: Option<JournalProfile>,
+    ) -> Result<Self> {
+        let domain = profile.as_ref().map_or(
+            AuthorityDomain {
+                epoch,
+                namespace: 0,
+            },
+            |p| p.domain,
+        );
         let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
         let database = spawn_blocking!("authority_journal_fresh_volatile", move || {
             let database = Database::builder()
                 .create_with_backend(redb::backends::InMemoryBackend::new())
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
-            Self::initialize_database(&database, node_id, epoch, &initial)?;
+            Self::initialize_database(&database, node_id, epoch, &initial, domain)?;
             Ok::<_, StorageError<u64>>(database)
         })
         .await
         .map_err(|e| failure(ErrorVerb::Write, e))??;
-        Ok(Self::from_database(
+        Self::from_database(
             database,
             node_id,
             epoch,
             true,
             JournalPersistence::Volatile,
-        ))
+            profile,
+            &ActiveFormat::base(domain),
+        )
     }
 
     pub const fn persistence(&self) -> JournalPersistence {
@@ -646,134 +895,329 @@ impl Journal {
         epoch: ClusterEpoch,
         limits: Limits,
     ) -> Result<Self> {
-        // Refuse an invalid admission envelope before creating any durable file.
-        let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
-        let path = path.as_ref().to_owned();
-        let (database, created) = spawn_blocking!("authority_journal_open", move || {
-            let (database, created) = match OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create_new(true)
-                .open(&path)
-            {
-                Ok(file) => (
-                    Database::builder()
-                        .create_file(file)
-                        .map_err(|e| failure(ErrorVerb::Write, e))?,
-                    true,
-                ),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (
-                    Database::open(&path).map_err(|e| failure(ErrorVerb::Read, e))?,
-                    false,
-                ),
-                Err(e) => return Err(failure(ErrorVerb::Write, e)),
-            };
-            if created {
-                Self::initialize_database(&database, node_id, epoch, &initial)?;
-                // Persist the new directory entry as well as database contents.
-                let parent = path
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .unwrap_or_else(|| Path::new("."));
-                File::open(parent)
-                    .and_then(|file| file.sync_all())
-                    .map_err(|e| failure(ErrorVerb::Write, e))?;
-            } else {
+        Self::open_inner(path, node_id, epoch, limits, None).await
+    }
+
+    pub async fn open_with_profile(
+        path: impl AsRef<Path>,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+    ) -> Result<Self> {
+        Self::open_inner(path, node_id, profile.domain.epoch, limits, Some(profile)).await
+    }
+
+    /// Reconstruct the bounded trusted fixture registry from closed journals.
+    /// The caller must stop and fence every prior member process first, and
+    /// supply every member named by an unresolved preparation. New profiles use
+    /// later incarnations and must all support that preparation before Raft is
+    /// restarted. This is an explicit in-process recovery procedure, not a
+    /// distributed fencing or disaster-recovery protocol.
+    pub async fn recover_admission(
+        domain: AuthorityDomain,
+        reader: ReaderCapabilities,
+        artifacts: Vec<(u64, PathBuf)>,
+    ) -> Result<Arc<AdmissionRegistry>> {
+        if artifacts.is_empty() || artifacts.len() > MAX_FORMAT_MEMBERS {
+            return Err(failure(ErrorVerb::Read, "invalid recovery member count"));
+        }
+        let evidence = spawn_blocking!("authority_admission_recovery", move || {
+            let mut evidence = Vec::new();
+            for (node, path) in artifacts {
+                // Redb's exclusive open also rejects an accidentally live
+                // local journal. It cannot establish remote process fencing.
+                let database = Database::open(path).map_err(|e| failure(ErrorVerb::Read, e))?;
                 let tx = database
                     .begin_read()
                     .map_err(|e| failure(ErrorVerb::Read, e))?;
                 let table = tx
                     .open_table(META)
                     .map_err(|e| failure(ErrorVerb::Read, e))?;
-                let bytes = table
-                    .get("identity")
-                    .map_err(|e| failure(ErrorVerb::Read, e))?
-                    .ok_or_else(|| failure(ErrorVerb::Read, "missing authority identity"))?;
-                let identity: Identity = decode(epoch, bytes.value())?;
-                if identity.node_id != node_id || identity.epoch != epoch {
-                    return Err(failure(ErrorVerb::Read, "authority node/epoch mismatch"));
+                let identity: Identity = decode(
+                    domain.epoch,
+                    table
+                        .get("identity")
+                        .map_err(|e| failure(ErrorVerb::Read, e))?
+                        .ok_or_else(|| failure(ErrorVerb::Read, "missing identity"))?
+                        .value(),
+                )?;
+                if identity.node_id != node || identity.epoch != domain.epoch {
+                    return Err(failure(ErrorVerb::Read, "recovery identity mismatch"));
                 }
-                let bytes = table
-                    .get("applied")
+                let applied: AppliedState = decode(
+                    domain.epoch,
+                    table
+                        .get("applied")
+                        .map_err(|e| failure(ErrorVerb::Read, e))?
+                        .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
+                        .value(),
+                )?;
+                applied.state(domain.epoch, reader)?;
+                if applied.format.domain != domain {
+                    return Err(failure(ErrorVerb::Read, "recovery namespace mismatch"));
+                }
+                let committed: Option<LogId<u64>> = table
+                    .get("committed")
                     .map_err(|e| failure(ErrorVerb::Read, e))?
-                    .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
-                let applied: AppliedState = decode(epoch, bytes.value())?;
-                applied.state(epoch)?;
-                let mut purged: Option<LogId<u64>> = None;
-                let mut committed: Option<LogId<u64>> = None;
-                // Every metadata section is authority-bearing in this format.
-                // Never ignore an unknown section, even if applied state alone
-                // would be sufficient to start this older executable.
-                for record in table.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
-                    let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
-                    match key.value() {
-                        "identity" | "applied" => {}
-                        "vote" => {
-                            decode::<Vote<u64>>(epoch, value.value())?;
+                    .map(|value| decode(domain.epoch, value.value()))
+                    .transpose()?
+                    .flatten();
+                let committed = committed.max(applied.last_applied);
+                let mut active = applied.format;
+                let mut membership = applied.membership;
+                let mut controls = Vec::new();
+                let mut decisions = Vec::new();
+                let logs = tx
+                    .open_table(LOGS)
+                    .map_err(|e| failure(ErrorVerb::Read, e))?;
+                for row in logs.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
+                    let (key, value) = row.map_err(|e| failure(ErrorVerb::Read, e))?;
+                    let entry = decode_log(domain.epoch, key.value(), value.value())?;
+                    let is_committed = committed.is_some_and(|position| entry.log_id <= position);
+                    if is_committed
+                        && applied
+                            .last_applied
+                            .is_none_or(|position| entry.log_id > position)
+                    {
+                        replay_format(&mut active, &mut membership, &entry, reader)?;
+                    }
+                    if let EntryPayload::Normal(batch) = entry.payload
+                        && let Some(control) = batch.control
+                    {
+                        if is_committed {
+                            let decision = match &control {
+                                FormatControl::Activate(preparation) => {
+                                    Some((preparation.permit, true))
+                                }
+                                FormatControl::Abort { permit, .. } => Some((*permit, false)),
+                                FormatControl::Prepare(_) => None,
+                            };
+                            if let Some((permit, activated)) = decision {
+                                decisions.push(FormatDecision {
+                                    permit,
+                                    position: entry.log_id,
+                                    activated,
+                                });
+                            }
                         }
-                        "committed" => {
-                            committed = decode(epoch, value.value())?;
-                        }
-                        "purged" => {
-                            purged = Some(decode(epoch, value.value())?);
-                        }
-                        "snapshot_sequence" => {
-                            decode::<u64>(epoch, value.value())?;
-                        }
-                        "snapshot" => {
-                            decode::<SavedSnapshot>(epoch, value.value())?.validate(epoch)?;
-                        }
-                        unknown => {
+                        controls.push((entry.log_id, control));
+                        if controls.len() > 3 * MAX_FORMAT_MEMBERS {
                             return Err(failure(
                                 ErrorVerb::Read,
-                                format!("unknown required journal section: {unknown}"),
+                                "recovery control history is oversized",
                             ));
                         }
                     }
                 }
-                let logs = tx
-                    .open_table(LOGS)
-                    .map_err(|e| failure(ErrorVerb::Read, e))?;
-                let mut previous = purged;
-                let mut first = true;
-                for record in logs.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
-                    let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
-                    let entry = decode_log(epoch, key.value(), value.value())?;
-                    let expected = previous.map_or(Some(0), |id| id.index.checked_add(1));
-                    // An installed snapshot may precede OpenRaft's log purge.
-                    // It justifies a missing prefix, never an interior hole.
-                    let covered_prefix = first
-                        && applied
-                            .last_applied
-                            .is_some_and(|id| entry.log_id.index <= id.index.saturating_add(1))
-                        && purged.is_none_or(|id| entry.log_id.index > id.index);
-                    if expected != Some(entry.log_id.index) && !covered_prefix {
-                        return Err(failure(
-                            ErrorVerb::Read,
-                            "noncontiguous persisted Raft logs",
-                        ));
-                    }
-                    previous = Some(entry.log_id);
-                    first = false;
-                }
-                if committed > previous.max(applied.last_applied) {
-                    return Err(failure(
-                        ErrorVerb::Read,
-                        "committed Raft position is missing",
-                    ));
-                }
+                evidence.push(RecoveryEvidence {
+                    node,
+                    active,
+                    controls,
+                    decisions,
+                });
             }
-            Ok((database, created))
+            Ok::<_, StorageError<u64>>(evidence)
         })
         .await
         .map_err(|e| failure(ErrorVerb::Read, e))??;
-        Ok(Self::from_database(
+        AdmissionRegistry::recover(domain, evidence).map_err(|e| failure(ErrorVerb::Read, e))
+    }
+
+    async fn open_inner(
+        path: impl AsRef<Path>,
+        node_id: u64,
+        epoch: ClusterEpoch,
+        limits: Limits,
+        profile: Option<JournalProfile>,
+    ) -> Result<Self> {
+        let domain = profile.as_ref().map_or(
+            AuthorityDomain {
+                epoch,
+                namespace: 0,
+            },
+            |p| p.domain,
+        );
+        let reader = profile
+            .as_ref()
+            .map_or(ReaderCapabilities::Base, |p| p.reader);
+        // Refuse an invalid admission envelope before creating any durable file.
+        let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
+        let path = path.as_ref().to_owned();
+        let (database, created, committed_format, controls) =
+            spawn_blocking!("authority_journal_open", move || {
+                let (database, created) = match OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                {
+                    Ok(file) => (
+                        Database::builder()
+                            .create_file(file)
+                            .map_err(|e| failure(ErrorVerb::Write, e))?,
+                        true,
+                    ),
+                    Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (
+                        Database::open(&path).map_err(|e| failure(ErrorVerb::Read, e))?,
+                        false,
+                    ),
+                    Err(e) => return Err(failure(ErrorVerb::Write, e)),
+                };
+                let mut committed_format = ActiveFormat::base(domain);
+                let mut controls = Vec::new();
+                if created {
+                    Self::initialize_database(&database, node_id, epoch, &initial, domain)?;
+                    // Persist the new directory entry as well as database contents.
+                    let parent = path
+                        .parent()
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .unwrap_or_else(|| Path::new("."));
+                    File::open(parent)
+                        .and_then(|file| file.sync_all())
+                        .map_err(|e| failure(ErrorVerb::Write, e))?;
+                } else {
+                    let tx = database
+                        .begin_read()
+                        .map_err(|e| failure(ErrorVerb::Read, e))?;
+                    let table = tx
+                        .open_table(META)
+                        .map_err(|e| failure(ErrorVerb::Read, e))?;
+                    let bytes = table
+                        .get("identity")
+                        .map_err(|e| failure(ErrorVerb::Read, e))?
+                        .ok_or_else(|| failure(ErrorVerb::Read, "missing authority identity"))?;
+                    let identity: Identity = decode(epoch, bytes.value())?;
+                    if identity.node_id != node_id || identity.epoch != epoch {
+                        return Err(failure(ErrorVerb::Read, "authority node/epoch mismatch"));
+                    }
+                    let bytes = table
+                        .get("applied")
+                        .map_err(|e| failure(ErrorVerb::Read, e))?
+                        .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
+                    let applied: AppliedState = decode(epoch, bytes.value())?;
+                    applied.state(epoch, reader)?;
+                    if applied.format.domain != domain {
+                        return Err(failure(ErrorVerb::Read, "authority namespace mismatch"));
+                    }
+                    committed_format = applied.format.clone();
+                    let mut committed_membership = applied.membership.clone();
+                    let mut purged: Option<LogId<u64>> = None;
+                    let mut committed: Option<LogId<u64>> = None;
+                    // Every metadata section is authority-bearing in this format.
+                    // Never ignore an unknown section, even if applied state alone
+                    // would be sufficient to start this older executable.
+                    for record in table.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
+                        let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
+                        match key.value() {
+                            "identity" | "applied" => {}
+                            "vote" => {
+                                decode::<Vote<u64>>(epoch, value.value())?;
+                            }
+                            "committed" => {
+                                committed = decode(epoch, value.value())?;
+                            }
+                            "purged" => {
+                                purged = Some(decode(epoch, value.value())?);
+                            }
+                            "snapshot_sequence" => {
+                                decode::<u64>(epoch, value.value())?;
+                            }
+                            "snapshot" => {
+                                let saved: SavedSnapshot = decode(epoch, value.value())?;
+                                saved.validate(epoch, reader)?;
+                                if saved.applied.format.domain != domain {
+                                    return Err(failure(
+                                        ErrorVerb::Read,
+                                        "foreign snapshot namespace",
+                                    ));
+                                }
+                            }
+                            unknown => {
+                                return Err(failure(
+                                    ErrorVerb::Read,
+                                    format!("unknown required journal section: {unknown}"),
+                                ));
+                            }
+                        }
+                    }
+                    let logs = tx
+                        .open_table(LOGS)
+                        .map_err(|e| failure(ErrorVerb::Read, e))?;
+                    let mut previous = purged;
+                    let mut first = true;
+                    for record in logs.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
+                        let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
+                        let entry = decode_log(epoch, key.value(), value.value())?;
+                        if let EntryPayload::Normal(batch) = &entry.payload
+                            && let Some(control) = &batch.control
+                        {
+                            controls.push((entry.log_id, control.clone()));
+                            if controls.len() > 3 * MAX_FORMAT_MEMBERS {
+                                return Err(failure(
+                                    ErrorVerb::Read,
+                                    "persisted control history is oversized",
+                                ));
+                            }
+                        }
+                        if committed.is_some_and(|position| entry.log_id <= position)
+                            && applied
+                                .last_applied
+                                .is_none_or(|position| entry.log_id > position)
+                        {
+                            replay_format(
+                                &mut committed_format,
+                                &mut committed_membership,
+                                &entry,
+                                reader,
+                            )?;
+                        }
+                        let expected = previous.map_or(Some(0), |id| id.index.checked_add(1));
+                        // An installed snapshot may precede OpenRaft's log purge.
+                        // It justifies a missing prefix, never an interior hole.
+                        let covered_prefix = first
+                            && applied
+                                .last_applied
+                                .is_some_and(|id| entry.log_id.index <= id.index.saturating_add(1))
+                            && purged.is_none_or(|id| entry.log_id.index > id.index);
+                        if expected != Some(entry.log_id.index) && !covered_prefix {
+                            return Err(failure(
+                                ErrorVerb::Read,
+                                "noncontiguous persisted Raft logs",
+                            ));
+                        }
+                        previous = Some(entry.log_id);
+                        first = false;
+                    }
+                    if committed > previous.max(applied.last_applied) {
+                        return Err(failure(
+                            ErrorVerb::Read,
+                            "committed Raft position is missing",
+                        ));
+                    }
+                }
+                Ok((database, created, committed_format, controls))
+            })
+            .await
+            .map_err(|e| failure(ErrorVerb::Read, e))??;
+        for (position, control) in controls {
+            profile
+                .as_ref()
+                .ok_or_else(|| {
+                    failure(ErrorVerb::Read, "format controls require admitted recovery")
+                })?
+                .admission
+                .knows_persisted(&control, position)
+                .map_err(|e| failure(ErrorVerb::Read, e))?;
+        }
+        Self::from_database(
             database,
             node_id,
             epoch,
             created,
             JournalPersistence::Durable,
-        ))
+            profile,
+            &committed_format,
+        )
     }
 
     async fn io<T: Send + 'static>(
@@ -826,6 +1270,9 @@ impl Journal {
         let fault = self.fault.clone();
         let measurements = self.measurements.clone();
         let persistence = self.persistence;
+        let profile = self.profile.clone();
+        let epoch = self.epoch;
+        let reader = self.reader;
         self.io(kind, batch_items, move |database| {
             let mut tx = database
                 .begin_write()
@@ -833,6 +1280,17 @@ impl Journal {
             tx.set_durability(Durability::Immediate)
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
             let result = operation(&tx)?;
+            let committed_format = if profile.is_some()
+                && matches!(
+                    kind,
+                    MeasuredOperation::Apply
+                        | MeasuredOperation::SaveCommitted
+                        | MeasuredOperation::InstallSnapshot
+                ) {
+                Some(committed_format(&tx, epoch, reader)?)
+            } else {
+                None
+            };
             let cutpoint = fault.swap(0, Ordering::SeqCst);
             if cutpoint == JournalFault::BeforeCommit as u8 {
                 return Err(failure(ErrorVerb::Write, "injected before backend commit"));
@@ -840,6 +1298,9 @@ impl Journal {
             let measured = measurements.enabled.load(Ordering::Relaxed);
             let commit_started = measured.then(Instant::now);
             tx.commit().map_err(|e| failure(ErrorVerb::Write, e))?;
+            if let (Some(profile), Some(active)) = (profile, committed_format) {
+                profile.admission.observe_committed(&active);
+            }
             if let Some(started) = commit_started {
                 let counter = &measurements.operations[kind as usize];
                 let commits = match persistence {
@@ -907,6 +1368,79 @@ impl Journal {
         .await
     }
 
+    pub async fn active_format(&self) -> Result<ActiveFormat> {
+        let applied: AppliedState = self
+            .read_meta("applied")
+            .await?
+            .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
+        applied.state(self.epoch, self.reader)?;
+        Ok(applied.format)
+    }
+
+    /// Trusted in-process qualification seam: derive evidence from admitted
+    /// journal profiles after an actual Raft barrier and commit both controls.
+    /// An interrupted proposal keeps admission pinned until activation or a
+    /// consensus-committed abort resolves it; canceling this future is no abort.
+    pub async fn prepare_features(
+        &self,
+        raft: &Raft<TypeConfig>,
+        required: Features,
+    ) -> std::result::Result<super::format::Preparation, String> {
+        if raft.metrics().borrow().id != self.node_id {
+            return Err("activation must use this journal's Raft member".into());
+        }
+        raft.ensure_linearizable()
+            .await
+            .map_err(|e| e.to_string())?;
+        let applied: AppliedState = self
+            .read_meta("applied")
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("missing applied state")?;
+        let profile = self
+            .profile
+            .as_ref()
+            .ok_or("no trusted member admission registry")?;
+        profile
+            .admission
+            .prepare(&applied.format, &applied.membership, required)
+    }
+
+    pub async fn activate_features(
+        &self,
+        raft: &Raft<TypeConfig>,
+        required: Features,
+    ) -> std::result::Result<(), String> {
+        let preparation = self.prepare_features(raft, required).await?;
+        raft.client_write(Batch::format(FormatControl::Prepare(preparation.clone()))?)
+            .await
+            .map_err(|e| e.to_string())?;
+        raft.client_write(Batch::format(FormatControl::Activate(preparation))?)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn abort_preparation(
+        &self,
+        raft: &Raft<TypeConfig>,
+        permit: u64,
+    ) -> std::result::Result<(), String> {
+        if raft.metrics().borrow().id != self.node_id {
+            return Err("abort must use this journal's Raft member".into());
+        }
+        raft.ensure_linearizable()
+            .await
+            .map_err(|e| e.to_string())?;
+        raft.client_write(Batch::format(FormatControl::Abort {
+            domain: self.domain,
+            permit,
+        })?)
+        .await
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     /// Consistent backend applied state. Callers serving authority reads must
     /// first pass the real Raft read barrier, as `Singleton::read` does.
     pub async fn read_applied(&self) -> Result<(Option<LogId<u64>>, State)> {
@@ -914,7 +1448,10 @@ impl Journal {
             .read_meta("applied")
             .await?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
-        Ok((applied.last_applied, applied.state(self.epoch)?))
+        Ok((
+            applied.last_applied,
+            applied.state(self.epoch, self.reader)?,
+        ))
     }
 
     /// Inject one failure in the next write, for explicit storage cutpoint tests.
@@ -1032,6 +1569,12 @@ impl RaftLogStorage<TypeConfig> for Journal {
     }
 
     async fn read_vote(&mut self) -> Result<Option<Vote<u64>>> {
+        if let Some(profile) = &self.profile {
+            profile
+                .admission
+                .recovery_ready()
+                .map_err(|e| failure(ErrorVerb::Read, e))?;
+        }
         self.read_meta("vote").await
     }
 
@@ -1053,6 +1596,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
     {
         let epoch = self.epoch;
         let entries: Vec<_> = entries.into_iter().collect();
+        let profile = self.profile.clone();
         let result = async {
             // Validate every command and membership before beginning the write.
             // The completion callback must receive validation failures too.
@@ -1060,6 +1604,35 @@ impl RaftLogStorage<TypeConfig> for Journal {
                 validate_entry(entry, ErrorVerb::Write)?;
             }
             self.write(MeasuredOperation::Append, entries.len(), move |tx| {
+                for entry in &entries {
+                    match &entry.payload {
+                        EntryPayload::Normal(batch) if batch.control.is_some() => {
+                            profile
+                                .as_ref()
+                                .ok_or_else(|| {
+                                    failure(
+                                        ErrorVerb::Write,
+                                        "format control requires admitted member evidence",
+                                    )
+                                })?
+                                .admission
+                                .authorize(
+                                    batch.control.as_ref().expect("checked control"),
+                                    entry.log_id,
+                                )
+                                .map_err(|e| failure(ErrorVerb::Write, e))?;
+                        }
+                        EntryPayload::Membership(membership) => {
+                            if let Some(profile) = &profile {
+                                profile
+                                    .admission
+                                    .membership_allowed(entry.log_id, membership)
+                                    .map_err(|e| failure(ErrorVerb::Write, e))?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 let mut table = tx
                     .open_table(LOGS)
                     .map_err(|e| failure(ErrorVerb::Write, e))?;
@@ -1153,7 +1726,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             .read_meta("applied")
             .await?
             .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
-        validate_membership(applied.membership.membership(), ErrorVerb::Read)?;
+        applied.state(self.epoch, self.reader)?;
         Ok((applied.last_applied, applied.membership))
     }
 
@@ -1170,6 +1743,7 @@ impl RaftStateMachine<TypeConfig> for Journal {
             validate_entry(entry, ErrorVerb::Write)?;
         }
         let epoch = self.epoch;
+        let reader = self.reader;
         self.write(MeasuredOperation::Apply, entries.len(), move |tx| {
             let mut table = tx
                 .open_table(META)
@@ -1181,18 +1755,23 @@ impl RaftStateMachine<TypeConfig> for Journal {
                     .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?;
                 decode(epoch, bytes.value())?
             };
-            let mut state = applied.state(epoch)?;
+            let mut state = applied.state(epoch, reader)?;
             let mut replies = Vec::with_capacity(entries.len());
             for entry in entries {
+                replay_format(&mut applied.format, &mut applied.membership, &entry, reader)?;
                 applied.last_applied = Some(entry.log_id);
                 replies.push(match entry.payload {
                     EntryPayload::Blank => BatchReply::default(),
                     EntryPayload::Normal(batch) => BatchReply {
-                        replies: batch
-                            .events
-                            .into_iter()
-                            .map(|event| state.apply(event))
-                            .collect(),
+                        replies: if batch.control.is_some() {
+                            vec![Reply::Applied]
+                        } else {
+                            batch
+                                .events
+                                .into_iter()
+                                .map(|event| state.apply(event))
+                                .collect()
+                        },
                     },
                     EntryPayload::Membership(membership) => {
                         applied.membership = StoredMembership::new(Some(entry.log_id), membership);
@@ -1200,7 +1779,8 @@ impl RaftStateMachine<TypeConfig> for Journal {
                     }
                 });
             }
-            applied.scheduler = state_json(&state)?;
+            applied.scheduler = SchedulerSection::from_state(&state, &applied.format)?;
+            applied.state(epoch, reader)?;
             let bytes = encode(epoch, &applied)?;
             table
                 .insert("applied", bytes.as_slice())
@@ -1228,7 +1808,10 @@ impl RaftStateMachine<TypeConfig> for Journal {
             .into_inner()
             .map_err(|e| failure(ErrorVerb::Read, e))?;
         let saved: SavedSnapshot = decode(self.epoch, &bytes)?;
-        saved.validate(self.epoch)?;
+        saved.validate(self.epoch, self.reader)?;
+        if saved.applied.format.domain != self.domain {
+            return Err(failure(ErrorVerb::Read, "foreign snapshot namespace"));
+        }
         if &saved.meta != meta {
             return Err(failure(
                 ErrorVerb::Read,
@@ -1255,7 +1838,10 @@ impl RaftStateMachine<TypeConfig> for Journal {
         let saved: Option<SavedSnapshot> = self.read_meta("snapshot").await?;
         saved
             .map(|saved| {
-                saved.validate(self.epoch)?;
+                saved.validate(self.epoch, self.reader)?;
+                if saved.applied.format.domain != self.domain {
+                    return Err(failure(ErrorVerb::Read, "foreign snapshot namespace"));
+                }
                 let bytes = encode(self.epoch, &saved)?;
                 Ok(Snapshot {
                     meta: saved.meta,
@@ -1273,6 +1859,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Journal {
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>> {
         let epoch = self.epoch;
         let node_id = self.node_id;
+        let reader = self.reader;
         self.write(MeasuredOperation::BuildSnapshot, 0, move |tx| {
             let mut table = tx
                 .open_table(META)
@@ -1300,7 +1887,7 @@ impl RaftSnapshotBuilder<TypeConfig> for Journal {
                 },
                 applied,
             };
-            saved.validate(epoch)?;
+            saved.validate(epoch, reader)?;
             let bytes = encode(epoch, &saved)?;
             table
                 .insert("snapshot", bytes.as_slice())
@@ -1406,7 +1993,22 @@ impl Singleton {
         batch: Batch,
     ) -> std::result::Result<openraft::raft::ClientWriteResponse<TypeConfig>, String> {
         batch.validate()?;
-        let expected = batch.events.len();
+        let expected = if batch.control.is_some() {
+            1
+        } else {
+            batch.events.len()
+        };
+        let batch = if batch.control.is_none() {
+            batch.at_feature_epoch(
+                self.journal
+                    .active_format()
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .feature_epoch,
+            )
+        } else {
+            batch
+        };
         let response = self
             .raft
             .client_write(batch)
@@ -1427,8 +2029,25 @@ impl Singleton {
         let journal = Journal::open(path, node_id, epoch, limits)
             .await
             .map_err(|e| e.to_string())?;
+        Self::from_journal(journal).await
+    }
+
+    pub async fn open_with_profile(
+        path: impl AsRef<Path>,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+    ) -> std::result::Result<Self, String> {
+        let journal = Journal::open_with_profile(path, node_id, limits, profile)
+            .await
+            .map_err(|e| e.to_string())?;
+        Self::from_journal(journal).await
+    }
+
+    async fn from_journal(journal: Journal) -> std::result::Result<Self, String> {
+        let node_id = journal.node_id;
         let config = openraft::Config {
-            cluster_name: format!("experimental-authority-{}", epoch.0),
+            cluster_name: format!("experimental-authority-{}", journal.epoch.0),
             heartbeat_interval: 50,
             election_timeout_min: 150,
             election_timeout_max: 300,
@@ -1511,7 +2130,11 @@ mod batch_validation_tests {
             applied: AppliedState {
                 last_applied: position,
                 membership,
-                scheduler: String::new(),
+                scheduler: SchedulerSection::String(String::new()),
+                format: ActiveFormat::base(AuthorityDomain {
+                    epoch: ClusterEpoch(u64::MAX),
+                    namespace: u64::MAX,
+                }),
             },
         };
         // Includes worst scalar widths, all wrappers/checksum/section names,
@@ -1521,8 +2144,10 @@ mod batch_validation_tests {
         // Core JSON is nested as a string twice; each of the two canonical
         // memberships is nested once. Their encoded byte limits pay for all
         // variable fields, including escaped node addresses and map keys.
-        let budget =
-            4 * crate::authority::MAX_STATE_BYTES + 4 * MAX_MEMBERSHIP_BYTES + METADATA_MARGIN;
+        let budget = 4 * crate::authority::MAX_STATE_BYTES
+            + 4 * MAX_MEMBERSHIP_BYTES
+            + 2 * MAX_FORMAT_BYTES
+            + METADATA_MARGIN;
         assert!(budget <= MAX_SNAPSHOT_BYTES);
     }
 
@@ -1554,18 +2179,26 @@ mod batch_validation_tests {
         };
         let malformed = [
             Batch {
+                control: None,
+                feature_epoch: 0,
                 version: 99,
                 events: vec![event.clone()],
             },
             Batch {
+                control: None,
+                feature_epoch: 0,
                 version: BATCH_VERSION,
                 events: vec![],
             },
             Batch {
+                control: None,
+                feature_epoch: 0,
                 version: BATCH_VERSION,
                 events: vec![event; MAX_BATCH_EVENTS + 1],
             },
             Batch {
+                control: None,
+                feature_epoch: 0,
                 version: BATCH_VERSION,
                 events: vec![oversized],
             },

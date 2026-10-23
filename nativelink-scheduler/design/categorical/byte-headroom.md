@@ -204,11 +204,14 @@ envelope escaping costs at most `4*M` for those two copies. A 1024-byte snapshot
 ID can contain control bytes: allow sixfold JSON escaping and another doubling
 at the envelope. Together with fixed IDs, wrappers, required-section text,
 checksum, and punctuation, reserve a conservative **16 KiB** metadata margin.
+Experimental format activation adds canonical metadata `F <= 64 KiB`;
+the outer envelope can double it. The direct-object scheduler representation
+uses less escaping than the base string, so the base bound covers both writers.
 
 ```text
-encoded saved snapshot <= 4*S + 4*M + 16 KiB
-                       <= 56 MiB + 4 MiB + 16 KiB
-                       = 60.015625 MiB
+encoded saved snapshot <= 4*S + 4*M + 2*F + 16 KiB
+                       <= 56 MiB + 4 MiB + 128 KiB + 16 KiB
+                       = 60.140625 MiB
                        < 64 MiB
 ```
 

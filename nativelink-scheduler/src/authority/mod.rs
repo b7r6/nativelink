@@ -25,6 +25,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod format;
 pub mod journal;
 pub mod reapi;
 pub mod request;

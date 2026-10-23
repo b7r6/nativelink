@@ -3404,6 +3404,7 @@ dependencies = [
  "nativelink-metric",
  "nativelink-proto",
  "nativelink-scheduler",
+ "nativelink-service",
  "nativelink-store",
  "nativelink-util",
  "opentelemetry",

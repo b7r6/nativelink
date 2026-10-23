@@ -20,6 +20,7 @@
 //! process incarnation; this function neither revokes nor kills its work.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::{StreamExt, stream};
 use nativelink_error::{Code, Error, make_err};
@@ -30,7 +31,7 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
     authority_coordinator_update, authority_worker_update,
 };
 use tokio::sync::watch;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 
 use crate::authority_worker::AuthorityWorker;
 use crate::running_actions_manager::RunningActionsManager;
@@ -39,6 +40,62 @@ use crate::running_actions_manager::RunningActionsManager;
 // successive inventories therefore loses no unresolved obligation, while a slow
 // transport retains only bounded snapshots instead of an ever-growing queue.
 type Inventory = (AuthorityReconciliation, AuthorityCapacityObservation);
+
+/// Reconnect the same process recipient after transient transport failures.
+/// Sessions advance even when negotiation was interrupted. This never replaces
+/// the incarnation, forgets a receipt, kills work, or refunds a reservation.
+/// The caller owns shutdown and the first session of this supervisor lifetime.
+pub async fn run_reconnecting<M: RunningActionsManager>(
+    worker: Arc<AuthorityWorker<M>>,
+    endpoint: Endpoint,
+    first_session: u64,
+    properties: Vec<Property>,
+    mut stopped: watch::Receiver<bool>,
+) -> Result<(), Error> {
+    let mut session = first_session;
+    let mut backoff = Duration::from_millis(100);
+    loop {
+        if *stopped.borrow() {
+            return Ok(());
+        }
+        let result = tokio::select! {
+            result = async {
+                let channel = endpoint.connect().await.map_err(|error| Error::from_std_err(Code::Unavailable, &error))?;
+                run_session(worker.clone(), AuthorityWorkerApiClient::new(channel), session, properties.clone()).await
+            } => result,
+            () = stop_requested(&mut stopped) => return Ok(()),
+        };
+        if let Err(error) = result
+            && !matches!(
+                error.code,
+                Code::Unavailable | Code::DeadlineExceeded | Code::Cancelled | Code::Unknown
+            )
+        {
+            // Protocol/capability/identity rejection cannot be repaired by
+            // silently downgrading or starting another worker incarnation.
+            return Err(error);
+        }
+        session = session.checked_add(1).ok_or_else(|| {
+            make_err!(
+                Code::ResourceExhausted,
+                "Authority session identity exhausted"
+            )
+        })?;
+        tokio::select! {
+            () = tokio::time::sleep(backoff) => {}
+            () = stop_requested(&mut stopped) => return Ok(()),
+        }
+        backoff = (backoff * 2).min(Duration::from_secs(2));
+    }
+}
+
+async fn stop_requested(stopped: &mut watch::Receiver<bool>) {
+    while !*stopped.borrow_and_update() {
+        if stopped.changed().await.is_err() {
+            return;
+        }
+    }
+}
 
 fn publish_inventory<M: RunningActionsManager>(
     worker: &AuthorityWorker<M>,

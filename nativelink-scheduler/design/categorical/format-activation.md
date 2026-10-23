@@ -1,12 +1,18 @@
 # Experimental format activation boundary
 
-Status: implementation proposal, not an implemented upgrade protocol. The
-current journal envelope is experimental format 2, its application batch is
-version 1, and its embedded scheduler snapshot is version 5. Their readers
-reject unsupported versions and unknown authority sections. They provide no
-compatible writer activation, previous-binary rollback, or migration promise.
-This proposal does not name or freeze a production format 3, qualify deployment,
-or waive the M0 representation and workload gates.
+Status: an implemented experimental journal protocol, with a trusted in-process
+admission fixture. The journal envelope is experimental format 3, its application
+batch is version 1, and its embedded scheduler snapshot is version 5. The base
+writer stores scheduler JSON in a string; committed feature 1 changes that
+authority-bearing section into a direct JSON object while preserving the complete
+logical scheduler state and pending effects. Format 2 and earlier prototypes are
+rejected. No conversion from them, released-binary compatibility, production
+format stability, or deployment qualification is claimed.
+
+The tests use immutable reader profiles in one executable. They exercise actual
+file/RAM journals and real single-member and three-member OpenRaft clusters.
+Separately compiled frozen-reader compatibility remains an open gate, as do the
+M0 representation/workload gates and deployed transport/admission prerequisites.
 
 ## The base reader must understand activation
 
@@ -25,7 +31,7 @@ the upgraded reader must understand its bounded feature-control vocabulary:
 - An activation record identifying the preceding feature epoch, the next epoch,
   the prepared feature set, and the matching preparation evidence.
 
-The exact Rust types and numeric versions remain undecided. Feature identifiers
+The current Rust types live in `src/authority/format.rs`. Feature identifiers
 are bounded data in a known control record, not a new enum variant for each
 future feature. The base reader can decode and preserve an unsupported target
 feature in a preparation or uncommitted activation record. It must refuse to
@@ -42,7 +48,7 @@ than a restart helper, decides whether an uncommitted proposal is retained or
 overwritten. Rollback never silently drops it from a log.
 
 This base reader is a new experimental compatibility baseline. It is not a
-claimed conversion from the current strict format-2 prototype. Any conversion
+claimed conversion from the preceding strict format-2 prototype. Any conversion
 from that prototype would require a separate explicit, lossless migration and
 its own evidence.
 
@@ -148,7 +154,7 @@ flag. Recovery must account for all of these boundaries:
 | Cutpoint | Required behavior |
 | --- | --- |
 | New binary installed, no preparation | Base writer bytes and base-reader rollback remain valid. |
-| Preparation committed, activation absent | The base reader preserves preparation and can still serve the base feature set. |
+| Preparation committed, activation absent | The base decoder preserves preparation; authority participation still requires admission, which the fixture holds until a committed abort or activation. |
 | Activation appended but not committed | The base reader decodes and preserves it; consensus may retain or overwrite it. |
 | Activation committed but not applied | Recovery discovers the committed decision before serving authority; an unsupported reader cannot serve the preceding snapshot as current state. |
 | Activation apply transaction fails before commit | Previous applied state remains complete; recovery retries the committed activation. |
@@ -196,22 +202,66 @@ membership history, or activation order fail closed. A snapshot at the old epoch
 plus a valid activation suffix must produce the same state and effect identities
 as uninterrupted execution.
 
-## Smallest next implementation and evidence
+## Implemented experiment and remaining evidence
 
-After the current checkpoint, start with an independently versioned experimental
-encoding module and fixtures, without changing the active journal format. Implement
-the base control vocabulary, two reader levels, bounded active-format state,
-base and upgraded encoders, and staged conversion. Use one bounded additional
-authority section whose value must survive conversion; name it as an experiment,
-not as a completed publication or retention implementation.
+`tests/authority_format_test.rs` drives the shared journal transaction and actual
+Raft protocol. Active-format metadata has a separate 64 KiB serialized bound;
+preparations contain at most 64 members and eight feature IDs. The fixture admits
+at most 64 distinct member identities and retains at most 64 resolved permits.
+An exhausted history refuses further preparation. This is a finite experiment,
+not an unbounded production admission service.
 
-Freeze the base reader fixture before adding the upgraded writer. A separately
-compiled base fixture must restore artifacts produced by the upgraded executable before
+Preparation obtains the applied membership after a real quorum read barrier.
+Every node named by that membership, including retained learners and both sides
+of a joint configuration, must have a live admitted profile supporting the
+target. The registry pins those profiles across proposal cancellation and
+refuses replacement or membership change until consensus commits activation or
+abort. Prepare and Activate bind their original full LogIds; completed history
+permits replay at those original positions, never a shifted stale certificate.
+
+The evidence currently covers exact base metadata and snapshot bytes before
+activation, reopen and compaction, refusal with an actual incompatible voter or retained learner,
+upgrade of that voter, activation while a capable member is partitioned, and
+subsequent replay preserving pending effects. It also covers an isolated old
+leader with an abandoned activation response, a new leader's committed abort,
+refusal of shifted stale controls, and a Base replacement after that abort.
+Snapshot construction and installation exercise both transaction cutpoints;
+unsupported readers and foreign namespaces are refused before installation.
+A mixed authority history preserves pending dispatch, a canceled but still
+charged attempt, and an accepted result awaiting publication together through
+activation, snapshot, and restart. A mismatched application feature epoch fails
+atomically, and unknown future feature IDs survive bounded control decoding
+without being accepted as active authority sections.
+
+Startup inspects the durable committed suffix before admitting a process, so a
+committed activation cannot hide behind an older applied snapshot. A known
+uncommitted target can still be decoded by the Base profile. Decoding an artifact
+does not prove that a Base voter may rejoin an unresolved activation.
+
+`Journal::recover_admission` reconstructs a fresh fixture registry from closed
+journals after every previous process has been stopped and fenced by the test
+procedure. The artifacts supply exact control positions and committed decisions;
+every member named by unresolved evidence must be included and admitted under
+a later capable incarnation before any Raft process restarts. `read_vote` refuses
+premature startup. A recovered permit may replay its original control positions;
+a new proposal requires abort and fresh preparation. Tests cover both a recovering
+leader whose old activation commits and a leader whose history overwrites it,
+then commits abort and successfully prepares again. Neither path infers rollback
+permission from a local pre-crash commit marker.
+
+This procedure depends on external knowledge that all old processes are fenced.
+It does not discover or enforce remote fencing, authenticate capability reports,
+recover an admission service independently of the members, or reconcile deployed
+membership. Its storage-level membership refusal can stop a Raft member; a
+production coordinator must reject conflicting requests before proposing them.
+
+The remaining binary-compatibility gate requires a separately compiled base fixture
+that must restore artifacts produced by the upgraded executable before
 activation. Passing two modes through one permissive decoder is not sufficient
 rollback evidence. This establishes only the declared experimental baseline,
 not compatibility with a previously released NativeLink binary.
 
-The first fixture matrix must cover:
+The complete qualification matrix must cover:
 
 - Exact base writer output after upgrade, ordinary writes, compaction, snapshot
   replacement, and restart before activation.
@@ -229,10 +279,7 @@ The first fixture matrix must cover:
 - Unsupported active features, unknown authority sections, feature-epoch gaps,
   mismatched domains, and downgrade refusal after committed activation.
 
-Only after those fixtures pass should a separate journal integration slice add
-active-format state to the shared RAM/file transaction path and exercise the
-same cutpoints through real OpenRaft commit, apply, and read barriers. That slice
-must include the admission fixture and membership races, not just direct encoding
-calls. Until the actual transport, admission, and membership prerequisites
-exist, the result remains an experimental format protocol and cannot qualify
-canonical production ingress or satisfy all of M3a.
+Journal integration now exercises the transaction, read, and membership boundaries
+above. The complete matrix still needs a frozen separately compiled reader
+and deployed transport, admission, and membership procedures. This remains an experimental
+format protocol and does not qualify canonical ingress or all of M3a.

@@ -129,15 +129,43 @@ commits. Both compositions preserve pending authority; the old durable leader
 also converges after restart. [Composed recovery receipts](evidence/composed-recovery/manifest.json)
 record the exact fixture boundary and its initial cutpoint correction.
 
-Remaining engineering includes finite recipient-ledger
-compaction, replacement-incarnation fencing, feature activation and compatible
-writers, canonical ingress/listeners/effect drivers,
+The [format activation experiment](format-activation.md) now selects compatible
+writers from committed feature state and refuses unsupported committed recovery.
+Ten new tests cover real quorum activation, mixed pending authority, committed
+suffixes, snapshot cutpoints, and reconstruction of the trusted admission
+fixture. Its synthesized, separately compiled Base reader is a further check;
+this checkpoint uses immutable reader profiles in one executable.
+
+The [automatic coordinator](automatic-coordinator.md) drives actual Execution and
+worker RPCs, matching, deadlines, reconciliation, and accepted-only publication.
+Five wire tests include completion during coordinator loss, reconnect with the
+same recipient, stable terminals and later cache hits, cancel before dispatch,
+report identity checks, bounded streams and oversized-result projection. The
+[typed output closure](typed-output-closure.md) validates exact physical objects,
+embedded Tree records, opaque leaves, and bounded DAG traversal in fourteen
+tests. A complete verified manifest is still evidence, not a protection grant.
+[Integrated receipts](evidence/activation-runtime-closure/manifest.json) retain
+the commands, source identities, and outcomes for this combined checkpoint.
+
+Four mutations of the automatic RPC adapter fail its named wire assertions.
+The full workspace run also exposed two corrections: Bazel Clippy requires the
+default boxed BLAKE3 constructor, and filesystem tests that inspect a global
+file-descriptor budget need exclusion from other tests using that budget.
+The fixture now uses shared guards for ordinary tests and exclusive guards for
+global-budget checks, preserving concurrency within each upload history.
+Failed checks remain in the receipts alongside the corrected runs. Cargo reports
+1,627 passes, zero failures and five ignored tests across the workspace; Bazel
+passes all 141 targets. The later filesystem corrections also pass their focused
+Cargo checks.
+
+Remaining engineering includes finite recipient-ledger compaction,
+replacement-incarnation fencing, deployed format admission, canonical
+construction and authenticated listeners, active observation renewal,
 qualified physical stores and their authority integration, actual typed closure
-protection, sustained
-collection, migration/cutover, and deletion of the legacy construction paths.
-The experimental snapshots explicitly reject earlier prototype versions; that
-is not an upgrade or rollback protocol. None of M0 through M9 is declared fully
-qualified by this checkpoint.
+protection, sustained collection, migration/cutover, and deletion of the legacy
+construction paths. Experimental envelope 3 rejects earlier prototypes; its
+activation protocol does not migrate released deployments. None of M0 through
+M9 is declared fully qualified by this checkpoint.
 
 ## Evidence currently missing
 

@@ -243,7 +243,7 @@ impl Hasher {
     fn new(algorithm: Algorithm) -> Self {
         match algorithm {
             Algorithm::Sha256 => Self::Sha256(Box::new(Sha256::new())),
-            Algorithm::Blake3 => Self::Blake3(Box::new(blake3::Hasher::new())),
+            Algorithm::Blake3 => Self::Blake3(Box::default()),
         }
     }
     fn update(&mut self, bytes: &[u8]) {

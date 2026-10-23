@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod ac_server;
+pub mod authority_server;
 pub mod bep_server;
 pub mod bytestream_server;
 pub mod capabilities_server;

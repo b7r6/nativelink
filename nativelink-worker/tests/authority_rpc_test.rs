@@ -1,0 +1,1028 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! Actual RPC ingress, automatic committed coordinator, retained recipient and
+//! real process fixture. This does not mount a production construction path.
+#![cfg(target_os = "linux")]
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+use futures::stream;
+use nativelink_util::background_spawn;
+use nativelink_config::cas_server::{UploadActionResultConfig, UploadCacheResultsStrategy};
+use nativelink_config::stores::{FastSlowSpec, FilesystemSpec, MemorySpec, StoreDirection, StoreSpec};
+use nativelink_macro::nativelink_test;
+use nativelink_proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
+use nativelink_proto::build::bazel::remote::execution::v2::execution_server::ExecutionServer;
+use nativelink_proto::build::bazel::remote::execution::v2::action_cache_client::ActionCacheClient;
+use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
+use nativelink_proto::build::bazel::remote::execution::v2::{Action, ActionResult, Command, Directory, ExecuteRequest, ExecuteResponse, Platform, RequestMetadata, UpdateActionResultRequest, WaitExecutionRequest};
+use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
+use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{AuthorityAttemptPhase, AuthorityResources, AuthorityWorkerIdentity};
+use nativelink_proto::google::longrunning::{Operation, operation};
+use nativelink_scheduler::authority::journal::Singleton;
+use nativelink_scheduler::authority::{ClusterEpoch, EffectKind, Limits, ObservableState, Phase, Resources};
+use nativelink_service::authority_server::{AuthorityService, CoordinatorTask, QualificationConfig, QualificationFaults};
+use nativelink_store::ac_utils::serialize_and_upload_message;
+use nativelink_store::fast_slow_store::FastSlowStore;
+use nativelink_store::filesystem_store::FilesystemStore;
+use nativelink_store::memory_store::MemoryStore;
+use nativelink_util::common::DigestInfo;
+use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
+use nativelink_util::store_trait::{Store, StoreLike};
+use nativelink_worker::authority_worker::AuthorityWorker;
+use nativelink_worker::authority_worker_transport::run_reconnecting;
+use nativelink_worker::namespace_utils;
+use nativelink_worker::running_actions_manager::{ExecutionConfiguration, PersistentWorkersSettings, RunningActionsManagerArgs, RunningActionsManagerImpl, UseNamespaces};
+use prost::Message;
+use tempfile::TempDir;
+use tokio::net::TcpListener;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
+use tonic::transport::{Channel, Endpoint, Server};
+use tonic::{Request, Streaming};
+
+const EPOCH: ClusterEpoch = ClusterEpoch(1);
+const IDENTITY: AuthorityWorkerIdentity = AuthorityWorkerIdentity {
+    cluster_epoch: 1,
+    worker_id: 2,
+    incarnation_id: 3,
+};
+const CAPACITY: Resources = Resources {
+    cpu_millis: 2000,
+    memory_bytes: 1024 * 1024 * 1024,
+    slots: 2,
+};
+const fn resources(value: Resources) -> AuthorityResources {
+    AuthorityResources {
+        cpu_millis: value.cpu_millis,
+        memory_bytes: value.memory_bytes,
+        slots: value.slots,
+    }
+}
+
+struct Context {
+    directory: TempDir,
+    cas: Arc<FastSlowStore>,
+    ac: Arc<MemoryStore>,
+    history: Arc<MemoryStore>,
+    worker: Arc<AuthorityWorker<RunningActionsManagerImpl>>,
+}
+
+impl Context {
+    async fn new(single_use: bool) -> Self {
+        Self::with_slow_store(
+            single_use,
+            Store::new(MemoryStore::new(&MemorySpec::default())),
+            Duration::from_secs(10),
+        )
+        .await
+    }
+
+    async fn with_slow_store(single_use: bool, slow: Store, download_timeout: Duration) -> Self {
+        let directory = TempDir::new().unwrap();
+        let filesystem = FilesystemSpec {
+            content_path: directory
+                .path()
+                .join("content")
+                .to_string_lossy()
+                .into_owned(),
+            temp_path: directory.path().join("temp").to_string_lossy().into_owned(),
+            ..FilesystemSpec::default()
+        };
+        let fast: Arc<FilesystemStore> = FilesystemStore::new(&filesystem).await.unwrap();
+        let cas = FastSlowStore::new(
+            &FastSlowSpec {
+                fast: StoreSpec::Filesystem(filesystem),
+                slow: StoreSpec::Memory(MemorySpec::default()),
+                fast_direction: StoreDirection::default(),
+                slow_direction: StoreDirection::default(),
+                bypass_dedup_threshold_bytes: 0,
+            },
+            Store::new(fast),
+            slow,
+        );
+        let ac = MemoryStore::new(&MemorySpec::default());
+        let history = MemoryStore::new(&MemorySpec::default());
+        let actions = directory.path().join("actions");
+        std::fs::create_dir(&actions).unwrap();
+        let manager = Arc::new(
+            RunningActionsManagerImpl::new(RunningActionsManagerArgs {
+                root_action_directory: actions.to_string_lossy().into_owned(),
+                execution_configuration: ExecutionConfiguration {
+                    persistent_workers: PersistentWorkersSettings {
+                        enabled: false,
+                        ..PersistentWorkersSettings::default()
+                    },
+                    ..ExecutionConfiguration::default()
+                },
+                cas_store: cas.clone(),
+                // Deliberately configure the legacy publication facility. The new
+                // recipient must not use it, even when the old policy says upload.
+                ac_store: Some(Store::new(ac.clone())),
+                historical_store: Store::new(history.clone()),
+                upload_action_result_config: &UploadActionResultConfig {
+                    upload_ac_results_strategy: UploadCacheResultsStrategy::Everything,
+                    upload_historical_results_strategy: Some(
+                        UploadCacheResultsStrategy::Everything,
+                    ),
+                    success_message_template: "legacy history link must not appear".to_owned(),
+                    ..UploadActionResultConfig::default()
+                },
+                max_action_timeout: Duration::from_secs(30),
+                max_upload_timeout: Duration::from_secs(10),
+                max_download_timeout: download_timeout,
+                max_cleanup_wait: Duration::from_secs(10),
+                max_cleanup_backoff: Duration::from_millis(10),
+                timeout_handled_externally: false,
+                directory_cache: None,
+                active_input_leases: true,
+                readonly_input_mounts: Vec::new(),
+                use_namespaces: UseNamespaces::Yes,
+            })
+            .unwrap(),
+        );
+        let worker = AuthorityWorker::new(
+            IDENTITY,
+            single_use,
+            resources(CAPACITY),
+            8,
+            64 * 1024,
+            manager,
+        )
+        .unwrap();
+        Self {
+            directory,
+            cas,
+            ac,
+            history,
+            worker,
+        }
+    }
+
+    async fn request(&self, timeout: i64) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
+        let marker = self.directory.path().join("executed");
+        let release = self.directory.path().join("release");
+        let command = Command {
+            arguments: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                format!(
+                    "printf x >> '{}'; while [ ! -f '{}' ]; do /bin/sleep 0.02; done; printf artifact > output; printf stdout; printf stderr >&2",
+                    marker.display(),
+                    release.display()
+                ),
+            ],
+            output_files: vec!["output".to_owned()],
+            ..Command::default()
+        };
+        let command_digest = serialize_and_upload_message(
+            &command,
+            self.cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await
+        .unwrap();
+        let input_root_digest = serialize_and_upload_message(
+            &Directory::default(),
+            self.cas.as_pin(),
+            &mut DigestHasherFunc::Sha256.hasher(),
+        )
+        .await
+        .unwrap();
+        let action = Action {
+            command_digest: Some(command_digest.into()),
+            input_root_digest: Some(input_root_digest.into()),
+            timeout: Some(prost_types::Duration {
+                seconds: timeout,
+                nanos: 0,
+            }),
+            platform: Some(Platform {
+                properties: vec![
+                    Property {
+                        name: "cpu_count".to_owned(),
+                        value: "1".to_owned(),
+                    },
+                    Property {
+                        name: "memory_kb".to_owned(),
+                        value: "1024".to_owned(),
+                    },
+                ],
+            }),
+            ..Action::default()
+        };
+        let mut bytes = action.encode_to_vec();
+        // A valid unknown protobuf field is retained in original CAS bytes.
+        bytes.extend_from_slice(&[0xf8, 0xf0, 0x04, 1]);
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        hasher.update(&bytes);
+        let digest = hasher.finalize_digest();
+        self.cas
+            .update_oneshot(digest, bytes.clone().into())
+            .await
+            .unwrap();
+        (
+            ExecuteRequest {
+                instance_name: "rpc-test".to_owned(),
+                action_digest: Some(digest.into()),
+                digest_function: 1,
+                skip_cache_lookup: true,
+                ..ExecuteRequest::default()
+            },
+            digest,
+            bytes,
+        )
+    }
+
+    fn release(&self) {
+        std::fs::write(self.directory.path().join("release"), b"go").unwrap();
+    }
+    fn assert_once(&self) {
+        assert_eq!(
+            std::fs::read(self.directory.path().join("executed")).unwrap(),
+            b"x"
+        );
+    }
+}
+
+struct Runtime {
+    service: AuthorityService,
+    task: CoordinatorTask,
+    client: ExecutionClient<Channel>,
+    worker_channel: Channel,
+    worker_address: SocketAddr,
+    servers: Vec<JoinHandle<Result<(), tonic::transport::Error>>>,
+}
+
+impl Runtime {
+    async fn start(
+        context: &Context,
+        clock: Arc<AtomicU64>,
+        faults: Arc<QualificationFaults>,
+        worker_address: Option<SocketAddr>,
+    ) -> Self {
+        let authority = Singleton::open(
+            context.directory.path().join("authority.redb"),
+            1,
+            EPOCH,
+            Limits::default(),
+        )
+        .await
+        .unwrap();
+        let (service, task) = AuthorityService::start(
+            authority,
+            QualificationConfig {
+                instance: "rpc-test".to_owned(),
+                principal: "trusted-local-fixture".to_owned(),
+                cas: Store::new(context.cas.clone()),
+                publication_sink: Store::new(context.ac.clone()),
+                now: Arc::new(move || clock.load(Ordering::Relaxed)),
+                faults,
+            },
+        )
+        .await
+        .unwrap();
+        let listener =
+            TcpListener::bind(worker_address.unwrap_or_else(|| "127.0.0.1:0".parse().unwrap()))
+                .await
+                .unwrap();
+        let worker_address = listener.local_addr().unwrap();
+        let incoming = stream::unfold(listener, |listener| async {
+            Some((
+                listener.accept().await.map(|(connection, _)| connection),
+                listener,
+            ))
+        });
+        let worker_server = background_spawn!(
+            "authority_rpc_fixture",
+            Server::builder()
+                .add_service(AuthorityWorkerApiServer::new(service.clone()))
+                .serve_with_incoming(incoming),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client_address = listener.local_addr().unwrap();
+        let incoming = stream::unfold(listener, |listener| async {
+            Some((
+                listener.accept().await.map(|(connection, _)| connection),
+                listener,
+            ))
+        });
+        let client_server = background_spawn!(
+            "authority_rpc_fixture",
+            Server::builder()
+                .add_service(ExecutionServer::new(service.clone()))
+                .serve_with_incoming(incoming),
+        );
+        let client = ExecutionClient::new(
+            Endpoint::from_shared(format!("http://{client_address}"))
+                .unwrap()
+                .connect()
+                .await
+                .unwrap(),
+        );
+        let worker_channel = Endpoint::from_shared(format!("http://{worker_address}"))
+            .unwrap()
+            .connect_timeout(Duration::from_secs(1))
+            .connect()
+            .await
+            .unwrap();
+        Self {
+            service,
+            task,
+            client,
+            worker_channel,
+            worker_address,
+            servers: vec![worker_server, client_server],
+        }
+    }
+
+    async fn wait(
+        &self,
+        predicate: impl Fn(&ObservableState) -> bool + Send + Sync,
+    ) -> Arc<ObservableState> {
+        let mut state = self.service.subscribe();
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                let value = state.borrow_and_update().clone();
+                if predicate(&value) {
+                    return value;
+                }
+                state.changed().await.unwrap();
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn shutdown(self) {
+        for server in &self.servers {
+            server.abort();
+        }
+        for server in self.servers {
+            let _ignored = server.await;
+        }
+        self.task.shutdown().await.unwrap();
+    }
+}
+
+async fn next_operation(stream: &mut Streaming<Operation>) -> Operation {
+    tokio::time::timeout(Duration::from_secs(20), stream.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+}
+
+async fn terminal(stream: &mut Streaming<Operation>) -> Operation {
+    loop {
+        let operation = next_operation(stream).await;
+        if operation.done {
+            return operation;
+        }
+    }
+}
+
+fn response(operation: &Operation) -> ExecuteResponse {
+    let Some(operation::Result::Response(response)) = &operation.result else {
+        panic!("Expected full ExecuteResponse: {operation:?}");
+    };
+    ExecuteResponse::decode(response.value.as_slice()).unwrap()
+}
+
+fn namespaces() -> bool {
+    if namespace_utils::namespaces_supported(false, false) {
+        true
+    } else {
+        eprintln!(
+            "SKIP: namespaces unavailable; actual RPC/quiescent acceptance remains unqualified"
+        );
+        false
+    }
+}
+
+#[nativelink_test]
+async fn actual_rpc_restart_after_acceptance_retains_candidate_and_publishes_accepted_result() {
+    if !namespaces() {
+        return;
+    }
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    let mut runtime = Runtime::start(&context, clock.clone(), faults.clone(), None).await;
+    let address = runtime.worker_address;
+    let (stop, stopped) = watch::channel(false);
+    let supervisor = background_spawn!(
+        "authority_rpc_fixture",
+        run_reconnecting(
+            context.worker.clone(),
+            Endpoint::from_shared(format!("http://{}", runtime.worker_address))
+                .unwrap()
+                .connect_timeout(Duration::from_secs(1)),
+            1,
+            Vec::new(),
+            stopped,
+        )
+    );
+    runtime.wait(|view| view.workers.len() == 1).await;
+    let (execute, action_digest, original_bytes) = context.request(30).await;
+    let mut request = Request::new(execute.clone());
+    request.metadata_mut().insert_bin(
+        "build.bazel.remote.execution.v2.requestmetadata-bin",
+        tonic::metadata::MetadataValue::from_bytes(
+            &RequestMetadata {
+                tool_invocation_id: "rpc-invocation".to_owned(),
+                ..RequestMetadata::default()
+            }
+            .encode_to_vec(),
+        ),
+    );
+    let mut stream = runtime.client.execute(request).await.unwrap().into_inner();
+    let name = next_operation(&mut stream).await.name;
+    let accepted = runtime
+        .wait(|view| {
+            view.attempts
+                .first()
+                .is_some_and(|attempt| attempt.phase == Phase::Running)
+                && !view
+                    .effects
+                    .iter()
+                    .any(|effect| matches!(effect.kind, EffectKind::Dispatch { .. }))
+        })
+        .await;
+    assert_eq!(
+        accepted.executions[0]
+            .request
+            .require_payload()
+            .unwrap()
+            .action_bytes(),
+        original_bytes
+    );
+    let dispatch = accepted.attempts[0].dispatch_effect;
+    assert_ne!(dispatch.0, 0);
+    assert!(!accepted.reservations[0].released);
+    assert!(context.ac.has(action_digest).await.unwrap().is_none());
+    context.assert_once();
+    // The outbox no longer contains Dispatch. Recovery must use the persisted
+    // attempt receipt fence, not an Effect retained by the test coordinator.
+    runtime.shutdown().await;
+    drop(stream);
+    context.release();
+    let mut changed = context.worker.subscribe();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if context.worker.reconcile().attempts.iter().any(|report| {
+                report.phase == AuthorityAttemptPhase::Quiescent as i32 && report.result.is_some()
+            }) {
+                break;
+            }
+            changed.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert!(context.ac.has(action_digest).await.unwrap().is_none());
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_publications.store(true, Ordering::Relaxed);
+    runtime = Runtime::start(&context, clock.clone(), faults, Some(address)).await;
+    let completed = runtime
+        .wait(|view| {
+            view.operations
+                .first()
+                .is_some_and(|operation| operation.terminal.is_some())
+        })
+        .await;
+    assert_eq!(completed.attempts[0].dispatch_effect, dispatch);
+    assert!(completed.reservations[0].released);
+    assert_eq!(completed.workers[0].charged, Resources::default());
+    assert!(completed.workers[0].session.0 > 1);
+    let mut stream = runtime
+        .client
+        .wait_execution(WaitExecutionRequest { name: name.clone() })
+        .await
+        .unwrap()
+        .into_inner();
+    let final_operation = terminal(&mut stream).await;
+    let full = response(&final_operation);
+    assert_eq!(full.result.as_ref().unwrap().exit_code, 0);
+    assert_eq!(full.result.as_ref().unwrap().output_files.len(), 1);
+    assert_eq!(context.history.len_for_test(), 0);
+    assert!(context.ac.has(action_digest).await.unwrap().is_none());
+    assert!(
+        completed
+            .effects
+            .iter()
+            .any(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
+    );
+    runtime.shutdown().await;
+    runtime = Runtime::start(
+        &context,
+        clock,
+        Arc::new(QualificationFaults::default()),
+        Some(address),
+    )
+    .await;
+    runtime.wait(|view| view.effects.is_empty()).await;
+    let mut stream = runtime
+        .client
+        .wait_execution(WaitExecutionRequest { name })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(terminal(&mut stream).await, final_operation);
+    assert_eq!(
+        ActionResult::decode(
+            context
+                .ac
+                .get_part_unchunked(action_digest, 0, None)
+                .await
+                .unwrap()
+        )
+        .unwrap(),
+        full.result.unwrap()
+    );
+    let mut cache_request = execute;
+    cache_request.skip_cache_lookup = false;
+    let mut cached = runtime
+        .client
+        .execute(cache_request)
+        .await
+        .unwrap()
+        .into_inner();
+    let cached = response(&terminal(&mut cached).await);
+    assert!(cached.cached_result);
+    assert_eq!(cached.result.as_ref().unwrap().exit_code, 0);
+    context.assert_once();
+    // Real worker listener does not mount a mutable AC route.
+    let mut ac_client = ActionCacheClient::new(runtime.worker_channel.clone());
+    let rejected = ac_client
+        .update_action_result(UpdateActionResultRequest {
+            instance_name: "rpc-test".to_owned(),
+            action_digest: Some(action_digest.into()),
+            action_result: Some(ActionResult::default()),
+            ..UpdateActionResultRequest::default()
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(rejected.code(), tonic::Code::Unimplemented);
+    stop.send(true).unwrap();
+    supervisor.await.unwrap().unwrap();
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_RPC: automatic match, accepted-dispatch restart, retained candidate, stable WaitExecution and publication restart exercised"
+    );
+}
+
+#[nativelink_test]
+async fn automatic_deadlines_cleanup_retirement_and_ingress_ids_survive_restart() {
+    if !namespaces() {
+        return;
+    }
+    let context = Context::new(true).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let mut runtime = Runtime::start(
+        &context,
+        clock.clone(),
+        Arc::new(QualificationFaults::default()),
+        None,
+    )
+    .await;
+    let address = runtime.worker_address;
+    let (stop, stopped) = watch::channel(false);
+    let supervisor = background_spawn!(
+        "authority_rpc_fixture",
+        run_reconnecting(
+            context.worker.clone(),
+            Endpoint::from_shared(format!("http://{}", runtime.worker_address))
+                .unwrap()
+                .connect_timeout(Duration::from_secs(1)),
+            1,
+            Vec::new(),
+            stopped,
+        )
+    );
+    runtime.wait(|view| view.workers.len() == 1).await;
+    let (execute, _, _) = context.request(5).await;
+    let mut stream = runtime
+        .client
+        .execute(execute.clone())
+        .await
+        .unwrap()
+        .into_inner();
+    let original_name = next_operation(&mut stream).await.name;
+    let running = runtime
+        .wait(|view| {
+            view.attempts
+                .first()
+                .is_some_and(|attempt| attempt.phase == Phase::Running)
+        })
+        .await;
+    assert_eq!(running.attempts[0].running_deadline, Some(5));
+    clock.store(6, Ordering::Relaxed);
+    runtime
+        .wait(|view| {
+            view.attempts
+                .first()
+                .is_some_and(|attempt| !attempt.authorized)
+                && view
+                    .reservations
+                    .first()
+                    .is_some_and(|reservation| reservation.released)
+        })
+        .await;
+    context.assert_once();
+    assert_eq!(context.history.len_for_test(), 0);
+    clock.store(301, Ordering::Relaxed);
+    runtime
+        .wait(|view| {
+            view.operations
+                .first()
+                .is_some_and(|operation| operation.terminal.is_some())
+        })
+        .await;
+    assert!(terminal(&mut stream).await.done);
+    clock.store(602, Ordering::Relaxed);
+    runtime.wait(|view| view.operations.is_empty()).await;
+    runtime.shutdown().await;
+    runtime = Runtime::start(
+        &context,
+        clock,
+        Arc::new(QualificationFaults::default()),
+        Some(address),
+    )
+    .await;
+    let mut stream = runtime.client.execute(execute).await.unwrap().into_inner();
+    let next_name = next_operation(&mut stream).await.name;
+    assert_ne!(next_name, original_name);
+    let old_id: u64 = original_name.rsplit('/').next().unwrap().parse().unwrap();
+    let next_id: u64 = next_name.rsplit('/').next().unwrap().parse().unwrap();
+    assert!(next_id > old_id);
+    assert_eq!(
+        runtime
+            .client
+            .wait_execution(WaitExecutionRequest {
+                name: original_name
+            })
+            .await
+            .unwrap_err()
+            .code(),
+        tonic::Code::NotFound
+    );
+    stop.send(true).unwrap();
+    supervisor.await.unwrap().unwrap();
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_RPC: automatic execution timer, cancellation cleanup, interest expiry, retirement and persisted ingress watermark exercised"
+    );
+}
+
+#[nativelink_test]
+async fn actual_rpc_cancel_before_first_dispatch_releases_only_after_recipient_tombstone() {
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_dispatches.store(true, Ordering::Relaxed);
+    let mut runtime = Runtime::start(&context, clock.clone(), faults, None).await;
+    let (stop, stopped) = watch::channel(false);
+    let supervisor = background_spawn!(
+        "authority_rpc_fixture",
+        run_reconnecting(
+            context.worker.clone(),
+            Endpoint::from_shared(format!("http://{}", runtime.worker_address)).unwrap(),
+            1,
+            Vec::new(),
+            stopped,
+        )
+    );
+    runtime.wait(|view| view.workers.len() == 1).await;
+    let (execute, _, _) = context.request(30).await;
+    let mut stream = runtime.client.execute(execute).await.unwrap().into_inner();
+    let _operation = next_operation(&mut stream).await;
+    let dispatching = runtime
+        .wait(|view| {
+            view.attempts
+                .first()
+                .is_some_and(|attempt| attempt.phase == Phase::Dispatching)
+        })
+        .await;
+    assert!(!dispatching.reservations[0].released);
+    assert!(context.worker.reconcile().attempts.is_empty());
+    clock.store(301, Ordering::Relaxed);
+    let cleaned = runtime
+        .wait(|view| {
+            view.reservations
+                .first()
+                .is_some_and(|reservation| reservation.released)
+        })
+        .await;
+    assert_eq!(cleaned.workers[0].charged, Resources::default());
+    let inventory = context.worker.reconcile();
+    assert_eq!(inventory.attempts.len(), 1);
+    assert_eq!(inventory.attempts[0].dispatch_effect_id, 0);
+    assert_ne!(inventory.attempts[0].cancel_effect_id, 0);
+    assert_eq!(
+        inventory.attempts[0].phase,
+        AuthorityAttemptPhase::Quiescent as i32
+    );
+    assert!(!context.directory.path().join("executed").exists());
+    stop.send(true).unwrap();
+    supervisor.await.unwrap().unwrap();
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_RPC: cancel arrived before any dispatch, exact committed cancel receipt released the original grant"
+    );
+}
+
+#[nativelink_test]
+async fn wire_invalid_reports_and_cancel_fences_cannot_accept_or_refund_work() {
+    use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_client::AuthorityWorkerApiClient;
+    use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
+        AuthorityAttemptIdentity, AuthorityAttemptReport, AuthorityCapacityObservation,
+        AuthorityDecline, AuthoritySession, AuthorityWorkerUpdate, authority_attempt_report,
+        authority_worker_update,
+    };
+    use tokio::sync::mpsc;
+
+    let context = Context::new(false).await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_dispatches.store(true, Ordering::Relaxed);
+    let mut runtime = Runtime::start(&context, clock.clone(), faults, None).await;
+    let (sender, receiver) = mpsc::channel(8);
+    let session = AuthoritySession {
+        worker: Some(IDENTITY),
+        session_id: 1,
+    };
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Registration(
+                context.worker.make_registration(1, Vec::new()).unwrap(),
+            )),
+        })
+        .await
+        .unwrap();
+    let updates = stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|value| (value, receiver))
+    });
+    let mut client = AuthorityWorkerApiClient::new(runtime.worker_channel.clone());
+    let mut responses = client.connect(updates).await.unwrap().into_inner();
+    assert!(responses.message().await.unwrap().is_some());
+    let (execute, _, _) = context.request(30).await;
+    let mut operation = runtime
+        .client
+        .execute(execute.clone())
+        .await
+        .unwrap()
+        .into_inner();
+    let name = next_operation(&mut operation).await.name;
+    let dispatching = runtime.wait(|view| !view.attempts.is_empty()).await;
+    let attempt = dispatching.attempts[0];
+    let target = AuthorityAttemptIdentity {
+        worker: Some(IDENTITY),
+        execution_id: attempt.execution.0,
+        attempt_id: attempt.id.0,
+    };
+    let report = AuthorityAttemptReport {
+        attempt: Some(target),
+        dispatch_effect_id: attempt.dispatch_effect.0,
+        observation_sequence: 1,
+        phase: 999,
+        ..AuthorityAttemptReport::default()
+    };
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Report(report.clone())),
+        })
+        .await
+        .unwrap();
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Report(
+                AuthorityAttemptReport {
+                    phase: AuthorityAttemptPhase::Running as i32,
+                    observation_sequence: 0,
+                    ..report.clone()
+                },
+            )),
+        })
+        .await
+        .unwrap();
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Report(
+                AuthorityAttemptReport {
+                    phase: AuthorityAttemptPhase::Running as i32,
+                    dispatch_effect_id: report.dispatch_effect_id + 1,
+                    ..report.clone()
+                },
+            )),
+        })
+        .await
+        .unwrap();
+    let capacity = |sequence, draining| AuthorityWorkerUpdate {
+        update: Some(authority_worker_update::Update::Capacity(
+            AuthorityCapacityObservation {
+                session: Some(session),
+                observation_sequence: sequence,
+                capacity: Some(resources(CAPACITY)),
+                admission_ceiling: Some(resources(CAPACITY)),
+                draining,
+            },
+        )),
+    };
+    // Capacity is an ordering barrier on the same incoming HTTP/2 stream.
+    sender.send(capacity(1, true)).await.unwrap();
+    let unchanged = runtime.wait(|view| view.workers[0].draining).await;
+    assert_eq!(unchanged.attempts[0], attempt);
+    assert!(!unchanged.reservations[0].released);
+    assert!(
+        unchanged
+            .effects
+            .iter()
+            .any(|effect| effect.id == attempt.dispatch_effect)
+    );
+
+    // The global bound applies before capture, and held observation streams
+    // retain their permits. One worker + one Execute + 62 observers fill it.
+    let mut observers = Vec::new();
+    for _ in 0..62 {
+        observers.push(
+            runtime
+                .client
+                .wait_execution(WaitExecutionRequest { name: name.clone() })
+                .await
+                .unwrap()
+                .into_inner(),
+        );
+    }
+    assert_eq!(
+        runtime
+            .client
+            .execute(ExecuteRequest::default())
+            .await
+            .unwrap_err()
+            .code(),
+        tonic::Code::ResourceExhausted
+    );
+    drop(observers);
+
+    clock.store(301, Ordering::Relaxed);
+    let revoked = runtime.wait(|view| !view.attempts[0].authorized).await;
+    let cancel = revoked
+        .effects
+        .iter()
+        .find(|effect| matches!(effect.kind, EffectKind::Cancel { .. }))
+        .unwrap()
+        .id;
+    let closed = AuthorityAttemptReport {
+        dispatch_effect_id: 0,
+        cancel_effect_id: cancel.0 + 1,
+        phase: AuthorityAttemptPhase::Quiescent as i32,
+        observation_sequence: 2,
+        ..report
+    };
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Report(closed.clone())),
+        })
+        .await
+        .unwrap();
+    sender.send(capacity(2, false)).await.unwrap();
+    let still_charged = runtime.wait(|view| !view.workers[0].draining).await;
+    assert!(!still_charged.reservations[0].released);
+    sender
+        .send(AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Report(
+                AuthorityAttemptReport {
+                    cancel_effect_id: cancel.0,
+                    observation_sequence: 3,
+                    result: Some(authority_attempt_report::Result::Decline(
+                        AuthorityDecline {
+                            reason: 2,
+                            detail: "recipient tombstone".to_owned(),
+                        },
+                    )),
+                    ..closed
+                },
+            )),
+        })
+        .await
+        .unwrap();
+    let cleaned = runtime.wait(|view| view.reservations[0].released).await;
+    assert_eq!(cleaned.workers[0].charged, Resources::default());
+    for oversized in [
+        authority_attempt_report::Result::ExecuteResponse(ExecuteResponse {
+            result: Some(ActionResult {
+                stdout_raw: vec![255; 64 * 1024 - 128].into(),
+                ..ActionResult::default()
+            }),
+            ..ExecuteResponse::default()
+        }),
+        authority_attempt_report::Result::InternalError(nativelink_proto::google::rpc::Status {
+            code: tonic::Code::Internal as i32,
+            message: "\u{0001}".repeat(9000),
+            details: Vec::new(),
+        }),
+    ] {
+        let mut operation = runtime
+            .client
+            .execute(execute.clone())
+            .await
+            .unwrap()
+            .into_inner();
+        let _initial = next_operation(&mut operation).await;
+        let pending = runtime
+            .wait(|view| view.attempts.iter().any(|attempt| attempt.authorized))
+            .await;
+        let attempt = pending
+            .attempts
+            .iter()
+            .find(|attempt| attempt.authorized)
+            .unwrap();
+        sender
+            .send(AuthorityWorkerUpdate {
+                update: Some(authority_worker_update::Update::Report(
+                    AuthorityAttemptReport {
+                        attempt: Some(AuthorityAttemptIdentity {
+                            worker: Some(IDENTITY),
+                            execution_id: attempt.execution.0,
+                            attempt_id: attempt.id.0,
+                        }),
+                        dispatch_effect_id: attempt.dispatch_effect.0,
+                        observation_sequence: 1,
+                        phase: AuthorityAttemptPhase::Quiescent as i32,
+                        result: Some(oversized),
+                        ..AuthorityAttemptReport::default()
+                    },
+                )),
+            })
+            .await
+            .unwrap();
+        let completed = response(&terminal(&mut operation).await);
+        assert_eq!(
+            completed.status.unwrap().code,
+            tonic::Code::ResourceExhausted as i32
+        );
+        assert!(completed.result.is_none());
+        let clean = runtime
+            .wait(|view| view.workers[0].charged == Resources::default())
+            .await;
+        assert!(
+            !clean
+                .effects
+                .iter()
+                .any(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
+        );
+    }
+    assert!(!context.directory.path().join("executed").exists());
+    drop(responses);
+    drop(sender);
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_RPC: invalid phase/zero sequence/wrong dispatch rejected, stream concurrency bounded, wrong cancel cannot refund, revoked decline closes only exact cancel"
+    );
+}
+
+#[nativelink_test]
+async fn undersized_core_payload_refuses_rpc_constructor_and_closes_journal() {
+    let context = Context::new(false).await;
+    let path = context.directory.path().join("small-authority.redb");
+    let limits = Limits {
+        max_payload_bytes: 64 * 1024 - 1,
+        ..Limits::default()
+    };
+    let authority = Singleton::open(&path, 1, EPOCH, limits).await.unwrap();
+    let rejected = AuthorityService::start(
+        authority,
+        QualificationConfig {
+            instance: "rpc-test".to_owned(),
+            principal: "trusted-local-fixture".to_owned(),
+            cas: Store::new(context.cas.clone()),
+            publication_sink: Store::new(context.ac.clone()),
+            now: Arc::new(|| 0),
+            faults: Arc::new(QualificationFaults::default()),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(rejected.contains("64 KiB"));
+    Singleton::open(&path, 1, EPOCH, limits)
+        .await
+        .unwrap()
+        .shutdown()
+        .await
+        .unwrap();
+}

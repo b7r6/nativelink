@@ -1,0 +1,219 @@
+{
+  "scope": "Experimental activation/runtime/closure integration, not canonical production construction, deployed authentication, format freeze, or retention protection. Root full Cargo precedes the explicitly recorded filesystem constructor and fixture-isolation corrections; focused Cargo and final Bazel cover those final sources. Agent receipts retain their isolated source provenance and earlier fixture counts. Mutation compiler failures/unmatched filters do not count; actual panic sites reviewed. Buildifier sorted worker test declarations and taplo sorted dev dependencies after initial runs, without semantic changes.",
+  "base_commit": "ca19d53f3316a43284847c0f5aeb7bb6618a0fed",
+  "source_sha256": {
+    "Cargo.lock": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto": "8a839bfc8a2b7f3c251ca5d6e61e6071918a0a4d0b0bb7e2f11c056d61997557",
+    "nativelink-scheduler/BUILD.bazel": "04d485734e201fe11c29ae44a09af735559822e8daffeab266256683aa266438",
+    "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+    "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+    "nativelink-scheduler/src/authority/mod.rs": "ed30463703b334df7302d9a4f30407284caf55d1ae4dab61223c7bf2f83527e2",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/tests.rs": "1c856f49659a34d27e7f5d155d87c548a7e8d73bdd864d54affef164b52c8465",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/tests/authority_format_test.rs": "00b70d17aed58595ed0995dade07b8b9dc197946894fd0e06897d0b133ab7a29",
+    "nativelink-service/BUILD.bazel": "91e87f81764f71f32e993a1f8428d1a929e5c72deb33c1efbe28bf2dbc73f1cc",
+    "nativelink-service/Cargo.toml": "24c6f7a24e2f2de78538aa547c2db55ed5d6707a6e91bcf5adc87ee939a9ec4a",
+    "nativelink-service/src/authority_server.rs": "81e7b6883645ac1b57ff30cbe76ee7cc699e24fd9ddc4300dcac58c245cee463",
+    "nativelink-service/src/lib.rs": "5b64f8e6fc8e995810cb3bb7c2467334cbbdd609d9840e9529fb105d24db159c",
+    "nativelink-store/BUILD.bazel": "da2e30ce67249d524522ef05855c25acd6660978ce39a146ed5084721c51927f",
+    "nativelink-store/src/lib.rs": "bbfd3018f7b3a0e81db631f50fe416a134a43cf2b5836fc9a1c12f7ea637dc06",
+    "nativelink-store/src/physical_closure.rs": "074be17aa9a3d3bed98df50e434186a75391f5afcb2a3f9a0fd919fd35cad2fe",
+    "nativelink-store/src/physical_filesystem.rs": "f697dfb772c9c400cf8311870c8c8c8ae9c8a5ae5ca6547c1b37db96771157eb",
+    "nativelink-store/tests/filesystem_store_test.rs": "a004a720a3562e9a0e968688b90ec5d7866f711bdf0605ec33fb6446031c7877",
+    "nativelink-store/tests/physical_closure_test.rs": "ee11125c57de9b6fd2f044e4891094595a9f765450b75d99ffefca57718798a6",
+    "nativelink-worker/BUILD.bazel": "25f9d32a27ced883f5613ac71b45443e182b806f05b91103a68e385fe56a8d5e",
+    "nativelink-worker/Cargo.toml": "e3c32b845c4fa943e8c0ac6a82c5b840da9dff156430f7b51d4f4e3eba45353d",
+    "nativelink-worker/src/authority_worker.rs": "a39bf106b8d1e1f4f72a2d21c9ccde3ca1860adfd19f672ffbff83f120b9fdd2",
+    "nativelink-worker/src/authority_worker_transport.rs": "10d77e35342ce23c6abeba39e455d8729e827dd87245408cfd33aa3326f78b7f",
+    "nativelink-worker/tests/authority_rpc_test.rs": "aed82ca465906ea39e70ffddd357c740e75973a0694f77239b0dfd9ad28efad5",
+    "tools/test-coordinator-mutations.py": "17f7888543432ea28b4f5c447bac74e2d2a86b6e44b0efb5807651e549019910"
+  },
+  "logs": [
+    {
+      "file": "activation-runtime-closure-cargo-final.log.gz",
+      "uncompressed_sha256": "799d5bbfbe0850baf50752c6bdabc687dd3b51f133a961c9906581b198583225",
+      "archive_sha256": "039d5accab52addd6f81acd45a5d05d548c943aaeb15fa1ab4a8babf4f7187c8",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler -p nativelink-store -p nativelink-service -p nativelink-worker --lib --test authority_cluster_test --test authority_format_test --test authority_raft_test --test authority_volatile_test --test physical_closure_test --test authority_rpc_test",
+      "result": "175 passed across 10 summaries"
+    },
+    {
+      "file": "activation-runtime-closure-bazel-final.log.gz",
+      "uncompressed_sha256": "c4e49a674852b1d47c543f5f03581f56fe08b98e4dd6dd4c456d53c17c7fb8f2",
+      "archive_sha256": "1489d80d9c244f23e1aa576ae02dfe9aaeb9cedd9001854cda36c1f30a63a2a3",
+      "command": "bazel test //nativelink-scheduler:integration_tests/authority_format_test_test //nativelink-scheduler:integration_tests/authority_cluster_test_test //nativelink-worker:integration_tests/authority_rpc_test_test //nativelink-service:unit_test //nativelink-store:integration_tests/physical_closure_test_test --jobs=24 --test_output=errors",
+      "result": "5 targets passed"
+    },
+    {
+      "file": "activation-runtime-closure-workspace-cargo.log.gz",
+      "uncompressed_sha256": "e1762c54389dc7235dff88db7c42cf9e00dc640151271a00e83f9ff48a40a008",
+      "archive_sha256": "6b1da85d4d3543dd2cf9062c26a6965ad3ac86f1fb5367cb2fabf8a3b83e69cb",
+      "command": "cargo test --locked --offline --profile smol --workspace -j 24",
+      "result": "1627 reported passes, zero failures, 5 ignored across148 summaries; precedes physical Box::default and filesystem fixture guard corrections, which have separate focused checks"
+    },
+    {
+      "file": "activation-runtime-closure-workspace-bazel.log.gz",
+      "uncompressed_sha256": "a59594b12190d735ad2ceb54bd52c235131c8795b67c52a807ab5ad15d942cf9",
+      "archive_sha256": "8e68dfdd134fa01a7aa8a6e11c9763c67a97faa4d7ad89655451cbff3a56a1d3",
+      "command": "bazel test //... --jobs=24 --test_output=errors",
+      "result": "Failed Clippy box_default on earlier physical implementation; retained"
+    },
+    {
+      "file": "activation-runtime-closure-workspace-bazel-final.log.gz",
+      "uncompressed_sha256": "f838344e0a603ff3c50f344a14883027f059f048c0683103a6b4e1d9a0c9b847",
+      "archive_sha256": "583b338db0f9b5a061ccde0fb83a0413784a46d79edc53e2c72e05f8e1e97336",
+      "command": "bazel test //... --jobs=24 --test_output=errors",
+      "result": "140 targets passed, filesystem fixture failed3 global-budget assertions; retained"
+    },
+    {
+      "file": "activation-runtime-closure-workspace-bazel-corrected.log.gz",
+      "uncompressed_sha256": "14dd6beff66e9f5c2d27c59bfe87b2688e1dddf8a920b1b8ae776debb6290a1f",
+      "archive_sha256": "90270eb4e86f2669ccc1b25367abead61a14c1aa87c5ba0c43398fe5f76f61aa",
+      "command": "bazel test //... --jobs=24 --test_output=errors",
+      "result": "140 targets passed, fixture Clippy failed because guards preceded local item declarations; retained"
+    },
+    {
+      "file": "activation-runtime-closure-workspace-bazel-passed.log.gz",
+      "uncompressed_sha256": "748929ed850fbcb86f47726da2077d22c68920a24b2e37217568324ae53e56fd",
+      "archive_sha256": "88da8fc22ec751c2566c4cfae26dd6c820f4156d5e7633aaa53347340d92cba1",
+      "command": "bazel test //... --jobs=24 --test_output=errors",
+      "result": "141 targets passed; final corrected source"
+    },
+    {
+      "file": "filesystem-budget-isolation-cargo.log.gz",
+      "uncompressed_sha256": "1d45bc1ef787bbccf978152c1488405221bb0448cc48d1884f7c2570f842233e",
+      "archive_sha256": "41f7dc0bbb6d106da83ee62368972b7bb55eac96c00edca6646e8cf584ac13c5",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-store --test filesystem_store_test --test physical_filesystem_test",
+      "result": "57 filesystem fixtures and10 physical generation tests passed after both corrections"
+    },
+    {
+      "file": "coordinator-mutations-runner.log.gz",
+      "uncompressed_sha256": "85b1fae0bce12bce43aceb177db1b92cd333677c4dbc7886f845e8c73d717ee4",
+      "archive_sha256": "907e367c395e29ec1d97644a8409ac67bdd357da39e8c92f9b0ed5acbac20774",
+      "command": "python3 tools/test-coordinator-mutations.py --output /tmp/nativelink-categorical-evidence/coordinator-mutations",
+      "result": "Baseline wire test passed; all4 runtime semantic faults detected"
+    },
+    {
+      "file": "filesystem-budget-isolation-clippy.log.gz",
+      "uncompressed_sha256": "310dc8460e9b1d850d87f150f95fd342c1eff68eedf07bf673ea665b82343904",
+      "archive_sha256": "e04e63198011e29d2be76413223d319f1c7e679974e388321bbb79b5fa91a222",
+      "command": "cargo clippy --locked --offline --profile smol -p nativelink-store --test filesystem_store_test --test physical_filesystem_test -- -D warnings",
+      "result": "Passed after both filesystem corrections"
+    }
+  ],
+  "raw_receipts": [
+    {
+      "file": "coordinator-mutations/accept_wrong_cancel_identity.txt.gz",
+      "uncompressed_sha256": "ca13e55e8fffdaabb978637d64a645c9590b2ba6c2e43fb3efdde86cfceedb75",
+      "archive_sha256": "7d03c216a689ffb87ba2c7c0e4e2c9b5775db98d221b7c02e12c374712426fee"
+    },
+    {
+      "file": "coordinator-mutations/accept_wrong_dispatch_identity.txt.gz",
+      "uncompressed_sha256": "89576f2511fdfbbb47cfed9deef74e8c55bfeb6fb07bdb5775e661740ae6ae71",
+      "archive_sha256": "9d7eb92777efe20f9c676f72823dbf34ba184322421364c07927c4a30dde6ea4"
+    },
+    {
+      "file": "coordinator-mutations/accept_zero_observation_sequence.txt.gz",
+      "uncompressed_sha256": "d8d9ff85c270cc592374330c1f0429fa3201c0aa63ee484ec89ecdc4bf34705f",
+      "archive_sha256": "2d4f28e5dfb7d3738fcc4d7bb4a02548da1c6aa6ddc9a18eff20c58d8641ddb4"
+    },
+    {
+      "file": "coordinator-mutations/baseline.txt.gz",
+      "uncompressed_sha256": "947c1a7bd7c2f58ea6bc46115475193c0609c84ed650a0b09b646a34b8598f38",
+      "archive_sha256": "72b42ca12d10c2bff0f412215c3deb51036f95e5178a57fd803426074393afbc"
+    },
+    {
+      "file": "coordinator-mutations/mutations.json",
+      "uncompressed_sha256": "0e7867906a2f439deb494c4a4dc65e4cabad8de9c5b7dc2d006d98c44dc5e28f",
+      "archive_sha256": "0e7867906a2f439deb494c4a4dc65e4cabad8de9c5b7dc2d006d98c44dc5e28f"
+    },
+    {
+      "file": "coordinator-mutations/skip_committed_payload_bound.txt.gz",
+      "uncompressed_sha256": "32d6981ff2bdc58e359a7871ffe0b7e1bc214cd1ee4f6ccc62a472d7259df223",
+      "archive_sha256": "3bb996a56db338d8fabcf2e946d963dc76f824693ead3d5b0947c6e2534f9dac"
+    },
+    {
+      "file": "physical-clippy-correction.json",
+      "uncompressed_sha256": "04fd013c6d96dbfd8d2e183be04c453178568f02d1968526a4c6a884775cc919",
+      "archive_sha256": "04fd013c6d96dbfd8d2e183be04c453178568f02d1968526a4c6a884775cc919"
+    },
+    {
+      "file": "agent-verification/format-full-tests.log.gz",
+      "uncompressed_sha256": "37334dc926fcb8db554eb023af80d3c6f098992c3f159fcb2324b09896f3aff4",
+      "archive_sha256": "6dc914fe7004827a5bb488aa6685a46971b5e55ac41ba882847ae91f5a030eff"
+    },
+    {
+      "file": "agent-verification/format-clippy.log.gz",
+      "uncompressed_sha256": "0e6000a6382df0eebb34080a868eb30ecb896fd2bc16c87a7131bdea36914feb",
+      "archive_sha256": "ea83ac973037bc1bfdac608bb49675c5799ec0bf6a338cf777c237fa7b03c6fb"
+    },
+    {
+      "file": "agent-verification/format-vale.log.gz",
+      "uncompressed_sha256": "f10c81ff63126b6213590a94251971b3715cbe861ddf8d496f7893cb29a8833c",
+      "archive_sha256": "fc0a418f43e20774223864abe83fa0cc16a7e75623b7ea520e551c58b76eb63a"
+    },
+    {
+      "file": "agent-verification/closure-final-cargo.log.gz",
+      "uncompressed_sha256": "506dcfadfd7b9332832e49240d5c15166171ff42aa8576af2675559ff77cfd69",
+      "archive_sha256": "6b2859ebcb601b4847dabde66db570f5144b4717bb1ea396748001de95f9aaf2"
+    },
+    {
+      "file": "agent-verification/closure-final-bazel.log.gz",
+      "uncompressed_sha256": "f12e22a615319107b40649cfc27033c8a76ee951108d4ed2dc410e308c05c187",
+      "archive_sha256": "784052e3602463d2d7776d3654ef5cd4be292fce0534112c9c1316fcf0110312"
+    },
+    {
+      "file": "agent-verification/closure-final-clippy.log.gz",
+      "uncompressed_sha256": "2925d8151b8fa1d648346fa6bf2952b70af3fd1e6f0b98fbb16161f7ac09a493",
+      "archive_sha256": "56a80164bf943fdd242244826b434ee15615508ceca415af680f680737140069"
+    },
+    {
+      "file": "agent-verification/closure-vale.log.gz",
+      "uncompressed_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "agent-verification/closure-typos.log.gz",
+      "uncompressed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "automatic-coordinator/commands.json",
+      "uncompressed_sha256": "dffbb9cb393327d571ec572311fd5d2a5c88286355b33c3330aa7377d4c9b449",
+      "archive_sha256": "dffbb9cb393327d571ec572311fd5d2a5c88286355b33c3330aa7377d4c9b449"
+    },
+    {
+      "file": "automatic-coordinator/manifest.json",
+      "uncompressed_sha256": "cedc668a0f776325e0357d7d6c9d21d6e0f62d98c4d0da4720b9188a2b070aef",
+      "archive_sha256": "cedc668a0f776325e0357d7d6c9d21d6e0f62d98c4d0da4720b9188a2b070aef"
+    },
+    {
+      "file": "automatic-coordinator/payload-unit.log.gz",
+      "uncompressed_sha256": "568f5371f51b6c37bc505219466d6f2f924cd7c414c1816127bae75139bdadfb",
+      "archive_sha256": "796b7f69ca0e84ad3483974c3e56ab768b3c78a91869b5b6cd24ecc897f7ef42"
+    },
+    {
+      "file": "automatic-coordinator/rpc-fixture.log.gz",
+      "uncompressed_sha256": "725a26b26654b0206ffb6d054809958c2cc7a141c36c9dd00d6a144b490a3280",
+      "archive_sha256": "f533da98b5dd987b113a87d860d43e2c078b0725bc1693375e42b436dfdb60de"
+    },
+    {
+      "file": "automatic-coordinator/service-clippy.log.gz",
+      "uncompressed_sha256": "a297504e36b3acb6046a61f358d552ad44aa90cc4f3b95ef16da4a2551e62b63",
+      "archive_sha256": "b31c67b8ced3744a6b4b435f5ae8ff3985c7ec9fde6af039c22fd7c8d8657aae"
+    },
+    {
+      "file": "automatic-coordinator/service-test-clippy.log.gz",
+      "uncompressed_sha256": "4d179bb5362b6b2d7053819b8702a47fd0cb8f5944629f7d3846d4e9de413f51",
+      "archive_sha256": "a69dff3bea5ca02b97a096b6114db2671c2575148b28a19aac63a8532026631c"
+    },
+    {
+      "file": "automatic-coordinator/worker-clippy.log.gz",
+      "uncompressed_sha256": "998913aeb4d8aec15fc5a18352d18332d65969b7d2f953ef12e88e4acc451f3e",
+      "archive_sha256": "9a0c8aa631a55e251ac3bfb942a72b3ee1c5b5032e012e74bcce255e9c626d56"
+    }
+  ]
+}

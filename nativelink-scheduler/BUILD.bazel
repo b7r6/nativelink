@@ -28,6 +28,7 @@ rust_library(
     srcs = [
         "src/admin.rs",
         "src/api_worker_scheduler.rs",
+        "src/authority/format.rs",
         "src/authority/journal.rs",
         "src/authority/mod.rs",
         "src/authority/reapi.rs",
@@ -162,6 +163,7 @@ rust_test_suite(
         "tests/action_messages_test.rs",
         "tests/admin_test.rs",
         "tests/authority_cluster_test.rs",
+        "tests/authority_format_test.rs",
         "tests/authority_raft_test.rs",
         "tests/authority_reapi_test.rs",
         "tests/authority_request_test.rs",
