@@ -66,6 +66,8 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{Instant, interval};
 use tonic::{Request, Response, Status, Streaming};
 
+mod operations;
+
 const FRAME_BYTES: usize = 64 * 1024;
 const OPERATION_BYTES: usize = 2 * FRAME_BYTES;
 const INTEREST_RENEWAL_TICKS: u64 = INTEREST_TIMEOUT / 3;
@@ -142,6 +144,7 @@ impl CoordinatorTask {
 enum Input {
     Submit(Box<AuthorityRequest>, ReplyTo<OperationId>),
     Observe(OperationId, ReplyTo<()>),
+    Cancel(OperationId, ReplyTo<()>),
     RenewInterest(OperationId, ReplyTo<()>),
     Register(
         Box<AuthorityRegistration>,
@@ -796,6 +799,15 @@ impl Driver {
             Input::Observe(operation, reply) => {
                 let outcome = self.commit(Event::Observe { operation }).await?;
                 let result = if matches!(outcome, Reply::Observed(_)) {
+                    Ok(())
+                } else {
+                    Err(Status::not_found("Operation is not retained"))
+                };
+                let _ignored = reply.send(result);
+            }
+            Input::Cancel(operation, reply) => {
+                let outcome = self.commit(Event::Cancel { operation }).await?;
+                let result = if matches!(outcome, Reply::Applied | Reply::Ignored) {
                     Ok(())
                 } else {
                     Err(Status::not_found("Operation is not retained"))

@@ -94,6 +94,7 @@ rust_test_suite(
     ],
     compile_data = [
         "tests/authority_history_rpc/cases.rs",
+        "tests/authority_operations_rpc/cases.rs",
         "tests/authority_publication/cases.rs",
         "tests/authority_publication/late.rs",
         "//nativelink-scheduler:publication_fixture_sources",
@@ -153,7 +154,10 @@ rust_test(
         "--exact",
         "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
     ],
-    compile_data = ["tests/authority_history_rpc/cases.rs"],
+    compile_data = [
+        "tests/authority_history_rpc/cases.rs",
+        "tests/authority_operations_rpc/cases.rs",
+    ],
     proc_macro_deps = [
         "//nativelink-macro",
         "@crates//:async-trait",
@@ -201,7 +205,10 @@ rust_test(
     timeout = "moderate",
     srcs = ["tests/authority_rpc_test.rs"],
     args = ["history::"],
-    compile_data = ["tests/authority_history_rpc/cases.rs"],
+    compile_data = [
+        "tests/authority_history_rpc/cases.rs",
+        "tests/authority_operations_rpc/cases.rs",
+    ],
     proc_macro_deps = [
         "//nativelink-macro",
         "@crates//:async-trait",

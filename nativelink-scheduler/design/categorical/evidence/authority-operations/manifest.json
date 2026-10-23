@@ -1,0 +1,150 @@
+{
+  "scope": "Test-constructed committed Operations Get/Cancel/Wait; production factory unchanged.",
+  "base_commit": "d1c12460e84f3350ca37092593c3154240c369f7",
+  "source": "verified-source-after.json.gz",
+  "cargo": {
+    "authority_rpc_test": {
+      "passed": 17,
+      "failed": 0,
+      "ignored": 0
+    },
+    "service_library": {
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    "actual_process_marker": "cargo-process-marker.json.gz"
+  },
+  "bazel": {
+    "unit_test": "PASS (6 tests)",
+    "authority_rpc_test_test": "PASS; target excludes dedicated history/receipt cases, full Cargo includes them",
+    "commands": [
+      "root-bazel-operations-timeout.json.gz",
+      "root-bazel-operations-deadline.json.gz"
+    ]
+  },
+  "review": "independent-source-review.json.gz; source only, initial-observation deadline defect fixed before final checks",
+  "initial_failures": [
+    "Missing parent file formatting, then use of absent generated OperationsClient::connect API; both fixed before semantic execution.",
+    "Initial source review found the wait did not bound initial commit. Final implementation and stalled-commit test cover this; no pre-repair semantic test run claimed."
+  ],
+  "limits": [
+    "Timed-out wait drops its reply and releases permit; already queued read-only Observe may still commit without renewing interest.",
+    "List/Delete remain Unimplemented; operation retirement remains committed policy.",
+    "Tonic 0.14.6 transport timeout maps to Cancelled; this ends the wait, not the retained operation.",
+    "No production authentication/cutover or complete cancellation-delivery qualification.",
+    "No fixed-listener mount yet in this commit; separately integrated with its construction change."
+  ],
+  "receipts": [
+    {
+      "file": "cargo-process-marker.json.gz",
+      "source_sha256": "095cf288d8695543b306fd4225a6c7d998ccfa6ad8f0cf2e8939ff8e0ef21ff8",
+      "archive_sha256": "f21bdb274229c23b852421169d58293caa962becc3f96869047301d32bd98d78"
+    },
+    {
+      "file": "cargo-process-marker.log.gz",
+      "source_sha256": "e8ecca9496ffa986a88e79ee25bdbfa52ef4e4f2cfec8df8b0c848795b5cecf4",
+      "archive_sha256": "a459709c44d521d4f52c45c02d12db577d5317d38abd4fc2d8baf2e74b3b0c76"
+    },
+    {
+      "file": "cargo-rpc-regression.json.gz",
+      "source_sha256": "7c1de0029ef7dcf0f4b51f497690ebf06f614e5d14ba7c7362237e94061e2c63",
+      "archive_sha256": "2f42812485dad22c3dd7323f34ad8ed3ce512da4d55d6ca8f70db5e1dca831e1"
+    },
+    {
+      "file": "cargo-rpc-regression.log.gz",
+      "source_sha256": "0d16be62ecea654fa01d22aa402a7e005eb3ae00e99bf37591c17396c6f8c414",
+      "archive_sha256": "76f0b190bc0391743d5258a2f80146534053c6ab92303e97a31aea2e0367e218"
+    },
+    {
+      "file": "cargo-service-lib.json.gz",
+      "source_sha256": "801dc3e89de64ae4e6e53efec8d8679aa8d41df52f010ee91da2fdc2bdd26a5d",
+      "archive_sha256": "91413827f5fc823c95b04e0e36bfc10acc8dce4f04194a2fbcc72277755f3687"
+    },
+    {
+      "file": "cargo-service-lib.log.gz",
+      "source_sha256": "d1c7b0a331e23c93123bb8edc2be1a9ac6ef6d6fb6387d454942e4e97cc0215f",
+      "archive_sha256": "5772e1a6971cf2f744117e338c8a486918163d2af8bb671c4ac3799d72992935"
+    },
+    {
+      "file": "independent-source-review.json.gz",
+      "source_sha256": "ff7d358efb831f98d5342cbfbcc328d643391430e5eea14d31908617b094e63b",
+      "archive_sha256": "2692e4cd6a6a8a850f5175701b5b1a135ce25ed1fd955b17dfc4b0fcc1d6b736"
+    },
+    {
+      "file": "root-bazel-operations-deadline.json.gz",
+      "source_sha256": "2ec0f50b9891a7f8462e3719ee5a76a41badc4332c181ab96e1ab5044e5c13b2",
+      "archive_sha256": "cc43c7229ce197a90e414593a7322e12f41607fa4daf620ee70eec91f16ec61c"
+    },
+    {
+      "file": "root-bazel-operations-deadline.log.gz",
+      "source_sha256": "ab5d5498e4f29ef68ec30628e79e40e9f18bcf7468d3725645519acb0895642a",
+      "archive_sha256": "fca9483688b27d1bea51c879ad885e592d7db00b524e4ebe7de34520063619a3"
+    },
+    {
+      "file": "root-bazel-operations-first.json.gz",
+      "source_sha256": "128005f72a229a10bf1197c04d8303721faf07f526aefeee50b0981cfc8cf53f",
+      "archive_sha256": "bc5925296289bc2fcdf346fe74c9e5a8901a57568d6122098ac9724b26900da9"
+    },
+    {
+      "file": "root-bazel-operations-first.log.gz",
+      "source_sha256": "e978c468348092a157b3ac87ac1cca45c448435d91386cd6c2f3b1d69f4ac633",
+      "archive_sha256": "862c2d01f7bee340ad598e312e50ffd2b287a703e155196f52b3e33106d1af03"
+    },
+    {
+      "file": "root-bazel-operations-formatted.json.gz",
+      "source_sha256": "29c335f6051763e6b0fb919110aba9ffb1a725fb23da70d9022e9979e04e0ee7",
+      "archive_sha256": "eefba40385eef9a8a5809846fcf2d2c7efdf463070008cdef8b72295b356b17e"
+    },
+    {
+      "file": "root-bazel-operations-formatted.log.gz",
+      "source_sha256": "9e9854fc3afb6a6f2a8c57f2a9ecf885b761ccd1813c18b0c2011809497db855",
+      "archive_sha256": "10b19ac1b95b453bba570ad92c9b0499a1a24dfe0edb6a4ad577303654b7ee1e"
+    },
+    {
+      "file": "root-bazel-operations-timeout.json.gz",
+      "source_sha256": "2e5f3877e59c57d8d8360d5ce505b6b3700716b97c827b5e41e9a373fbb16ac4",
+      "archive_sha256": "ea3eb9186790676bc2c5e947331fab1d71e5bf8ff71d27043df809e42c9f00c1"
+    },
+    {
+      "file": "root-bazel-operations-timeout.log.gz",
+      "source_sha256": "9716a690f464d77268c913be0dfbadb9746015d0afabddb5e0f4008bb187b6d6",
+      "archive_sha256": "90c9335646fc19649f18655b4a070d1c44d5df4cae2c733c275fb7c57b8f89ff"
+    },
+    {
+      "file": "rpc-deadline-source.json.gz",
+      "source_sha256": "016656ca4da999fe1b19de041af1e3c0981170b1be2999c5a25df0bb0d313bfe",
+      "archive_sha256": "9afe334ff5973ab692e9135c2c9c3c776967941353db946dfa8843b115c53d1a"
+    },
+    {
+      "file": "timeout-source.json.gz",
+      "source_sha256": "496c5e2aa2ea5473733b28422b2093d3b6bf7646d03e17926788c1d85f25424c",
+      "archive_sha256": "739f6c10dec889d80a72617ab5b94733ebba826f2dbe8d79782be06e66ea6bcd"
+    },
+    {
+      "file": "timeout.patch.gz",
+      "source_sha256": "2c4e7260ee44b7230041e2d0672b159bd1b88732bd3284993412d383a069fd4c",
+      "archive_sha256": "ad822c1bcd99d6aa6d411a6b0c02a31a8223a399b528aa612cf61716c22fe19c"
+    },
+    {
+      "file": "verified-source-after.json.gz",
+      "source_sha256": "016656ca4da999fe1b19de041af1e3c0981170b1be2999c5a25df0bb0d313bfe",
+      "archive_sha256": "9afe334ff5973ab692e9135c2c9c3c776967941353db946dfa8843b115c53d1a"
+    },
+    {
+      "file": "verified-source.patch.gz",
+      "source_sha256": "52bfeb26abce7d7a9a4489a4c71be7a43f7b2aec1e992b98ff66570b179c8af7",
+      "archive_sha256": "1abe40aef1ce317c9b8b1f47a83fcffcfba51bd301d45402707d07fca8d056ce"
+    },
+    {
+      "file": "nativelink-service-unit_test.log.gz",
+      "source_sha256": "8102798f4bb1d7a936d7ff1a7fd52585d436dc7ccfb79c538e9efeb0a342fc8d",
+      "archive_sha256": "3bf81b8768ef69733aed983d9dc31a9f7cf6f9503ed9f4a59aec579dda6a54ce"
+    },
+    {
+      "file": "nativelink-worker-integration_tests-authority_rpc_test_test.log.gz",
+      "source_sha256": "5c4e0ae527f5e36f20a3bb8f4e15b46b919de69ee11b4c19fe3c5335df16bfb2",
+      "archive_sha256": "30c55b0ad459ca76b8dde9c19545bc531f8431853088c6a9e8a7cd8c16b63a2a"
+    }
+  ]
+}

@@ -554,6 +554,14 @@ behavior remain intact. Fixed listener roles and strict canonical configuration
 are the next construction boundaries; this does not close M4a.1 or M4a.2 in the
 product.
 
+[Operations RPCs](authority-operations.md) now read, wait for, and cancel retained
+operation handles through the committed authority. One caller's cancellation
+preserves another caller's coalesced execution and accepted AC result. Exact
+terminals survive restart. Wait durations include the initial commit; review
+caught and corrected that missing bound. Full authority RPC Cargo passes 17
+cases, service units pass six, and focused Bazel targets pass. The fixed listener
+mount is integrated separately; production construction remains unchanged.
+
 ## Next work and facts for the morning
 
 1. Resolve the surviving aggregate-byte guard mutation with a valid history that

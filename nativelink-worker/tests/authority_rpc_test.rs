@@ -59,6 +59,9 @@ use tokio::task::JoinHandle;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Streaming};
 
+#[path = "authority_operations_rpc/cases.rs"]
+mod operations;
+
 const EPOCH: ClusterEpoch = ClusterEpoch(1);
 const IDENTITY: AuthorityWorkerIdentity = AuthorityWorkerIdentity {
     cluster_epoch: 1,
@@ -523,6 +526,11 @@ impl Runtime {
             Server::builder()
                 .add_service(
                     ExecutionServer::new(service.clone()).max_encoding_message_size(128 * 1024)
+                )
+                .add_service(
+                    nativelink_proto::google::longrunning::operations_server::OperationsServer::new(
+                        service.clone()
+                    )
                 )
                 .serve_with_incoming(incoming),
         );

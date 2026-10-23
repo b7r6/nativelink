@@ -12,6 +12,7 @@ rust_library(
     srcs = [
         "src/ac_server.rs",
         "src/authority_server.rs",
+        "src/authority_server/operations.rs",
         "src/bep_server.rs",
         "src/bytestream_server.rs",
         "src/capabilities_server.rs",
