@@ -663,8 +663,12 @@ All four affected integrated Bazel targets executed and passed; their
 pins 141 unchanged scheduler source/build inputs.
 The [independent byte review](prepared-memory-bound-review.md) confirms the
 2,026,948-byte generated snapshot bound under the unchanged 2 MiB cap.
-Independent comparison and compiled faults remain separate qualification work;
+Independent comparison remains separate qualification work;
 the private candidate adds no production routing or accepted-history activation.
+The subsequent [eight compiled candidate faults](prepared-memory-mutations.md)
+were all detected by their named assertions. The unmodified and restored source
+each passed all 72 tests. This result does not inherit or complete the independent
+reference comparison.
 
 ## Next work and facts for the morning
 
