@@ -17,7 +17,9 @@
 
 use std::sync::atomic::Ordering;
 
+use futures::StreamExt;
 use nativelink_proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
+use nativelink_proto::build::bazel::remote::execution::v2::execution_server::Execution;
 use nativelink_proto::build::bazel::remote::execution::v2::{
     Action, Command, ExecuteRequest, ExecuteResponse, digest_function,
 };
@@ -197,6 +199,51 @@ async fn lookup_uses_action_algorithm_and_preserves_same_key_namespace_isolation
         drop(operations);
         rpc.shutdown().await;
     }
+}
+
+#[nativelink_macro::nativelink_test]
+async fn unknown_request_uses_fixed_sha256_despite_ambient_blake3_context() {
+    let (fixture, stores) = Fixture::new().await;
+    let rpc = FixedRpc::new(&fixture, &stores).await;
+    let key = action(&rpc, DigestHasherFunc::Sha256).await;
+    let selected = result(b"fixed default SHA256 entry");
+    let unrelated = result(b"ambient BLAKE3 entry must not be selected");
+    cache_put(&rpc, key, DigestHasherFunc::Sha256, &selected).await;
+    cache_put(&rpc, key, DigestHasherFunc::Blake3, &unrelated).await;
+    let mut request = execute(key, DigestHasherFunc::Sha256, false);
+    request.digest_function = digest_function::Value::Unknown.into();
+    // This is a direct service call to control its ambient task context. The
+    // other fixtures exercise actual HTTP/2; no global default is changed.
+    let mut operations = rpc
+        .service
+        .execute(tonic::Request::new(request))
+        .with_context(make_ctx_for_hash_func(DigestHasherFunc::Blake3).unwrap())
+        .await
+        .expect("Unknown must select fixed SHA256, even in a BLAKE3 task")
+        .into_inner();
+    let response = timeout(Duration::from_secs(10), async {
+        loop {
+            let operation = operations.next().await.unwrap().unwrap();
+            if operation.done {
+                let Some(operation::Result::Response(response)) = operation.result else {
+                    panic!("expected a terminal ExecuteResponse");
+                };
+                break ExecuteResponse::decode(response.value.as_slice()).unwrap();
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(response.cached_result);
+    assert_eq!(response.result, Some(selected));
+    assert_eq!(
+        cache_get(&rpc, key, DigestHasherFunc::Blake3)
+            .await
+            .unwrap(),
+        unrelated
+    );
+    drop(operations);
+    rpc.shutdown().await;
 }
 
 async fn worker(
