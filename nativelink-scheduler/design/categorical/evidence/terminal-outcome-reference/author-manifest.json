@@ -1,0 +1,36 @@
+{
+  "base": "2c97d36e15a527323f5e209225e0c5376b1ffcff",
+  "patch_sha256": "a26fa7b5134e074387dce1f8fc12c1f127f4d59ca354a15c3b288fa7dd8b27e0",
+  "contract_sha256": "c1d21e6acefe0d32129753263ba4edbbd552a74115c5899535b221df49acbe3d",
+  "sources": {
+    "nativelink-scheduler/BUILD.bazel": "c1fdf12c9e93072c568d66f867995d3151a3ded648bb4bd04d206b492be9f485",
+    "nativelink-scheduler/tests/terminal_outcome_reference_test.rs": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "nativelink-scheduler/tests/terminal_outcome/types.rs": "1d6012f7465f567a49f597c0a0528167f56aa2111daa038aabaa8e933a3c6299",
+    "nativelink-scheduler/tests/terminal_outcome/reference.rs": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "nativelink-scheduler/tests/terminal_outcome/cases.rs": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "nativelink-scheduler/tests/terminal_outcome/README.md": "b3f7ecc87b35e34dfb42306045e8b4bc22af656fe1ddfa65217bedb46ae8bd1c"
+  },
+  "unchanged_frozen_dependencies": {
+    "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167"
+  },
+  "qualification": {
+    "cargo": {
+      "new": 22,
+      "inherited_m1": 7,
+      "total_pass": 29
+    },
+    "strict_clippy": "PASS",
+    "rustfmt": "PASS",
+    "buildifier": "PASS",
+    "typos": "PASS",
+    "vale_repository_readme": "PASS",
+    "diff_and_reverse_apply_check": "PASS",
+    "compiled_mutants": 12,
+    "killed_mutants": 12,
+    "root_bazel": "PENDING separate integration receipt"
+  },
+  "scope": "Independent no-graph terminal lifecycle relation, using frozen M1 and retention; no actual successor candidate comparison yet. Fresh declared stage members and trusted initial roots. No history feature3, graph publish, provider I/O, collector, production format or activation qualification.",
+  "provenance": "Author reviewed prior candidate/source during design; new successor candidate reducer/tests were not read. Candidate author received frozen contract only before oracle freeze."
+}

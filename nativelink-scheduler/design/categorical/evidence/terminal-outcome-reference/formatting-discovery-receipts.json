@@ -1,0 +1,12 @@
+[
+  {
+    "file": "root-initial-precommit.log.gz",
+    "source_sha256": "0f020ab4ef34c41642788d0f44cb2de636bd9108d6ae657bbbc0881365baf8d8",
+    "archive_sha256": "7618cf8824474670ed1106e6847fb56a5d7148e489086c71d7c24298f44cdfc9"
+  },
+  {
+    "file": "integration-formatting.diff.gz",
+    "source_sha256": "f2a7907c4bdb40ea916e600125a3274d7259b08def4d71cc3979484af7018537",
+    "archive_sha256": "797bc5b0fc7854f5d13eb1f0a619f6906eb4f7cc3e596deade7743db6d2931c6"
+  }
+]

@@ -1,0 +1,179 @@
+{
+  "scope": "Additive independent terminal-outcome reference, using unchanged frozen M1 and retention oracles. No successor candidate differential or production cutover claim.",
+  "integration_base": "1026e5f75d76deb18c99b6409154b9d155120f6f",
+  "author_base": "2c97d36e15a527323f5e209225e0c5376b1ffcff",
+  "frozen_patch_sha256": "a26fa7b5134e074387dce1f8fc12c1f127f4d59ca354a15c3b288fa7dd8b27e0",
+  "frozen_archive": {
+    "file": "frozen-evidence.tar.gz",
+    "bytes": 187050,
+    "sha256": "06029307813d80c48ba69a80daf70abf4c103b415bb087b86941e59f742da5e6"
+  },
+  "contract_sha256": "c1d21e6acefe0d32129753263ba4edbbd552a74115c5899535b221df49acbe3d",
+  "source_sha256": {
+    "nativelink-scheduler/BUILD.bazel": "2f7936080c4dadf839beb4c8bf504faff61a9a66e8c79d82ad46f1a01b70fe78",
+    "nativelink-scheduler/tests/terminal_outcome_reference_test.rs": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "nativelink-scheduler/tests/terminal_outcome/types.rs": "1d6012f7465f567a49f597c0a0528167f56aa2111daa038aabaa8e933a3c6299",
+    "nativelink-scheduler/tests/terminal_outcome/reference.rs": "f630144e76341918e5885bc8ed7a85ac5a6edfda7f7335eac36514b2b652b018",
+    "nativelink-scheduler/tests/terminal_outcome/cases.rs": "70ff34dd35ccfea5ffc6e225cd5520f5aa5e11594e4c2621f2e12da5dc4c63ff",
+    "nativelink-scheduler/tests/terminal_outcome/README.md": "b3f7ecc87b35e34dfb42306045e8b4bc22af656fe1ddfa65217bedb46ae8bd1c"
+  },
+  "unchanged_inherited_source_sha256": {
+    "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167"
+  },
+  "build_context": "Frozen patch applied cleanly, preserving all Rust hashes for the first integrated Bazel run. Full hooks exposed two unformatted child-module blocks; the separately archived rustfmt-only integration delta changes two Rust byte hashes. Original author archive, source and mutant hashes remain untouched. Semantic independence is preserved; integrated byte identity is not claimed for those two files.",
+  "validation": [
+    {
+      "command": "CARGO_TARGET_DIR=/tmp/nativelink-history-differential-target cargo test --locked --profile smol -j 8 -p nativelink-scheduler --test terminal_outcome_reference_test",
+      "status": "PASS",
+      "new_cases": 22,
+      "inherited_cases": 7,
+      "total_cases": 29,
+      "boundary": "frozen author source"
+    },
+    {
+      "command": "cargo clippy --locked --profile smol -j 8 -p nativelink-scheduler --test terminal_outcome_reference_test -- -D warnings",
+      "status": "PASS",
+      "boundary": "frozen author source"
+    },
+    {
+      "command": "bazel test --jobs=8 --local_test_jobs=2 //nativelink-scheduler:terminal_outcome_reference_test",
+      "status": "PASS",
+      "new_cases": 22,
+      "inherited_cases": 7,
+      "total_cases": 29,
+      "failures": 0,
+      "ignored": 0,
+      "xml_wrapper_cases": 1,
+      "elapsed_seconds": 7.144,
+      "test_seconds": 2.71,
+      "boundary": "root integration; original frozen Rust hashes"
+    },
+    {
+      "command": "bazel test --jobs=8 --local_test_jobs=2 //nativelink-scheduler:terminal_outcome_reference_test",
+      "status": "PASS",
+      "new_cases": 22,
+      "inherited_cases": 7,
+      "total_cases": 29,
+      "failures": 0,
+      "ignored": 0,
+      "xml_wrapper_cases": 1,
+      "elapsed_seconds": 6.82,
+      "test_seconds": 2.62,
+      "boundary": "formatted root integration; see changed-source hashes"
+    },
+    {
+      "command": "rustfmt --edition 2024 --check nativelink-scheduler/tests/terminal_outcome_reference_test.rs nativelink-scheduler/tests/terminal_outcome/types.rs nativelink-scheduler/tests/terminal_outcome/reference.rs nativelink-scheduler/tests/terminal_outcome/cases.rs",
+      "status": "PASS",
+      "tool": "pinned rustfmt 1.10.0-nightly (787af2b8c8 2026-08-25)",
+      "boundary": "all four integrated Rust files explicitly named"
+    },
+    {
+      "command": "pre-commit run",
+      "status": "PASS",
+      "boundary": "all configured applicable staged-file hooks after formatting correction"
+    }
+  ],
+  "mutations": {
+    "compiled": 12,
+    "killed": 12,
+    "unchanged_tests_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "receipt": "author/mutation-results.json.gz"
+  },
+  "author_evidence": {
+    "manifest": "author-manifest.json",
+    "receipt_index": "author-receipts.json",
+    "files": 81
+  },
+  "integration_receipts": [
+    {
+      "file": "root-bazel.log.gz",
+      "source_sha256": "f1f5c18bac74e6ecf642e6d382eb350f5739f3ce73cf91cc8468d914de6a829e",
+      "archive_sha256": "b3e0ef9012abc01d6630c69626e479d202e90f30cc3e3d6e592581d6e683bf04",
+      "source_bytes": 1315
+    },
+    {
+      "file": "root-test.log.gz",
+      "source_sha256": "1a9d6ebd0aa63175058511f77a21ce3ef92e0203877f0cb63f857665e700a024",
+      "archive_sha256": "2e852b58096a5e5c7efe8f2983c67ea7e6afaa810f7f079f88e3cac6bf1e8a3f",
+      "source_bytes": 3019
+    },
+    {
+      "file": "root-test.xml.gz",
+      "source_sha256": "b274e84dff50787a5bb6137fa8e7ac891729292e5ae71685d544e0d56706de4e",
+      "archive_sha256": "c7f984f4e455cebec6f82bfde593fbf59e30aca59d3702159de4c15c6c7bdc39",
+      "source_bytes": 3457
+    },
+    {
+      "file": "formatted-root-bazel.log.gz",
+      "source_sha256": "ccc14568aa196cd6bc8aa24469955bb09fa67e8615f9dc6b032a8fda9c943d7f",
+      "archive_sha256": "046f5515dddf49c673a01cda1bb1ba324598c6b7fc931f82fe9c121e9fcf8886",
+      "source_bytes": 1264
+    },
+    {
+      "file": "formatted-root-test.log.gz",
+      "source_sha256": "939e4c0e2dde9b452f78a0e88285563b9e9cdba2948745cb16ef8ebcacd3f9f8",
+      "archive_sha256": "ff38755287a4a55bcbce15d7abece8cec2e80943f47879d77e1dcd4d1d1ce9a8",
+      "source_bytes": 3019
+    },
+    {
+      "file": "formatted-root-test.xml.gz",
+      "source_sha256": "ea386c952426faa5f11c30f35e8d55c185f72cf1a9a9ff6f428c9e41a5132750",
+      "archive_sha256": "06fdc97c5467da6eaca23fce36e3cef0c0c9773080ab5e36fd29f521bb87e463",
+      "source_bytes": 3457
+    },
+    {
+      "file": "root-all-child-rustfmt.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "source_bytes": 0
+    },
+    {
+      "file": "root-final-precommit.log.gz",
+      "source_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "archive_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "source_bytes": 2160
+    },
+    {
+      "file": "root-vale.log.gz",
+      "source_sha256": "f10c81ff63126b6213590a94251971b3715cbe861ddf8d496f7893cb29a8833c",
+      "archive_sha256": "fc0a418f43e20774223864abe83fa0cc16a7e75623b7ea520e551c58b76eb63a",
+      "source_bytes": 55
+    }
+  ],
+  "limitations": [
+    "No successor candidate comparison at this checkpoint",
+    "Initial protected roots and fresh stage closures are declared fixture facts",
+    "No production routing, provider I/O, graph traversal or collector qualification",
+    "History feature3, graph-bearing ResourceFailed and durable publication formats excluded",
+    "Aggregate snapshot admission is not complete future-byte or retry-capacity prepayment"
+  ],
+  "initial_integrated_source_sha256": {
+    "nativelink-scheduler/BUILD.bazel": "2f7936080c4dadf839beb4c8bf504faff61a9a66e8c79d82ad46f1a01b70fe78",
+    "nativelink-scheduler/tests/terminal_outcome_reference_test.rs": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "nativelink-scheduler/tests/terminal_outcome/types.rs": "1d6012f7465f567a49f597c0a0528167f56aa2111daa038aabaa8e933a3c6299",
+    "nativelink-scheduler/tests/terminal_outcome/reference.rs": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "nativelink-scheduler/tests/terminal_outcome/cases.rs": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "nativelink-scheduler/tests/terminal_outcome/README.md": "b3f7ecc87b35e34dfb42306045e8b4bc22af656fe1ddfa65217bedb46ae8bd1c"
+  },
+  "formatting_correction": {
+    "cause": "Repository .rustfmt.toml sets skip_children=true. Author final rustfmt check named the entrypoint only, leaving two late-added child blocks unchecked.",
+    "initial_receipt_qualification": "author/rustfmt.log.gz proves entrypoint-only formatting, not full child-source formatting.",
+    "delta": "integration-formatting.diff.gz",
+    "failure_log": "root-initial-precommit.log.gz",
+    "discovery_receipts": "formatting-discovery-receipts.json",
+    "changed_sources": {
+      "nativelink-scheduler/tests/terminal_outcome/reference.rs": {
+        "frozen": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+        "integrated": "f630144e76341918e5885bc8ed7a85ac5a6edfda7f7335eac36514b2b652b018"
+      },
+      "nativelink-scheduler/tests/terminal_outcome/cases.rs": {
+        "frozen": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+        "integrated": "70ff34dd35ccfea5ffc6e225cd5520f5aa5e11594e4c2621f2e12da5dc4c63ff"
+      }
+    },
+    "correction": "Apply the configured rustfmt output only; preserve all original bytes in the frozen archive and author sources. No statement of semantic equivalence substitutes for the repeated integrated test and full hooks.",
+    "mutation_scope": "12 compiled mutants and unchanged assertions ran on the exact frozen author sources, not the reformatted root byte hashes."
+  }
+}

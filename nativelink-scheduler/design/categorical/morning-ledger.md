@@ -464,6 +464,21 @@ position. Five compiled faulty variants are detected. The integrated candidate,
 comparison, physical and worker suites pass with 38, eight, nine and eight cases.
 Private snapshot v3 remains separate from durable accepted-history feature 3.
 
+The separately frozen [terminal-outcome reference](terminal-outcome-reference.md)
+now covers accepted responses with `result=None`, memory retry versus final
+failure, per-operation cancellation, explicit expiry, and retained storage
+obligations. It reuses the unchanged independent M1 and retention oracles.
+Twenty-two new cases and seven inherited cases pass in Cargo and root Bazel;
+all twelve compiled faulty variants are detected. Frozen Rust hashes and the
+original evidence archive remain preserved in the
+[integration receipt](evidence/terminal-outcome-reference/manifest.json).
+Full pre-commit exposed an entry-point-only formatter check; a separately recorded
+formatting delta now passes explicit child checks, full hooks and repeated root
+Bazel. Two integrated Rust hashes changed, with original mutation evidence intact.
+No comparison against the successor candidate is claimed yet. Graph-bearing
+resource failures, active history, physical collection, durable publication
+formats and production cutover remain outside this checkpoint.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

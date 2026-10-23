@@ -1,0 +1,488 @@
+[
+  {
+    "file": "author/SCOPE.md.gz",
+    "source_sha256": "2e171e0c66ae01b7e039587a6a31990d77ce84b55675322af5d4eaf9c222f63a",
+    "archive_sha256": "662df171c2a1cac45b4616b3e02599a17aa3d188dfe20bace8cf1e4ed9679458",
+    "source_bytes": 1483
+  },
+  {
+    "file": "author/baseline/cargo.log.gz",
+    "source_sha256": "2494c9f6db09bb317c7a131ab4676d39dd3cbaf8fe04bfe5ed79dadcce753d62",
+    "archive_sha256": "c0e380d0cdcbdbbcc0eceb325d0bbde64a0b53b253f443553e93a21c2b48d849",
+    "source_bytes": 3264
+  },
+  {
+    "file": "author/baseline/clippy.log.gz",
+    "source_sha256": "11ac3651efb03204543abe40ed1e9cce08d670fe5c8f3178f8fb260d310c1109",
+    "archive_sha256": "4e0ec7ad2eb6985bf45bc4259141e768c2f756452cf566a9761bbdeaa9562198",
+    "source_bytes": 284
+  },
+  {
+    "file": "author/baseline/reference.rs.gz",
+    "source_sha256": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "archive_sha256": "eea708b6908d97f8f47e58bb31ae3a94c741ad83686a5d7c59cd928af5be73a2",
+    "source_bytes": 37301
+  },
+  {
+    "file": "author/buildifier.log.gz",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "source_bytes": 0
+  },
+  {
+    "file": "author/contract-v1.md.gz",
+    "source_sha256": "c1d21e6acefe0d32129753263ba4edbbd552a74115c5899535b221df49acbe3d",
+    "archive_sha256": "45fc79aaac1efc64fc3b13839724427e7cbe11fbead1aa35f21ee60a824ea404",
+    "source_bytes": 12684
+  },
+  {
+    "file": "author/diff-check.log.gz",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "source_bytes": 0
+  },
+  {
+    "file": "author/final-cargo.log.gz",
+    "source_sha256": "b1f687a41370bb7d8239cab9dad6a2ea449cfc9193a6a3704f6d4d1df14bb2a0",
+    "archive_sha256": "7065f6cb47023632247f8da05a78d39cbe8a3713ae9a9cfb5786704aebf5b8c8",
+    "source_bytes": 3264
+  },
+  {
+    "file": "author/final-clippy.log.gz",
+    "source_sha256": "bfd6fc7c6e2c2bf02d89bb40d0e856050d6a1aad16dc14a9173be8f9608ae2ca",
+    "archive_sha256": "054e49f0275dbe182e175de55bd8d548242c3f700adc31f5c721b0cf338c99e2",
+    "source_bytes": 284
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/BUILD.bazel.gz",
+    "source_sha256": "c1fdf12c9e93072c568d66f867995d3151a3ded648bb4bd04d206b492be9f485",
+    "archive_sha256": "f540eddd43d467275421d24097b5dd7ec82f9736cf4cc804f25739feb66f57ed",
+    "source_bytes": 17903
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/tests/terminal_outcome/README.md.gz",
+    "source_sha256": "b3f7ecc87b35e34dfb42306045e8b4bc22af656fe1ddfa65217bedb46ae8bd1c",
+    "archive_sha256": "33126c218ae85a5eb4cc47149cbff159ae0749e83227c905e7ffe12bce2de2ea",
+    "source_bytes": 7013
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/tests/terminal_outcome/cases.rs.gz",
+    "source_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "archive_sha256": "4862e5a21e7342a3bfb328880235ff6aa10478527bee27c03dc8188a406c6770",
+    "source_bytes": 43256
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/tests/terminal_outcome/reference.rs.gz",
+    "source_sha256": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "archive_sha256": "eea708b6908d97f8f47e58bb31ae3a94c741ad83686a5d7c59cd928af5be73a2",
+    "source_bytes": 37301
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/tests/terminal_outcome/types.rs.gz",
+    "source_sha256": "1d6012f7465f567a49f597c0a0528167f56aa2111daa038aabaa8e933a3c6299",
+    "archive_sha256": "bb8b72ae5d6aa6f077555e9b0f6433d84d8c0fc17c021f1063d348141d857017",
+    "source_bytes": 6049
+  },
+  {
+    "file": "author/final-sources/nativelink-scheduler/tests/terminal_outcome_reference_test.rs.gz",
+    "source_sha256": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "archive_sha256": "ee1d6927ba719084856d898c28c2d36d35f7e5fd35d142699776418d9c1323aa",
+    "source_bytes": 941
+  },
+  {
+    "file": "author/frozen-dependencies/nativelink-scheduler/tests/authority/reference.rs.gz",
+    "source_sha256": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "archive_sha256": "7a0e6db0900f84444e8e72266c3bd82c16e143be048c3b0091fcc703df344325",
+    "source_bytes": 91660
+  },
+  {
+    "file": "author/frozen-dependencies/nativelink-scheduler/tests/retention/protocol.rs.gz",
+    "source_sha256": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "archive_sha256": "fb05be587e3c9083f6b589ef106d06594b3cfa02d215902cbd689aed36ce84c0",
+    "source_bytes": 5841
+  },
+  {
+    "file": "author/frozen-dependencies/nativelink-scheduler/tests/retention/reference.rs.gz",
+    "source_sha256": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167",
+    "archive_sha256": "a1dccfa1e2b8edfe51b66534feb2b13782679ad2c78294a841b2deec713ae88a",
+    "source_bytes": 27332
+  },
+  {
+    "file": "author/initial/nativelink-terminal-outcome-baseline.log.gz",
+    "source_sha256": "f0e712c363651a5593df995ea16a0e4f5902a44abaeacd7c816d530917b39869",
+    "archive_sha256": "6e9e94b674131f79247e5767e1e2d69818d85237076e47c526d325c1beb95ff3",
+    "source_bytes": 3264
+  },
+  {
+    "file": "author/initial/nativelink-terminal-outcome-clippy-initial.log.gz",
+    "source_sha256": "4f503f5de8b9095b4a827ad729c4d15ccf582a44c02d7df188a12bc2f35361d8",
+    "archive_sha256": "32311cb16fde17fcfb76bf7cfea1fe91edbe556ea606a3f65f7bcc84a0e13d81",
+    "source_bytes": 8391
+  },
+  {
+    "file": "author/initial/nativelink-terminal-outcome-clippy-second.log.gz",
+    "source_sha256": "a8357e2e28377f0aa19cbb0229b91644d04462a4c9e766e06b11b57cc453615c",
+    "archive_sha256": "4f3486df50cffbe7ece0e981297c1c2b15b6b0a42ad0f7c57c8b5952b7d64891",
+    "source_bytes": 284
+  },
+  {
+    "file": "author/initial/nativelink-terminal-outcome-expanded-tests.log.gz",
+    "source_sha256": "802214f099af42c2101a48f3e736683f9f95c759f9a3de6ac66b6d94d67c92e4",
+    "archive_sha256": "bb8b1550ecb5bdea37801229e6a5757d012c7f8181f99445e60320b52469aeb8",
+    "source_bytes": 3092
+  },
+  {
+    "file": "author/initial/nativelink-terminal-outcome-first-compile.log.gz",
+    "source_sha256": "cfb00d003c960b876663fa2d978be883a56ee4105b0371a18997d7e1a2bb8db9",
+    "archive_sha256": "1ce50c5eeffaca7029e996b54e0ffac7afb68325a994ddb2d97906e8417a661d",
+    "source_bytes": 3584
+  },
+  {
+    "file": "author/initial/vale.log.gz",
+    "source_sha256": "3aaa246a2b8906a33f381ba0ecbfd412e4f672cd19033593305691e4b4309096",
+    "archive_sha256": "84cfa9e95bb9dbefbc0d4e29346ca62c1c1b5ef645a10770887a77150f325b30",
+    "source_bytes": 928
+  },
+  {
+    "file": "author/manifest.json.gz",
+    "source_sha256": "28df9a06367b3b870c766a98c9fd3426c5199f7fca46172a06df5556b8e04736",
+    "archive_sha256": "9a4de5d7fda900fce370201d90055e76ca97f56b3f9f93435584ecd555a05eb3",
+    "source_bytes": 2333
+  },
+  {
+    "file": "author/mutants/01-classification-coerced-complete/cargo.log.gz",
+    "source_sha256": "4a802c5baad7cb60ba1dcacd2e78088507d5f8035c53c3b0479ee36e0ebb856b",
+    "archive_sha256": "12fae5e182af0299fc23197d6df637d31a1e9073276796e6aadadbceb7e13299",
+    "source_bytes": 1224
+  },
+  {
+    "file": "author/mutants/01-classification-coerced-complete/mutation.diff.gz",
+    "source_sha256": "4abf87ca64b692eda44622ca85d1c64ccd5e6c5b846ccba723dcd9ae2c57e56e",
+    "archive_sha256": "83821733554d02957373db3c662d81d5f8e63a4e0b12ab27a486ff97e3f31cb7",
+    "source_bytes": 802
+  },
+  {
+    "file": "author/mutants/01-classification-coerced-complete/reference.rs.gz",
+    "source_sha256": "1137e50563ed447474bd46ad1bf00bb257e9fdee3c69f4128e0be3ce601aaf8c",
+    "archive_sha256": "16f0e13b5141d58c735cde5d8e097214720ebe2146c22b5103686de1aec95008",
+    "source_bytes": 37086
+  },
+  {
+    "file": "author/mutants/01-classification-coerced-complete/result.json.gz",
+    "source_sha256": "1c974753b6628cce0b25af3dcfb39ecfd6d98f20a70bfe5c07bde670d520de69",
+    "archive_sha256": "cffc4bdef172733a82628f1b4299fefd6f866115c500e80ffad50c829a19aa2a",
+    "source_bytes": 359
+  },
+  {
+    "file": "author/mutants/02-forced-final-through-invented-ceiling/cargo.log.gz",
+    "source_sha256": "68438accba0a0470c4d65116ddecabc9bddf5ba4a51ce16073a10c38e54ff27d",
+    "archive_sha256": "92d9e4c6a6f3ea2da8a23f59fed0ca08d1c9c83481e19228e69de0580017fd9e",
+    "source_bytes": 2337
+  },
+  {
+    "file": "author/mutants/02-forced-final-through-invented-ceiling/mutation.diff.gz",
+    "source_sha256": "9441d0e8093b0519365693f427de38ebf8f5d5f867123bcb4335bfce01198efc",
+    "archive_sha256": "d72a156de14917ae98c51aab28be8e0864d63ddd9a8154e5fc9156746b4693e5",
+    "source_bytes": 855
+  },
+  {
+    "file": "author/mutants/02-forced-final-through-invented-ceiling/reference.rs.gz",
+    "source_sha256": "f7f744e1f8b3f9df731f538233b02fc2883c68a641828b98252b54a40c0f303b",
+    "archive_sha256": "b082c56c7a73a8799cf26d8d9e7c58a828fdab2dc1489dabf10e12e3dd29e13e",
+    "source_bytes": 37794
+  },
+  {
+    "file": "author/mutants/02-forced-final-through-invented-ceiling/result.json.gz",
+    "source_sha256": "69d0485970d92c5a01c8816c28001821ba45c7a20160bc7028059a3f3351d817",
+    "archive_sha256": "76948cad14ce5846a659d53213054ef3af3615116956d50f93e0a73663847eae",
+    "source_bytes": 375
+  },
+  {
+    "file": "author/mutants/03-missing-no-graph-gate/cargo.log.gz",
+    "source_sha256": "9fba425bdcee3516bae8cfcfd698274de84b9b8af0e930778909331957120cba",
+    "archive_sha256": "01da4abf91cc3b3690c72d9d4a5ea74deed4ff84deac07c9748d909b8b49160f",
+    "source_bytes": 2316
+  },
+  {
+    "file": "author/mutants/03-missing-no-graph-gate/mutation.diff.gz",
+    "source_sha256": "c97f5072ec698fa2466718fe5eec8f4ebe2bdb4f2f3d85b18b5b4036ed6cc2a7",
+    "archive_sha256": "1222c4fbecceb1980bcd78e740a3acfc2d8f54dc14fa8cf6578cbea4852f7c29",
+    "source_bytes": 537
+  },
+  {
+    "file": "author/mutants/03-missing-no-graph-gate/reference.rs.gz",
+    "source_sha256": "ed7b4c9f9c72456282abeb92cf009791cc710e2becda1402a33e9731bc7636f0",
+    "archive_sha256": "52761e2bd776d06a2a96527b9d63362f9a1797afe80bd51e32db797e526c4a13",
+    "source_bytes": 37275
+  },
+  {
+    "file": "author/mutants/03-missing-no-graph-gate/result.json.gz",
+    "source_sha256": "1e85b6081fa6b29c024ce3de4d319adc3895b07bf362e7ce47fd8e5df08622e0",
+    "archive_sha256": "7daf0cda40acc931353b90fdc69a5c671d679cfa6a95d02d1859f5d52100d528",
+    "source_bytes": 369
+  },
+  {
+    "file": "author/mutants/04-overwrite-cancelled-operation-link/cargo.log.gz",
+    "source_sha256": "8f9400495c07ad4f1486fda5f0fd718daef04e08048983eac98d468901a3736c",
+    "archive_sha256": "15308f966a13fb3b5c5b3a961e2a154c2bd9f2e2e06b21ad8cd53d9ad437851d",
+    "source_bytes": 1240
+  },
+  {
+    "file": "author/mutants/04-overwrite-cancelled-operation-link/mutation.diff.gz",
+    "source_sha256": "4007f0f6ec23239a3e2c7db4dba3d40cc6fb7b616dbb19adb226b96c7628d522",
+    "archive_sha256": "32ef8a7cc8ce0ad142dd37fe19753d12e4963f954a8dd0f674976fdbd8f551f1",
+    "source_bytes": 411
+  },
+  {
+    "file": "author/mutants/04-overwrite-cancelled-operation-link/reference.rs.gz",
+    "source_sha256": "7236aaa982a1835da0d6e81f2daea6ae00a133540246ce8a7176aa11e3f943bc",
+    "archive_sha256": "3f7275ec63ed92da757da756d16bd6e378fe7fb43f913ea62e6130c8fdbf4908",
+    "source_bytes": 37430
+  },
+  {
+    "file": "author/mutants/04-overwrite-cancelled-operation-link/result.json.gz",
+    "source_sha256": "d9efcd50625a539a733beae02d2a63a7dc6077fd892901ec22b1c0517688adc6",
+    "archive_sha256": "e9101f2546f3926dfac62326658ca426de60dde896af552bc9a9cff60aff9e94",
+    "source_bytes": 366
+  },
+  {
+    "file": "author/mutants/05-refund-on-cancel-without-quiescence/cargo.log.gz",
+    "source_sha256": "34b73b428c0e2dc1a6a1d4ca1683dbd73ab1769461d827907db564f5e0f1e087",
+    "archive_sha256": "c92106e31d4db551e23b2f507e0105d6e01e6145ace37327d7009b35f67c4243",
+    "source_bytes": 1387
+  },
+  {
+    "file": "author/mutants/05-refund-on-cancel-without-quiescence/mutation.diff.gz",
+    "source_sha256": "56eb5432e0d5481a0a55440d9c5f42cf94a9040bd2eb08f52914aa2b3980703d",
+    "archive_sha256": "d3b83f67b22c9a9fceb61d4bbd5627753f4bf8af22bb26d47db98a55460b521b",
+    "source_bytes": 749
+  },
+  {
+    "file": "author/mutants/05-refund-on-cancel-without-quiescence/reference.rs.gz",
+    "source_sha256": "bbe1bf7fb1160f6b715bb2ff22fe0e8f65be2ebbcfd04cc64d51ddb74f87b37d",
+    "archive_sha256": "fc329cc95354df2899e61d6c3c621e74a80a2bfb85f1699d14b3a615fd440610",
+    "source_bytes": 37644
+  },
+  {
+    "file": "author/mutants/05-refund-on-cancel-without-quiescence/result.json.gz",
+    "source_sha256": "137f293da39341216021b0eec3e9d7320d5fed6bc686d32b4a1f0c6d74ef11a1",
+    "archive_sha256": "706fba765734273d0969ad021e07e297f9ecf3f6c62a52c65c3c5ee408559019",
+    "source_bytes": 376
+  },
+  {
+    "file": "author/mutants/06-forget-old-write-intents-on-report/cargo.log.gz",
+    "source_sha256": "64d1a8459481b1046c7b9e188137d1c2f025fdb2415dd1af21fd48678e60dfa2",
+    "archive_sha256": "2cfbce274d45fa665dbb385fe5df26427c497df57205291badb978618e34a305",
+    "source_bytes": 1280
+  },
+  {
+    "file": "author/mutants/06-forget-old-write-intents-on-report/mutation.diff.gz",
+    "source_sha256": "cb3fce50e9476f70ea3d971b74772b1b7182ec30757d54fce901de46e467bc2c",
+    "archive_sha256": "a799b9c7a77b7118734460903fe6fc077f8695bcafcfc0d9c27d528205ca3abe",
+    "source_bytes": 502
+  },
+  {
+    "file": "author/mutants/06-forget-old-write-intents-on-report/reference.rs.gz",
+    "source_sha256": "e177be97adaa3b5776a42e9e144f73f1123b55271caf47731937f21159062f89",
+    "archive_sha256": "24e90e9d06d966402b1e0c9a567edffb921c78d91b288ae74c32858b5ddeb36c",
+    "source_bytes": 37489
+  },
+  {
+    "file": "author/mutants/06-forget-old-write-intents-on-report/result.json.gz",
+    "source_sha256": "9092905ec95398ffafc2580cef56dd17252ffab625a19cf75e6262b68580b17b",
+    "archive_sha256": "0d347695b03252e96800150402ba6540c2251bba395b921f359c2685beb56d78",
+    "source_bytes": 376
+  },
+  {
+    "file": "author/mutants/07-ignore-interest-generation-fence/cargo.log.gz",
+    "source_sha256": "3c825709f6e240e8280741479e6b4819114fc914996f7c27f7726d422adf1a38",
+    "archive_sha256": "ca6453c97e3f4775f7b1a160aa40ab667b917fb8094f2194439adc611a4c5d4d",
+    "source_bytes": 1279
+  },
+  {
+    "file": "author/mutants/07-ignore-interest-generation-fence/mutation.diff.gz",
+    "source_sha256": "405ea46b011f0db8670f5ba8a57b0579f05f9737caed97eebcaf9488d0b9a887",
+    "archive_sha256": "b4647b3b02a43b7269965a6a5e2bae2e77a4ee682d4d40e4ccb3634911051379",
+    "source_bytes": 786
+  },
+  {
+    "file": "author/mutants/07-ignore-interest-generation-fence/reference.rs.gz",
+    "source_sha256": "59f30c8ecfeb0bfa6bae5d23f99e3fdd5784ef10f51d38e6fbb59d980834adfb",
+    "archive_sha256": "e84d09fa4b1adcb723214de7878cdf2c3abf0b06738f3070012027e36b7a80f5",
+    "source_bytes": 37689
+  },
+  {
+    "file": "author/mutants/07-ignore-interest-generation-fence/result.json.gz",
+    "source_sha256": "9fe282bba2be17a92753bd5f77c8077223d002d79001fc05c4efb9f32ff77083",
+    "archive_sha256": "83ae9423e6bfb2d3f72e413dce4269c4aa178100aba1045e837903033c236c61",
+    "source_bytes": 371
+  },
+  {
+    "file": "author/mutants/08-reauthorize-recorded-origin/cargo.log.gz",
+    "source_sha256": "48803b4fb1a3e94dd8826b782dbe35aca30af25a9957d863f52bb8a61ebbad32",
+    "archive_sha256": "07fb0bf58b2bde74180fe2f4a00b1a6466abc687d6443956d09f034f7351aaf2",
+    "source_bytes": 1296
+  },
+  {
+    "file": "author/mutants/08-reauthorize-recorded-origin/mutation.diff.gz",
+    "source_sha256": "0ae52e0917f11252c6884cf5997ea71f69c2af856528607298a1e6229ecff2e5",
+    "archive_sha256": "909d4b988daebde5aa70407dd0a696c08e0ee7b6cdc6f80704b833340c9d1d43",
+    "source_bytes": 596
+  },
+  {
+    "file": "author/mutants/08-reauthorize-recorded-origin/reference.rs.gz",
+    "source_sha256": "e4314a51c1f5205f25899f2dbffe26878a8e22c5dc7016a77a7470114f37d622",
+    "archive_sha256": "deb06e942dccb96cd8ede4dc99b00e2948ed62f190773a07e2133712cabe2b94",
+    "source_bytes": 37454
+  },
+  {
+    "file": "author/mutants/08-reauthorize-recorded-origin/result.json.gz",
+    "source_sha256": "8b03ec2d513af6909b31a1c59ba2b4d2f96ad4b79138ebbe0ee9d3ff84043350",
+    "archive_sha256": "f8f889317a8e7055aed1e924078f214b4ecdbb4957f699efa1629efbd4ab4885",
+    "source_bytes": 373
+  },
+  {
+    "file": "author/mutants/09-omit-original-operation-binding/cargo.log.gz",
+    "source_sha256": "899d7962632a072143b6d7a47da1c0f2c77dcc1026bcc15a892cdf573b46e545",
+    "archive_sha256": "258167791418f5d56ff5864d17b72718b58d5d58a864a43ca8aed48ed464211d",
+    "source_bytes": 1287
+  },
+  {
+    "file": "author/mutants/09-omit-original-operation-binding/mutation.diff.gz",
+    "source_sha256": "7bc4c963112cedd3a532ba9d42e81707deb7918f51a95ae606564ba2f506c1ab",
+    "archive_sha256": "c630c3cd8925a87a2c6b50097070c5e0a2954266cc3608d6a8f7271ee3a5b289",
+    "source_bytes": 606
+  },
+  {
+    "file": "author/mutants/09-omit-original-operation-binding/reference.rs.gz",
+    "source_sha256": "01c9ddbed31f0bbf28c2c9b20c1b4357215a75c36bddba857841830d074e3430",
+    "archive_sha256": "4d7b1a5c8881e017d510ad8ae33bb0e3e52a06d15b9d0b55e979bc446af4be31",
+    "source_bytes": 37220
+  },
+  {
+    "file": "author/mutants/09-omit-original-operation-binding/result.json.gz",
+    "source_sha256": "a1e4a9aeafc03f5ff2d1599b49546f59c76497bec843f3eeed061bc5da46c8eb",
+    "archive_sha256": "44ead0497bf9cbd4d1c9d49d3a80cd504038feeceff1369a2203732a46c4abc7",
+    "source_bytes": 373
+  },
+  {
+    "file": "author/mutants/10-omit-outer-byte-admission/cargo.log.gz",
+    "source_sha256": "4e3a30ed2f5fa76ecdc46e9d609e50eed9d23fbf7f71cc65af2dab71934bc87c",
+    "archive_sha256": "7e5f3153553d44fb99ec50e67cd24a46e08b9105bfc3be8cd62defdc1ab486d7",
+    "source_bytes": 1254
+  },
+  {
+    "file": "author/mutants/10-omit-outer-byte-admission/mutation.diff.gz",
+    "source_sha256": "f001ebf21890bb8485de167e730c3f7bc2ad65dde4b410012e3e0179009add2a",
+    "archive_sha256": "62067e000244b6da93f39390a7a8af0475fcb15ca50b09cf3edc8b4609ee7708",
+    "source_bytes": 379
+  },
+  {
+    "file": "author/mutants/10-omit-outer-byte-admission/reference.rs.gz",
+    "source_sha256": "c613c0c92e78ea196155cf571c714cac3dc356e2113a78af436f5ea061a8897c",
+    "archive_sha256": "bc3e3743789cffc2a7116c49f229258e22a03676e2fa72cb390bd1b21224731a",
+    "source_bytes": 37352
+  },
+  {
+    "file": "author/mutants/10-omit-outer-byte-admission/result.json.gz",
+    "source_sha256": "f7b8a2a10f0e3bd28814703ff952424863427411ee50f4960d28d6961bb2ff33",
+    "archive_sha256": "ece407eba3cfdec4e6679265fa0a2aed32d964d1145fa6fefa72d0bd55188bd9",
+    "source_bytes": 360
+  },
+  {
+    "file": "author/mutants/11-borrow-other-executions-credits/cargo.log.gz",
+    "source_sha256": "70c25511dde5387760dcc1657f29784bb55ad7b3734634afb7b2ccda00c2a2c0",
+    "archive_sha256": "67d0fa82cb75280b59d66b635ad9c9988c872fc6d53e610d13eaec0ea9b592ba",
+    "source_bytes": 1348
+  },
+  {
+    "file": "author/mutants/11-borrow-other-executions-credits/mutation.diff.gz",
+    "source_sha256": "0d46ed1d9c7ef08879addef9daf8759e662bf3c5ed57a4ed3c1a24fc7f4bce29",
+    "archive_sha256": "22fe70aa967b339cba81d8e9e759a9229f2d8dc4c990694e550ea754c122f9b7",
+    "source_bytes": 1074
+  },
+  {
+    "file": "author/mutants/11-borrow-other-executions-credits/reference.rs.gz",
+    "source_sha256": "80dff042d443977dcc7bd7f6f0abb90e64c4ddfd0ad267886d19a36759419241",
+    "archive_sha256": "af4584ade1d2b679b39dab5cc3a77811bdcaac28ba4cf148dcfb8ed9bf6f8b80",
+    "source_bytes": 36924
+  },
+  {
+    "file": "author/mutants/11-borrow-other-executions-credits/result.json.gz",
+    "source_sha256": "e6e29d511f68e2597865f9b17f2066cf1972ec471165d8b71df1382b5824e849",
+    "archive_sha256": "d66e011591c303ebc2cf411f82f6811f3a04fff249ffdb8632ba237eed044de1",
+    "source_bytes": 368
+  },
+  {
+    "file": "author/mutants/12-ignore-conflicting-report-reuse/cargo.log.gz",
+    "source_sha256": "7dc461cd95774657ba3c57820577a0f696b4984c2add69f20f32b4c281fd42bf",
+    "archive_sha256": "e6259a46cf17d477395811b7c718de9c7d95f6fe14e52fb9895d1aa095360b70",
+    "source_bytes": 1301
+  },
+  {
+    "file": "author/mutants/12-ignore-conflicting-report-reuse/mutation.diff.gz",
+    "source_sha256": "007188cd4cb047bba75e8f38b029341d0a6c719e6998ab256c0cfddb3b61c4b7",
+    "archive_sha256": "95eedcad211c4fe5a722702e62a392f8b2123d08f0888782eac9cbdf378c2441",
+    "source_bytes": 461
+  },
+  {
+    "file": "author/mutants/12-ignore-conflicting-report-reuse/reference.rs.gz",
+    "source_sha256": "a3a08d33903fdb69d593a44df8088ac7660e6e3b606d418f51b5ba297374e784",
+    "archive_sha256": "ef110b41a2eacb9c3495342d6d0db6b7a56ddeee49744c7195dfb8326627788f",
+    "source_bytes": 37306
+  },
+  {
+    "file": "author/mutants/12-ignore-conflicting-report-reuse/result.json.gz",
+    "source_sha256": "e8e0f01b8740e0d34685747f12ed2fa7527f0b17f7f7c0156aec2afe06b40738",
+    "archive_sha256": "6f77191ec72e3bbbb52acfc293c495bbe7a5080e56e677a7879f137ce3474894",
+    "source_bytes": 377
+  },
+  {
+    "file": "author/mutation-campaign.py.gz",
+    "source_sha256": "402e80bfd7b3b826a1a950139017256cfc5529e5e6506adc2d01cd5b611c7e22",
+    "archive_sha256": "aaa8a5c0f982c272d426f9855078983cecb8cced525bec6250196cb815174d92",
+    "source_bytes": 8439
+  },
+  {
+    "file": "author/mutation-results.json.gz",
+    "source_sha256": "eaf193c7ab9ef38b6cf7b6db9a19c50e098f8d17810c47d6041c767addcf7655",
+    "archive_sha256": "3025cd28f184c3719c8c24f4ce4e017d99662d801e6145e86ae13575563300a1",
+    "source_bytes": 4674
+  },
+  {
+    "file": "author/mutation-run.log.gz",
+    "source_sha256": "efb1f7e0e0a0949773cf214821c3ddeea51455f27942cbf037274a5c7d7ac2b9",
+    "archive_sha256": "69335371843201cc711cd8527b4208a92421e77ded084bfa7b6545e33ff6947a",
+    "source_bytes": 4334
+  },
+  {
+    "file": "author/reference.patch.gz",
+    "source_sha256": "a26fa7b5134e074387dce1f8fc12c1f127f4d59ca354a15c3b288fa7dd8b27e0",
+    "archive_sha256": "9618130152fceb0e5c12b8f2cf83a315851b13c500ac5eed01d08b21798d6bbb",
+    "source_bytes": 99567
+  },
+  {
+    "file": "author/reverse-apply-check.log.gz",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "source_bytes": 0
+  },
+  {
+    "file": "author/rustfmt.log.gz",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "source_bytes": 0
+  },
+  {
+    "file": "author/typos.log.gz",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "source_bytes": 0
+  },
+  {
+    "file": "author/vale.log.gz",
+    "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+    "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da",
+    "source_bytes": 54
+  }
+]
