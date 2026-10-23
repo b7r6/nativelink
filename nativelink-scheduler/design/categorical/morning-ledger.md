@@ -14,8 +14,17 @@ separate standalone, syscall and integrated tests. Fixed listener message limits
 are integrated; their combined qualification is recorded separately. Production
 construction, wire classification and the complete canonical clock contract remain open.
 
-Latest full integration at `4876ddd48c`: Cargo passed 2,007 tests with zero failures
-and eleven ignored cases; all 166 Bazel targets passed, including the two manual
+Latest full Bazel checkpoint at `e6978139cf`: all 172 targets passed, including
+six explicitly selected manual canonical targets. Sixty-five executed and 107
+were cached; the run took 345.873 seconds with 1,313 unchanged tracked inputs.
+The [receipt](evidence/canonical-construction-checkpoint/manifest.json) records
+commands, per-target cache status and logs. It qualifies the integrated storage,
+descriptor Singleton, local memory receipt, clock and listener changes at that
+commit. Later persisted-limit and memory-wire work does not inherit these totals.
+
+The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
+zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
+passed, including the two manual
 canonical-config targets. Of those targets, 134 executed and 32 were cached.
 The integrated listener binary also passed all four explicit local mTLS cases.
 [Workspace receipts](evidence/authority-construction-workspace/manifest.json)
@@ -849,6 +858,19 @@ these checks and records 548 unchanged integrated inputs. Outgoing size checks
 occur after encoding; CAS batch accumulation, GetTree traversal and service-wide
 admission remain open. The generic capabilities advertisement still does not
 describe the canonical backend's finite object ceiling.
+
+Journal reopen now checks the supplied five-field limit envelope against both
+restored applied state and every saved snapshot before registering admission or
+starting Raft. Matching custom limits, including disabled admission, remain
+admissible. The compiled old implementation failed four new unit cases and the
+descriptor bridge case. Removing either guard was independently detected: the
+first applied-state fault selection was masked by the remaining snapshot guard,
+so the retained no-snapshot singleton fixture supplies its separate oracle.
+The restored source passed 89 unit and 12 bridge cases; the subsequent integration
+passed nine Bazel targets (eight executed, one cached) and built the server with
+548 unchanged inputs. The [receipt](evidence/persisted-authority-limits/manifest.json)
+preserves the initial surviving selection. This is constructor compatibility,
+not enforcement on live snapshot installation or a cluster-wide resize policy.
 
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
