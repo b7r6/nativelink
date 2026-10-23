@@ -1,7 +1,8 @@
 # Experimental filesystem namespace ownership
 
-This Linux library qualifies one small part of canonical construction: cold
-namespace identity and exclusive ownership among cooperating local callers.
+This Linux library qualifies two small parts of canonical construction: cold
+namespace identity and descriptor capabilities with ownership that lasts through
+data access among cooperating local callers.
 **No runtime calls it, and it never constructs a store, opens a journal, serves
 traffic, starts collection, or authorizes a deployment.** The canonical parser
 remains a separate pure package; the offline converter does not link this library.
@@ -80,8 +81,8 @@ the executable-copy directory. It also owns `content.exec` and, on macOS,
 `temp`, `content.exec`, and any sentinel inside the corresponding owned role
 root, with the ownership record outside those scanned children. The separately
 owned journal and its snapshots must remain outside both store roots and any
-collector's lifetime ownership. This library creates none of that layout and
-does not qualify macOS behavior.
+collector's lifetime ownership. The experimental `FixedLayout` described below
+creates the three Linux child directories; it does not qualify macOS behavior.
 
 Directory descriptors make this library's record operations independent of
 subsequent path traversal. They do **not** make the existing path-based
@@ -90,7 +91,90 @@ declared path at the instant checked, but a later path open can still race a
 rename or symlink substitution. A guard can continue holding the original inode
 after its path is moved. Safe construction needs an adapter that retains and
 uses directory capabilities, plus a declared host namespace/permission boundary;
-passing strings after preflight is still an unresolved integration blocker.
+passing strings after preflight is still an unresolved integration blocker. The
+descriptor API below supplies a prerequisite for a future adapter. It does not
+change or qualify the legacy constructor.
+
+## Descriptor capabilities
+
+`FixedLayout::create(&Arc<Ownership>)` checks both data roots for entries other
+than their ownership records before creating `content`, `temp`, and
+`content.exec` in each role. Journal and worker roots remain unchanged. The
+record schema and cold-root checks remain unchanged. A nonempty data root
+refuses creation. Partial creation remains on disk; no rollback deletes evidence.
+`FixedLayout::reopen` requires all six children to exist and opens each with
+`O_DIRECTORY | O_NOFOLLOW`. Symbolic, missing, and non-directory children refuse.
+Neither operation scans, prunes, migrates or certifies existing child contents.
+
+Each capability retains pinned descriptors and an `Arc<Ownership>`, holding all
+four role locks. Cloned directory capabilities and returned file handles retain
+that ownership after the original layout and caller drop. The handles may move
+into blocking closures without shortening the ownership lifetime. No public
+handle provides a `File`, raw descriptor, descriptor conversion or ambient path.
+The API provides no `/proc/self/fd` path escape.
+
+`DigestLeaf` is constructed from SHA-256 or BLAKE3, 32 digest bytes and a `u64`
+size. Its strict parser accepts only that canonical single-component encoding.
+It cannot name a child directory or ownership record. `TemporaryId` encodes one
+numeric staging name; exclusive creation rejects any existing entry. The API
+does not verify content hashes or lengths. These are digest slots in the first
+fixed layout, **not non-reused physical generations or collector authorization**.
+
+`CasDirectory::publish` consumes a unique writable staging handle and uses
+descriptor-relative `renameat2(RENAME_NOREPLACE)` into the same role's content
+directory. An existing destination is conflict without overwrite. The mutable
+`SinkDirectory::replace` consumes the same kind of handle and atomically replaces
+a regular destination. The returned handle supports read and seek only; staging
+handles cannot be cloned or converted into writable aliases. A capability from
+another layout instance or role cannot publish the handle.
+
+Read and remove accept only `DigestLeaf`. A read first checks the entry without
+following symlinks, opens with `O_NOFOLLOW | O_NONBLOCK`, verifies regular-file
+type and the observed device/inode, then retains the opened file. Type checks
+also refuse directories, named pipes, sockets and observed multiple hard links. A
+rename of the ancestor, role root or child directory does not redirect these
+operations. They keep using the original directory even if it has moved outside
+the configured ambient path; this is descriptor identity, not containment in a
+fixed visible path.
+
+These checks assume cooperating owners. Stat followed by open, rename or unlink
+is not an atomic defense against a hostile writer of the same UID. Sink rename
+does not follow a substituted destination symlink, but its earlier type check
+does not guarantee atomic refusal of every racing destination of another type.
+Observed link counts do not prevent later hard-link creation or retained external
+writable descriptors. Mount changes, administrator interference, old workers and
+external collectors remain outside this qualification.
+Remove addresses the current named slot; callers must serialize mutations of
+that slot. It is not an atomic compare-and-unlink operation on an earlier file
+identity and cannot implement deletion of a persistent physical generation.
+
+Publication guarantees an atomic name operation on the host filesystem, not a
+durable authority commit. File sync and directory sync are explicit separate
+operations; a caller needs an ordering and recovery protocol. Directory sync
+retains ownership through the temporary, content and executable directory calls.
+`FixedLayout::sync_layout` syncs all six children followed by the two pinned
+data-role parents, making parent-entry synchronization available after creation.
+No failure or handle drop removes temporary files, so ambiguous or replaced
+artifacts remain for review. The API provides no automatic retry adoption, orphan cleanup,
+power-loss qualification or new persistent generation basis. The earlier
+inode-reuse and final-sync counterexamples still apply.
+
+## Future store bridge
+
+A future capability implementation of `StoreDriver` can retain `CasDirectory`
+or `SinkDirectory` in its shared context, use typed leaves in `FileEntry`, move a
+`PendingWrite` into a blocking write task, and retain `ReadHandle` through the
+last streamed read. Finalization consumes the writer through publish or replace;
+the resulting entry retains the directory capability for later reads and
+eviction. File and directory sync errors must remain observable to the caller.
+
+The existing `FilesystemStore`, `EncodedFilePath`, `get_file_path_locked` and
+path-based `FileSlot` reopen protocol cannot consume these handles safely.
+The next bridge needs a dedicated capability `FileEntry` and descriptor-based
+enumeration, bounded I/O admission, eviction and executable-copy operations.
+It must carry the guard into every delayed operation and avoid returning to raw
+paths. This package supplies none of that runtime wiring; exposing the legacy
+constructor after `verify_attached` remains unsupported.
 
 Locks are advisory. Every participating owner must honor them for the entire
 data-access lifetime. The legacy constructor does not, and a second process
@@ -121,6 +205,10 @@ dirty or absent, symlink roots/ancestors/records, ordinary aliases/overlap,
 wrong domain/namespace/role, copied records on replaced directories, partial
 initialization, torn records, and caller mutation. The partial-initialization
 tests construct persisted crash shapes; they are not power-loss experiments.
+The capability cases additionally cover ancestor/root/child rename and symlink
+substitution, immutable CAS and mutable sink publication, unsafe leaves and
+special-file refusal, preserved conflicting/replaced staging artifacts, and all
+four locks retained by directory/file handles and a delayed blocking closure.
 An independent [boundary review receipt](../../nativelink-scheduler/design/categorical/evidence/canonical-filesystem-review/README.md)
 records the inode-reuse and final-sync witnesses above, plus actual injected
 failures at all eight sync sites and four record writes and a FIFO refusal

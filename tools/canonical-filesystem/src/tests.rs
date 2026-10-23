@@ -33,6 +33,9 @@ static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 // before exec closes them. Keep fixture lifetimes separate from that window.
 static FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 
+#[path = "capability_tests.rs"]
+mod capabilities;
+
 struct Fixture {
     directory: PathBuf,
     manifest: Manifest,

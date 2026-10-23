@@ -28,6 +28,12 @@ use nativelink_canonical_config::{Error, Manifest};
 use rustix::fs::{Dir, FlockOperation, Mode, OFlags, flock, fstat, fsync, open, openat};
 use serde::{Deserialize, Serialize};
 
+mod capability;
+pub use capability::{
+    CasDirectory, DigestAlgorithm, DigestLeaf, FixedLayout, PendingWrite, ReadHandle,
+    SinkDirectory, TemporaryId,
+};
+
 /// Outside the fixed content/temp layout that a store may scan or prune.
 pub const OWNERSHIP_RECORD: &str = ".nativelink-namespace-v1.json";
 const MAX_RECORD_BYTES: u64 = 64 * 1024;
