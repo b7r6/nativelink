@@ -562,6 +562,69 @@ impl SavedSnapshot {
     }
 }
 
+/// Construction policy only; generic journals retain replicated recovery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecoveryExpectation {
+    Any,
+    Singleton,
+}
+
+fn validate_singleton_recovery(
+    node_id: u64,
+    frontier: Option<LogId<u64>>,
+    membership: &StoredMembership<u64, BasicNode>,
+    snapshot: Option<&SnapshotMeta<u64, BasicNode>>,
+) -> Result<()> {
+    let (Some(frontier), Some(member_position)) = (frontier, *membership.log_id()) else {
+        return Err(failure(
+            ErrorVerb::Read,
+            "singleton recovery: existing journal lacks initialized membership",
+        ));
+    };
+    if member_position > frontier || member_position.index > frontier.index {
+        return Err(failure(
+            ErrorVerb::Read,
+            "singleton recovery membership position exceeds recovered frontier",
+        ));
+    }
+    let configs = membership.membership().get_joint_config();
+    if configs.len() != 1
+        || !configs[0].iter().copied().eq([node_id])
+        || !membership.nodes().map(|(id, _)| *id).eq([node_id])
+    {
+        return Err(failure(
+            ErrorVerb::Read,
+            "singleton recovery requires exactly one local voter and no other nodes",
+        ));
+    }
+    if let Some(snapshot) = snapshot {
+        if snapshot.last_log_id > Some(frontier)
+            || snapshot
+                .last_log_id
+                .is_some_and(|position| position.index > frontier.index)
+        {
+            return Err(failure(
+                ErrorVerb::Read,
+                "singleton recovery snapshot exceeds recovered frontier",
+            ));
+        }
+        // An older snapshot can legitimately name an earlier multi-member or
+        // joint configuration. A snapshot covering the final membership entry
+        // must contain that exact stored membership, including its position.
+        if snapshot
+            .last_log_id
+            .is_some_and(|position| position.index >= member_position.index)
+            && snapshot.last_membership != *membership
+        {
+            return Err(failure(
+                ErrorVerb::Read,
+                "singleton recovery snapshot contradicts recovered membership",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn replay_format(
     active: &mut ActiveFormat,
     membership: &mut StoredMembership<u64, BasicNode>,
@@ -1148,7 +1211,7 @@ impl Journal {
         epoch: ClusterEpoch,
         limits: Limits,
     ) -> Result<Self> {
-        Self::open_inner(path, node_id, epoch, limits, None).await
+        Self::open_inner(path, node_id, epoch, limits, None, RecoveryExpectation::Any).await
     }
 
     pub async fn open_with_profile(
@@ -1157,7 +1220,15 @@ impl Journal {
         limits: Limits,
         profile: JournalProfile,
     ) -> Result<Self> {
-        Self::open_inner(path, node_id, profile.domain.epoch, limits, Some(profile)).await
+        Self::open_inner(
+            path,
+            node_id,
+            profile.domain.epoch,
+            limits,
+            Some(profile),
+            RecoveryExpectation::Any,
+        )
+        .await
     }
 
     /// Construct from a capability-aware factory without depending on a
@@ -1172,6 +1243,25 @@ impl Journal {
         profile: JournalProfile,
         factory: impl FnOnce() -> io::Result<JournalDatabase> + Send + 'static,
     ) -> Result<Self> {
+        Self::open_from_factory_with_expectation(
+            binding,
+            node_id,
+            limits,
+            profile,
+            RecoveryExpectation::Any,
+            factory,
+        )
+        .await
+    }
+
+    async fn open_from_factory_with_expectation(
+        binding: JournalBinding,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+        expectation: RecoveryExpectation,
+        factory: impl FnOnce() -> io::Result<JournalDatabase> + Send + 'static,
+    ) -> Result<Self> {
         if binding.node_id != node_id || binding.domain != profile.domain {
             return Err(failure(ErrorVerb::Read, "journal factory binding mismatch"));
         }
@@ -1180,6 +1270,7 @@ impl Journal {
             profile.domain.epoch,
             limits,
             Some(profile),
+            expectation,
             move || factory().map_err(|error| failure(ErrorVerb::Read, error)),
         )
         .await
@@ -1307,9 +1398,10 @@ impl Journal {
         epoch: ClusterEpoch,
         limits: Limits,
         profile: Option<JournalProfile>,
+        expectation: RecoveryExpectation,
     ) -> Result<Self> {
         let path = path.as_ref().to_owned();
-        Self::open_with_factory_inner(node_id, epoch, limits, profile, move || {
+        Self::open_with_factory_inner(node_id, epoch, limits, profile, expectation, move || {
             match OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -1342,6 +1434,7 @@ impl Journal {
         epoch: ClusterEpoch,
         limits: Limits,
         profile: Option<JournalProfile>,
+        expectation: RecoveryExpectation,
         factory: impl FnOnce() -> Result<JournalDatabase> + Send + 'static,
     ) -> Result<Self> {
         let domain = profile.as_ref().map_or(
@@ -1402,6 +1495,7 @@ impl Journal {
                     let mut committed_membership = applied.membership.clone();
                     let mut purged: Option<LogId<u64>> = None;
                     let mut committed: Option<LogId<u64>> = None;
+                    let mut singleton_snapshot = None;
                     // Every metadata section is authority-bearing in this format.
                     // Never ignore an unknown section, even if applied state alone
                     // would be sufficient to start this older executable.
@@ -1435,6 +1529,9 @@ impl Journal {
                                         "foreign snapshot namespace",
                                     ));
                                 }
+                                if expectation == RecoveryExpectation::Singleton {
+                                    singleton_snapshot = Some(saved.meta);
+                                }
                             }
                             unknown => {
                                 return Err(failure(
@@ -1447,11 +1544,31 @@ impl Journal {
                     let logs = tx
                         .open_table(LOGS)
                         .map_err(|e| failure(ErrorVerb::Read, e))?;
+                    // OpenRaft 0.9.25 first clamps committed to applied, then
+                    // replays by INDEX. Its later membership loader also sees
+                    // uncommitted membership entries. Project without applying
+                    // events, spawning Raft or registering the member profile.
+                    let recovered_frontier = committed.max(applied.last_applied);
+                    let mut singleton_membership = (expectation == RecoveryExpectation::Singleton)
+                        .then(|| applied.membership.clone());
                     let mut previous = purged;
                     let mut first = true;
                     for record in logs.iter().map_err(|e| failure(ErrorVerb::Read, e))? {
                         let (key, value) = record.map_err(|e| failure(ErrorVerb::Read, e))?;
                         let entry = decode_log(epoch, key.value(), value.value())?;
+                        if let Some(membership) = &mut singleton_membership
+                            && let EntryPayload::Membership(value) = &entry.payload
+                        {
+                            if recovered_frontier.is_none_or(|position| entry.log_id.index > position.index) {
+                                return Err(failure(
+                                    ErrorVerb::Read,
+                                    "singleton recovery has pending membership beyond committed frontier",
+                                ));
+                            }
+                            if applied.last_applied.is_none_or(|position| entry.log_id.index > position.index) {
+                                *membership = StoredMembership::new(Some(entry.log_id), value.clone());
+                            }
+                        }
                         if let EntryPayload::Normal(batch) = &entry.payload
                             && let Some(control) = &batch.control
                         {
@@ -1497,6 +1614,14 @@ impl Journal {
                             ErrorVerb::Read,
                             "committed Raft position is missing",
                         ));
+                    }
+                    if let Some(membership) = singleton_membership {
+                        validate_singleton_recovery(
+                            node_id,
+                            recovered_frontier,
+                            &membership,
+                            singleton_snapshot.as_ref(),
+                        )?;
                     }
                 }
                 Ok((database, created, committed_format, controls))
@@ -2592,9 +2717,16 @@ impl Singleton {
         epoch: ClusterEpoch,
         limits: Limits,
     ) -> std::result::Result<Self, String> {
-        let journal = Journal::open(path, node_id, epoch, limits)
-            .await
-            .map_err(|e| e.to_string())?;
+        let journal = Journal::open_inner(
+            path,
+            node_id,
+            epoch,
+            limits,
+            None,
+            RecoveryExpectation::Singleton,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         Self::from_journal(
             journal,
             #[cfg(test)]
@@ -2609,9 +2741,16 @@ impl Singleton {
         limits: Limits,
         profile: JournalProfile,
     ) -> std::result::Result<Self, String> {
-        let journal = Journal::open_with_profile(path, node_id, limits, profile)
-            .await
-            .map_err(|e| e.to_string())?;
+        let journal = Journal::open_inner(
+            path,
+            node_id,
+            profile.domain.epoch,
+            limits,
+            Some(profile),
+            RecoveryExpectation::Singleton,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         Self::from_journal(
             journal,
             #[cfg(test)]
@@ -2620,10 +2759,11 @@ impl Singleton {
         .await
     }
 
-    /// Open through a custody-retaining journal factory and the existing real
-    /// singleton Raft path. Binding, state and format validation are unchanged.
-    /// This does not authorize canonical bootstrap or certify singleton recovery
-    /// membership, clock interpretation, or closed-member admission recovery.
+    /// Open through a custody-retaining journal factory and real singleton Raft.
+    /// Existing journals must recover exactly this node with no pending
+    /// membership change, before profile registration or Raft startup. This
+    /// does not authorize canonical bootstrap, fence old members, fix lifetime
+    /// membership, or certify clock interpretation/closed-member recovery.
     ///
     /// Once polled, preparation owns startup independently of this caller. If
     /// the caller disappears before accepting the result, preparation shuts down
@@ -2672,10 +2812,16 @@ impl Singleton {
         let (accepted, acceptance) = oneshot::channel();
         let _prepare = background_spawn!("authority_singleton_prepare", async move {
             let result = async {
-                let journal =
-                    Journal::open_from_factory(binding, node_id, limits, profile, factory)
-                        .await
-                        .map_err(|error| error.to_string())?;
+                let journal = Journal::open_from_factory_with_expectation(
+                    binding,
+                    node_id,
+                    limits,
+                    profile,
+                    RecoveryExpectation::Singleton,
+                    factory,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
                 Self::from_journal(
                     journal,
                     #[cfg(test)]

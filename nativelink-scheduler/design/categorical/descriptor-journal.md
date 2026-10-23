@@ -83,12 +83,37 @@ that I/O continues.
 
 `Singleton::open_from_factory` accepts the same binding, node, limits, profile
 and factory. It calls the journal factory and then the existing real singleton
-Raft startup path. The newly created journal receives singleton membership;
-an existing journal must already have initialized membership. This constructor
-does not adopt a metadata-only journal, infer canonical bootstrap permission,
-change format validation, or certify that recovered membership is exactly one
-member. Existing foreign or joint membership is still outside canonical startup
-qualification.
+Raft startup path. The newly created journal receives singleton membership.
+Existing journals pass an additional read-only preflight before profile
+registration or `Raft::new`. All three singleton constructors select this private
+expectation; generic `Journal` constructors retain replicated recovery behavior.
+The preflight does not adopt a metadata-only journal or infer bootstrap permission.
+
+The preflight follows the pinned OpenRaft 0.9.25 loader: clamp the committed
+position upward to the applied position, then project membership changes over
+that committed **index** interval without applying scheduler events. Comparing
+only full log IDs can miss a record with a different term that OpenRaft will
+replay by index. The resulting membership must have a supporting position within
+the recovered frontier, exactly one voter configuration containing this node,
+and exactly this node in its node map. Foreign voters, joint configurations,
+retained learners, missing node metadata and unsupported membership positions
+refuse. An existing local node address is retained without a new address policy.
+
+Every membership entry beyond that committed frontier refuses, including a
+redundant singleton membership. This is deliberately conservative: OpenRaft can
+make an uncommitted membership effective on recovery. Ordinary command and blank
+suffixes retain their existing recovery behavior. Historical membership records
+from a committed three-to-one transition remain admissible, including a committed
+final membership that has not yet been applied.
+
+A saved snapshot must not extend beyond the recovered committed frontier. An
+older snapshot can still describe a historical multi-member or joint state.
+When the snapshot covers the final membership change, its stored membership and
+position must equal the recovered membership. These checks do not prove the
+legitimacy of historical quorum decisions or reconstruct purged consensus history.
+They also do not make membership immutable after startup: callers still hold a
+public Raft handle and can invoke its membership APIs. Fencing old members,
+live snapshot policy and closed-member admission recovery remain separate gates.
 
 After the constructor's first poll, an owned background task retains preparation
 through file creation, parent synchronization, Raft initialization and the
@@ -116,6 +141,15 @@ rather than relying on the last handle disappearing. A separate withheld
 acknowledgment case covers result handoff; the public constructor has no await in
 that interval. Binding and limit refusal count factory invocations, and the
 successful handoff commits and reads an `AdvanceTime` event through real Raft.
+
+The membership recovery fixtures write synthetic valid journal envelopes and
+exercise real OpenRaft startup where admission succeeds. They cover all three
+constructors, committed and pending membership, historical and contradictory
+snapshots, an index/term disagreement, and matching singleton recovery. These
+are recovery fixtures, not an executed migration of a live three-member cluster.
+Refusals compare all logical metadata and log bytes and reuse the same registry
+incarnation through a generic journal. The descriptor metadata-only refusal also
+checks ownership release and successful reuse of that same profile.
 
 The manual descriptor integration adds a create/write/read/shutdown/reopen
 round trip after root rename, with the replacement path left untouched and all
