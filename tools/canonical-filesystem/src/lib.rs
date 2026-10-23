@@ -32,6 +32,11 @@ mod capability;
 #[cfg(feature = "redb")]
 mod journal;
 mod namespace;
+#[allow(
+    dead_code,
+    reason = "Private worker capabilities are staged for qualification before canonical factory integration."
+)]
+mod worker;
 pub use capability::{
     CasDirectory, DigestAlgorithm, DigestLeaf, FixedLayout, PendingWrite, ReadHandle,
     SinkDirectory, TemporaryId,

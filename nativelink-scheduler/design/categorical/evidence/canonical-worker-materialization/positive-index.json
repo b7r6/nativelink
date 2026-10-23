@@ -1,0 +1,882 @@
+{
+  "source_directory": "/tmp/nativelink-canonical-worker-materialization-evidence",
+  "archives": [
+    {
+      "path": "positive-01.tar.gz",
+      "bytes": 4308696,
+      "sha256": "2b188b4bc91a41b303d120975e9fa44c77ee9967750a60fcf97643817b1b9911",
+      "files": 14,
+      "source_bytes": 18424591
+    },
+    {
+      "path": "positive-02.tar.gz",
+      "bytes": 4411782,
+      "sha256": "13f5841e0582a5a1c21ec18092b203d5801f371f3e0d14d2f8c32ab6e03c19fe",
+      "files": 77,
+      "source_bytes": 18337652
+    },
+    {
+      "path": "positive-03.tar.gz",
+      "bytes": 3987355,
+      "sha256": "6fce6cc88bc197f95c85117648f3cb2203c0dee9492ed5cde2108cabce966991",
+      "files": 1,
+      "source_bytes": 16883496
+    },
+    {
+      "path": "positive-04.tar.gz",
+      "bytes": 4134383,
+      "sha256": "2e4f4e9d116988a8a88a2bef516ad5a34bb652c51e3501ab40a3134860b653e4",
+      "files": 29,
+      "source_bytes": 17017783
+    }
+  ],
+  "members": [
+    {
+      "path": "positive/attempt-01/bep.json",
+      "bytes": 539731,
+      "sha256": "d1e2d8e08d911bf9caced1c1a40dcbf3bd4bfb7b714e57b81d032702e1581bb3",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/command.json",
+      "bytes": 939,
+      "sha256": "747735bdb10909e44796c9e266c7cbc3284cbada06d56d6c59a8564f8a3e198b",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/lre.bazelrc",
+      "bytes": 1786,
+      "sha256": "f60cc96d8b292fe3b88e977f88656052ccc88e1fb1e56a07195c799d554ad441",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/nativelink.bazelrc",
+      "bytes": 304,
+      "sha256": "553375742e683f12cf6a85f77bb4b11cc37696cdcfc7607d60a90ddf6f13011a",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/nixos.bazelrc",
+      "bytes": 1140,
+      "sha256": "6bed8e0a0dbe854c4207ae27196d3e5cd1f99846fcc7f372f9246d8328614f4e",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/source-after.json",
+      "bytes": 232264,
+      "sha256": "9f790934626b188aea774a594b1cdb19c05125b047be2f4ae4073e28e25bc2aa",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/source-before.json",
+      "bytes": 232264,
+      "sha256": "9f790934626b188aea774a594b1cdb19c05125b047be2f4ae4073e28e25bc2aa",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/stderr.log",
+      "bytes": 7818,
+      "sha256": "7862fde63758686982192b1dbbfa86550bc5623f7435656ec029cf0f15acc5b1",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/stdout.log",
+      "bytes": 204,
+      "sha256": "7f7aeb771d3c0275487a41a8324741000307e9a91034281d71af8de3199fa314",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-01/summary.json",
+      "bytes": 529,
+      "sha256": "fd6ccb8f6a533b8a89fcd541718d322b5619fe702064360cb86162862e4b75d1",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/artifacts.json",
+      "bytes": 2575,
+      "sha256": "36ce2f9d775e2754704ef928b1e33db0fb0627b09fce65147bd86553904877a3",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/bep.json",
+      "bytes": 520602,
+      "sha256": "01c3faa5f9c36e5f148111853156b84efe897f93bc63e18fc64a21fcce9ea6a1",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/command.json",
+      "bytes": 939,
+      "sha256": "fde4473233bee49aa747e3b83524650edb221774aef25e0cdbaef67ca83169e6",
+      "mode": 420,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/elf/journal_test",
+      "bytes": 16883496,
+      "sha256": "ccb4b751bdc18fe3dcb8942c02b3434ed593c7a22ab9a19a2b7adfadd0ae41f5",
+      "mode": 493,
+      "archive": "positive-01.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/elf/ownership_test",
+      "bytes": 11644832,
+      "sha256": "937e4efaf93f2c3df67d611788a2faae8bca85bed4d9699a91d60ca4993089b1",
+      "mode": 493,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/lre.bazelrc",
+      "bytes": 1786,
+      "sha256": "f60cc96d8b292fe3b88e977f88656052ccc88e1fb1e56a07195c799d554ad441",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/nativelink.bazelrc",
+      "bytes": 304,
+      "sha256": "553375742e683f12cf6a85f77bb4b11cc37696cdcfc7607d60a90ddf6f13011a",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/nixos.bazelrc",
+      "bytes": 1140,
+      "sha256": "6bed8e0a0dbe854c4207ae27196d3e5cd1f99846fcc7f372f9246d8328614f4e",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/source-after.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/source-before.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/stderr.log",
+      "bytes": 1036,
+      "sha256": "3e4eec9482ffd9cd871b3de5928ad53994cdcd8b2ae063ea2f995a13f0e06730",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/stdout.log",
+      "bytes": 357,
+      "sha256": "8c094451304da70b857612d554f8de79b397f5c8e38f2dc25a3aa50b509a502c",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/summary.json",
+      "bytes": 528,
+      "sha256": "85e02813e2231658f1b414dfaa553138b1024500780bb3bc97ee272548cbda81",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/test-summary.json",
+      "bytes": 5605,
+      "sha256": "df5d9863461d9c1d8c4cbe17d8618093eb1d83a2922a60bed8c8b531ca287387",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/testlogs/journal_test/test.log",
+      "bytes": 7206,
+      "sha256": "10de8d9d04b865b28d35b22c9e80d506d579c3df0a983196157df183cb40f286",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/testlogs/journal_test/test.xml",
+      "bytes": 7618,
+      "sha256": "8f9bd19116441c73ebb51a203c269ec873e38ebca6321bc79007c54aa4e2d94e",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/testlogs/ownership_test/test.log",
+      "bytes": 6233,
+      "sha256": "d80b92e854c6cadd835f661c69bef5f5a350be0433fdbdc83b07820d9298cca2",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/attempt-02/testlogs/ownership_test/test.xml",
+      "bytes": 6649,
+      "sha256": "907ce3a0589712a536657bd161931d91ad005179a30da1bdca05b0da2c63da25",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/collect_bep.py",
+      "bytes": 2736,
+      "sha256": "b232b7a890c4d826c2c3a6e783937a5e2dfb7c66b0c6914aff5f554136e11ee0",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/independent-review/lint-correction-01-review.json",
+      "bytes": 7335,
+      "sha256": "df9ae78ea70730652570a15ecf0f62e37c373b542e0c9a4986629f2e9531eb58",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/independent-review/positive-and-library-review.json",
+      "bytes": 3910,
+      "sha256": "3fe66e51f9c3b77b79bd5875a88e3eee1bceddef1089a47e02982dcc7a335884",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/independent-review/review.json",
+      "bytes": 7385,
+      "sha256": "2801b278dc10839db779276d363c4af901d36857161092316a27b3be438d3209",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/artifacts/nativelink-canonical-filesystem/libnativelink_canonical_filesystem-2584987233.rlib",
+      "bytes": 1860314,
+      "sha256": "cd909df8116c379dac06ebde28ce72ad59bdca02a546ba4601b0e297c0347491",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/artifacts/nativelink-canonical-filesystem-redb/libnativelink_canonical_filesystem-1170967707.rlib",
+      "bytes": 2021700,
+      "sha256": "28b7a798ba9b27ca3a74a225078de60b90cd93a2ee1ea5601495822c62442548",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/artifacts.json",
+      "bytes": 1163,
+      "sha256": "9275e0d068c4254c4b573afae54d39ee9c40f9836ed3415c15488eb78664c33f",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/bep.json",
+      "bytes": 515954,
+      "sha256": "fa976d080a03ebcb58a5f1364d1951c557bb71e2a1e93c204d40994a613e39b3",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/command.json",
+      "bytes": 863,
+      "sha256": "2ea56dafeb0b071672dd604646736a86bacdb2d1044bc49209ff415afb1567a5",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/lre.bazelrc",
+      "bytes": 1786,
+      "sha256": "f60cc96d8b292fe3b88e977f88656052ccc88e1fb1e56a07195c799d554ad441",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/nativelink.bazelrc",
+      "bytes": 304,
+      "sha256": "553375742e683f12cf6a85f77bb4b11cc37696cdcfc7607d60a90ddf6f13011a",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/nixos.bazelrc",
+      "bytes": 1140,
+      "sha256": "6bed8e0a0dbe854c4207ae27196d3e5cd1f99846fcc7f372f9246d8328614f4e",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/source-after.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/source-before.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/stderr.log",
+      "bytes": 852,
+      "sha256": "5d0fc6793948dddb6e9a170964e2f7afbc4bb87d23421e11561e00494c7a9e5b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/library-build-01/summary.json",
+      "bytes": 530,
+      "sha256": "c594e66359b79d83eb424a0ae9420ce4fd9a07290dfe7a004808134f62cb8963",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/lint-correction-01/correction.patch",
+      "bytes": 968,
+      "sha256": "2af075a1aa802be8ded584c66bcf5bb54c258dbca3b96b76b05f261ad8b27aa6",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/lint-correction-01/refreeze.json",
+      "bytes": 593,
+      "sha256": "341e2473a97a0cd544d1164166b144b1f1ba77457c929d4d8cde39984dd847b0",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/lint-correction-01/worker-after.rs",
+      "bytes": 18870,
+      "sha256": "149815cc62b9467d47dcc059105cb29319d335f5482afdf4343423bb0f96bbee",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/lint-correction-01/worker-before.rs",
+      "bytes": 18809,
+      "sha256": "526d28f3be96d4d79c29fb7e9cf7dadaca184fea0620b382b6bd64f82ea6f681",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-qualification.json",
+      "bytes": 2572,
+      "sha256": "4d91c2326e53fe67838147eef65487995e53fe45c1f708f5bad25374644a2ed7",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-receipts.json",
+      "bytes": 14678,
+      "sha256": "8dec56980d87cd7847a234d98ce0d3869e6cfc5a08f8124469537c3f8831f938",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-seal.json",
+      "bytes": 301,
+      "sha256": "adcbfc1e8ed803b3f2ca48b31dd996b22141fe0528dbfa8a32bccdf0f5906ea9",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/.claude/skills/nativelink-rust-change/SKILL.md",
+      "bytes": 2410,
+      "sha256": "72fdebc3737e84dbb3de99ab985f28e69f450c9e87495febeea5842f83171c81",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/.rustfmt.toml",
+      "bytes": 172,
+      "sha256": "06031963ffb1d2649f05f0d4e84eb37e67d95e7a75cfde17fd35a481e10d67a6",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/nativelink-scheduler/design/categorical/source-plan.md",
+      "bytes": 102267,
+      "sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/nativelink-worker/src/running_actions_manager.rs",
+      "bytes": 289742,
+      "sha256": "767d035fe66c80bee33f3887732072d70d1cda581613ddccf0044832294a044c",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/BUILD.bazel",
+      "bytes": 1488,
+      "sha256": "1db5d4dcfeef148425396a0a702197b9847d974199228bf084c147dafbfbc03a",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/Cargo.lock",
+      "bytes": 6331,
+      "sha256": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/Cargo.toml",
+      "bytes": 1258,
+      "sha256": "5006c5d6900fd80fdace204fa6819c5f4acbee5aa1b02a4989d5b4f364e8d4df",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/README.md",
+      "bytes": 8275,
+      "sha256": "9fb394bb9b9e0941765685a7f257f72ee122184ced47b31ceb60524863a15959",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/fixtures/canonical.json",
+      "bytes": 1546,
+      "sha256": "1bfec5d8a1c79f1fd0adbfa095a2e6c8fd8b6ff0cf251de377f4d1b3bf14080f",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/fixtures/legacy.json",
+      "bytes": 1887,
+      "sha256": "e1e0006998fc9d32e0c6c5dec4a723605a933d7b81850adac7ab40813da16943",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/fixtures/mapping.json",
+      "bytes": 3290,
+      "sha256": "121da3b19f9f1bc7af74e219f8ee9a8dba2f9dd262e7d03d2ec5eed76f2e2451",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/bin/convert.rs",
+      "bytes": 2009,
+      "sha256": "d09c9da2d3cc0409afdc78384afd4bc53a07fe6db557ea4921a0e8855bbb3dc6",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/conversion.rs",
+      "bytes": 21350,
+      "sha256": "3408c8a175ed6d75b25d2ed2a935314b9584c2e24b6899a6df7d95958fae7aa6",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/conversion_tests.rs",
+      "bytes": 11020,
+      "sha256": "a5cdbabc616c059eb0ddd3249b1ccac4ae19b0a7e6dc2a035832cef8384c8a05",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/legacy.rs",
+      "bytes": 3835,
+      "sha256": "7a9b68131bbc591c51205bcc9ecfc5ce57a45b1dcfd4a8e6a6c3e2706a909fe8",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/lib.rs",
+      "bytes": 1836,
+      "sha256": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/parse.rs",
+      "bytes": 8371,
+      "sha256": "89dbbc2078525156e73bba6377bdaacd79568e6f9208536fd78147aa4d979943",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/src/schema.rs",
+      "bytes": 9802,
+      "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-config/tests/parser.rs",
+      "bytes": 8664,
+      "sha256": "2c84b570ca492210abafa8d31d9095b359fc8f4409680f301ac8b6536cffc234",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/BUILD.bazel",
+      "bytes": 2887,
+      "sha256": "7a611f0ae9a7ea14fce0ba8c64e8016cd9c7d5ea408081e1175a9caf2f1567b7",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/Cargo.lock",
+      "bytes": 8052,
+      "sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/Cargo.toml",
+      "bytes": 1107,
+      "sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/README.md",
+      "bytes": 21184,
+      "sha256": "702cb35194f90ab334e71e960834db010756bcfd46a893a99289b38741805834",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/fixtures/namespace-v1.hex",
+      "bytes": 373,
+      "sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/journal_bridge_test.rs",
+      "bytes": 21144,
+      "sha256": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/capability.rs",
+      "bytes": 17462,
+      "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/capability_tests.rs",
+      "bytes": 17934,
+      "sha256": "c8b518f26a80029f4307406c1dd69a78a24c7c67964e8c4e4c83f9635bd69c8f",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/journal_tests.rs",
+      "bytes": 13419,
+      "sha256": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/lib.rs",
+      "bytes": 12137,
+      "sha256": "15e0efd795918447f13c9a06ef9c1b9cae1cffebe02ed6829a5499c51851049d",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/namespace_tests.rs",
+      "bytes": 14464,
+      "sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/tests.rs",
+      "bytes": 13428,
+      "sha256": "e304aeb65ce888b9154abf7f4331d9cbe7971e7a9bb51cb1b7d5be0be7861e41",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/worker.rs",
+      "bytes": 18870,
+      "sha256": "149815cc62b9467d47dcc059105cb29319d335f5482afdf4343423bb0f96bbee",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-source/tools/canonical-filesystem/src/worker_tests.rs",
+      "bytes": 42984,
+      "sha256": "cafb721735aeb7f8bc2d6faafa9e40f1feaadd8bec9ca49d4f46d77377bd424d",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/positive-sources.json",
+      "bytes": 8344,
+      "sha256": "728d2fff76979abedac14a5eca6da26b7b0bcdefae2b68f5f2ffee2a8b50270d",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/artifacts.json",
+      "bytes": 2575,
+      "sha256": "4065d271ae10d21cf984fb0e839dbd8769980731b8421a191ba4a4fc6790249b",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/bep.json",
+      "bytes": 522167,
+      "sha256": "51b3491ef59ed4f88e7c7db6474cd6eca8477479afe21158d2f02a0cd3c95e7d",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/command.json",
+      "bytes": 948,
+      "sha256": "b3b1b2623e13b2f67cfd9d794cf489fb752293554ba327d5b41894d404a58ccd",
+      "mode": 420,
+      "archive": "positive-02.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/elf/journal_test",
+      "bytes": 16883496,
+      "sha256": "ccb4b751bdc18fe3dcb8942c02b3434ed593c7a22ab9a19a2b7adfadd0ae41f5",
+      "mode": 493,
+      "archive": "positive-03.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/elf/ownership_test",
+      "bytes": 11644832,
+      "sha256": "937e4efaf93f2c3df67d611788a2faae8bca85bed4d9699a91d60ca4993089b1",
+      "mode": 493,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/lre.bazelrc",
+      "bytes": 1786,
+      "sha256": "f60cc96d8b292fe3b88e977f88656052ccc88e1fb1e56a07195c799d554ad441",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/nativelink.bazelrc",
+      "bytes": 304,
+      "sha256": "553375742e683f12cf6a85f77bb4b11cc37696cdcfc7607d60a90ddf6f13011a",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/nixos.bazelrc",
+      "bytes": 1140,
+      "sha256": "6bed8e0a0dbe854c4207ae27196d3e5cd1f99846fcc7f372f9246d8328614f4e",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/source-after.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/source-before.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/stderr.log",
+      "bytes": 1252,
+      "sha256": "08bc041847a59aa753e05b9966d0679a6426cd5926a9c4edbf3200cc7e14b622",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/stdout.log",
+      "bytes": 357,
+      "sha256": "bcc97347a33fb98a32acee8d13a229dcd1e0ecefff4572b2181cede2ceab051a",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/summary.json",
+      "bytes": 529,
+      "sha256": "098f857722d19df7eea489d82a400c050bfec5372e01a258c5f073a61da2cd1f",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/test-summary.json",
+      "bytes": 5605,
+      "sha256": "7202385ccb8d8b4d9632cdda0159f177fc95be1e7f849d7475674f455ac6be4b",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/testlogs/journal_test/test.log",
+      "bytes": 7206,
+      "sha256": "a9cd796d52497ecb87f1ba521820d9acc8cb60ec9e9f7aa29ff357def2444dea",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/testlogs/journal_test/test.xml",
+      "bytes": 7618,
+      "sha256": "8a8fa7af98cdb194363c9cfc5bf21299a6e768cba72ffbf4a7c2eaa0265356bc",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/testlogs/ownership_test/test.log",
+      "bytes": 6233,
+      "sha256": "7a53078793b65df5c81ce1bd252786128ab18d3f76295d49540fbadf157fb9c7",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-attempt-01/testlogs/ownership_test/test.xml",
+      "bytes": 6649,
+      "sha256": "11efaab933d05cf23f576868a9e6a579090b161096a390ae003e763b2667c9fe",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/artifacts/libnativelink_canonical_filesystem-1170967707.rlib",
+      "bytes": 2021700,
+      "sha256": "28b7a798ba9b27ca3a74a225078de60b90cd93a2ee1ea5601495822c62442548",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/artifacts/libnativelink_canonical_filesystem-2584987233.rlib",
+      "bytes": 1860314,
+      "sha256": "cd909df8116c379dac06ebde28ce72ad59bdca02a546ba4601b0e297c0347491",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/artifacts.json",
+      "bytes": 1094,
+      "sha256": "f078c6f02dace7939615c36e4f256ad96b47b311d9864f7e050b2364733ff9ca",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/bep.json",
+      "bytes": 510665,
+      "sha256": "b1d156df1581aa419854dd07f7d4cbdb40f4aef338f7cc016fe2d6437270f1ba",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/command.json",
+      "bytes": 872,
+      "sha256": "4f26ade93a65ecc397a559d9795343a601707011ed5320306052dc0cbc0d5d0d",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/lre.bazelrc",
+      "bytes": 1786,
+      "sha256": "f60cc96d8b292fe3b88e977f88656052ccc88e1fb1e56a07195c799d554ad441",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/nativelink.bazelrc",
+      "bytes": 304,
+      "sha256": "553375742e683f12cf6a85f77bb4b11cc37696cdcfc7607d60a90ddf6f13011a",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/nixos.bazelrc",
+      "bytes": 1140,
+      "sha256": "6bed8e0a0dbe854c4207ae27196d3e5cd1f99846fcc7f372f9246d8328614f4e",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/source-after.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/source-before.json",
+      "bytes": 232264,
+      "sha256": "298b4b8941cee672135b2bdb2c0ba84ceae8a08fb396d389d695a4a9e97d691b",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/stderr.log",
+      "bytes": 719,
+      "sha256": "3cf37ca8948e3c69ee622c2c6b5c256776982645e41d6e9d1992f28ce2d3bd14",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/restored-library-build-01/summary.json",
+      "bytes": 530,
+      "sha256": "edd16d79f174c0ff90a1287580721832bb8daccf7e3dbcf8ca65a57481051fb2",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/run_bazel.py",
+      "bytes": 3077,
+      "sha256": "6bb407d7d82afe09ff1ca52f29dc09999051512adb22a4afc357cd32e1bfada4",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    },
+    {
+      "path": "positive/run_library_build.py",
+      "bytes": 3015,
+      "sha256": "14dc8586a7d5eac87f8efd1dc20a5f3acbbfc3829aa9917241d12839e8604033",
+      "mode": 420,
+      "archive": "positive-04.tar.gz"
+    }
+  ]
+}

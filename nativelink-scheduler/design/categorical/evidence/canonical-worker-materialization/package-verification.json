@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "package_sha256": "c8ae6d644a110c198bc0e57b65ce6ee2bb254a46d1f9495a751b3fd202f747fa",
+  "archives": 40,
+  "members": 1677,
+  "member_bytes": 622861154,
+  "operation": "Read and hash only; no extraction or executable invocation"
+}

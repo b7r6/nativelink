@@ -1,0 +1,329 @@
+{
+  "source_directory": "/tmp/nativelink-canonical-worker-materialization-review",
+  "archives": [
+    {
+      "path": "source-audit-01.tar.gz",
+      "bytes": 462656,
+      "sha256": "c57118d861098cc0efd738ba23e950403410bd7101a2d1bc13afab365dfff811",
+      "files": 45,
+      "source_bytes": 2094037
+    }
+  ],
+  "members": [
+    {
+      "path": "source-audit/inputs.json",
+      "bytes": 12812,
+      "sha256": "2b00f18eb37811f6a0376efb9f02c1f3404a0df4c5579b5fe6c2b5b9cb213667",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/owned-worker-symbol-search.json",
+      "bytes": 312,
+      "sha256": "63cc5483a539136352657b1d8654ea1a7c5f75c3d3fc1e2cb2c242a6359a2746",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/pinned-rustix-1.1.2/src/fs/at.rs",
+      "bytes": 16020,
+      "sha256": "53fda1b8bcd6d70d2fb50979ab639b1cc92ee5302456a68481ba88cb7cfedbb2",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/pinned-rustix-1.1.2/src/fs/fd.rs",
+      "bytes": 10487,
+      "sha256": "cdeddb69610f9bab80cefd74449dce842d7f1c16123958bbd7ea0a3520fdc7bc",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/prepare.py",
+      "bytes": 3178,
+      "sha256": "47d61006df6db877c18495a60ea415a2fe158eb1e69b02c7fcd762f852b220df",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/proposal.json",
+      "bytes": 35093,
+      "sha256": "8263506056cf45070592d7dedc4a1ec3da41e8ab7c57fcea8dba125f3db307b4",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/receipts.json",
+      "bytes": 7535,
+      "sha256": "a7cb047487862d624802cfc87fdeacd7fe32d0613841e46e5bd530f35ab268a8",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/requested-plan.md",
+      "bytes": 102267,
+      "sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/seal.json",
+      "bytes": 422,
+      "sha256": "9f4209dc3f7b26ca45ca1d953812e0aaf04e9f9be7d2efe4b910e05a03a016be",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-config/src/cas_server.rs",
+      "bytes": 96641,
+      "sha256": "8e7e5a2f66f68a7a8974b0a2ec4104f31194bd5078b5bbbbacedd68935b29edd",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-scheduler/design/categorical/source-map.md",
+      "bytes": 10714,
+      "sha256": "edddcf1b5b1bfc70e207eec96bf61f9ffd60728ae0fd39b43b883321a6effbc2",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-scheduler/design/categorical/source-plan.md",
+      "bytes": 102267,
+      "sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-store/src/fast_slow_store.rs",
+      "bytes": 48751,
+      "sha256": "b3fdd0dbeb19cf29eca33bfa4d8c91e226f6501de5c0cbccab758484639c251e",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-store/src/filesystem_store.rs",
+      "bytes": 96397,
+      "sha256": "b11960764038c2edd4b9cb01d6788f9d16407240ef9899c4ad2dafbb19756fb8",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-util/src/fs.rs",
+      "bytes": 22103,
+      "sha256": "7ab2f45cc0e58e14bf610e4389ec865600c875ef711e99b2651e798af9b12499",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-util/src/task.rs",
+      "bytes": 5096,
+      "sha256": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/BUILD.bazel",
+      "bytes": 10572,
+      "sha256": "fac9244d762bd5ffeaab659955bf86de8e3c52362a7ed8f9e6129d42da312f91",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/Cargo.toml",
+      "bytes": 3403,
+      "sha256": "10ea69e971c615081bd5a187f269d5ec5a7c344af1a29e59704e2049f671f6c9",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/src/authority_worker.rs",
+      "bytes": 43040,
+      "sha256": "7b65bf493f738c19d09270bcd08fc53c8ccbfe1285cfb217d7a13542fecb13a5",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/src/directory_cache.rs",
+      "bytes": 105467,
+      "sha256": "db431ed5afe62bac57b62310728aa0f2312af87426223b65f671d5d6bcbf66be",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/src/local_worker.rs",
+      "bytes": 82302,
+      "sha256": "e7fd73924cbedd101455e28a77eb1e20eee60f2cf4dd682aecedc8bdc8cd5102",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/src/running_actions_manager.rs",
+      "bytes": 289742,
+      "sha256": "767d035fe66c80bee33f3887732072d70d1cda581613ddccf0044832294a044c",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/tests/authority_rpc_test.rs",
+      "bytes": 72073,
+      "sha256": "40b5241ff9183037ded3004252ecf56a5b4e65717e857a6a09800f19bbf6a634",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/tests/directory_cache_test.rs",
+      "bytes": 66078,
+      "sha256": "ad967489705fa649c2efdd7a73d577dcfb04bbf3ef240204cf6db6d40b6e0b46",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/nativelink-worker/tests/running_actions_manager_test.rs",
+      "bytes": 458549,
+      "sha256": "15c4545a6c82e50e86a380aad0e3712be603924c2237f397c5e6788a3f3acb09",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/src/bin/nativelink.rs",
+      "bytes": 43390,
+      "sha256": "84ec7247c5cce7674c4d7fdeabb35776ba4fdddfebadc56f2fe0ee404199bf6c",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-config/src/lib.rs",
+      "bytes": 1836,
+      "sha256": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-config/src/schema.rs",
+      "bytes": 9802,
+      "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/BUILD.bazel",
+      "bytes": 2775,
+      "sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/Cargo.lock",
+      "bytes": 8052,
+      "sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/Cargo.toml",
+      "bytes": 1107,
+      "sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/README.md",
+      "bytes": 19440,
+      "sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/capability.rs",
+      "bytes": 17462,
+      "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/capability_tests.rs",
+      "bytes": 17934,
+      "sha256": "c8b518f26a80029f4307406c1dd69a78a24c7c67964e8c4e4c83f9635bd69c8f",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/lib.rs",
+      "bytes": 11988,
+      "sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/namespace_tests.rs",
+      "bytes": 14464,
+      "sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-filesystem/src/tests.rs",
+      "bytes": 13387,
+      "sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-store/Cargo.toml",
+      "bytes": 2451,
+      "sha256": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-store/README.md",
+      "bytes": 9681,
+      "sha256": "56dd20d5fc290940ec08b90d34c1f2026146b7fd6feda9e14999761f6d5a75f8",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/source/tools/canonical-store/src/lib.rs",
+      "bytes": 20261,
+      "sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/verification.json",
+      "bytes": 1558,
+      "sha256": "e829a3d1bdee81686096a3c13bc36f44717865a1888a383ca5aafca3f4e5acba",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    },
+    {
+      "path": "source-audit/write-proposal.py",
+      "bytes": 21372,
+      "sha256": "ef6b5301d54ab1a91d38d570ad989907b4aa7b897562ae4c9ecab249181ddf1f",
+      "mode": 420,
+      "archive": "source-audit-01.tar.gz"
+    }
+  ]
+}

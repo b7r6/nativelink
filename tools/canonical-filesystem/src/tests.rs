@@ -39,6 +39,9 @@ mod capabilities;
 #[path = "namespace_tests.rs"]
 mod namespace;
 
+#[path = "worker_tests.rs"]
+mod worker;
+
 #[expect(
     clippy::redundant_pub_crate,
     reason = "Shared fixture is visible only to sibling crate tests."

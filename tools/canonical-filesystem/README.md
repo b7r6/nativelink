@@ -216,6 +216,43 @@ artifacts remain for review. The API provides no automatic retry adoption, orpha
 power-loss qualification or new persistent generation basis. The earlier
 inode-reuse and final-sync counterexamples still apply.
 
+## Private worker staging
+
+The private `worker` library module adds a cold Worker-role layout with pinned
+`inputs`, `staging` and `actions` directories. It is compiled in ordinary library
+builds, with no public exports or factory integration. Only its fault probes are
+conditional on tests. Unknown or partial existing state is refused and preserved.
+
+A pending input copies bytes into a separate worker inode, checks exact size and
+EOF, sets mode `0444`, closes writable access and publishes without replacement.
+Canonical CAS inodes keep their single-link requirement. Ordinary action files
+can share worker-local hardlinks; custom mode, executable and modification-time requests use
+private inodes. Every descendant retains all four namespace locks. Operations
+within a detached blocking closure keep custody until their system calls finish.
+
+The limit of 65,536 bytes per input and the 8,192-byte copy buffer are finite
+qualification parameters. They do not define production disk, aggregate input,
+pin, queue or transfer budgets. Raw read handles do not establish digest identity.
+The module does not sync publication, walk input trees, spawn actions, upload
+outputs, evict files, clean up artifacts or reconstruct a worker after restart.
+Named inode checks still require cooperative mutation; mode bits do not exclude
+a hostile owner who can change permissions. The worker factory, namespace
+fencing and deployment requirements remain separate work.
+
+The 33 worker tests specify descriptor rename behavior, four-role custody,
+separate CAS and worker inodes, private metadata, cross-family refusal, bounded
+copy/EOF accounting and real syscall failures. Both normal library variants
+build. Uncached ownership and journal suites pass 68 and 80 tests respectively,
+including all 33 worker tests in each: 148 executions of 80 distinct tests.
+
+The [qualification evidence](../../nativelink-scheduler/design/categorical/evidence/canonical-worker-materialization)
+preserves 16 compiled runtime variants and 17 exact test invocations. Each
+selected assertion detects its variant. Two variants still refuse completion
+through the final size check and fail only the expected error-code assertion;
+the recorded results distinguish these from unexpected success. Restored
+baseline suites pass again with default formatting and Clippy checks. This
+qualifies the private prerequisite above, not production worker integration.
+
 ## Future store bridge
 
 The separate [`canonical-store`](../canonical-store) experiment now implements
