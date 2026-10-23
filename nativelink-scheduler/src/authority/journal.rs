@@ -906,6 +906,54 @@ pub enum JournalPersistence {
     Volatile,
 }
 
+/// Facts supplied by an owned storage capability before opening its database.
+/// The domain includes both the cluster epoch and authority namespace.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct JournalBinding {
+    pub node_id: u64,
+    pub domain: AuthorityDomain,
+}
+
+/// A database produced by a trusted factory. Its backend must retain any
+/// namespace custody for the entire database/transaction lifetime. A separate
+/// callback or caller guard is insufficient when blocking I/O outlives a caller.
+pub struct JournalDatabase {
+    database: Database,
+    sync_new_parent: Option<Box<dyn FnOnce() -> io::Result<()> + Send>>,
+}
+
+impl Debug for JournalDatabase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JournalDatabase")
+            .field("created", &self.sync_new_parent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl JournalDatabase {
+    /// Use only for an exclusively created file. The parent callback runs after
+    /// durable authority initialization and must refer to the opened parent.
+    pub fn created(
+        database: Database,
+        sync_parent: impl FnOnce() -> io::Result<()> + Send + 'static,
+    ) -> Self {
+        Self {
+            database,
+            sync_new_parent: Some(Box::new(sync_parent)),
+        }
+    }
+
+    /// Use only for existing storage; the factory must refuse missing or empty
+    /// storage before it could initialize anything. All journal validation still
+    /// runs before the database is admitted.
+    pub fn existing(database: Database) -> Self {
+        Self {
+            database,
+            sync_new_parent: None,
+        }
+    }
+}
+
 /// Cloneable split storage handles share one serialized blocking-I/O queue.
 #[derive(Clone)]
 pub struct Journal {
@@ -1111,6 +1159,31 @@ impl Journal {
         Self::open_inner(path, node_id, profile.domain.epoch, limits, Some(profile)).await
     }
 
+    /// Construct from a capability-aware factory without depending on a
+    /// platform-specific filesystem library. Bindings and limits are checked
+    /// before the factory runs on the blocking pool. Existing format validation
+    /// and admission registration are unchanged. This does not fence an old
+    /// authority, authorize bootstrap, or replace closed-member recovery.
+    pub async fn open_from_factory(
+        binding: JournalBinding,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+        factory: impl FnOnce() -> io::Result<JournalDatabase> + Send + 'static,
+    ) -> Result<Self> {
+        if binding.node_id != node_id || binding.domain != profile.domain {
+            return Err(failure(ErrorVerb::Read, "journal factory binding mismatch"));
+        }
+        Self::open_with_factory_inner(
+            node_id,
+            profile.domain.epoch,
+            limits,
+            Some(profile),
+            move || factory().map_err(|error| failure(ErrorVerb::Read, error)),
+        )
+        .await
+    }
+
     /// Reconstruct the bounded trusted fixture registry from closed journals.
     /// The caller must stop and fence every prior member process first, and
     /// supply every member named by an unresolved preparation. New profiles use
@@ -1234,6 +1307,42 @@ impl Journal {
         limits: Limits,
         profile: Option<JournalProfile>,
     ) -> Result<Self> {
+        let path = path.as_ref().to_owned();
+        Self::open_with_factory_inner(node_id, epoch, limits, profile, move || {
+            match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(file) => {
+                    let database = Database::builder()
+                        .create_file(file)
+                        .map_err(|e| failure(ErrorVerb::Write, e))?;
+                    Ok(JournalDatabase::created(database, move || {
+                        let parent = path
+                            .parent()
+                            .filter(|p| !p.as_os_str().is_empty())
+                            .unwrap_or_else(|| Path::new("."));
+                        File::open(parent)?.sync_all()
+                    }))
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Database::open(&path)
+                    .map(JournalDatabase::existing)
+                    .map_err(|e| failure(ErrorVerb::Read, e)),
+                Err(e) => Err(failure(ErrorVerb::Write, e)),
+            }
+        })
+        .await
+    }
+
+    async fn open_with_factory_inner(
+        node_id: u64,
+        epoch: ClusterEpoch,
+        limits: Limits,
+        profile: Option<JournalProfile>,
+        factory: impl FnOnce() -> Result<JournalDatabase> + Send + 'static,
+    ) -> Result<Self> {
         let domain = profile.as_ref().map_or(
             AuthorityDomain {
                 epoch,
@@ -1246,39 +1355,19 @@ impl Journal {
             .map_or(ReaderCapabilities::Base, |p| p.reader);
         // Refuse an invalid admission envelope before creating any durable file.
         let initial = State::new(epoch, limits).map_err(|e| failure(ErrorVerb::Write, e))?;
-        let path = path.as_ref().to_owned();
         let (database, created, committed_format, controls) =
             spawn_blocking!("authority_journal_open", move || {
-                let (database, created) = match OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create_new(true)
-                    .open(&path)
-                {
-                    Ok(file) => (
-                        Database::builder()
-                            .create_file(file)
-                            .map_err(|e| failure(ErrorVerb::Write, e))?,
-                        true,
-                    ),
-                    Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (
-                        Database::open(&path).map_err(|e| failure(ErrorVerb::Read, e))?,
-                        false,
-                    ),
-                    Err(e) => return Err(failure(ErrorVerb::Write, e)),
-                };
+                let JournalDatabase {
+                    database,
+                    sync_new_parent,
+                } = factory()?;
+                let created = sync_new_parent.is_some();
                 let mut committed_format = ActiveFormat::base(domain);
                 let mut controls = Vec::new();
-                if created {
+                if let Some(sync_new_parent) = sync_new_parent {
                     Self::initialize_database(&database, node_id, epoch, &initial, domain)?;
                     // Persist the new directory entry as well as database contents.
-                    let parent = path
-                        .parent()
-                        .filter(|p| !p.as_os_str().is_empty())
-                        .unwrap_or_else(|| Path::new("."));
-                    File::open(parent)
-                        .and_then(|file| file.sync_all())
-                        .map_err(|e| failure(ErrorVerb::Write, e))?;
+                    sync_new_parent().map_err(|e| failure(ErrorVerb::Write, e))?;
                 } else {
                     let tx = database
                         .begin_read()
@@ -2579,6 +2668,10 @@ impl Singleton {
         self.raft.shutdown().await.map_err(|e| e.to_string())
     }
 }
+
+#[cfg(test)]
+#[path = "journal_factory_tests.rs"]
+mod factory_tests;
 
 #[cfg(test)]
 mod batch_validation_tests {

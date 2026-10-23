@@ -110,6 +110,7 @@ name = "nativelink-canonical-filesystem"
 version = "0.0.0"
 dependencies = [
  "nativelink-canonical-config",
+ "redb",
  "rustix",
  "serde",
  "serde_json",
@@ -174,6 +175,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "redb"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39178e0a867f9e3eaa6292a4ab1dd3613f2519c5b564341e1e7b29b270736cc4"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

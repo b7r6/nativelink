@@ -79,6 +79,7 @@ rust_library(
         "src/authority/accepted_history_tests.rs",
         "src/authority/format.rs",
         "src/authority/journal.rs",
+        "src/authority/journal_factory_tests.rs",
         "src/authority/mod.rs",
         "src/authority/reapi.rs",
         "src/authority/receipt_retirement.rs",

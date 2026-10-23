@@ -36,14 +36,14 @@ static FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 #[path = "capability_tests.rs"]
 mod capabilities;
 
-struct Fixture {
-    directory: PathBuf,
-    manifest: Manifest,
+pub struct Fixture {
+    pub(super) directory: PathBuf,
+    pub(super) manifest: Manifest,
     _guard: MutexGuard<'static, ()>,
 }
 
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let guard = FIXTURE_LOCK.lock().unwrap();
         let directory = std::env::temp_dir().join(format!(
             "nativelink-namespace-{}-{}",

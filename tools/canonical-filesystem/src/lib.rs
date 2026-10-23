@@ -29,10 +29,14 @@ use rustix::fs::{Dir, FlockOperation, Mode, OFlags, flock, fstat, fsync, open, o
 use serde::{Deserialize, Serialize};
 
 mod capability;
+#[cfg(feature = "redb")]
+mod journal;
 pub use capability::{
     CasDirectory, DigestAlgorithm, DigestLeaf, FixedLayout, PendingWrite, ReadHandle,
     SinkDirectory, TemporaryId,
 };
+#[cfg(feature = "redb")]
+pub use journal::{JOURNAL_FILE, JournalBinding, JournalDirectory, JournalParent, OpenedJournal};
 
 /// Outside the fixed content/temp layout that a store may scan or prune.
 pub const OWNERSHIP_RECORD: &str = ".nativelink-namespace-v1.json";

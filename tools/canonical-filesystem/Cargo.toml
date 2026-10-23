@@ -14,8 +14,14 @@ inherits = "dev"
 opt-level = "z"
 strip = true
 
+[features]
+redb = ["dep:redb"]
+
 [dependencies]
 nativelink-canonical-config = { path = "../canonical-config" }
+redb = { version = "=4.4.0", features = [
+  "std",
+], default-features = false, optional = true }
 rustix = { version = "=1.1.2", features = ["fs"] }
 serde = { version = "=1.0.228", default-features = false, features = [
   "derive",
