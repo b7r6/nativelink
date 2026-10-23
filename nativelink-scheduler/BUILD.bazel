@@ -418,6 +418,30 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "publication_physical_test",
+    timeout = "moderate",
+    srcs = ["tests/publication_physical_test.rs"],
+    compile_data = [
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_physical/cases.rs",
+        "tests/publication_physical/fixture.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
+    ],
+)
+
 rust_doc(
     name = "docs",
     crate = ":nativelink-scheduler",
