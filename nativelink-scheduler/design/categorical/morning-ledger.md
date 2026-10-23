@@ -7,7 +7,12 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest integration: all 22 selected Bazel targets pass across the service crate,
+Latest focused integration: the standalone parser and converter pass both manual
+Bazel targets, the converter binary builds, and the fixed listener suite passes.
+The integrated listener binary also passes all four explicit local mTLS cases.
+[Receipts](evidence/canonical-listener-integration/manifest.json) record the
+source boundary, build and binary hashes, and the initial misspelled target.
+The preceding integration passed all 22 selected Bazel targets across the service crate,
 publication candidate/comparisons, physical fixture, and worker publication.
 [Integration receipts](evidence/construction-integration/manifest.json) retain
 the exact source and an initial library lint failure. Authority-only construction retains no legacy publication
@@ -582,7 +587,26 @@ ByteStream. The same immediate store handle cannot occupy both object and sink
 roles. All 22 selected integration targets pass, including the full service
 crate and an additional client-only Operations case. The library-wide lint run
 also caught a wildcard import omitted from the earlier focused target coverage;
-explicit imports fix it. Actual mTLS exclusion is the next local qualification.
+explicit imports fix it.
+
+The [fixed-listener mTLS qualification](authority-listener-tls.md) now exercises
+both hash algorithms with isolated trust and deliberately shared trust. Worker
+credentials fail on the isolated client AC route while authorized client writes,
+worker transfers, accepted publication and later cache hits succeed. The shared
+trust control admits the worker write and is classified unsafe. All four cases
+pass again against the integrated Bazel binary. This covers every client listener
+in the one-client-listener fixture, not deployed ingress or credential placement.
+
+The [canonical schema and offline converter](../../../../tools/canonical-config/README.md)
+now form a standalone package without runtime or Redis dependencies. Seventeen
+Cargo tests and both manual Bazel targets pass. The parser refuses legacy keys,
+duplicates, interpolation, unknown fields and bounded-input violations. The
+converter accepts only its narrow direct-filesystem source shape and requires
+explicit ownership, encoding, placement, trust and fencing declarations. Unknown
+or unsupported facts emit blockers with no candidate; even complete proposals
+remain unqualified for deployment. [Author receipts](evidence/canonical-config/manifest.json)
+retain actual legacy-schema acceptance, source/dependency hashes and successful
+and refused CLI syscall observations. No runtime consumes this format yet.
 
 ## Next work and facts for the morning
 
@@ -593,7 +617,9 @@ explicit imports fix it. Actual mTLS exclusion is the next local qualification.
 2. Resume the plan's M4a.1 through M4a.4 product sequence: canonical role
    construction, removal of legacy worker publication/history bypasses, fixed
    listener isolation, and strict configuration refusal plus the offline
-   converter. Existing fixtures qualify parts of these behaviors; production
+   converter. The parser, converter and local mTLS fixture are implemented;
+   physical namespace preflight, startup refusal ordering and the fixed clock
+   still need combined construction. Existing fixtures qualify parts of these behaviors; production
    factories still select the legacy runtime. Unknown migration destinations must
    remain explicit blocking output from the converter.
 3. Measure combined execution, publication, lease and retirement demand, and
