@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use bytes::BytesMut;
-use futures::future::pending;
+use futures::future::{Fuse, FusedFuture, pending};
 use futures::stream::unfold;
 use futures::{Future, Stream, StreamExt, TryFutureExt, try_join};
 use nativelink_config::cas_server::{ByteStreamConfig, InstanceName, WithInstanceName};
@@ -428,7 +428,7 @@ type StoreUpdateFuture = Pin<Box<dyn Future<Output = Result<(), Error>> + Send +
 struct StreamState {
     uuid: UploadKey,
     tx: DropCloserWriteHalf,
-    store_update_fut: StoreUpdateFuture,
+    store_update_fut: Fuse<StoreUpdateFuture>,
     digest_function: DigestHasherFunc,
 }
 
@@ -440,8 +440,8 @@ impl Debug for StreamState {
     }
 }
 
-/// If a stream is in this state, it will automatically be put back into an `IdleStream` and
-/// placed back into the `active_uploads` map as an `IdleStream` after it is dropped.
+/// Pending backend work returns to the `active_uploads` map as an `IdleStream`
+/// when this guard is dropped. Completed backend work cannot be resumed.
 /// To prevent it from being put back into an `IdleStream` you must call `.graceful_finish()`.
 struct ActiveStreamGuard {
     stream_state: Option<StreamState>,
@@ -475,6 +475,14 @@ impl Drop for ActiveStreamGuard {
             );
             return;
         };
+        // Completion belongs to the retained future, not the temporary join
+        // inside this RPC. A backend error, or backend success followed by a
+        // client error, must not park a future that has already returned Ready.
+        if stream_state.store_update_fut.is_terminated() {
+            active_uploads.remove(&uuid);
+            self.metrics.active_uploads.fetch_sub(1, Ordering::Relaxed);
+            return;
+        }
         // Mark stream as idle with current timestamp.
         // The global sweeper will clean it up after idle_stream_timeout.
         // This avoids spawning a task per stream, reducing overhead from O(n) to O(1).
@@ -795,7 +803,7 @@ impl ByteStreamServer {
 
         let (tx, rx) = make_buf_channel_pair();
         let store = instance.store.clone();
-        let store_update_fut = Box::pin(
+        let store_update_fut: StoreUpdateFuture = Box::pin(
             async move {
                 // We need to wrap `Store::update()` in a another future because we need to capture
                 // `store` to ensure its lifetime follows the future and not the caller.
@@ -811,7 +819,7 @@ impl ByteStreamServer {
             stream_state: Some(StreamState {
                 uuid,
                 tx,
-                store_update_fut,
+                store_update_fut: futures::FutureExt::fuse(store_update_fut),
                 digest_function,
             }),
             bytes_received,
