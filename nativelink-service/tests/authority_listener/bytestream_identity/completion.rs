@@ -68,10 +68,9 @@ impl StoreDriver for CompleteOnce {
         self.completed.fetch_add(1, Ordering::Release);
         match self.first {
             FirstCompletion::EarlySuccess => Ok(u64::try_from(received).unwrap()),
-            FirstCompletion::ErrorBeforeEof | FirstCompletion::ErrorAfterEof => Err(make_err!(
-                nativelink_error::Code::Unavailable,
-                "fixture backend failed"
-            )),
+            FirstCompletion::ErrorBeforeEof | FirstCompletion::ErrorAfterEof => {
+                Err(make_err!(Code::Unavailable, "fixture backend failed"))
+            }
         }
     }
 
