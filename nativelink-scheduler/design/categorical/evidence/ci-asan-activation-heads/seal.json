@@ -1,0 +1,18 @@
+{
+  "executable-nativelink-scheduler-publication_activation_v2_reference_test.tar.gz": {
+    "bytes": 4143004,
+    "sha256": "edd5ecc3053b0ecb6bea72700e03861ae5d947073d5c3ba407f0c043e70fff2b"
+  },
+  "manifest.json": {
+    "bytes": 306666,
+    "sha256": "b52f5e96decb61ad2defd51c0f1226990707821eb845fd83bf76f8963282806f"
+  },
+  "sources-and-runs.tar.gz": {
+    "bytes": 7056512,
+    "sha256": "f79efd5c12601419ae69ba554484c862ef7a6646db9ba2a34ace2958279cf44b"
+  },
+  "verify.py": {
+    "bytes": 1975,
+    "sha256": "201cd1597262767bf376977accb92f15c1595fa85bf6bd47fceedc43a5447310"
+  }
+}

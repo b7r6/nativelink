@@ -1,0 +1,27 @@
+{
+  "decision": "No field-drop-order defect in inspected current source or original descriptor-capability commit. No edits proposed.",
+  "git_head": "1305a415f32e73588d647bb2eaff864e566904d4",
+  "files": [
+    {
+      "path": "tools/canonical-filesystem/src/capability.rs",
+      "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "bytes": 17462
+    },
+    {
+      "path": "tools/canonical-filesystem/src/lib.rs",
+      "sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "bytes": 11988
+    },
+    {
+      "path": "tools/canonical-filesystem/README.md",
+      "sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+      "bytes": 19440
+    }
+  ],
+  "declaration_lines": "capability.rs:119-127 declares content, temporary, executable, then ownership. Original e449d0a590 declaration identical. Worker isolated worktree capability bytes also identical.",
+  "apparent_confusion": "Constructor expression at capability.rs:226-231 lists ownership first. Rust named-field initializer ordering does not change declaration field destruction order.",
+  "actual_custody": "Every directory operation borrows self backed by Arc<Directories>; active normal use cannot coincide with final Arc destruction. Returned PendingWrite/ReadHandle declare File before retained Arc, so file closes before final directory custody may release. Directories declares three OwnedFd before Arc<Ownership>, so final destruction closes child descriptors before dropping final role locks. No custom Drop or spawned work in capability.rs changes this.",
+  "bounded_counterfactual": "If ownership had been declared first, final lock release could precede child directory descriptor close. With final Arc reached there is no remaining safe Rust operation, directory close is not a promised sync/durability action, and no Drop implementation runs new namespace mutations. That alone would not establish overlapping live I/O or corruption; it would violate a stronger all-descriptors-closed-before-unlock contract if claimed. Actual declaration already enforces the stronger ordering.",
+  "limits": "Source-level destruction/custody audit only, not a new runtime test or syscall trace, and no durability/power-loss inference. Existing cooperative namespace assumptions remain.",
+  "review_actions": "Read-only repository/Git/source inspection; reviewer files only. No compiler/build/test invocation or worktree edit."
+}

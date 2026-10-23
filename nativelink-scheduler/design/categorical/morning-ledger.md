@@ -18,12 +18,39 @@ Their receipts separate independent source review, original failures, author
 fault controls and root integration. Production construction, combined admission
 and the complete canonical clock contract remain open.
 
-The private lifecycle and clock components pass their combined root checkpoint
+The closed recovered owner and private worker materialization pass their combined
+root checkpoint at `78ab50c3b6`: six uncached targets, 378 passes, one existing
+ignore, and a successful server build. The [sealed integration packet](evidence/canonical-recovered-worker-root/manifest.json)
+retains 1,387 unchanged tracked inputs, raw build events and logs, independent
+review, and all seven executables matched to build-event digests. The worker
+runtime and tests match their qualified sources; all 35 selected inputs match
+the final author commit. Its final documentation update accounts for the one
+difference from the earlier control baseline.
+
+The [recovered owner](canonical-recovered-owner.md) includes sixteen new library
+cases, an external API case, six detected compiled controls and sixteen negative
+API compiler probes. The [worker packet](evidence/canonical-worker-materialization/README.md)
+preserves thirty-three new cases and sixteen compiled variants with seventeen
+reached assertion failures. Two variants retain refusal and only fail error-code
+assertions; another detects loss of descriptor-relative availability. These
+counts overlap the combined run and are not extra full-workspace coverage.
+Production factories and worker execution still use the legacy runtime.
+
+The first published nightly ASAN check stops before test execution at four
+Clippy assertion-style diagnostics. Commit `b46336cd13` changes those empty-head
+assertions to value comparisons without changing their meaning. The affected
+activation-reference target then passes all 27 cases, uncached, under the same
+`--config=asan` configuration. Its [separate packet](evidence/ci-asan-activation-heads/manifest.json)
+retains the original CI log, source audit, local hook correction, 1,387 unchanged
+source inputs, and the actual executable. This does not establish a full
+sanitizer run. GitHub checks on the final published revision remain separate.
+
+The earlier private lifecycle and clock components pass their combined checkpoint
 at `61a12ad332`: five uncached targets, 295 passes, one existing ignore, and a
 successful server build. The [sealed integration packet](evidence/canonical-recovery-components-root/manifest.json)
 preserves all 1,365 unchanged source inputs, raw logs, build events, independent
-review, and six executables including the server. The public recovered owner and
-worker materialization are separate changes still undergoing qualification.
+review, and six executables including the server. The closed owner and worker
+materialization were qualified separately before the later combined checkpoint.
 
 Earlier full Bazel checkpoint at `ef57a7deae`: all 172 targets passed in the
 reduced-concurrency run, including six explicitly selected manual canonical
@@ -1205,8 +1232,8 @@ owner from an accepted handoff. Its 21 new fixtures pass; the qualified and
 restored author runs pass 184 library tests and one API test, with one ignore.
 Six compiled controls fail reached assertions, and restored strict checks pass.
 Root verifies the complete archived packet and matches all 21 selected author
-sources at `c3beca65f8`. Combined root execution and composition with the clock
-remain pending. No public recovery constructor or production route is enabled.
+sources at `c3beca65f8`. The later checkpoints above qualify combined execution
+and the closed public recovered owner. No production route is enabled.
 
 The [private recovered clock](canonical-recovery-clock.md) now passes its sixteen
 numeric and real Raft fixtures. Qualified and restored author runs pass 167
@@ -1214,10 +1241,23 @@ library tests plus one API test, with one ignore; strict checks pass and restore
 binaries match. Twelve compiled controls produce eleven direct detections and
 one expected equivalent survivor. All earlier command, environment, lint, and
 formatting attempts remain in the sealed packet. Root integrates the clock with
-the private supervisor at `94350bda62`; their combined execution and the closed
-public owner are the next separate checks. No production constructor changes.
+the private supervisor at `94350bda62`; the later checkpoints above qualify
+their combined execution and the closed public owner. No production constructor
+changes.
 
 ## Next work and facts for the morning
+
+The [source-only handoff](evidence/canonical-next-stage-handoff/proposal.json)
+identifies four concrete dependencies: match completed fixed-layout
+synchronization to retained namespace custody; implement supervised cold
+initialization and sealing; qualify one fixed admitted feature profile; and
+keep the canonical coordinator inside the supervisor behind typed ingress.
+Cold preparation still leaves Preparing state, and its temporal audit alone
+does not validate initialized singleton membership. Canonical recovery currently
+accepts only Base format. Feature admission is required before canonical serving;
+it need not block a closed Base-format cold owner. The proposed proof API remains
+a design choice. This handoff is source inspection, not implementation or new
+runtime qualification.
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions
    change. The current bound and repaired restore premise explain the surviving

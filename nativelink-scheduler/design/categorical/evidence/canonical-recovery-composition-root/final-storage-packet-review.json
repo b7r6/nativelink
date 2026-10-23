@@ -1,0 +1,42 @@
+{
+  "decision": "PASS: sealed packet preserves independently reviewed source, actual artifacts, raw results, prerequisite failures and bounded semantic classifications; all contents verified after relocation.",
+  "packet_commit": "880ea7b8e2e47e9b1a5bc2b5ba73fe53c917f2df",
+  "all11_packet_files_byte_equal_git_commit": true,
+  "manifest_sha256": "4f915de0bdfef3898a7b59d0730b72a3009ca5f96ac9dc33f75bab3af5c2e4cd",
+  "raw_review_sha256": "01b3e92acf0bdb36e28f9b660eba6fe6992357afc89147ec87e9653be9e4037e",
+  "archive_counts": {
+    "archives": 8,
+    "members": 2222,
+    "distinct_actual_ELFs": 10,
+    "distinct_actual_rlibs": 3,
+    "binary_alias_paths": 66,
+    "Cargo_attempt_bindings": 13,
+    "actual_API_runs": 2
+  },
+  "original_reviews_fully_preserved": {
+    "storage-review": {
+      "files": 1026,
+      "ordinary_members": 993,
+      "binary_aliases": 33
+    },
+    "root-review": {
+      "files": 214,
+      "ordinary_members": 214,
+      "binary_aliases": 0
+    }
+  },
+  "author_retained_files_byte_equal": 1035,
+  "qualified44_source_inputs_exact_at_commit": "d80937eb1815cf00c23e331e790f47077f516320",
+  "original_independent_final_review_sha256": "d315094f75ec4a637f4d119e08bfe139e237bdd2ccefe37430d6b71fc75a25a7",
+  "semantic_review": "README and manifest accurately preserve216library+2external passes/1existingignore,16focused included,6distinct compiled controls and actual first observed assertions. Leader-only does not claim premature owner offer; early-origin secondary teardown panic is not the detection. No count of unexecuted later branches. Original strict5diagnostics/3classes retained with exact narrow source correction.",
+  "API_review": "Both actual runs positive0 plus16required primary negative diagnostics; original classifier15 preserved; exact constructor E0451 and related secondary private-type macro span handled only by frozen v2 classifier before restored rerun. Metadata probes are separate from runtime controls.",
+  "source_provenance": "Original source_manifest_sha256 in Cargo receipts selects paths; exact44source_before/after and per-attempt copied bytes bind initial/qualified/individual-mutant content. Explicitly documented, no stale-hash claim of executed contents.",
+  "hooks": "Original packet-hook attempt Vale2spelling errors retained outside packet; correctedREADME only. Corrected packet fullhook commit log has noFailed and records880ea7b8e2. Independently copied both logs; no runtime changes or evidence-byte changes.",
+  "limits": [
+    "No serving,time-driver,proposal/query API,factory adoption,cold initialization,seal writer or repository-wide rawhandle elimination qualification.",
+    "Diagnostic is capture information,not current health. Backend final destruction before acknowledged completion does not add durability; external aliases/blocked I/O can retain custody.",
+    "Archive selected sources/production libraries are not a hermetic dependency/toolchain closure.",
+    "Packet verification/extraction performs no compiler or test execution. Earlier independently reviewed runtime results are preserved,not repeated by this review."
+  ],
+  "review_directory_stable": true
+}

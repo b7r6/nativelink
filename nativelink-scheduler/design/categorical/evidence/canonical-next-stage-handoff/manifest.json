@@ -1,0 +1,225 @@
+{
+  "scope": "Unimplemented source-only next-stage proposal and author current-source audit. No new runtime or test qualification.",
+  "head": "78ab50c3b632dc9a1b36db77f411a1aef277ef32",
+  "archives": [
+    {
+      "name": "source-only-handoff.tar.gz",
+      "bytes": 229386,
+      "sha256": "3fac1f6146602b4625a172b9d8318f37ddbf284ff3bb76e05853ea9b6b85d2a9",
+      "parts": [
+        {
+          "path": "source-only-handoff.tar.gz",
+          "bytes": 229386,
+          "sha256": "3fac1f6146602b4625a172b9d8318f37ddbf284ff3bb76e05853ea9b6b85d2a9"
+        }
+      ],
+      "members": [
+        {
+          "path": "proposal/elimination-plan.md",
+          "bytes": 102267,
+          "sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6"
+        },
+        {
+          "path": "proposal/proposal.json",
+          "bytes": 15852,
+          "sha256": "081864e8620a235bc9dd82dff6cc2c2f54b40c7452530a271e0ff7a6836787c9"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/Cargo.toml",
+          "bytes": 3175,
+          "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "bytes": 4418,
+          "sha256": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+          "bytes": 11728,
+          "sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/canonical_binding.rs",
+          "bytes": 3272,
+          "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/canonical_clock.rs",
+          "bytes": 5747,
+          "sha256": "2e36d691fab0ccfd3b570da0bfb3d2c1f187ab1648754d319e89fdb988b03c06"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/canonical_owner.rs",
+          "bytes": 14737,
+          "sha256": "4c1e1afe4ab59cef2de7fd916428c0119e5d2540bf33c85e3ff9c34c771eb1cf"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/canonical_recovery.rs",
+          "bytes": 13334,
+          "sha256": "0123ddf0ec1722bdc129af1be14adfae15a542c291e3452bb9ba50c1c6f36cdc"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+          "bytes": 14704,
+          "sha256": "79f6b5fc379016aee0e3713b0c44c5c53decf696fa2c8ea6a9e1fe3c99890e80"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/format.rs",
+          "bytes": 42037,
+          "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/journal.rs",
+          "bytes": 124513,
+          "sha256": "b2432bd2922de404d3b270c015948fdb90749559233bd9708de7bdfb3c5244f7"
+        },
+        {
+          "path": "proposal/source/nativelink-scheduler/src/authority/types.rs",
+          "bytes": 18199,
+          "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+        },
+        {
+          "path": "proposal/source/nativelink-service/Cargo.toml",
+          "bytes": 3313,
+          "sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4"
+        },
+        {
+          "path": "proposal/source/nativelink-service/src/authority_server.rs",
+          "bytes": 90986,
+          "sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61"
+        },
+        {
+          "path": "proposal/source/tools/canonical-config/src/schema.rs",
+          "bytes": 9802,
+          "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764"
+        },
+        {
+          "path": "proposal/source/tools/canonical-filesystem/src/capability.rs",
+          "bytes": 17462,
+          "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773"
+        },
+        {
+          "path": "proposal/source/tools/canonical-filesystem/src/journal.rs",
+          "bytes": 9482,
+          "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+        },
+        {
+          "path": "proposal/source/tools/canonical-filesystem/src/lib.rs",
+          "bytes": 11988,
+          "sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de"
+        },
+        {
+          "path": "proposal/source/tools/canonical-filesystem/src/namespace.rs",
+          "bytes": 8025,
+          "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+        },
+        {
+          "path": "proposal/source/tools/canonical-store/src/lib.rs",
+          "bytes": 20261,
+          "sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1"
+        },
+        {
+          "path": "current-source-audit/audit.json",
+          "bytes": 11404,
+          "sha256": "bba66669b0ef9f85b5dcea55925ee96c87295d938d00936ef290e499f40e5f44"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/Cargo.toml",
+          "bytes": 3175,
+          "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+          "bytes": 4418,
+          "sha256": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+          "bytes": 11728,
+          "sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+          "bytes": 3272,
+          "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/canonical_clock.rs",
+          "bytes": 5747,
+          "sha256": "2e36d691fab0ccfd3b570da0bfb3d2c1f187ab1648754d319e89fdb988b03c06"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+          "bytes": 14737,
+          "sha256": "4c1e1afe4ab59cef2de7fd916428c0119e5d2540bf33c85e3ff9c34c771eb1cf"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/canonical_recovery.rs",
+          "bytes": 13334,
+          "sha256": "0123ddf0ec1722bdc129af1be14adfae15a542c291e3452bb9ba50c1c6f36cdc"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+          "bytes": 14704,
+          "sha256": "79f6b5fc379016aee0e3713b0c44c5c53decf696fa2c8ea6a9e1fe3c99890e80"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/format.rs",
+          "bytes": 42037,
+          "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/journal.rs",
+          "bytes": 124513,
+          "sha256": "b2432bd2922de404d3b270c015948fdb90749559233bd9708de7bdfb3c5244f7"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-scheduler/src/authority/types.rs",
+          "bytes": 18199,
+          "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-service/Cargo.toml",
+          "bytes": 3313,
+          "sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4"
+        },
+        {
+          "path": "current-source-audit/current-source/nativelink-service/src/authority_server.rs",
+          "bytes": 90986,
+          "sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-config/src/schema.rs",
+          "bytes": 9802,
+          "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-filesystem/src/capability.rs",
+          "bytes": 17462,
+          "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-filesystem/src/journal.rs",
+          "bytes": 9482,
+          "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-filesystem/src/lib.rs",
+          "bytes": 12137,
+          "sha256": "15e0efd795918447f13c9a06ef9c1b9cae1cffebe02ed6829a5499c51851049d"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-filesystem/src/namespace.rs",
+          "bytes": 8025,
+          "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+        },
+        {
+          "path": "current-source-audit/current-source/tools/canonical-store/src/lib.rs",
+          "bytes": 20261,
+          "sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1"
+        }
+      ]
+    }
+  ]
+}
