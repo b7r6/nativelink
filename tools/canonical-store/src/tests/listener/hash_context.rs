@@ -117,7 +117,7 @@ async fn cache_get(
         .map(tonic::Response::into_inner)
 }
 
-async fn state(rpc: &FixedRpc, predicate: impl Fn(&ObservableState) -> bool) {
+async fn state(rpc: &FixedRpc, predicate: impl Fn(&ObservableState) -> bool + Send + Sync) {
     let mut states = rpc.service.subscribe();
     timeout(Duration::from_secs(10), async {
         loop {
