@@ -395,7 +395,7 @@ impl Fixture {
     pub(super) fn stage(&mut self, graph: &Graph, id: u64, publisher: Publisher) {
         let owner = match publisher {
             Publisher::Worker { execution, .. } => Some(execution),
-            Publisher::Client { .. } => None,
+            Publisher::Client { .. } | Publisher::AuthorizedClient { .. } => None,
         };
         for row in &graph.rows {
             self.ensure_store(row.key);

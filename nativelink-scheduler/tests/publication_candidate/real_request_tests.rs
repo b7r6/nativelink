@@ -779,3 +779,6 @@ fn restore_cannot_downgrade_captured_requests_into_synthetic_mode() {
         );
     }
 }
+
+#[path = "direct_client_tests.rs"]
+mod direct_client;

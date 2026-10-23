@@ -23,6 +23,8 @@ impl PublicationAuthority {
             .map_err(|_| Error::Corrupt)?;
         self.retention.snapshot().map_err(|_| Error::Corrupt)?;
         self.validate_bindings().map_err(|_| Error::Corrupt)?;
+        self.validate_update_authorizations()
+            .map_err(|_| Error::Corrupt)?;
         let scheduler = self.scheduler.view();
         let retention = self.retention.view();
         let meta = &self.metadata;
@@ -206,6 +208,8 @@ impl PublicationAuthority {
             }
             self.validate_candidate(&stage.candidate)
                 .map_err(|_| Error::Corrupt)?;
+            self.validate_update_stage(stage)
+                .map_err(|_| Error::Corrupt)?;
             let actual = retention
                 .roots
                 .get(&r::RootId(stage.root))
@@ -345,6 +349,11 @@ impl PublicationAuthority {
                     !entry.request.do_not_cache
                         && candidate.response.exit_code == 0
                         && candidate.response.error.is_none()
+                }
+                Publisher::AuthorizedClient { .. } => {
+                    self.validate_update_acceptance(stage, accepted)
+                        .map_err(|_| Error::Corrupt)?;
+                    true
                 }
                 Publisher::Client { principal } => {
                     if !meta.clients.contains(&principal) {

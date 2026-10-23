@@ -454,6 +454,16 @@ distinct reservation; old stage/write records survive that retry and checkpoint
 reopen. All eight worker bridge cases pass in Cargo and Bazel with no skipped
 process case. No second process or worker acknowledgment is implied.
 
+The [direct-client grant extension](evidence/publication-direct-client/manifest.json)
+adds explicit trusted permission for the complete registered action binding,
+without creating a worker attempt. Revocation blocks future staging and
+acceptance while preserving earlier accepted heads and serving protection.
+Review reproduced six impossible retained-position collisions across both digest
+algorithms; the correction enforces one recorded event per retained commit
+position. Five compiled faulty variants are detected. The integrated candidate,
+comparison, physical and worker suites pass with 38, eight, nine and eight cases.
+Private snapshot v3 remains separate from durable accepted-history feature 3.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

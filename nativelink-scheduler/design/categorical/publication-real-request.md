@@ -38,9 +38,10 @@ incarnation remain actual scheduler identities. Current Stage authorization and
 Publish acceptance reuse the actual scheduler reducer.
 
 The original synthetic constructor remains available for the previously frozen
-comparison fixtures. Real-mode authorities refuse synthetic admission and direct
-client publication; the latter needs its own qualified binding and authorization
-adapter. No arbitrary request label can impersonate a registered binding.
+comparison fixtures. Real-mode authorities refuse synthetic admission. The later
+[direct-client extension](evidence/publication-direct-client/manifest.json)
+requires an explicit trusted grant for a complete registered action binding;
+its private permission ledger is not production RPC authentication. No arbitrary request label can impersonate a registered binding.
 
 `execution_scope` remains an in-flight compatibility fact. It is absent from the
 completed-cache binding. A successful cacheable request with skip-lookup set can

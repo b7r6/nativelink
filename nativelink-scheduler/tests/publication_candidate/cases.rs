@@ -93,7 +93,7 @@ fn candidate(
     let object = Object::for_bytes(1, &bytes).unwrap();
     let owner = match publisher {
         Publisher::Worker { execution, .. } => Some(execution),
-        Publisher::Client { .. } => None,
+        Publisher::Client { .. } | Publisher::AuthorizedClient { .. } => None,
     };
     state
         .install_physical_for(owner, key(generation), object, true)

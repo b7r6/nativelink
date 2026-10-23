@@ -26,6 +26,7 @@ filegroup(
     name = "publication_fixture_sources",
     srcs = [
         "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/real_request.rs",
         "tests/publication_candidate/types.rs",
@@ -441,6 +442,7 @@ rust_test(
     srcs = ["tests/publication_physical_test.rs"],
     compile_data = [
         "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/real_request.rs",
         "tests/publication_candidate/types.rs",
@@ -480,8 +482,10 @@ rust_test(
     compile_data = [
         "tests/publication_candidate/capacity.rs",
         "tests/publication_candidate/real_request_tests.rs",
+        "tests/publication_candidate/direct_client_tests.rs",
         "tests/publication_candidate/cases.rs",
         "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/real_request.rs",
         "tests/publication_candidate/types.rs",
@@ -506,6 +510,7 @@ rust_test(
     compile_data = [
         "tests/publication_differential/real_requests.rs",
         "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
         "tests/publication_candidate/engine.rs",
         "tests/publication_candidate/real_request.rs",
         "tests/publication_candidate/types.rs",

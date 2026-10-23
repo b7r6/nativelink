@@ -92,6 +92,10 @@ pub(crate) enum Publisher {
     Client {
         principal: u64,
     },
+    /// Immutable trusted grant; real-mode principal and binding live in its ledger.
+    AuthorizedClient {
+        authorization: u64,
+    },
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -124,6 +128,8 @@ pub(crate) enum StageState {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Stage {
     pub(crate) candidate: Candidate,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) authorized_at: Option<u64>,
     pub(crate) until: u64,
     pub(crate) root: u64,
     pub(crate) writes: BTreeMap<u64, Key>,

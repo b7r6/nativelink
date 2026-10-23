@@ -27,6 +27,9 @@ use super::types::*;
 
 #[path = "binding.rs"]
 mod binding;
+#[path = "direct_client.rs"]
+mod direct_client;
+use direct_client::UpdateAuthorization;
 
 #[path = "validation.rs"]
 mod validation;
@@ -69,6 +72,8 @@ struct Metadata {
     real: Option<RealBindings>,
     credits: BTreeMap<u64, Credit>,
     clients: BTreeSet<u64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    update_authorizations: BTreeMap<u64, UpdateAuthorization>,
     namespaces: Vec<NamespaceBinding>,
     physical: Vec<Physical>,
     stages: BTreeMap<u64, Stage>,
@@ -133,6 +138,7 @@ impl PublicationAuthority {
                 real: None,
                 credits: BTreeMap::new(),
                 clients: BTreeSet::new(),
+                update_authorizations: BTreeMap::new(),
                 namespaces: Vec::new(),
                 physical: Vec::new(),
                 stages: BTreeMap::new(),
@@ -701,6 +707,7 @@ impl PublicationAuthority {
         {
             return Err(Error::Bounds);
         }
+        self.validate_direct_candidate(candidate, &result, &response)?;
         if let Publisher::Client { principal } = candidate.publisher {
             if !self.metadata.clients.contains(&principal) {
                 return Err(Error::Unauthorized);
@@ -763,6 +770,7 @@ impl PublicationAuthority {
             }
             next.validate_candidate(&candidate)?;
             next.validate_worker_stage(&candidate)?;
+            next.validate_current_update(&candidate)?;
             match candidate.publisher {
                 Publisher::Worker { execution, .. } => {
                     let credit = next
@@ -775,7 +783,7 @@ impl PublicationAuthority {
                     }
                     credit.stage = Some(id);
                 }
-                Publisher::Client { .. } => {
+                Publisher::Client { .. } | Publisher::AuthorizedClient { .. } => {
                     let pending = next
                         .metadata
                         .credits
@@ -816,10 +824,13 @@ impl PublicationAuthority {
                 })?;
                 internal_writes.insert(*write, internal);
             }
+            let authorized_at = matches!(candidate.publisher, Publisher::AuthorizedClient { .. })
+                .then_some(next.metadata.commit);
             next.metadata.stages.insert(
                 id,
                 Stage {
                     candidate,
+                    authorized_at,
                     until,
                     root,
                     writes,
@@ -1003,6 +1014,7 @@ impl PublicationAuthority {
             let preparation = stage.preparation.as_ref().ok_or(Error::Incomplete)?;
             next.validate_evidence(&stage, preparation, until)?;
             next.validate_candidate(&stage.candidate)?;
+            next.validate_current_update(&stage.candidate)?;
             let eligible = match stage.candidate.publisher {
                 Publisher::Worker { execution, attempt, worker, incarnation } => {
                     let before = next.scheduler.view();
@@ -1022,7 +1034,7 @@ impl PublicationAuthority {
                     }
                     eligible
                 }
-                Publisher::Client { .. } => true,
+                Publisher::Client { .. } | Publisher::AuthorizedClient { .. } => true,
             };
             let root = next.root_id()?;
             next.retain(r::Event::Transfer { staging: r::RootId(stage.root), lease: 1, publication: r::RootId(root), until })?;
@@ -1115,7 +1127,7 @@ impl PublicationAuthority {
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, Error> {
         self.validate()?;
         let snapshot = Snapshot {
-            version: if self.metadata.real.is_some() { 2 } else { 1 },
+            version: self.metadata.snapshot_version(),
             scheduler: self.scheduler.snapshot().map_err(|_| Error::Corrupt)?,
             retention: self.retention.snapshot().map_err(|_| Error::Corrupt)?,
             metadata: self.metadata.clone(),
@@ -1131,12 +1143,7 @@ impl PublicationAuthority {
             return Err(Error::Bounds);
         }
         let snapshot: Snapshot = serde_json::from_slice(bytes).map_err(|_| Error::Corrupt)?;
-        if snapshot.version
-            != if snapshot.metadata.real.is_some() {
-                2
-            } else {
-                1
-            }
+        if snapshot.version != snapshot.metadata.snapshot_version()
             || serde_json::to_vec(&snapshot).map_err(|_| Error::Corrupt)? != bytes
         {
             return Err(Error::Corrupt);

@@ -16,8 +16,9 @@ separate activation gate. Accepted-history activation is refused on restore.
 Direct publishers have a distinct client identity and no synthetic attempt.
 Only canonical successful cacheable direct updates are accepted; broader direct
 update policy remains unspecified. Worker eligibility comes from the actual
-scheduler request and captured response. Full qualified action identities are
-opaque strings; their components are not shortened or interpreted by this test.
+scheduler request and captured response. The synthetic constructor keeps opaque action labels. The real constructor
+binds each label to one complete registered ActionKey, captured selected platform,
+cache policy and trusted principal/config context.
 
 Typed closure and physical readiness inputs are explicitly trusted fixture
 observations. Their completeness is an environmental assumption, not a proof
@@ -90,8 +91,30 @@ the candidate's per-execution row credit; it does not claim equivalence to the
 reference's entire Stage alphabet with a global stage budget. Preview cloning and
 snapshot serialization costs are test-only; production performance is unqualified.
 
+Real direct updates require an explicit bounded authorization record for the exact
+pre-registered ActionBinding. The fixture API takes trusted context, retains all
+four ActionKey fields, and never treats the grant ID as an incoming credential.
+It constructs a canonical successful ActionResult projection with the registered
+SHA256 or BLAKE3 algorithm. The caller still supplies trusted typed closure and
+physical observations. No RPC authentication, production UpdateActionResult
+adapter or fake worker attempt is introduced.
+
+Authorization IDs cannot be reused. Revocation prevents new stages and acceptance
+of already prepared updates, while an accepted head and existing serving roots
+remain valid. Restore checks the retained full binding and the ordered grant,
+staging, acceptance and revocation positions. Revoked grants remain bounded rows;
+the fixture refuses new grants after eight distinct IDs. Worker and client heads
+follow accepted commit order without changing the original worker response.
+
+Private test snapshot version 1 preserves the synthetic format. Version 2 is the
+real-request format without direct grants; version 3 requires a nonempty direct
+authorization ledger, including revoked records. A version number alone grants
+nothing. Version 3 here is unrelated to durable accepted-history feature 3, which
+remains disabled and refused on restore. Optional fields are omitted from older
+formats; no production persistent migration is claimed.
+
 The additive [real-request constructor](../../design/categorical/publication-real-request.md)
 retains the captured REAPI request and full trusted action binding without
 changing these frozen synthetic scenarios. Each joined operation is checked
-through its own original request. Real-mode direct publication is currently
-refused; provider readiness remains separately qualified.
+through its own original request. Real-mode direct publication now requires an explicit trusted grant as described
+above; provider readiness remains separately qualified.
