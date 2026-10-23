@@ -70,6 +70,9 @@ mod tls;
 #[path = "authority_listener/limits.rs"]
 mod limits;
 
+#[path = "authority_listener/cas_admission.rs"]
+mod cas_admission;
+
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {
@@ -121,6 +124,23 @@ impl Runtime {
         worker_tls: Option<ClientTlsConfig>,
         client_tls: Option<ClientTlsConfig>,
     ) -> Self {
+        Self::start_with_store_and_transports(
+            Store::new(MemoryStore::new(&MemorySpec::default())),
+            worker_transport,
+            client_transport,
+            worker_tls,
+            client_tls,
+        )
+        .await
+    }
+
+    async fn start_with_store_and_transports(
+        cas: Store,
+        worker_transport: Server,
+        client_transport: Server,
+        worker_tls: Option<ClientTlsConfig>,
+        client_tls: Option<ClientTlsConfig>,
+    ) -> Self {
         let directory = TestDirectory::new();
         let authority = Singleton::open(
             directory.0.join("authority.redb"),
@@ -130,10 +150,7 @@ impl Runtime {
         )
         .await
         .unwrap();
-        let config = config(
-            Store::new(MemoryStore::new(&MemorySpec::default())),
-            Store::new(MemoryStore::new(&MemorySpec::default())),
-        );
+        let config = config(cas, Store::new(MemoryStore::new(&MemorySpec::default())));
         let faults = config.faults.clone();
         let listeners = AuthorityListeners::start(authority, config).await.unwrap();
         let worker_socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
