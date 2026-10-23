@@ -303,6 +303,85 @@ pub enum Event {
     RetireExecution {
         execution: ExecutionId,
     },
+    /// Commit one immutable certificate only when the preceding acknowledgement
+    /// matches. Replayed proposals cannot create a successor after an intervening
+    /// acknowledgement. Current pending certificates are retried without change.
+    IssueReceipts {
+        worker: WorkerId,
+        incarnation: IncarnationId,
+        after_ack: Option<EffectId>,
+    },
+    /// The adapter authenticates the current worker session. Exact certificate
+    /// equality confirms compaction delivery only, never physical quiescence.
+    AcknowledgeReceipts {
+        worker: WorkerId,
+        incarnation: IncarnationId,
+        certificate: ReceiptCertificate,
+    },
+}
+
+/// A receipt exception binds every identity domain that recipient compaction
+/// would otherwise forget. This is evidence for retirement, never a work grant.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptBinding {
+    pub attempt: AttemptId,
+    pub execution: ExecutionId,
+    pub dispatch_effect: EffectId,
+    pub reservation: ReservationId,
+    pub cancel_effect: Option<EffectId>,
+}
+
+/// One immutable committed recipient-retirement intent. Its stable effect ID
+/// shares the allocator used by dispatch, cancellation, and publication.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptCertificate {
+    pub effect: EffectId,
+    pub attempts_through: AttemptId,
+    pub effects_through: EffectId,
+    pub reservations_through: ReservationId,
+    pub retain: Vec<ReceiptBinding>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptFloors {
+    pub effect: EffectId,
+    pub attempts_through: AttemptId,
+    pub effects_through: EffectId,
+    pub reservations_through: ReservationId,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptStream {
+    pub incarnation: IncarnationId,
+    pub acknowledged: Option<ReceiptFloors>,
+    pub pending: Option<ReceiptCertificate>,
+    /// New committed releases since the last issued certificate. Acknowledging
+    /// that certificate cannot clear releases that happened while it was pending.
+    pub dirty: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptRetirement {
+    pub streams: BTreeMap<WorkerId, ReceiptStream>,
+}
+
+pub const MAX_RECEIPT_BINDINGS: usize = 1024;
+/// JSON's named fields cost more than the separately bounded 64 KiB protobuf.
+pub const MAX_RECEIPT_CERTIFICATE_BYTES: usize = 256 * 1024;
+
+impl Event {
+    #[must_use]
+    pub const fn requires_receipt_retirement(&self) -> bool {
+        matches!(
+            self,
+            Self::IssueReceipts { .. } | Self::AcknowledgeReceipts { .. }
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

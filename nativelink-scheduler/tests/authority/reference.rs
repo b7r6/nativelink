@@ -892,6 +892,10 @@ impl Reference {
                 }
             }
             Event::RetireExecution { execution } => self.retire(execution),
+            // This original oracle qualifies the unactivated core-5 contract.
+            Event::IssueReceipts { .. } | Event::AcknowledgeReceipts { .. } => {
+                Reply::Rejected(Rejection::Invalid)
+            }
         }
     }
 

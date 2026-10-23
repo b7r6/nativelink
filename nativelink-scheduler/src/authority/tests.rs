@@ -16,6 +16,9 @@ use std::collections::BTreeMap;
 
 use super::*;
 
+#[path = "receipt_retirement_tests.rs"]
+mod receipts;
+
 fn apply(state: &mut State, event: Event) -> Reply {
     let reply = state.apply(RecordedEvent {
         epoch: ClusterEpoch(1),
@@ -214,6 +217,159 @@ fn snapshots_fail_closed_on_unknown_version_and_fields() {
     let mut corrupt: serde_json::Value = serde_json::from_slice(&original).unwrap();
     corrupt["version"] = (SNAPSHOT_VERSION + 1).into();
     assert!(State::restore(&serde_json::to_vec(&corrupt).unwrap()).is_err());
+}
+
+fn snapshot_with_zero_allocated_row(state: &State, collection: &str, old_key: &str) -> Vec<u8> {
+    let (fields, binding_field): (&[&str], Option<&str>) = match collection {
+        "executions" => (
+            &[
+                "/state/executions/0/id",
+                "/state/executions/0/enqueue_ordinal",
+                "/state/operations/1/view/execution",
+                "/state/attempts/1/execution",
+                "/state/effects/1/kind/Dispatch/execution",
+            ],
+            Some("execution"),
+        ),
+        "operations" => (&["/state/operations/0/view/id"], None),
+        "attempts" => (
+            &[
+                "/state/attempts/0/id",
+                "/state/executions/1/attempt",
+                "/state/reservations/1/attempt",
+                "/state/effects/1/kind/Dispatch/attempt",
+            ],
+            Some("attempt"),
+        ),
+        "reservations" => (
+            &[
+                "/state/reservations/0/id",
+                "/state/attempts/1/reservation",
+                "/state/effects/1/kind/Dispatch/reservation",
+            ],
+            Some("reservation"),
+        ),
+        "effects" => (&["/state/effects/0/id"], None),
+        _ => panic!("allocated row collection"),
+    };
+    let original = state.snapshot().unwrap();
+    assert_eq!(State::restore(&original).unwrap(), *state);
+    let mut corrupt: serde_json::Value = serde_json::from_slice(&original).unwrap();
+    let rows = corrupt["state"][collection].as_object_mut().unwrap();
+    let row = rows.remove(old_key).unwrap();
+    assert!(rows.insert("0".into(), row).is_none());
+    for field in fields {
+        *corrupt.pointer_mut(field).unwrap() = 0.into();
+    }
+    if state.receipt_retirement_enabled()
+        && let Some(field) = binding_field
+    {
+        corrupt["state"]["receipt_retirement"]["streams"]["1"]["pending"]["retain"][0][field] =
+            0.into();
+    }
+    serde_json::to_vec(&corrupt).unwrap()
+}
+
+#[test]
+fn snapshots_reject_coordinated_zero_allocated_ids() {
+    let charged = charged_state();
+    let mut lookup = State::new(ClusterEpoch(1), Limits::default()).unwrap();
+    let mut request = charged.executions[&ExecutionId(1)].request.clone();
+    request.skip_cache_lookup = false;
+    assert!(matches!(
+        apply(
+            &mut lookup,
+            Event::Submit {
+                operation: OperationId(1),
+                request,
+            }
+        ),
+        Reply::Submitted { .. }
+    ));
+    let mut publication = charged.clone();
+    hold_complete(&mut publication, 1);
+    let mut accepted = Vec::new();
+    for activated in [false, true] {
+        for (name, mut state, collection, old_key) in [
+            ("execution", charged.clone(), "executions", "1"),
+            ("operation", charged.clone(), "operations", "1"),
+            ("attempt", charged.clone(), "attempts", "1"),
+            ("reservation", charged.clone(), "reservations", "1"),
+            ("lookup effect", lookup.clone(), "effects", "1"),
+            ("publication effect", publication.clone(), "effects", "2"),
+        ] {
+            if activated {
+                state.enable_receipt_retirement().unwrap();
+                if state.workers.contains_key(&WorkerId(1)) {
+                    assert_eq!(
+                        apply(
+                            &mut state,
+                            Event::IssueReceipts {
+                                worker: WorkerId(1),
+                                incarnation: IncarnationId(1),
+                                after_ack: None,
+                            }
+                        ),
+                        Reply::Applied
+                    );
+                }
+            }
+            let corrupt = snapshot_with_zero_allocated_row(&state, collection, old_key);
+            if State::restore(&corrupt).is_ok() {
+                accepted.push((name, activated));
+            }
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "accepted coordinated zero IDs: {accepted:?}"
+    );
+}
+
+#[test]
+fn zero_caller_supplied_identity_domains_remain_valid_in_pure_authority() {
+    let charged = charged_state();
+    let capacity = charged.workers[&WorkerId(1)].capacity;
+    let request = charged.executions[&ExecutionId(1)].request.clone();
+    let mut state = State::new(ClusterEpoch(0), Limits::default()).unwrap();
+    for event in [
+        Event::Register {
+            worker: WorkerId(0),
+            incarnation: IncarnationId(0),
+            session: SessionId(0),
+            properties: BTreeMap::new(),
+            capacity,
+            available: capacity,
+        },
+        Event::Submit {
+            operation: OperationId(1),
+            request,
+        },
+        Event::Match,
+    ] {
+        assert!(!matches!(
+            state.apply(RecordedEvent {
+                epoch: ClusterEpoch(0),
+                event
+            }),
+            Reply::Rejected(_)
+        ));
+        state.check_invariants().unwrap();
+    }
+    assert_eq!(State::restore(&state.snapshot().unwrap()).unwrap(), state);
+    state.enable_receipt_retirement().unwrap();
+    assert_eq!(
+        state.apply(RecordedEvent {
+            epoch: ClusterEpoch(0),
+            event: Event::IssueReceipts {
+                worker: WorkerId(0),
+                incarnation: IncarnationId(0),
+                after_ack: None
+            },
+        }),
+        Reply::Applied
+    );
+    assert_eq!(State::restore(&state.snapshot().unwrap()).unwrap(), state);
 }
 
 #[test]
@@ -1849,6 +2005,7 @@ fn every_command_frame_leaves_room_for_the_maximum_accepted_payload() {
     for event in events {
         let paid = match &event {
             Event::Register { properties, .. } => encoded_size(properties),
+            Event::AcknowledgeReceipts { certificate, .. } => encoded_size(certificate),
             Event::Submit { request, .. } => encoded_size(request),
             Event::LookupResult { result, .. } => result.as_ref().map_or(0, encoded_size),
             Event::Complete { result, .. } | Event::MemoryFailure { result, .. } => {
@@ -1870,7 +2027,8 @@ fn every_command_frame_leaves_room_for_the_maximum_accepted_payload() {
             | Event::ExpireInterest { .. }
             | Event::Cleanup { .. }
             | Event::EffectOutcome { .. }
-            | Event::RetireExecution { .. } => 0,
+            | Event::RetireExecution { .. }
+            | Event::IssueReceipts { .. } => 0,
         };
         let batch = journal::Batch::new(vec![RecordedEvent {
             epoch: ClusterEpoch(u),

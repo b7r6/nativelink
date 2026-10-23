@@ -28,6 +28,7 @@ mod tests;
 pub mod format;
 pub mod journal;
 pub mod reapi;
+mod receipt_retirement;
 pub mod request;
 pub mod types;
 use std::cmp::Reverse;
@@ -73,6 +74,8 @@ pub struct State {
     attempts: BTreeMap<AttemptId, AttemptView>,
     reservations: BTreeMap<ReservationId, ReservationView>,
     effects: BTreeMap<EffectId, Effect>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    receipt_retirement: Option<ReceiptRetirement>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -200,6 +203,7 @@ impl State {
             attempts: BTreeMap::new(),
             reservations: BTreeMap::new(),
             effects: BTreeMap::new(),
+            receipt_retirement: None,
         })
     }
 
@@ -459,14 +463,11 @@ impl State {
                 if entry.authorized {
                     return Reply::Rejected(Rejection::Busy);
                 }
-                let reservation = self
-                    .reservations
-                    .get_mut(&entry.reservation)
-                    .expect("attempt reservation");
-                if reservation.released {
+                let reservation = entry.reservation;
+                if self.reservations[&reservation].released {
                     return Reply::Ignored;
                 }
-                reservation.released = true;
+                self.release_reservation(reservation);
                 self.drop_attempt_effects(attempt, true);
                 Reply::Applied
             }
@@ -481,6 +482,16 @@ impl State {
                 Reply::Applied
             }
             Event::RetireExecution { execution } => self.retire(execution),
+            Event::IssueReceipts {
+                worker,
+                incarnation,
+                after_ack,
+            } => self.issue_receipts(worker, incarnation, after_ack),
+            Event::AcknowledgeReceipts {
+                worker,
+                incarnation,
+                certificate,
+            } => self.acknowledge_receipts(worker, incarnation, &certificate),
         }
     }
 
@@ -595,6 +606,7 @@ impl State {
                 self.revoke(attempt, false);
             }
         }
+        self.register_receipt_stream(worker, incarnation);
         self.workers.insert(
             worker,
             WorkerView {
@@ -1126,10 +1138,8 @@ impl State {
         let entry = self.attempts.get_mut(&attempt).expect("authorized attempt");
         entry.authorized = false;
         let execution = entry.execution;
-        self.reservations
-            .get_mut(&entry.reservation)
-            .expect("attempt reservation")
-            .released = true;
+        let reservation = entry.reservation;
+        self.release_reservation(reservation);
         self.drop_attempt_effects(attempt, false);
         let request = self.executions[&execution].request.clone();
         self.terminal(execution, TerminalResult::Completed(result.clone()));
@@ -1208,10 +1218,8 @@ impl State {
             .get_mut(&attempt)
             .expect("authorized attempt")
             .authorized = false;
-        self.reservations
-            .get_mut(&entry.reservation)
-            .expect("attempt reservation")
-            .released = true;
+        let reservation = entry.reservation;
+        self.release_reservation(reservation);
         self.drop_attempt_effects(attempt, false);
         self.executions
             .get_mut(&entry.execution)
@@ -1292,10 +1300,8 @@ impl State {
         entry.authorized = false;
         let (execution, worker, incarnation) = (entry.execution, entry.worker, entry.incarnation);
         if quiescent {
-            self.reservations
-                .get_mut(&entry.reservation)
-                .expect("attempt reservation")
-                .released = true;
+            let reservation = entry.reservation;
+            self.release_reservation(reservation);
         }
         self.drop_attempt_effects(attempt, false);
         if !quiescent {
@@ -1464,10 +1470,11 @@ impl State {
             .filter(|attempt| attempt.execution == execution)
             .map(|attempt| attempt.id)
             .collect();
-        if self
-            .reservations
-            .values()
-            .any(|reservation| attempts.contains(&reservation.attempt) && !reservation.released)
+        if self.receipt_attempts_pinned(&attempts)
+            || self
+                .reservations
+                .values()
+                .any(|reservation| attempts.contains(&reservation.attempt) && !reservation.released)
             || self
                 .effects
                 .values()
@@ -1543,7 +1550,7 @@ impl State {
         serde_json::to_writer(
             &mut snapshot,
             &Snapshot {
-                version: SNAPSHOT_VERSION,
+                version: self.snapshot_version(),
                 state: self,
             },
         )
@@ -1558,7 +1565,7 @@ impl State {
         }
         let snapshot: Snapshot =
             serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
-        if snapshot.version != SNAPSHOT_VERSION {
+        if snapshot.version != snapshot.state.snapshot_version() {
             return Err(format!(
                 "unsupported authority snapshot version {}",
                 snapshot.version
@@ -1592,13 +1599,23 @@ impl State {
             || self.next_attempt == 0
             || self.next_reservation == 0
             || self.next_effect == 0
-            || self.executions.keys().any(|id| id.0 >= self.next_execution)
-            || self.attempts.keys().any(|id| id.0 >= self.next_attempt)
+            || self.operations.contains_key(&OperationId(0))
+            || self
+                .executions
+                .keys()
+                .any(|id| id.0 == 0 || id.0 >= self.next_execution)
+            || self
+                .attempts
+                .keys()
+                .any(|id| id.0 == 0 || id.0 >= self.next_attempt)
             || self
                 .reservations
                 .keys()
-                .any(|id| id.0 >= self.next_reservation)
-            || self.effects.keys().any(|id| id.0 >= self.next_effect)
+                .any(|id| id.0 == 0 || id.0 >= self.next_reservation)
+            || self
+                .effects
+                .keys()
+                .any(|id| id.0 == 0 || id.0 >= self.next_effect)
             || self.next_attempt != self.next_reservation
             || !self.identities_have_headroom(false)
         {
@@ -1922,6 +1939,7 @@ impl State {
                 }
             }
         }
+        self.check_receipt_invariants()?;
         if self.holds.len() > self.hold_cap() {
             return fail("HOLD1: held workers fit the fixed usable-fleet cap");
         }

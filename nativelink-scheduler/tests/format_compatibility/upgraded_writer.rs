@@ -26,7 +26,7 @@ use nativelink_scheduler::authority::format::{
 use nativelink_scheduler::authority::journal::{Batch, Journal, Singleton, TypeConfig};
 use nativelink_scheduler::authority::{
     ActionKey, ClusterEpoch, EffectKind, Event, IncarnationId, Limits, OperationId, RecordedEvent,
-    Reply, Request, Resources, ResultPayload, SessionId, WorkerId,
+    Reply, Request, Resources, ResultPayload, SessionId, State, WorkerId,
 };
 use openraft::storage::{RaftLogStorage, RaftLogStorageExt, RaftStateMachine};
 use openraft::{Entry, EntryPayload, LogId, RaftSnapshotBuilder};
@@ -37,12 +37,51 @@ const DOMAIN: AuthorityDomain = AuthorityDomain {
 };
 const NODE: u64 = 1;
 
-fn profile(registry: &Arc<AdmissionRegistry>, incarnation: u64) -> JournalProfile {
+fn profile(
+    registry: &Arc<AdmissionRegistry>,
+    incarnation: u64,
+    reader: ReaderCapabilities,
+) -> JournalProfile {
     JournalProfile {
         domain: DOMAIN,
         incarnation,
-        reader: ReaderCapabilities::DirectScheduler,
+        reader,
         admission: registry.clone(),
+    }
+}
+
+fn producer_reader(mode: &str) -> Result<ReaderCapabilities, &'static str> {
+    match mode {
+        "direct" => Ok(ReaderCapabilities::DirectScheduler),
+        "receipt" | "both" => {
+            #[cfg(feature = "compatibility-receipt-retirement")]
+            {
+                Ok(ReaderCapabilities::ReceiptRetirement)
+            }
+            #[cfg(not(feature = "compatibility-receipt-retirement"))]
+            {
+                Err("receipt mode requires a receipt-capable writer build")
+            }
+        }
+        _ => Err("writer mode must be direct, receipt, or both"),
+    }
+}
+
+fn activated_state(state: &State, receipts: bool) -> Result<State, String> {
+    #[cfg(feature = "compatibility-receipt-retirement")]
+    {
+        let mut expected = state.clone();
+        if receipts {
+            expected.enable_receipt_retirement()?;
+        }
+        Ok(expected)
+    }
+    #[cfg(not(feature = "compatibility-receipt-retirement"))]
+    {
+        if receipts {
+            return Err("receipt mode requires a receipt-capable writer build".into());
+        }
+        Ok(state.clone())
     }
 }
 
@@ -89,14 +128,22 @@ fn submit(operation: u64, skip_cache_lookup: bool) -> RecordedEvent {
     reason = "JSON report is the subprocess protocol"
 )]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    assert!(
-        ReaderCapabilities::DirectScheduler.supports(&BTreeSet::from([DIRECT_SCHEDULER])),
-        "upgraded producer linked a frozen Base capability implementation"
-    );
     let directory = PathBuf::from(
         std::env::args_os()
             .nth(1)
             .ok_or("artifact directory required")?,
+    );
+    let mode = std::env::args().nth(2).unwrap_or_else(|| "direct".into());
+    let features = match mode.as_str() {
+        "direct" => BTreeSet::from([DIRECT_SCHEDULER]),
+        "receipt" => BTreeSet::from([2]),
+        "both" => BTreeSet::from([DIRECT_SCHEDULER, 2]),
+        _ => return Err("writer mode must be direct, receipt, or both".into()),
+    };
+    let reader = producer_reader(&mode)?;
+    assert!(
+        reader.supports(&features),
+        "producer linked an incompatible capability implementation"
     );
     std::fs::create_dir_all(&directory)?;
     let source = directory.join("source.redb");
@@ -104,9 +151,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("artifact directory already contains a source journal".into());
     }
     let registry = AdmissionRegistry::new(DOMAIN);
-    let node =
-        Singleton::open_with_profile(&source, NODE, Limits::default(), profile(&registry, 1))
-            .await?;
+    let node = Singleton::open_with_profile(
+        &source,
+        NODE,
+        Limits::default(),
+        profile(&registry, 1, reader),
+    )
+    .await?;
     let capacity = Resources {
         cpu_millis: 300,
         memory_bytes: 3072,
@@ -177,6 +228,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         2
     );
     let state_json = String::from_utf8(expected.snapshot()?)?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&state_json)?["version"],
+        5
+    );
 
     // The capable writer still emits the Base representation through ordinary
     // writes, snapshot replacement, and compaction before activation.
@@ -202,14 +257,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.shutdown().await?;
     std::fs::copy(&source, directory.join("preactivation.redb"))?;
 
-    let node =
-        Singleton::open_with_profile(&source, NODE, Limits::default(), profile(&registry, 2))
-            .await?;
+    let node = Singleton::open_with_profile(
+        &source,
+        NODE,
+        Limits::default(),
+        profile(&registry, 2, reader),
+    )
+    .await?;
     assert_eq!(node.read().await?, expected);
     let preparation = node
         .journal
-        .prepare_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .prepare_features(&node.raft, features.clone())
         .await?;
+    let encoded_preparation = serde_json::to_value(&preparation)?;
+    assert!(
+        encoded_preparation["members"]
+            .as_object()
+            .ok_or("members missing")?
+            .values()
+            .all(|member| member["reader"] == "DirectScheduler")
+    );
     node.raft
         .client_write(Batch::format(FormatControl::Prepare(preparation.clone()))?)
         .await?;
@@ -233,15 +300,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(registry);
     std::fs::copy(&source, directory.join("uncommitted-activation.redb"))?;
 
-    let recovered = Journal::recover_admission(
-        DOMAIN,
-        ReaderCapabilities::DirectScheduler,
-        vec![(NODE, source.clone())],
+    let recovered =
+        Journal::recover_admission(DOMAIN, reader, vec![(NODE, source.clone())]).await?;
+    let mut journal = Journal::open_with_profile(
+        &source,
+        NODE,
+        Limits::default(),
+        profile(&recovered, 3, reader),
     )
     .await?;
-    let mut journal =
-        Journal::open_with_profile(&source, NODE, Limits::default(), profile(&recovered, 3))
-            .await?;
     journal.save_committed(Some(activation.log_id)).await?;
     assert_eq!(
         journal.active_format().await?.feature_epoch,
@@ -251,12 +318,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(journal);
     std::fs::copy(&source, directory.join("committed-before-apply.redb"))?;
 
-    let mut journal =
-        Journal::open_with_profile(&source, NODE, Limits::default(), profile(&recovered, 4))
-            .await?;
+    let mut journal = Journal::open_with_profile(
+        &source,
+        NODE,
+        Limits::default(),
+        profile(&recovered, 4, reader),
+    )
+    .await?;
     journal.apply([activation]).await?;
     assert_eq!(journal.active_format().await?.feature_epoch, 1);
-    assert_eq!(journal.read_applied().await?.1, expected);
+    let expected_activated = activated_state(&expected, mode != "direct")?;
+    assert_eq!(journal.read_applied().await?.1, expected_activated);
+    let activated_state_json = String::from_utf8(expected_activated.snapshot()?)?;
     let activated_snapshot = journal.build_snapshot().await?;
     std::fs::write(
         directory.join("activated.snapshot.json"),
@@ -269,6 +342,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "domain": { "epoch": DOMAIN.epoch.0, "namespace": DOMAIN.namespace },
         "node": NODE,
         "state_json": state_json,
+        "activated_state_json": activated_state_json,
+        "writer_mode": mode,
+        "activated_features": features,
         "pending_effects": view.effects.len(),
         "charged_reservations": 2,
         "artifacts": ["preactivation.redb", "preactivation.snapshot.json", "uncommitted-activation.redb", "committed-before-apply.redb", "activated.redb", "activated.snapshot.json"],

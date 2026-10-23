@@ -28,6 +28,8 @@ extend-exclude = [
   "nativelink-util/tests/data/*.json",
   # Raw operating-system observations preserve the observed process names.
   "nativelink-scheduler/design/categorical/evidence/*/ambient-processes.json",
+  # Exact external qualification metadata includes a target-directory hash.
+  "nativelink-scheduler/design/categorical/evidence/receipt-retirement/independent-differential/manifest.json",
   # Generated from the site, the blog and the docs corpus (all covered or
   # excluded above); regenerated, never edited.
   "llms-full.txt",

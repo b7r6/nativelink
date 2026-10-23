@@ -436,6 +436,8 @@ const fn kind(event: &Event) -> &'static str {
         Event::Cleanup { .. } => "Cleanup",
         Event::EffectOutcome { .. } => "EffectOutcome",
         Event::RetireExecution { .. } => "RetireExecution",
+        Event::IssueReceipts { .. } => "IssueReceipts",
+        Event::AcknowledgeReceipts { .. } => "AcknowledgeReceipts",
     }
 }
 

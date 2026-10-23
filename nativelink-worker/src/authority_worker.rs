@@ -17,15 +17,15 @@
 //! Receipts survive connection loss, not process loss. A new process must use a
 //! new incarnation, and the authority must retain old charges until trusted
 //! cleanup/fencing evidence exists. This module cannot supply that evidence for
-//! another process. Its finite lifetime ledger never evicts uncertain attempts
-//! or tombstones; saturation stops admission pending a future retirement design.
+//! another process. Its finite ledger removes only quiescent receipts covered by
+//! an explicit trusted retirement certificate; uncertain attempts always veto.
 //! A candidate result alone cannot become the current core's `Complete` event:
 //! that event releases its reservation, so the adapter must also require trusted
 //! `Quiescent` evidence. Byte and owned-child observations are implemented, but
 //! supported-load and optimized cache/mount liveness remain unqualified. See
 //! `nativelink-scheduler/design/categorical/worker-progress.md`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,9 +36,10 @@ use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     AuthorityAttemptIdentity, AuthorityAttemptPhase, AuthorityAttemptReport, AuthorityCapability,
     AuthorityCapacityObservation, AuthorityCommand, AuthorityDecline, AuthorityDispatch,
-    AuthorityReconciliation, AuthorityRegistration, AuthorityRegistrationResult,
-    AuthorityResources, AuthoritySession, AuthorityWorkerIdentity, StartExecute,
-    authority_attempt_report, authority_command, authority_decline,
+    AuthorityReceiptCertificate, AuthorityReceiptRetirement, AuthorityReconciliation,
+    AuthorityRegistration, AuthorityRegistrationResult, AuthorityResources, AuthoritySession,
+    AuthorityWorkerIdentity, StartExecute, authority_attempt_report, authority_command,
+    authority_decline,
 };
 use nativelink_util::action_messages::{ActionResult, ActionStage, OperationId};
 use nativelink_util::background_spawn;
@@ -52,12 +53,15 @@ use crate::running_actions_manager::{RunningAction, RunningActionsManager};
 pub const PROTOCOL_VERSION: u32 = 1;
 /// Includes inventory envelope headroom, below tonic's default 4 MiB limit.
 pub const MAX_RECONCILIATION_BYTES: usize = 3 * 1024 * 1024;
-pub const REQUIRED_CAPABILITIES: [i32; 5] = [
+pub const MAX_RECEIPT_CERTIFICATE_BYTES: usize = 64 * 1024;
+pub const MAX_RECEIPT_EXCEPTIONS: usize = 1024;
+pub const REQUIRED_CAPABILITIES: [i32; 6] = [
     AuthorityCapability::AttemptEffectIdentities as i32,
     AuthorityCapability::ReconnectReconciliation as i32,
     AuthorityCapability::CleanupTombstones as i32,
     AuthorityCapability::CandidateResults as i32,
     AuthorityCapability::MeaningfulProgress as i32,
+    AuthorityCapability::ReceiptRetirement as i32,
 ];
 
 struct Receipt {
@@ -65,6 +69,7 @@ struct Receipt {
     dispatch: Option<Vec<u8>>,
     cancelled: watch::Sender<bool>,
     reserved: Option<AuthorityResources>,
+    reservation_id: u64,
 }
 
 #[derive(Default)]
@@ -75,6 +80,7 @@ struct Ledger {
     attempts: BTreeMap<u64, Receipt>,
     effects: BTreeMap<u64, u64>,
     reservations: BTreeMap<u64, u64>,
+    retirement: Option<AuthorityReceiptCertificate>,
 }
 
 /// Bounded, volatile receipt state for exactly one process incarnation.
@@ -137,6 +143,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
             || max_payload_bytes
                 .checked_add(5)
                 .and_then(|bytes| max_attempts.checked_mul(bytes))
+                .and_then(|bytes| bytes.checked_add(MAX_RECEIPT_CERTIFICATE_BYTES + 8))
                 .and_then(|bytes| bytes.checked_add(256))
                 .is_none_or(|bytes| bytes > MAX_RECONCILIATION_BYTES)
         {
@@ -225,6 +232,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                     .map(|entry| entry.report.clone())
                     .collect(),
                 single_use_spent: self.single_use && ledger.spent,
+                receipt_retirement: ledger.retirement.clone(),
             }),
         };
         if registration.encoded_len() > MAX_RECONCILIATION_BYTES {
@@ -288,6 +296,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                 .map(|entry| entry.report.clone())
                 .collect(),
             single_use_spent: self.single_use && ledger.spent,
+            receipt_retirement: ledger.retirement.clone(),
         }
     }
 
@@ -299,6 +308,203 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
     pub fn admission_closed(&self) -> bool {
         let ledger = self.ledger.lock();
         ledger.attempts.len() >= self.max_attempts || (self.single_use && ledger.spent)
+    }
+
+    /// Apply one trusted, committed compaction directive. This never establishes
+    /// cleanup, accepts output or releases an authority reservation. `OutOfRange`
+    /// distinguishes an obsolete certificate from a conflicting current one.
+    pub fn retire_receipts(&self, control: AuthorityReceiptRetirement) -> Result<bool, Error> {
+        let session = control
+            .session
+            .ok_or_else(|| invalid("Missing retirement session"))?;
+        let certificate = control
+            .certificate
+            .ok_or_else(|| invalid("Missing retirement certificate"))?;
+        if session.worker != Some(self.identity)
+            || certificate.effect_id == 0
+            || certificate.effects_through < certificate.effect_id
+            || certificate.retain.len() > MAX_RECEIPT_EXCEPTIONS
+            || certificate.encoded_len() > MAX_RECEIPT_CERTIFICATE_BYTES
+        {
+            return Err(invalid("Invalid receipt retirement identity or bound"));
+        }
+        let mut retained = BTreeMap::new();
+        let mut effects = BTreeSet::new();
+        let mut reservations = BTreeSet::new();
+        let mut previous_attempt = 0;
+        for entry in &certificate.retain {
+            if entry.attempt_id <= previous_attempt
+                || entry.attempt_id > certificate.attempts_through
+                || entry.execution_id == 0
+                || entry.dispatch_effect_id == 0
+                || entry.dispatch_effect_id > certificate.effects_through
+                || entry.reservation_id == 0
+                || entry.reservation_id > certificate.reservations_through
+                || entry.cancel_effect_id > certificate.effects_through
+                || !effects.insert(entry.dispatch_effect_id)
+                || (entry.cancel_effect_id != 0 && !effects.insert(entry.cancel_effect_id))
+                || !reservations.insert(entry.reservation_id)
+            {
+                return Err(invalid("Invalid or aliased retained receipt binding"));
+            }
+            previous_attempt = entry.attempt_id;
+            retained.insert(entry.attempt_id, entry);
+        }
+        if effects.contains(&certificate.effect_id) {
+            return Err(invalid("Retirement effect aliases a retained command"));
+        }
+        let mut ledger = self.ledger.lock();
+        if !ledger.connected || session.session_id != ledger.session {
+            return Err(invalid(
+                "Retirement is not on the negotiated current session",
+            ));
+        }
+        if let Some(previous) = &ledger.retirement {
+            if certificate.effect_id == previous.effect_id {
+                return if certificate == *previous {
+                    Ok(false)
+                } else {
+                    Err(invalid("Retirement identity changed contents"))
+                };
+            }
+            if certificate.effect_id < previous.effect_id {
+                return Err(make_err!(
+                    Code::OutOfRange,
+                    "Receipt retirement certificate is obsolete"
+                ));
+            }
+            if certificate.effect_id <= previous.effects_through {
+                return Err(invalid(
+                    "Receipt retirement reused an allocated effect identity",
+                ));
+            }
+            if certificate.attempts_through < previous.attempts_through
+                || certificate.effects_through < previous.effects_through
+                || certificate.reservations_through < previous.reservations_through
+            {
+                return Err(invalid(
+                    "Receipt retirement watermarks regressed or reused identity",
+                ));
+            }
+            let old: BTreeMap<_, _> = previous
+                .retain
+                .iter()
+                .map(|entry| (entry.attempt_id, entry))
+                .collect();
+            for entry in &certificate.retain {
+                if entry.attempt_id <= previous.attempts_through {
+                    let prior = old
+                        .get(&entry.attempt_id)
+                        .ok_or_else(|| invalid("Retirement revived an omitted attempt"))?;
+                    if entry.execution_id != prior.execution_id
+                        || entry.dispatch_effect_id != prior.dispatch_effect_id
+                        || entry.reservation_id != prior.reservation_id
+                        || (entry.cancel_effect_id != prior.cancel_effect_id
+                            && (prior.cancel_effect_id != 0
+                                || entry.cancel_effect_id <= previous.effects_through))
+                    {
+                        return Err(invalid("Retained receipt identity changed"));
+                    }
+                } else if entry.dispatch_effect_id <= previous.effects_through
+                    || entry.reservation_id <= previous.reservations_through
+                    || (entry.cancel_effect_id != 0
+                        && entry.cancel_effect_id <= previous.effects_through)
+                {
+                    return Err(invalid("New retained attempt reused retired identities"));
+                }
+            }
+        }
+        if ledger.effects.contains_key(&certificate.effect_id) {
+            return Err(invalid("Retirement effect aliases a local command"));
+        }
+        for entry in &certificate.retain {
+            if [entry.dispatch_effect_id, entry.cancel_effect_id]
+                .into_iter()
+                .filter(|id| *id != 0)
+                .any(|id| {
+                    ledger
+                        .effects
+                        .get(&id)
+                        .is_some_and(|attempt| *attempt != entry.attempt_id)
+                })
+                || ledger
+                    .reservations
+                    .get(&entry.reservation_id)
+                    .is_some_and(|attempt| *attempt != entry.attempt_id)
+            {
+                return Err(invalid("Retained binding aliases another local attempt"));
+            }
+        }
+        for (attempt, receipt) in &ledger.attempts {
+            let report = &receipt.report;
+            let known_effects = [report.dispatch_effect_id, report.cancel_effect_id];
+            if *attempt > certificate.attempts_through {
+                if known_effects
+                    .into_iter()
+                    .any(|id| id != 0 && id <= certificate.effects_through)
+                    || (receipt.reservation_id != 0
+                        && receipt.reservation_id <= certificate.reservations_through)
+                {
+                    return Err(invalid(
+                        "Certificate cuts a newer local attempt's identities",
+                    ));
+                }
+            } else if let Some(binding) = retained.get(attempt) {
+                if report
+                    .attempt
+                    .as_ref()
+                    .is_none_or(|target| target.execution_id != binding.execution_id)
+                    || (report.dispatch_effect_id != 0
+                        && report.dispatch_effect_id != binding.dispatch_effect_id)
+                    || (receipt.reservation_id != 0
+                        && receipt.reservation_id != binding.reservation_id)
+                    || (report.cancel_effect_id != 0
+                        && report.cancel_effect_id != binding.cancel_effect_id
+                        && (binding.cancel_effect_id != 0
+                            || report.cancel_effect_id <= certificate.effects_through))
+                {
+                    return Err(invalid(
+                        "Certificate conflicts with a retained local receipt",
+                    ));
+                }
+            } else if report.phase != AuthorityAttemptPhase::Quiescent as i32
+                || known_effects
+                    .into_iter()
+                    .any(|id| id > certificate.effects_through)
+                || receipt.reservation_id > certificate.reservations_through
+            {
+                return Err(invalid(
+                    "Receipt retirement requires covered local quiescence",
+                ));
+            }
+        }
+        ledger.attempts.retain(|attempt, _| {
+            *attempt > certificate.attempts_through || retained.contains_key(attempt)
+        });
+        ledger.effects.retain(|_, attempt| {
+            *attempt > certificate.attempts_through || retained.contains_key(attempt)
+        });
+        ledger.reservations.retain(|_, attempt| {
+            *attempt > certificate.attempts_through || retained.contains_key(attempt)
+        });
+        ledger.retirement = Some(certificate);
+        drop(ledger);
+        self.changed.send_replace(());
+        Ok(true)
+    }
+
+    #[doc(hidden)]
+    pub fn ledger_counts_for_test(&self) -> (usize, usize, usize, usize) {
+        let ledger = self.ledger.lock();
+        (
+            ledger.attempts.len(),
+            ledger.effects.len(),
+            ledger.reservations.len(),
+            ledger
+                .retirement
+                .as_ref()
+                .map_or(0, |certificate| certificate.retain.len()),
+        )
     }
 
     /// Test a real successful spawn whose receipt is lost before being retained.
@@ -349,6 +555,54 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         if !ledger.connected || ledger.session != session {
             return Err(invalid("Command is not on the negotiated current session"));
         }
+        if let Some(certificate) = &ledger.retirement {
+            let retained = certificate
+                .retain
+                .iter()
+                .find(|entry| entry.attempt_id == target.attempt_id);
+            if target.attempt_id <= certificate.attempts_through && retained.is_none() {
+                return Err(make_err!(
+                    Code::OutOfRange,
+                    "Attempt was permanently compacted in this incarnation"
+                ));
+            }
+            if retained.is_some_and(|entry| entry.execution_id != target.execution_id) {
+                return Err(invalid("Command changed a retained execution identity"));
+            }
+            let expected_effect = retained.map(|entry| match &kind {
+                authority_command::Command::Dispatch(_) => entry.dispatch_effect_id,
+                authority_command::Command::Cancel(()) => entry.cancel_effect_id,
+            });
+            if command.effect_id <= certificate.effects_through
+                && expected_effect != Some(command.effect_id)
+            {
+                return Err(invalid("Command reused a retired effect identity"));
+            }
+            match &kind {
+                authority_command::Command::Dispatch(dispatch) => {
+                    let changed_effect =
+                        retained.is_some_and(|entry| entry.dispatch_effect_id != command.effect_id);
+                    let changed_reservation = retained
+                        .is_some_and(|entry| entry.reservation_id != dispatch.reservation_id);
+                    if changed_effect
+                        || changed_reservation
+                        || (dispatch.reservation_id <= certificate.reservations_through
+                            && retained.is_none_or(|entry| {
+                                entry.reservation_id != dispatch.reservation_id
+                            }))
+                    {
+                        return Err(invalid("Dispatch changed or reused a retired identity"));
+                    }
+                }
+                authority_command::Command::Cancel(()) => {
+                    if retained.is_some_and(|entry| {
+                        entry.cancel_effect_id != 0 && entry.cancel_effect_id != command.effect_id
+                    }) {
+                        return Err(invalid("Cancel changed a retained effect identity"));
+                    }
+                }
+            }
+        }
         if ledger
             .effects
             .get(&command.effect_id)
@@ -387,6 +641,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                     dispatch: None,
                     cancelled: watch::channel(false).0,
                     reserved: None,
+                    reservation_id: 0,
                 },
             );
         }
@@ -439,6 +694,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                     && resources.memory_bytes <= available.memory_bytes
                     && resources.slots <= available.slots;
                 reservation = Some(dispatch.reservation_id);
+                entry.reservation_id = dispatch.reservation_id;
                 if *entry.cancelled.borrow() {
                     // The earlier cancel tombstone closes this recipient even
                     // when the first dispatch arrives after cleanup evidence.

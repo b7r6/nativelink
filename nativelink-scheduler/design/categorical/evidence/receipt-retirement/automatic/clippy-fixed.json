@@ -1,0 +1,41 @@
+[
+  {
+    "label": "service-clippy-fixed",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 24.701622375985608
+  },
+  {
+    "label": "worker-clippy-fixed",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--lib",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 101,
+    "seconds": 21.11458945897175
+  }
+]

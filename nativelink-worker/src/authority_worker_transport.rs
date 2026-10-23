@@ -203,10 +203,18 @@ pub async fn run_session<M: RunningActionsManager>(
                 let message = message.map_err(Error::from)?.ok_or_else(|| {
                     make_err!(Code::Unavailable, "Authority command stream ended")
                 })?;
-                let Some(authority_coordinator_update::Update::Command(command)) = message.update else {
-                    return Err(make_err!(Code::FailedPrecondition, "Unexpected authority negotiation message"));
+                let outcome = match message.update {
+                    Some(authority_coordinator_update::Update::Command(command)) => worker.command(session, command).map(|_| ()),
+                    Some(authority_coordinator_update::Update::Retirement(certificate)) => worker.retire_receipts(certificate).map(|_| ()),
+                    _ => return Err(make_err!(Code::FailedPrecondition, "Unexpected authority negotiation message")),
                 };
-                worker.command(session, command)?;
+                if let Err(error) = outcome {
+                    // Compacted attempts and older certificates cannot create a
+                    // cleanup report or terminate a healthy successor session.
+                    if error.code != Code::OutOfRange {
+                        return Err(error);
+                    }
+                }
                 publish_inventory(&worker, &sender, session, &mut sequence)?;
             }
             observation = changed.changed() => {

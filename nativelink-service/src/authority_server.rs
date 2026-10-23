@@ -34,8 +34,10 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApi;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     AuthorityAttemptIdentity, AuthorityAttemptPhase, AuthorityAttemptReport, AuthorityCapability,
+    AuthorityCapacityObservation, AuthorityReconciliation,
     AuthorityCommand, AuthorityCoordinatorUpdate, AuthorityDispatch, AuthorityRegistration,
     AuthorityRegistrationResult, AuthorityResources, AuthoritySession, AuthorityWorkerIdentity,
+    AuthorityReceiptCertificate, AuthorityReceiptRetirement, AuthorityRetainedReceipt,
     AuthorityWorkerUpdate, authority_attempt_report, authority_command,
     authority_coordinator_update, authority_worker_update,
 };
@@ -43,13 +45,15 @@ use nativelink_proto::google::longrunning::{Operation, operation};
 use nativelink_scheduler::authority::journal::Singleton;
 use nativelink_scheduler::authority::request::RequestPayload;
 use nativelink_scheduler::authority::{
-    ActionKey, Effect, EffectId, EffectKind, Event, IncarnationId, ObservableState,
+    ActionKey, AttemptId, Effect, EffectId, EffectKind, Event, ExecutionId, IncarnationId, ObservableState,
     OperationId, Phase, RecordedEvent, Reply, Request as AuthorityRequest, Resources,
     ResultPayload, SessionId, INTEREST_TIMEOUT, TERMINAL_RETENTION, TerminalResult, WorkerId,
+    ReceiptBinding, ReceiptCertificate, ReceiptRetirement, ReservationId, MAX_RECEIPT_BINDINGS,
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::background_spawn;
 use nativelink_util::store_trait::{Store, StoreLike};
+use parking_lot::Mutex;
 use prost::Message;
 use prost_types::{Any, Timestamp};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
@@ -62,12 +66,13 @@ const OPERATION_BYTES: usize = 2 * FRAME_BYTES;
 const INTEREST_RENEWAL_TICKS: u64 = INTEREST_TIMEOUT / 3;
 const QUEUE: usize = 64;
 const VERSION: u32 = 1;
-const CAPABILITIES: [i32; 5] = [
+const CAPABILITIES: [i32; 6] = [
     AuthorityCapability::AttemptEffectIdentities as i32,
     AuthorityCapability::ReconnectReconciliation as i32,
     AuthorityCapability::CleanupTombstones as i32,
     AuthorityCapability::CandidateResults as i32,
     AuthorityCapability::MeaningfulProgress as i32,
+    AuthorityCapability::ReceiptRetirement as i32,
 ];
 const REQUEST_METADATA: &str = "build.bazel.remote.execution.v2.requestmetadata-bin";
 
@@ -83,6 +88,10 @@ pub struct QualificationFaults {
     pub hold_dispatches: AtomicBool,
     pub hold_publications: AtomicBool,
     pub candidate_reports: AtomicU64,
+    pub hold_receipt_issues: AtomicBool,
+    pub hold_receipt_delivery: AtomicBool,
+    pub hold_receipt_acknowledgments: AtomicBool,
+    pub receipt_inventories: AtomicU64,
 }
 
 /// Fixed test construction facts; not a runtime configuration selector.
@@ -100,6 +109,7 @@ pub struct QualificationConfig {
 pub struct AuthorityService {
     commands: mpsc::Sender<Input>,
     committed: watch::Receiver<Arc<ObservableState>>,
+    receipts: watch::Receiver<Arc<Option<ReceiptRetirement>>>,
     instance: Arc<str>,
     principal: Arc<str>,
     cas: Store,
@@ -130,7 +140,56 @@ enum Input {
         ReplyTo<()>,
     ),
     Worker(AuthoritySession, Box<AuthorityWorkerUpdate>),
+    WorkerSnapshots(AuthoritySession, Arc<Mutex<WorkerSnapshots>>),
     Disconnected(AuthoritySession),
+}
+
+/// Complete inventories retain unresolved receipts. Coalesce them again after
+/// transport decoding, before a slow journal can queue many obsolete copies.
+/// Taking the snapshot and clearing its notification share the same lock as
+/// replacement, so an observation arriving during a commit queues another turn.
+#[derive(Default)]
+struct WorkerSnapshots {
+    inventory: Option<AuthorityReconciliation>,
+    capacity: Option<AuthorityCapacityObservation>,
+    queued: bool,
+}
+
+fn worker_input(
+    session: AuthoritySession,
+    snapshots: &mut Arc<Mutex<WorkerSnapshots>>,
+    update: AuthorityWorkerUpdate,
+) -> Option<Input> {
+    if update.encoded_len() > 1024 * 1024 {
+        return None;
+    }
+    let mut pending = snapshots.lock();
+    match update.update {
+        Some(authority_worker_update::Update::Reconciliation(inventory)) => {
+            if inventory.session != Some(session) {
+                return None;
+            }
+            pending.inventory = Some(inventory);
+        }
+        Some(authority_worker_update::Update::Capacity(capacity)) => {
+            if capacity.session != Some(session) {
+                return None;
+            }
+            pending.capacity = Some(capacity);
+        }
+        _ => {
+            // A standalone report is an ordering barrier. Later snapshots must
+            // not replace an earlier notification and overtake that report.
+            drop(pending);
+            *snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));
+            return Some(Input::Worker(session, Box::new(update)));
+        }
+    }
+    if pending.queued {
+        return None;
+    }
+    pending.queued = true;
+    Some(Input::WorkerSnapshots(session, snapshots.clone()))
 }
 
 struct Observation {
@@ -159,6 +218,11 @@ struct Driver {
     in_flight: BTreeSet<EffectId>,
     retry_at: BTreeMap<EffectId, Instant>,
     restore_deadlines: bool,
+    receipts_enabled: bool,
+    receipts: Arc<Option<ReceiptRetirement>>,
+    committed_receipts: watch::Sender<Arc<Option<ReceiptRetirement>>>,
+    receipt_issue_due: bool,
+    receipt_sent: BTreeMap<EffectId, (u64, Instant)>,
 }
 
 impl AuthorityService {
@@ -180,6 +244,9 @@ impl AuthorityService {
             );
         }
         let watermark = initial.ingress_watermark();
+        let receipts_enabled = initial.receipt_retirement_enabled();
+        let receipts = Arc::new(initial.receipt_retirement().cloned());
+        let (committed_receipts, receipt_receiver) = watch::channel(receipts.clone());
         let state = Arc::new(initial.view());
         let (committed, receiver) = watch::channel(state.clone());
         let (commands, inputs) = mpsc::channel(QUEUE);
@@ -187,6 +254,7 @@ impl AuthorityService {
         let service = Self {
             commands,
             committed: receiver,
+            receipts: receipt_receiver,
             instance: Arc::from(config.instance.as_str()),
             principal: Arc::from(config.principal.as_str()),
             cas: config.cas.clone(),
@@ -204,6 +272,11 @@ impl AuthorityService {
             in_flight: BTreeSet::new(),
             retry_at: BTreeMap::new(),
             restore_deadlines: true,
+            receipts_enabled,
+            receipts,
+            committed_receipts,
+            receipt_issue_due: true,
+            receipt_sent: BTreeMap::new(),
         };
         let task = background_spawn!(
             "experimental_authority_coordinator",
@@ -214,6 +287,11 @@ impl AuthorityService {
 
     pub fn subscribe(&self) -> watch::Receiver<Arc<ObservableState>> {
         self.committed.clone()
+    }
+
+    /// Committed qualification metadata, independent of the observable model.
+    pub fn subscribe_receipts(&self) -> watch::Receiver<Arc<Option<ReceiptRetirement>>> {
+        self.receipts.clone()
     }
 
     fn name(&self, operation: OperationId) -> String {
@@ -468,17 +546,17 @@ impl AuthorityWorkerApi for AuthorityService {
         let commands = self.commands.clone();
         background_spawn!("experimental_authority_worker_ingress", async move {
             let _permit = permit;
+            let mut snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));
             loop {
                 let next =
                     tokio::select! { _ = &mut stopped => break, next = incoming.message() => next };
                 let Ok(Some(update)) = next else {
                     break;
                 };
-                if commands
-                    .send(Input::Worker(session, Box::new(update)))
-                    .await
-                    .is_err()
-                {
+                let Some(input) = worker_input(session, &mut snapshots, update) else {
+                    continue;
+                };
+                if commands.send(input).await.is_err() {
                     return;
                 }
             }
@@ -503,6 +581,10 @@ impl Driver {
             .data;
         let state = self.authority.read().await?;
         self.watermark = state.ingress_watermark();
+        self.receipts_enabled = state.receipt_retirement_enabled();
+        self.receipts = Arc::new(state.receipt_retirement().cloned());
+        self.committed_receipts.send_replace(self.receipts.clone());
+        self.receipt_issue_due = true;
         self.state = Arc::new(state.view());
         self.committed.send_replace(self.state.clone());
         Ok(reply)
@@ -558,7 +640,9 @@ impl Driver {
                     }
                 }
             }
+            self.issue_receipts().await?;
             self.pump_effects()?;
+            self.pump_receipts()?;
         }
         Ok(())
     }
@@ -691,6 +775,31 @@ impl Driver {
                     self.update(session, *update).await?;
                 }
             }
+            Input::WorkerSnapshots(session, snapshots) => {
+                let snapshots = std::mem::take(&mut *snapshots.lock());
+                if self.current(session) {
+                    if let Some(inventory) = snapshots.inventory {
+                        self.update(
+                            session,
+                            AuthorityWorkerUpdate {
+                                update: Some(authority_worker_update::Update::Reconciliation(
+                                    inventory,
+                                )),
+                            },
+                        )
+                        .await?;
+                    }
+                    if let Some(capacity) = snapshots.capacity {
+                        self.update(
+                            session,
+                            AuthorityWorkerUpdate {
+                                update: Some(authority_worker_update::Update::Capacity(capacity)),
+                            },
+                        )
+                        .await?;
+                    }
+                }
+            }
             Input::Disconnected(session) => {
                 if self.current(session)
                     && let Some(identity) = session.worker
@@ -748,6 +857,8 @@ impl Driver {
             for report in inventory.attempts {
                 self.report(session, report).await?;
             }
+            self.acknowledge_receipts(session, inventory.receipt_retirement)
+                .await?;
         }
         if sender
             .try_send(Ok(AuthorityCoordinatorUpdate {
@@ -782,6 +893,8 @@ impl Driver {
                 for report in inventory.attempts {
                     self.report(session, report).await?;
                 }
+                self.acknowledge_receipts(session, inventory.receipt_retirement)
+                    .await?;
             }
             Some(authority_worker_update::Update::Report(report)) => {
                 self.report(session, report).await?;
@@ -802,12 +915,25 @@ impl Driver {
                     return Ok(());
                 };
                 connection.capacity_sequence = capacity.observation_sequence;
+                let total = resources(total);
+                let ceiling = resources(ceiling);
+                if self.state.workers.iter().any(|worker| {
+                    worker.id.0 == identity.worker_id
+                        && worker.incarnation.0 == identity.incarnation_id
+                        && worker.session.0 == session.session_id
+                        && worker.capacity == total
+                        && worker.available == ceiling
+                        && worker.draining == capacity.draining
+                        && worker.last_heartbeat == self.state.now
+                }) {
+                    return Ok(());
+                }
                 self.commit(Event::Capacity {
                     worker: WorkerId(identity.worker_id),
                     incarnation: IncarnationId(identity.incarnation_id),
                     session: SessionId(session.session_id),
-                    capacity: resources(total),
-                    available: resources(ceiling),
+                    capacity: total,
+                    available: ceiling,
                     draining: capacity.draining,
                 })
                 .await?;
@@ -889,19 +1015,23 @@ impl Driver {
             }
             return Ok(());
         }
-        self.commit(Event::WorkerAccepted {
-            attempt: attempt.id,
-            worker,
-            incarnation,
-        })
-        .await?;
+        if attempt.phase == Phase::Dispatching {
+            self.commit(Event::WorkerAccepted {
+                attempt: attempt.id,
+                worker,
+                incarnation,
+            })
+            .await?;
+        }
         let phase = match AuthorityAttemptPhase::try_from(report.phase).ok() {
             Some(AuthorityAttemptPhase::Preparing) => Some(Phase::Preparing),
             Some(AuthorityAttemptPhase::Running) => Some(Phase::Running),
             Some(AuthorityAttemptPhase::Uploading) => Some(Phase::Uploading),
             _ => None,
         };
-        if let Some(phase) = phase {
+        if let Some(phase) = phase
+            && (phase != attempt.phase || report.phase_progress > attempt.progress)
+        {
             self.commit(Event::Progress {
                 attempt: attempt.id,
                 worker,
@@ -937,6 +1067,167 @@ impl Driver {
                     result,
                 })
                 .await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn issue_receipts(&mut self) -> Result<(), String> {
+        if !self.receipts_enabled
+            || !self.receipt_issue_due
+            || self
+                .config
+                .faults
+                .hold_receipt_issues
+                .load(Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        let proposals: Vec<_> = self
+            .receipts
+            .as_ref()
+            .as_ref()
+            .map_or_else(Vec::new, |receipts| {
+                receipts
+                    .streams
+                    .iter()
+                    .filter_map(|(worker, stream)| {
+                        (stream.dirty && stream.pending.is_none()).then_some(Event::IssueReceipts {
+                            worker: *worker,
+                            incarnation: stream.incarnation,
+                            after_ack: stream.acknowledged.map(|floor| floor.effect),
+                        })
+                    })
+                    .collect()
+            });
+        for event in proposals {
+            self.commit(event).await?;
+        }
+        // A rejected proposal is retried after another input/commit, not every
+        // idle timer tick. Fault release still retries the unsubmitted intent.
+        self.receipt_issue_due = false;
+        Ok(())
+    }
+
+    async fn acknowledge_receipts(
+        &mut self,
+        session: AuthoritySession,
+        certificate: Option<AuthorityReceiptCertificate>,
+    ) -> Result<(), String> {
+        if !self.receipts_enabled || !self.current(session) {
+            return Ok(());
+        }
+        self.config
+            .faults
+            .receipt_inventories
+            .fetch_add(1, Ordering::Relaxed);
+        if self
+            .config
+            .faults
+            .hold_receipt_acknowledgments
+            .load(Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        let (Some(identity), Some(certificate)) = (session.worker, certificate) else {
+            return Ok(());
+        };
+        if certificate.encoded_len() > FRAME_BYTES
+            || certificate.retain.len() > MAX_RECEIPT_BINDINGS
+        {
+            return Ok(());
+        }
+        let worker = WorkerId(identity.worker_id);
+        let incarnation = IncarnationId(identity.incarnation_id);
+        let certificate = receipt_certificate(certificate);
+        let pending = self
+            .receipts
+            .as_ref()
+            .as_ref()
+            .and_then(|receipts| receipts.streams.get(&worker))
+            .filter(|stream| stream.incarnation == incarnation)
+            .and_then(|stream| stream.pending.as_ref());
+        if pending != Some(&certificate) {
+            return Ok(());
+        }
+        self.commit(Event::AcknowledgeReceipts {
+            worker,
+            incarnation,
+            certificate,
+        })
+        .await?;
+        Ok(())
+    }
+
+    fn pump_receipts(&mut self) -> Result<(), String> {
+        let pending: BTreeMap<_, _> =
+            self.receipts
+                .as_ref()
+                .as_ref()
+                .map_or_else(BTreeMap::new, |receipts| {
+                    receipts
+                        .streams
+                        .iter()
+                        .filter_map(|(worker, stream)| {
+                            stream.pending.as_ref().map(|certificate| {
+                                (
+                                    certificate.effect,
+                                    (*worker, stream.incarnation, certificate),
+                                )
+                            })
+                        })
+                        .collect()
+                });
+        self.receipt_sent
+            .retain(|effect, _| pending.contains_key(effect));
+        if self
+            .config
+            .faults
+            .hold_receipt_delivery
+            .load(Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        for (effect, (worker, incarnation, certificate)) in pending {
+            let Some(connection) = self.workers.get(&worker) else {
+                continue;
+            };
+            if connection
+                .session
+                .worker
+                .is_none_or(|identity| identity.incarnation_id != incarnation.0)
+                || self
+                    .receipt_sent
+                    .get(&effect)
+                    .is_some_and(|(session, sent)| {
+                        *session == connection.session.session_id
+                            && sent.elapsed() < Duration::from_millis(250)
+                    })
+            {
+                continue;
+            }
+            let certificate = wire_receipt_certificate(certificate);
+            if certificate.encoded_len() > FRAME_BYTES
+                || certificate.retain.len() > MAX_RECEIPT_BINDINGS
+            {
+                return Err("Committed receipt certificate exceeds wire bounds".to_owned());
+            }
+            if connection
+                .sender
+                .try_send(Ok(AuthorityCoordinatorUpdate {
+                    update: Some(authority_coordinator_update::Update::Retirement(
+                        AuthorityReceiptRetirement {
+                            session: Some(connection.session),
+                            certificate: Some(certificate),
+                        },
+                    )),
+                }))
+                .is_ok()
+            {
+                // Queueing is not acknowledgment. The committed body remains
+                // pending and is retried, including within a live session.
+                self.receipt_sent
+                    .insert(effect, (connection.session.session_id, Instant::now()));
             }
         }
         Ok(())
@@ -1017,6 +1308,47 @@ impl Driver {
             }
         }
         Ok(())
+    }
+}
+
+fn receipt_certificate(value: AuthorityReceiptCertificate) -> ReceiptCertificate {
+    ReceiptCertificate {
+        effect: EffectId(value.effect_id),
+        attempts_through: AttemptId(value.attempts_through),
+        effects_through: EffectId(value.effects_through),
+        reservations_through: ReservationId(value.reservations_through),
+        retain: value
+            .retain
+            .into_iter()
+            .map(|binding| ReceiptBinding {
+                attempt: AttemptId(binding.attempt_id),
+                execution: ExecutionId(binding.execution_id),
+                dispatch_effect: EffectId(binding.dispatch_effect_id),
+                reservation: ReservationId(binding.reservation_id),
+                cancel_effect: (binding.cancel_effect_id != 0)
+                    .then_some(EffectId(binding.cancel_effect_id)),
+            })
+            .collect(),
+    }
+}
+
+fn wire_receipt_certificate(value: &ReceiptCertificate) -> AuthorityReceiptCertificate {
+    AuthorityReceiptCertificate {
+        effect_id: value.effect.0,
+        attempts_through: value.attempts_through.0,
+        effects_through: value.effects_through.0,
+        reservations_through: value.reservations_through.0,
+        retain: value
+            .retain
+            .iter()
+            .map(|binding| AuthorityRetainedReceipt {
+                attempt_id: binding.attempt.0,
+                execution_id: binding.execution.0,
+                dispatch_effect_id: binding.dispatch_effect.0,
+                reservation_id: binding.reservation.0,
+                cancel_effect_id: binding.cancel_effect.map_or(0, |effect| effect.0),
+            })
+            .collect(),
     }
 }
 
@@ -1344,6 +1676,190 @@ fn completion_payload(response: &ExecuteResponse) -> Option<ResultPayload> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn session() -> AuthoritySession {
+        AuthoritySession {
+            worker: Some(AuthorityWorkerIdentity {
+                cluster_epoch: 1,
+                worker_id: 2,
+                incarnation_id: 3,
+            }),
+            session_id: 4,
+        }
+    }
+
+    fn inventory(sequence: u64, phase: AuthorityAttemptPhase) -> AuthorityWorkerUpdate {
+        AuthorityWorkerUpdate {
+            update: Some(authority_worker_update::Update::Reconciliation(
+                AuthorityReconciliation {
+                    session: Some(session()),
+                    attempts: vec![
+                        AuthorityAttemptReport {
+                            observation_sequence: 1,
+                            phase: AuthorityAttemptPhase::Running as i32,
+                            ..AuthorityAttemptReport::default()
+                        },
+                        AuthorityAttemptReport {
+                            observation_sequence: sequence,
+                            phase: phase as i32,
+                            result: (phase == AuthorityAttemptPhase::Quiescent).then(|| {
+                                authority_attempt_report::Result::ExecuteResponse(ExecuteResponse {
+                                    result: Some(ActionResult::default()),
+                                    ..ExecuteResponse::default()
+                                })
+                            }),
+                            ..AuthorityAttemptReport::default()
+                        },
+                    ],
+                    receipt_retirement: Some(AuthorityReceiptCertificate {
+                        effect_id: 7,
+                        attempts_through: 2,
+                        effects_through: 7,
+                        reservations_through: 2,
+                        retain: vec![AuthorityRetainedReceipt {
+                            attempt_id: 1,
+                            execution_id: 1,
+                            dispatch_effect_id: 1,
+                            reservation_id: 1,
+                            cancel_effect_id: 0,
+                        }],
+                    }),
+                    ..AuthorityReconciliation::default()
+                },
+            )),
+        }
+    }
+
+    #[test]
+    fn slow_coordinator_observes_latest_candidate_with_one_pending_notification() {
+        let mut snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));
+        let mut notifications = Vec::new();
+        // The journal consumer is stopped while ingress receives more complete
+        // observations than the FIFO can hold. The terminal candidate must be
+        // immediately available when it resumes, retaining the old live hole.
+        for sequence in 1..=4 * QUEUE as u64 {
+            let phase = if sequence == 4 * QUEUE as u64 {
+                AuthorityAttemptPhase::Quiescent
+            } else {
+                AuthorityAttemptPhase::Uploading
+            };
+            for update in [
+                inventory(sequence, phase),
+                AuthorityWorkerUpdate {
+                    update: Some(authority_worker_update::Update::Capacity(
+                        AuthorityCapacityObservation {
+                            session: Some(session()),
+                            observation_sequence: sequence,
+                            ..AuthorityCapacityObservation::default()
+                        },
+                    )),
+                },
+            ] {
+                if let Some(input) = worker_input(session(), &mut snapshots, update) {
+                    notifications.push(input);
+                }
+            }
+        }
+        assert_eq!(notifications.len(), 1);
+        let Input::WorkerSnapshots(_, pending) = notifications.pop().unwrap() else {
+            panic!("Expected one coalesced snapshot notification");
+        };
+        let latest = std::mem::take(&mut *pending.lock());
+        let expected = inventory(4 * QUEUE as u64, AuthorityAttemptPhase::Quiescent);
+        assert_eq!(
+            latest
+                .inventory
+                .map(authority_worker_update::Update::Reconciliation),
+            expected.update
+        );
+        assert_eq!(
+            latest.capacity.unwrap().observation_sequence,
+            4 * QUEUE as u64
+        );
+        // An update after the snapshot is taken must queue another turn, even
+        // while the consumer is still awaiting the preceding journal commit.
+        assert!(
+            worker_input(
+                session(),
+                &mut snapshots,
+                inventory(4 * QUEUE as u64 + 1, AuthorityAttemptPhase::Quiescent),
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn standalone_report_seals_preceding_snapshot_before_later_capacity() {
+        let mut snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));
+        let first = worker_input(
+            session(),
+            &mut snapshots,
+            inventory(1, AuthorityAttemptPhase::Preparing),
+        )
+        .unwrap();
+        let report = AuthorityAttemptReport {
+            observation_sequence: 2,
+            phase: AuthorityAttemptPhase::Running as i32,
+            ..AuthorityAttemptReport::default()
+        };
+        let barrier = worker_input(
+            session(),
+            &mut snapshots,
+            AuthorityWorkerUpdate {
+                update: Some(authority_worker_update::Update::Report(report.clone())),
+            },
+        )
+        .unwrap();
+        let last = worker_input(
+            session(),
+            &mut snapshots,
+            AuthorityWorkerUpdate {
+                update: Some(authority_worker_update::Update::Capacity(
+                    AuthorityCapacityObservation {
+                        session: Some(session()),
+                        observation_sequence: 3,
+                        ..AuthorityCapacityObservation::default()
+                    },
+                )),
+            },
+        )
+        .unwrap();
+        assert!(
+            worker_input(
+                session(),
+                &mut snapshots,
+                inventory(4, AuthorityAttemptPhase::Quiescent),
+            )
+            .is_none()
+        );
+        let Input::WorkerSnapshots(_, before) = first else {
+            panic!("Missing first snapshot");
+        };
+        assert_eq!(
+            before.lock().inventory.as_ref().unwrap().attempts[1].observation_sequence,
+            1
+        );
+        assert!(before.lock().capacity.is_none());
+        let Input::Worker(_, actual) = barrier else {
+            panic!("Missing standalone report");
+        };
+        assert_eq!(
+            actual.update,
+            Some(authority_worker_update::Update::Report(report))
+        );
+        let Input::WorkerSnapshots(_, after) = last else {
+            panic!("Missing later snapshot");
+        };
+        assert!(!Arc::ptr_eq(&before, &after));
+        assert_eq!(
+            after.lock().capacity.as_ref().unwrap().observation_sequence,
+            3
+        );
+        assert_eq!(
+            after.lock().inventory.as_ref().unwrap().attempts[1].observation_sequence,
+            4
+        );
+    }
 
     #[test]
     fn completion_checks_committed_encoding_and_preserves_supported_response() {

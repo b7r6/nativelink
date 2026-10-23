@@ -90,6 +90,40 @@ replacing the committed pin. Updating the writer under test does not require
 changing the Base pin. Replacing that pin for every candidate would erase the
 compatibility boundary this fixture is intended to test.
 
+## Receipt-retirement writer modes
+
+`--writer-mode direct` remains the default feature-1 qualification and can build
+the original pinned writer revision. A receipt-capable writer revision can also
+run `--writer-mode receipt` for feature 2 with the string scheduler section, or
+`--writer-mode both` for features 1 and 2 with the direct-object section. Use a
+separate output directory for each mode. The frozen Base source, pin, overlay,
+and executable capability remain unchanged.
+
+For example, after committing the upgraded implementation:
+
+```sh
+python3 nativelink-scheduler/tests/format_compatibility/run.py run \
+  --writer-revision <upgraded-commit> --writer-mode receipt \
+  --output /tmp/nativelink-receipt-base-evidence \
+  --cargo-target-dir /tmp/nativelink-frozen-base-target
+```
+
+The runner enables a fixture-only Cargo feature for the receipt modes. Its
+conditional producer code lets the default fixture compile against the
+older pinned writer. This is a build capability of the test executable, not a
+runtime authority-format selector. The selected feature set still crosses the
+real Prepare, append, commit, and apply boundaries.
+
+Each mode records its feature set and the complete activated state separately
+from the core-5 state used for pre-activation compatibility comparisons. Before
+activation, even the receipt-capable executable must emit core 5. The producer
+also checks that preparation evidence still contains the `DirectScheduler`
+reader spelling. The frozen reader must preserve the uncommitted receipt
+control, refuse admission while unresolved, and reject committed activation
+before a vote read or Raft startup. For feature 2 alone, rejection follows the
+unsupported active feature; for the combined mode, the frozen decoder also
+lacks the direct-object representation.
+
 This is a bounded experimental compatibility gate. It does not qualify a
 deployed transport, authenticate remote capabilities, fence old processes, or
 replace a production admission and membership protocol. Compiler versions and

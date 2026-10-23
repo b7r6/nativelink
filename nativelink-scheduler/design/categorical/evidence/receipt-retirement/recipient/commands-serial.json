@@ -1,0 +1,49 @@
+[
+  {
+    "label": "targets-serial",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "--test",
+      "authority_rpc_test",
+      "--test",
+      "authority_scheduler_test",
+      "--",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "exit": 0,
+    "seconds": 128.38365244865417
+  },
+  {
+    "label": "clippy-final",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--lib",
+      "--test",
+      "authority_worker_test",
+      "--test",
+      "authority_rpc_test",
+      "--test",
+      "authority_scheduler_test",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 101,
+    "seconds": 11.965125560760498
+  }
+]

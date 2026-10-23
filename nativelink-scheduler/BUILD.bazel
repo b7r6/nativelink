@@ -32,6 +32,8 @@ rust_library(
         "src/authority/journal.rs",
         "src/authority/mod.rs",
         "src/authority/reapi.rs",
+        "src/authority/receipt_retirement.rs",
+        "src/authority/receipt_retirement_tests.rs",
         "src/authority/request.rs",
         "src/authority/snapshot_buffer.rs",
         "src/authority/tests.rs",
@@ -104,6 +106,8 @@ rust_test(
         "//:Cargo.lock",
         "src/authority/mod.rs",
         "src/authority/reapi.rs",
+        "src/authority/receipt_retirement.rs",
+        "src/authority/receipt_retirement_tests.rs",
         "src/authority/request.rs",
         "src/authority/types.rs",
         "tests/authority/adversarial.rs",
@@ -119,6 +123,34 @@ rust_test(
         "//nativelink-util",
         "@crates//:prost",
         "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "receipt_retirement_reference_test",
+    srcs = ["tests/receipt_retirement_reference_test.rs"],
+    compile_data = [
+        "tests/receipt_retirement/differential.rs",
+        "tests/receipt_retirement/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "receipt_retirement_differential_test",
+    srcs = ["tests/receipt_retirement_differential_test.rs"],
+    compile_data = [
+        "tests/receipt_retirement/differential.rs",
+        "tests/receipt_retirement/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
         "@crates//:serde",
         "@crates//:serde_json",
     ],

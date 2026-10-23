@@ -231,8 +231,8 @@ pub mod authority_attempt_report {
 }
 /// / Complete process-incarnation inventory, including uncertain launches,
 /// / uncertain termination, retained candidates, and cancellation tombstones.
-/// / Missing reports never prove cleanup. No receipt is evicted by this version;
-/// / bounded lifetime admission stops when the recipient ledger is full.
+/// / Missing reports never prove cleanup. A certificate acknowledges only receipt
+/// / compaction, never process cleanup, result acceptance or resource release.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorityReconciliation {
     #[prost(message, optional, tag = "1")]
@@ -241,6 +241,49 @@ pub struct AuthorityReconciliation {
     pub attempts: ::prost::alloc::vec::Vec<AuthorityAttemptReport>,
     #[prost(bool, tag = "3")]
     pub single_use_spent: bool,
+    /// / Absent means no certificate was applied, never implicit acknowledgment.
+    #[prost(message, optional, tag = "4")]
+    pub receipt_retirement: ::core::option::Option<AuthorityReceiptCertificate>,
+}
+/// / Exact identity exceptions retained below cumulative retirement watermarks.
+/// / An unknown local attempt may still need its first dispatch or cancellation.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorityRetainedReceipt {
+    #[prost(uint64, tag = "1")]
+    pub attempt_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub execution_id: u64,
+    #[prost(uint64, tag = "3")]
+    pub dispatch_effect_id: u64,
+    #[prost(uint64, tag = "4")]
+    pub reservation_id: u64,
+    /// / Zero means no cancellation was allocated at this certificate's cut.
+    #[prost(uint64, tag = "5")]
+    pub cancel_effect_id: u64,
+}
+/// / Immutable committed retirement intent, scoped by the envelope's process
+/// / identity. effect_id is its stable authority effect identity and revision.
+/// / The recipient retains only the latest certificate across reconnects.
+/// / Qualification-only trusted issuance until the real authority outbox lands.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorityReceiptCertificate {
+    #[prost(uint64, tag = "1")]
+    pub effect_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub attempts_through: u64,
+    #[prost(uint64, tag = "3")]
+    pub effects_through: u64,
+    #[prost(uint64, tag = "4")]
+    pub reservations_through: u64,
+    #[prost(message, repeated, tag = "5")]
+    pub retain: ::prost::alloc::vec::Vec<AuthorityRetainedReceipt>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorityReceiptRetirement {
+    #[prost(message, optional, tag = "1")]
+    pub session: ::core::option::Option<AuthoritySession>,
+    #[prost(message, optional, tag = "2")]
+    pub certificate: ::core::option::Option<AuthorityReceiptCertificate>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorityWorkerUpdate {
@@ -263,7 +306,7 @@ pub mod authority_worker_update {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorityCoordinatorUpdate {
-    #[prost(oneof = "authority_coordinator_update::Update", tags = "1, 2")]
+    #[prost(oneof = "authority_coordinator_update::Update", tags = "1, 2, 3")]
     pub update: ::core::option::Option<authority_coordinator_update::Update>,
 }
 /// Nested message and enum types in `AuthorityCoordinatorUpdate`.
@@ -274,6 +317,8 @@ pub mod authority_coordinator_update {
         Registration(super::AuthorityRegistrationResult),
         #[prost(message, tag = "2")]
         Command(super::AuthorityCommand),
+        #[prost(message, tag = "3")]
+        Retirement(super::AuthorityReceiptRetirement),
     }
 }
 /// / What a worker has to spare, sent with every keepalive so the scheduler
@@ -682,6 +727,7 @@ pub enum AuthorityCapability {
     CleanupTombstones = 3,
     CandidateResults = 4,
     MeaningfulProgress = 5,
+    ReceiptRetirement = 6,
 }
 impl AuthorityCapability {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -700,6 +746,7 @@ impl AuthorityCapability {
             Self::CleanupTombstones => "AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES",
             Self::CandidateResults => "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS",
             Self::MeaningfulProgress => "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS",
+            Self::ReceiptRetirement => "AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -715,6 +762,7 @@ impl AuthorityCapability {
             "AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES" => Some(Self::CleanupTombstones),
             "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS" => Some(Self::CandidateResults),
             "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS" => Some(Self::MeaningfulProgress),
+            "AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT" => Some(Self::ReceiptRetirement),
             _ => None,
         }
     }

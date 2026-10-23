@@ -25,6 +25,12 @@ does not revoke work or refund resources.
 `authority_worker_transport::run_reconnecting` retains the same process recipient
 and opens a new transport connection for each bounded retry. Sessions increase
 without resetting receipts, candidate results, spent state or resource charges.
+
+When feature 2 has been explicitly activated through the real journal, the
+driver also issues and delivers committed receipt-retirement certificates and
+commits exact current-session acknowledgments. Base constructors retain their
+existing feature set. The [receipt-retirement qualification](receipt-retirement.md)
+describes bounded receiving, the durable outbox and its restart cutpoints.
 Protocol rejection cannot downgrade to the old worker protocol. Replacement
 sessions close the previous server ingress task. Delivery bookkeeping retains
 one session per unresolved effect, rather than an entry for every reconnect.
@@ -36,6 +42,16 @@ storage effects execute concurrently. Each Action/Command accumulator refuses
 bytes beyond 64 KiB before extending its buffer. Invalid or missing identities
 never reach completion application. Driver failures and ordinary shutdown both
 close Raft explicitly before the journal can be reopened.
+
+Complete worker inventories and capacity observations also coalesce after gRPC
+decoding, before the coordinator queue. Repeated inventory and capacity messages
+share one pending notification instead of forming a FIFO of stale copies.
+The snapshot preserves every unresolved candidate, cleanup receipt and explicit
+certificate acknowledgment. Taking it and clearing its notification are atomic;
+observations arriving during a commit queue another turn. Standalone reports
+seal the preceding snapshot, so later capacity or inventory cannot overtake
+that report. Equal accepted/progress facts do not generate new journal events;
+unchanged capacity still records a heartbeat when authority time advances.
 
 Worker response bytes and the committed JSON representation have different size
 costs. This fixture requires a core payload limit of at least 64 KiB, bounds its

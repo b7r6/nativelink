@@ -38,7 +38,7 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     AuthorityAttemptIdentity, AuthorityAttemptPhase, AuthorityAttemptReport, AuthorityCommand,
-    AuthorityCoordinatorUpdate, AuthorityDispatch, AuthorityRegistration, AuthorityRegistrationResult, AuthorityResources, AuthoritySession,
+    AuthorityCoordinatorUpdate, AuthorityDispatch, AuthorityReceiptCertificate, AuthorityReceiptRetirement, AuthorityRetainedReceipt, AuthorityReconciliation, AuthorityRegistration, AuthorityRegistrationResult, AuthorityResources, AuthoritySession,
     AuthorityWorkerIdentity, AuthorityWorkerUpdate, authority_attempt_report, authority_command, authority_coordinator_update, authority_worker_update,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_client::AuthorityWorkerApiClient;
@@ -61,6 +61,7 @@ use nativelink_worker::running_actions_manager::{
     RunningActionsManagerImpl, UseNamespaces,
 };
 use tempfile::TempDir;
+use prost::Message;
 use tokio::io::unix::AsyncFd;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
@@ -482,6 +483,408 @@ async fn bounded_ledger_never_evicts_cleanup_tombstones() {
     assert_eq!(context.worker.reconcile().attempts.len(), 1);
 }
 
+const fn receipt_certificate(
+    effect: u64,
+    through: u64,
+    retain: Vec<AuthorityRetainedReceipt>,
+) -> AuthorityReceiptCertificate {
+    AuthorityReceiptCertificate {
+        effect_id: effect,
+        attempts_through: through,
+        effects_through: effect,
+        reservations_through: through,
+        retain,
+    }
+}
+
+const fn receipt_control(
+    session: u64,
+    certificate: AuthorityReceiptCertificate,
+) -> AuthorityReceiptRetirement {
+    AuthorityReceiptRetirement {
+        session: Some(AuthoritySession {
+            worker: Some(IDENTITY),
+            session_id: session,
+        }),
+        certificate: Some(certificate),
+    }
+}
+
+const fn receipt_binding(attempt: u64, cancel_effect_id: u64) -> AuthorityRetainedReceipt {
+    AuthorityRetainedReceipt {
+        attempt_id: attempt,
+        execution_id: target(attempt).execution_id,
+        dispatch_effect_id: attempt * 2,
+        reservation_id: attempt,
+        cancel_effect_id,
+    }
+}
+
+#[nativelink_test]
+async fn retirement_fences_unknown_first_dispatch_and_forgotten_aliases() {
+    let context = setup(false, 1, 4, false).await;
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    let initial = receipt_certificate(4, 1, vec![receipt_binding(1, 3)]);
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, initial.clone()))
+            .unwrap()
+    );
+    assert!(
+        !context
+            .worker
+            .retire_receipts(receipt_control(1, initial.clone()))
+            .unwrap()
+    );
+    // The first dispatch is unknown locally, but its committed binding survives.
+    context.worker.command(1, cancel(1)).unwrap();
+    let command = context.sleeping(1).await;
+    assert_eq!(
+        context.worker.command(1, command.clone()).unwrap().phase,
+        AuthorityAttemptPhase::Quiescent as i32
+    );
+    assert!(!context.directory.path().join("spawn-1").exists());
+    let retired = receipt_certificate(5, 1, Vec::new());
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, retired.clone()))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    assert_eq!(
+        context.worker.command(1, command).unwrap_err().code,
+        Code::OutOfRange
+    );
+    assert_eq!(
+        context.worker.command(1, cancel(1)).unwrap_err().code,
+        Code::OutOfRange
+    );
+    let mut revived_command = context.sleeping(1).await;
+    revived_command.effect_id = 6;
+    let Some(authority_command::Command::Dispatch(dispatch)) = revived_command.command.as_mut()
+    else {
+        unreachable!()
+    };
+    dispatch.reservation_id = 2;
+    assert_eq!(
+        context.worker.command(1, revived_command).unwrap_err().code,
+        Code::OutOfRange
+    );
+    assert!(!context.directory.path().join("spawn-1").exists());
+    let mut alias = context.sleeping(2).await;
+    alias.effect_id = 2;
+    assert_eq!(
+        context.worker.command(1, alias.clone()).unwrap_err().code,
+        Code::FailedPrecondition
+    );
+    alias.effect_id = 6;
+    let Some(authority_command::Command::Dispatch(dispatch)) = alias.command.as_mut() else {
+        unreachable!()
+    };
+    dispatch.reservation_id = 1;
+    assert_eq!(
+        context.worker.command(1, alias).unwrap_err().code,
+        Code::FailedPrecondition
+    );
+    assert!(!context.directory.path().join("spawn-2").exists());
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    let revived = receipt_certificate(6, 1, vec![receipt_binding(1, 3)]);
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, revived))
+            .is_err()
+    );
+    assert_eq!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, initial))
+            .unwrap_err()
+            .code,
+        Code::OutOfRange
+    );
+    let mut changed = retired.clone();
+    changed.attempts_through += 1;
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, changed))
+            .is_err()
+    );
+    for invalid in [
+        AuthorityReceiptRetirement {
+            session: None,
+            certificate: Some(retired.clone()),
+        },
+        AuthorityReceiptRetirement {
+            session: receipt_control(1, retired.clone()).session,
+            certificate: None,
+        },
+        receipt_control(2, retired.clone()),
+    ] {
+        assert!(context.worker.retire_receipts(invalid).is_err());
+    }
+    for field in 0..3 {
+        let mut wrong = receipt_control(1, retired.clone());
+        let identity = wrong.session.as_mut().unwrap().worker.as_mut().unwrap();
+        match field {
+            0 => identity.cluster_epoch += 1,
+            1 => identity.worker_id += 1,
+            _ => identity.incarnation_id += 1,
+        }
+        assert!(context.worker.retire_receipts(wrong).is_err());
+    }
+    context.worker.disconnect(1);
+    let registration = context.worker.make_registration(2, Vec::new()).unwrap();
+    assert_eq!(
+        registration.reconciliation.unwrap().receipt_retirement,
+        Some(retired.clone())
+    );
+    context.worker.negotiate(&negotiation(2)).unwrap();
+    assert!(
+        !context
+            .worker
+            .retire_receipts(receipt_control(2, retired))
+            .unwrap()
+    );
+    assert_eq!(
+        context.worker.command(2, cancel(1)).unwrap_err().code,
+        Code::OutOfRange
+    );
+}
+
+#[nativelink_test]
+async fn retirement_rejects_aliases_bounds_regression_and_uncertain_processes_atomically() {
+    let context = setup(false, 2, 4, false).await;
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    context.worker.lose_next_launch_receipt();
+    context
+        .worker
+        .command(1, context.sleeping(1).await)
+        .unwrap();
+    wait_marker(&context.directory.path().join("spawn-1")).await;
+    context.worker.command(1, cancel(2)).unwrap();
+    let before = context.worker.reconcile();
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(6, 2, Vec::new())))
+            .is_err()
+    );
+    assert_eq!(context.worker.reconcile(), before);
+    let certificate = receipt_certificate(6, 2, vec![receipt_binding(1, 0)]);
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, certificate.clone()))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (1, 1, 1, 1));
+    let mut failures = Vec::new();
+    let mut invalid = receipt_certificate(7, 2, vec![receipt_binding(1, 0)]);
+    invalid.retain[0].dispatch_effect_id = 7; // Certificate/command alias.
+    failures.push(invalid);
+    let mut invalid = receipt_certificate(7, 2, vec![receipt_binding(1, 0)]);
+    invalid.retain[0].reservation_id = 2;
+    failures.push(invalid);
+    let mut invalid = receipt_certificate(7, 2, vec![receipt_binding(1, 0)]);
+    invalid.retain[0].cancel_effect_id = 3; // Old forgotten command domain.
+    failures.push(invalid);
+    failures.push(receipt_certificate(
+        7,
+        2,
+        vec![receipt_binding(1, 0), receipt_binding(1, 0)],
+    ));
+    failures.push(receipt_certificate(7, 2, vec![receipt_binding(3, 0)]));
+    failures.push(receipt_certificate(7, 1, vec![receipt_binding(1, 0)]));
+    failures.push(receipt_certificate(
+        7,
+        1025,
+        (1..=1025)
+            .map(|attempt| receipt_binding(attempt, 0))
+            .collect(),
+    ));
+    let retained = context.worker.reconcile();
+    for invalid in failures {
+        assert!(
+            context
+                .worker
+                .retire_receipts(receipt_control(1, invalid))
+                .is_err()
+        );
+        assert_eq!(context.worker.reconcile(), retained);
+    }
+    let mut cancellation = cancel(1);
+    cancellation.effect_id = 7;
+    context.worker.command(1, cancellation).unwrap();
+    let result = wait_result(&context.worker, 1).await;
+    assert_eq!(
+        result.phase,
+        AuthorityAttemptPhase::TerminationUncertain as i32
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(8, 2, Vec::new())))
+            .is_err()
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(
+                1,
+                receipt_certificate(8, 2, vec![receipt_binding(1, 7)])
+            ))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (1, 2, 1, 1));
+}
+
+#[nativelink_test]
+async fn empty_receipt_certificate_still_fences_the_allocated_effect_domain() {
+    let context = setup(false, 1, 4, false).await;
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    let mut empty = receipt_certificate(1, 0, Vec::new());
+    empty.effects_through = 5;
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, empty))
+            .unwrap()
+    );
+    let mut reused = receipt_certificate(2, 0, Vec::new());
+    reused.effects_through = 6;
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, reused))
+            .is_err()
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(6, 0, Vec::new())))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    let mut invalid = cancel(1);
+    invalid.effect_id = 6;
+    assert!(context.worker.command(1, invalid).is_err());
+    let mut fresh = cancel(1);
+    fresh.effect_id = 7;
+    assert_eq!(
+        context.worker.command(1, fresh).unwrap().phase,
+        AuthorityAttemptPhase::Quiescent as i32
+    );
+}
+
+#[nativelink_test]
+async fn cancellation_after_certificate_cut_requires_an_absent_binding() {
+    let context = setup(false, 1, 4, false).await;
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    let mut cancellation = cancel(1);
+    cancellation.effect_id = 100;
+    context.worker.command(1, cancellation).unwrap();
+    // A later-arriving certificate can predate the actual cancellation. It
+    // cannot name a different cancellation that supposedly existed at its cut.
+    let conflict = receipt_certificate(20, 1, vec![receipt_binding(1, 3)]);
+    let before = context.worker.reconcile();
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, conflict))
+            .is_err()
+    );
+    assert_eq!(context.worker.reconcile(), before);
+    let earlier = receipt_certificate(20, 1, vec![receipt_binding(1, 0)]);
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, earlier))
+            .unwrap()
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(21, 1, Vec::new())))
+            .is_err()
+    );
+    let covered = receipt_certificate(101, 1, vec![receipt_binding(1, 100)]);
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, covered))
+            .unwrap()
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(102, 1, Vec::new())))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+}
+
+#[nativelink_test]
+async fn receipt_compaction_never_restores_single_use_admission() {
+    let context = setup(true, 1, 1, false).await;
+    let executable = context
+        .directory
+        .path()
+        .join("invalid-executable-retirement");
+    std::fs::write(&executable, b"invalid executable format").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    context
+        .worker
+        .command(
+            1,
+            context
+                .dispatch(1, vec![executable.to_string_lossy().into_owned()])
+                .await,
+        )
+        .unwrap();
+    assert_eq!(
+        wait_result(&context.worker, 1).await.phase,
+        AuthorityAttemptPhase::Quiescent as i32
+    );
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(1, receipt_certificate(3, 1, Vec::new())))
+            .unwrap()
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    assert!(context.worker.admission_closed());
+    assert_eq!(
+        context
+            .worker
+            .make_capacity_observation(1, 1)
+            .unwrap()
+            .admission_ceiling,
+        Some(AuthorityResources::default())
+    );
+    context.worker.disconnect(1);
+    assert!(
+        context
+            .worker
+            .negotiate(&negotiation(2))
+            .unwrap()
+            .single_use_spent
+    );
+    let declined = context
+        .worker
+        .command(2, context.sleeping(2).await)
+        .unwrap();
+    assert!(matches!(
+        declined.result,
+        Some(authority_attempt_report::Result::Decline(_))
+    ));
+    assert!(!context.directory.path().join("spawn-2").exists());
+}
+
 #[nativelink_test]
 async fn normal_pid_namespace_exit_provides_domain_quiescence() {
     if !namespace_utils::namespaces_supported(false, false) {
@@ -819,6 +1222,235 @@ impl WireConnection {
         .await
         .unwrap()
     }
+
+    async fn retired(&mut self, effect: u64) -> AuthorityReconciliation {
+        loop {
+            if let authority_worker_update::Update::Reconciliation(inventory) = self.next().await
+                && inventory
+                    .receipt_retirement
+                    .as_ref()
+                    .is_some_and(|certificate| certificate.effect_id == effect)
+            {
+                self.reports = inventory
+                    .attempts
+                    .iter()
+                    .map(|report| (report.attempt.unwrap().attempt_id, report.clone()))
+                    .collect();
+                return inventory;
+            }
+        }
+    }
+}
+
+/// A local fault fixture, not the real authority reducer or outbox. Its caller
+/// explicitly selects the trusted certificate after observing each candidate.
+/// Only the latest complete record exists; fsync precedes wire transmission.
+struct CertificateJournal {
+    path: PathBuf,
+}
+
+impl CertificateJournal {
+    fn commit(&self, control: &AuthorityReceiptRetirement) {
+        let pending = self.path.with_extension("pending");
+        let mut output = File::create(&pending).unwrap();
+        output.write_all(&control.encode_to_vec()).unwrap();
+        output.sync_all().unwrap();
+        std::fs::rename(pending, &self.path).unwrap();
+        File::open(self.path.parent().unwrap())
+            .unwrap()
+            .sync_all()
+            .unwrap();
+    }
+
+    async fn deliver(&self, connection: &WireConnection, session: u64) {
+        let mut control =
+            AuthorityReceiptRetirement::decode(std::fs::read(&self.path).unwrap().as_slice())
+                .unwrap();
+        let target = control.session.as_mut().unwrap();
+        assert_eq!(target.worker, Some(IDENTITY));
+        target.session_id = session;
+        connection
+            .send(authority_coordinator_update::Update::Retirement(control))
+            .await;
+    }
+}
+
+async fn wait_receipt_certificate(
+    worker: &AuthorityWorker<RunningActionsManagerImpl>,
+    effect: u64,
+) {
+    let mut changes = worker.subscribe();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if worker
+                .reconcile()
+                .receipt_retirement
+                .as_ref()
+                .is_some_and(|certificate| certificate.effect_id == effect)
+            {
+                return;
+            }
+            changes.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[nativelink_test]
+async fn wire_committed_receipt_retirement_survives_cutpoints_and_old_active_hole() {
+    if !namespace_utils::namespaces_supported(false, false) {
+        eprintln!(
+            "SKIP: namespaces unavailable; sustained quiescent receipt retirement remains unqualified"
+        );
+        return;
+    }
+    let context = setup(false, 2, 4, true).await;
+    let mut server = WireServer::new().await;
+    let (old, old_command) = ProcessWitness::new(&context, 1).await;
+    let (mut first, first_task) = server.connect(context.worker.clone(), 1).await;
+    assert!(
+        first
+            .registration()
+            .await
+            .reconciliation
+            .unwrap()
+            .receipt_retirement
+            .is_none()
+    );
+    first.negotiate(1).await;
+    first
+        .send(authority_coordinator_update::Update::Command(old_command))
+        .await;
+    old.started().await;
+    let completed_command = context.dispatch(2, vec!["/bin/true".to_owned()]).await;
+    first
+        .send(authority_coordinator_update::Update::Command(
+            completed_command.clone(),
+        ))
+        .await;
+    first
+        .report(2, |report| {
+            report.phase == AuthorityAttemptPhase::Quiescent as i32
+        })
+        .await;
+    let path = context
+        .directory
+        .path()
+        .join("trusted-receipt-certificate.pb");
+    assert!(!path.exists());
+    // Coordinator loss before certificate commit leaves the full candidate.
+    drop(first);
+    assert_eq!(session_error(first_task).await.code, Code::Unavailable);
+    let (mut second, second_task) = server.connect(context.worker.clone(), 2).await;
+    let inventory = second.registration().await.reconciliation.unwrap();
+    assert!(
+        inventory
+            .attempts
+            .iter()
+            .any(|report| report.attempt.unwrap().attempt_id == 2 && report.result.is_some())
+    );
+    assert!(inventory.receipt_retirement.is_none());
+    second.negotiate(2).await;
+    let journal = CertificateJournal { path: path.clone() };
+    let certificate = receipt_certificate(5, 2, vec![receipt_binding(1, 0)]);
+    journal.commit(&receipt_control(2, certificate.clone()));
+    // The committed bytes survive loss before wire delivery.
+    drop(second);
+    assert_eq!(session_error(second_task).await.code, Code::Unavailable);
+    drop(journal);
+    let journal = CertificateJournal { path };
+    let (mut third, third_task) = server.connect(context.worker.clone(), 3).await;
+    let inventory = third.registration().await.reconciliation.unwrap();
+    assert!(
+        inventory
+            .attempts
+            .iter()
+            .any(|report| report.attempt.unwrap().attempt_id == 2 && report.result.is_some())
+    );
+    third.negotiate(3).await;
+    journal.deliver(&third, 3).await;
+    wait_receipt_certificate(&context.worker, 5).await;
+    // Drop the coordinator before it consumes the acknowledgment.
+    drop(third);
+    assert_eq!(session_error(third_task).await.code, Code::Unavailable);
+    let (mut connection, task) = server.connect(context.worker.clone(), 4).await;
+    let inventory = connection.registration().await.reconciliation.unwrap();
+    assert_eq!(inventory.receipt_retirement, Some(certificate));
+    assert_eq!(inventory.attempts.len(), 1);
+    connection.negotiate(4).await;
+    journal.deliver(&connection, 4).await;
+    assert_eq!(connection.retired(5).await.attempts.len(), 1);
+
+    // Forty-eight completed processes exceed the four-receipt limit twelve
+    // times while attempt 1 stays active. Only the latest certificate is kept.
+    for attempt in 3..=49 {
+        let command = context
+            .dispatch(attempt, vec!["/bin/true".to_owned()])
+            .await;
+        connection
+            .send(authority_coordinator_update::Update::Command(command))
+            .await;
+        let candidate = connection
+            .report(attempt, |report| {
+                report.phase == AuthorityAttemptPhase::Quiescent as i32
+            })
+            .await;
+        assert!(candidate.result.is_some());
+        let certificate =
+            receipt_certificate(attempt * 2 + 1, attempt, vec![receipt_binding(1, 0)]);
+        journal.commit(&receipt_control(4, certificate));
+        journal.deliver(&connection, 4).await;
+        let inventory = connection.retired(attempt * 2 + 1).await;
+        assert_eq!(inventory.attempts.len(), 1);
+        assert_eq!(inventory.attempts[0].attempt.unwrap().attempt_id, 1);
+        assert_ne!(
+            inventory.attempts[0].phase,
+            AuthorityAttemptPhase::Quiescent as i32
+        );
+        assert_eq!(context.worker.ledger_counts_for_test(), (1, 1, 1, 1));
+        assert!(!context.worker.admission_closed());
+    }
+    assert!(!old.finished.exists());
+    assert_eq!(std::fs::read(&old.launches).unwrap(), b"x");
+    assert!(
+        context
+            .worker
+            .retire_receipts(receipt_control(4, receipt_certificate(101, 49, Vec::new())))
+            .is_err()
+    );
+    // These obsolete commands must neither relaunch nor close the transport.
+    connection
+        .send(authority_coordinator_update::Update::Command(
+            completed_command,
+        ))
+        .await;
+    connection
+        .send(authority_coordinator_update::Update::Command(cancel(2)))
+        .await;
+    let mut cancellation = cancel(1);
+    cancellation.effect_id = 100;
+    connection
+        .send(authority_coordinator_update::Update::Command(cancellation))
+        .await;
+    connection
+        .report(1, |report| {
+            report.phase == AuthorityAttemptPhase::Quiescent as i32
+        })
+        .await;
+    journal.commit(&receipt_control(
+        4,
+        receipt_certificate(101, 49, Vec::new()),
+    ));
+    journal.deliver(&connection, 4).await;
+    assert!(connection.retired(101).await.attempts.is_empty());
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    assert!(!context.worker.admission_closed());
+    drop(connection);
+    assert_eq!(session_error(task).await.code, Code::Unavailable);
+    eprintln!(
+        "AUTHORITY_RECEIPT_RETIREMENT: 48 actual quiescent completions with ledger_limit4 and activeattempt1; latest durable qualificationcertificate only; beforecommit/beforewire/lostack/reconnect cutpoints; stalecommands cannot relaunch or stop successor session; no authority acceptance/outbox claim"
+    );
 }
 
 async fn session_error(task: JoinHandleDropGuard<Result<(), Error>>) -> Error {

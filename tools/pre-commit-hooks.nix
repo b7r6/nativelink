@@ -66,12 +66,13 @@ in {
   };
   mixed-line-endings = {
     enable = true;
-    inherit excludes;
+    # Extension-based text detection can also select compressed Markdown.
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     types = ["text"];
   };
   trim-trailing-whitespace = {
     enable = true;
-    inherit excludes;
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     types = ["text"];
   };
 

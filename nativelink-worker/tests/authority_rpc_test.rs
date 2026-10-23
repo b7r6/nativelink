@@ -16,6 +16,7 @@
 //! real process fixture. This does not mount a production construction path.
 #![cfg(target_os = "linux")]
 
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -34,8 +35,9 @@ use nativelink_proto::build::bazel::remote::execution::v2::{Action, ActionResult
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{AuthorityAttemptPhase, AuthorityResources, AuthorityWorkerIdentity};
 use nativelink_proto::google::longrunning::{Operation, operation};
-use nativelink_scheduler::authority::journal::Singleton;
-use nativelink_scheduler::authority::{ClusterEpoch, EffectKind, Event, Limits, ObservableState, Phase, RecordedEvent, Reply, Resources};
+use nativelink_scheduler::authority::journal::{Journal, Singleton};
+use nativelink_scheduler::authority::format::{AdmissionRegistry, AuthorityDomain, JournalProfile, ReaderCapabilities, RECEIPT_RETIREMENT};
+use nativelink_scheduler::authority::{ClusterEpoch, EffectKind, Event, Limits, ObservableState, Phase, RecordedEvent, Reply, Resources, ReceiptRetirement, WorkerId};
 use nativelink_service::authority_server::{AuthorityService, CoordinatorTask, QualificationConfig, QualificationFaults};
 use nativelink_store::ac_utils::serialize_and_upload_message;
 use nativelink_store::fast_slow_store::FastSlowStore;
@@ -81,6 +83,7 @@ struct Context {
     ac: Arc<MemoryStore>,
     history: Arc<MemoryStore>,
     worker: Arc<AuthorityWorker<RunningActionsManagerImpl>>,
+    authority_incarnation: AtomicU64,
 }
 
 impl Context {
@@ -94,6 +97,23 @@ impl Context {
     }
 
     async fn with_slow_store(single_use: bool, slow: Store, download_timeout: Duration) -> Self {
+        Self::with_worker_bounds(
+            single_use,
+            slow,
+            download_timeout,
+            8,
+            Duration::from_secs(30),
+        )
+        .await
+    }
+
+    async fn with_worker_bounds(
+        single_use: bool,
+        slow: Store,
+        download_timeout: Duration,
+        receipts: usize,
+        action_timeout: Duration,
+    ) -> Self {
         let directory = TempDir::new().unwrap();
         let filesystem = FilesystemSpec {
             content_path: directory
@@ -143,7 +163,7 @@ impl Context {
                     success_message_template: "legacy history link must not appear".to_owned(),
                     ..UploadActionResultConfig::default()
                 },
-                max_action_timeout: Duration::from_secs(30),
+                max_action_timeout: action_timeout,
                 max_upload_timeout: Duration::from_secs(10),
                 max_download_timeout: download_timeout,
                 max_cleanup_wait: Duration::from_secs(10),
@@ -160,7 +180,7 @@ impl Context {
             IDENTITY,
             single_use,
             resources(CAPACITY),
-            8,
+            receipts,
             64 * 1024,
             manager,
         )
@@ -171,6 +191,7 @@ impl Context {
             ac,
             history,
             worker,
+            authority_incarnation: AtomicU64::new(0),
         }
     }
 
@@ -190,6 +211,31 @@ impl Context {
             output_files: vec!["output".to_owned()],
             ..Command::default()
         };
+        self.command_request(timeout, command).await
+    }
+
+    async fn fast_request(&self, number: usize) -> ExecuteRequest {
+        let marker = self.directory.path().join(format!("completed-{number}"));
+        self.command_request(
+            10,
+            Command {
+                arguments: vec![
+                    "/bin/sh".to_owned(),
+                    "-c".to_owned(),
+                    format!("printf x >> '{}'; printf completed", marker.display()),
+                ],
+                ..Command::default()
+            },
+        )
+        .await
+        .0
+    }
+
+    async fn command_request(
+        &self,
+        timeout: i64,
+        command: Command,
+    ) -> (ExecuteRequest, DigestInfo, Vec<u8>) {
         let command_digest = serialize_and_upload_message(
             &command,
             self.cas.as_pin(),
@@ -276,14 +322,74 @@ impl Runtime {
         faults: Arc<QualificationFaults>,
         worker_address: Option<SocketAddr>,
     ) -> Self {
-        let authority = Singleton::open(
-            context.directory.path().join("authority.redb"),
-            1,
-            EPOCH,
-            Limits::default(),
-        )
-        .await
-        .unwrap();
+        Self::start_with_receipts(context, clock, faults, worker_address, false).await
+    }
+
+    async fn start_with_receipts(
+        context: &Context,
+        clock: Arc<AtomicU64>,
+        faults: Arc<QualificationFaults>,
+        worker_address: Option<SocketAddr>,
+        activated: bool,
+    ) -> Self {
+        let authority = if activated {
+            let domain = AuthorityDomain {
+                epoch: EPOCH,
+                namespace: 73,
+            };
+            let path = context.directory.path().join("authority.redb");
+            let admission = if path.exists() {
+                // Runtime::shutdown has stopped the previous local member and
+                // closed its journal. Reconstruct the fixture admission registry
+                // from that artifact before admitting the later incarnation.
+                Journal::recover_admission(
+                    domain,
+                    ReaderCapabilities::ReceiptRetirement,
+                    vec![(1, path.clone())],
+                )
+                .await
+                .unwrap()
+            } else {
+                AdmissionRegistry::new(domain)
+            };
+            let authority = Singleton::open_with_profile(
+                path,
+                1,
+                Limits::default(),
+                JournalProfile {
+                    domain,
+                    incarnation: context
+                        .authority_incarnation
+                        .fetch_add(1, Ordering::Relaxed)
+                        + 1,
+                    reader: ReaderCapabilities::ReceiptRetirement,
+                    admission,
+                },
+            )
+            .await
+            .unwrap();
+            if !authority.read().await.unwrap().receipt_retirement_enabled() {
+                authority
+                    .journal
+                    .activate_features(&authority.raft, BTreeSet::from([RECEIPT_RETIREMENT]))
+                    .await
+                    .unwrap();
+            }
+            let format = authority.journal.active_format().await.unwrap();
+            assert!(format.required.contains(&RECEIPT_RETIREMENT));
+            assert!(format.feature_epoch > 0);
+            assert!(authority.read().await.unwrap().receipt_retirement_enabled());
+            authority
+        } else {
+            Singleton::open(
+                context.directory.path().join("authority.redb"),
+                1,
+                EPOCH,
+                Limits::default(),
+            )
+            .await
+            .unwrap()
+        };
         let (service, task) = AuthorityService::start(
             authority,
             QualificationConfig {
@@ -381,6 +487,29 @@ impl Runtime {
         }
         self.task.shutdown().await.unwrap();
     }
+
+    async fn wait_receipts(
+        &self,
+        predicate: impl Fn(&ReceiptRetirement) -> bool + Send + Sync,
+    ) -> Arc<Option<ReceiptRetirement>> {
+        let mut receipts = self.service.subscribe_receipts();
+        let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                let value = receipts.borrow_and_update().clone();
+                if value.as_ref().as_ref().is_some_and(&predicate) {
+                    return value;
+                }
+                receipts.changed().await.unwrap();
+            }
+        })
+        .await;
+        outcome.unwrap_or_else(|error| {
+            panic!(
+                "Receipt wait failed: {error}; committed metadata: {:?}",
+                receipts.borrow()
+            )
+        })
+    }
 }
 
 async fn next_operation(stream: &mut Streaming<Operation>) -> Operation {
@@ -394,6 +523,24 @@ async fn next_operation(stream: &mut Streaming<Operation>) -> Operation {
 async fn terminal(stream: &mut Streaming<Operation>) -> Operation {
     loop {
         let operation = next_operation(stream).await;
+        if operation.done {
+            return operation;
+        }
+    }
+}
+
+async fn receipt_terminal(
+    runtime: &Runtime,
+    context: &Context,
+    stream: &mut Streaming<Operation>,
+) -> Operation {
+    loop {
+        let operation = tokio::time::timeout(Duration::from_secs(20), stream.message()).await.unwrap_or_else(|error| {
+            let view = runtime.service.subscribe().borrow().clone();
+            let receipts = runtime.service.subscribe_receipts().borrow().clone();
+            let executions: Vec<_> = view.executions.iter().map(|execution| (execution.id, execution.phase, execution.attempt, execution.terminal.is_some())).collect();
+            panic!("Receipt RPC wait failed: {error}; workers={:?}; executions={executions:?}; last_attempt={:?}; receipt_metadata={receipts:?}; recipient={:?}", view.workers, view.attempts.last(), context.worker.reconcile());
+        }).unwrap().unwrap();
         if operation.done {
             return operation;
         }
@@ -416,6 +563,316 @@ fn namespaces() -> bool {
         );
         false
     }
+}
+
+#[nativelink_test]
+async fn activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole() {
+    if !namespaces() {
+        return;
+    }
+    let context = Context::with_worker_bounds(
+        false,
+        Store::new(MemoryStore::new(&MemorySpec::default())),
+        Duration::from_secs(10),
+        4,
+        Duration::from_mins(15),
+    )
+    .await;
+    let clock = Arc::new(AtomicU64::new(0));
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_receipt_issues.store(true, Ordering::Relaxed);
+    let mut runtime =
+        Runtime::start_with_receipts(&context, clock.clone(), faults, None, true).await;
+    let address = runtime.worker_address;
+    let (stop, stopped) = watch::channel(false);
+    let supervisor = background_spawn!(
+        "authority_rpc_fixture",
+        run_reconnecting(
+            context.worker.clone(),
+            Endpoint::from_shared(format!("http://{address}"))
+                .unwrap()
+                .connect_timeout(Duration::from_secs(1)),
+            1,
+            Vec::new(),
+            stopped,
+        )
+    );
+    runtime.wait(|view| view.workers.len() == 1).await;
+    let (request, _, _) = context.request(900).await;
+    let mut old_stream = runtime.client.execute(request).await.unwrap().into_inner();
+    let old_name = next_operation(&mut old_stream).await.name;
+    let running = runtime
+        .wait(|view| {
+            view.attempts
+                .first()
+                .is_some_and(|attempt| attempt.phase == Phase::Running)
+        })
+        .await;
+    let old = running.attempts[0];
+    context.assert_once();
+    let mut completed = runtime
+        .client
+        .execute(context.fast_request(0).await)
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        response(&receipt_terminal(&runtime, &context, &mut completed).await)
+            .result
+            .unwrap()
+            .exit_code,
+        0
+    );
+    let released = runtime
+        .wait_receipts(|receipts| {
+            receipts
+                .streams
+                .get(&WorkerId(2))
+                .is_some_and(|stream| stream.dirty && stream.pending.is_none())
+        })
+        .await;
+    assert!(
+        released.as_ref().as_ref().unwrap().streams[&WorkerId(2)]
+            .acknowledged
+            .is_none()
+    );
+    assert!(context.worker.reconcile().receipt_retirement.is_none());
+    assert_eq!(context.worker.ledger_counts_for_test(), (2, 2, 2, 0));
+
+    eprintln!("AUTOMATIC_RECEIPT_CUT: released before issuance");
+    // An accepted result alone cannot tell the recipient to discard its receipt.
+    // Stop before IssueReceipts is committed, then recover the actual journal.
+    runtime.shutdown().await;
+    drop(old_stream);
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_receipt_delivery.store(true, Ordering::Relaxed);
+    faults
+        .hold_receipt_acknowledgments
+        .store(true, Ordering::Relaxed);
+    runtime =
+        Runtime::start_with_receipts(&context, clock.clone(), faults, Some(address), true).await;
+    let issued = runtime
+        .wait_receipts(|receipts| {
+            receipts
+                .streams
+                .get(&WorkerId(2))
+                .is_some_and(|stream| stream.pending.is_some())
+        })
+        .await;
+    let certificate = issued.as_ref().as_ref().unwrap().streams[&WorkerId(2)]
+        .pending
+        .clone()
+        .unwrap();
+    assert_eq!(certificate.retain.len(), 1);
+    assert_eq!(certificate.retain[0].attempt, old.id);
+    assert_eq!(certificate.retain[0].dispatch_effect, old.dispatch_effect);
+    assert!(context.worker.reconcile().receipt_retirement.is_none());
+    assert_eq!(context.worker.ledger_counts_for_test(), (2, 2, 2, 0));
+
+    eprintln!("AUTOMATIC_RECEIPT_CUT: issued before wire");
+    // The certificate now exists only as committed intent, before wire delivery.
+    runtime.shutdown().await;
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_receipt_delivery.store(true, Ordering::Relaxed);
+    runtime =
+        Runtime::start_with_receipts(&context, clock.clone(), faults.clone(), Some(address), true)
+            .await;
+    runtime
+        .wait(|_| faults.receipt_inventories.load(Ordering::Relaxed) >= 2)
+        .await;
+    let restored = runtime
+        .wait_receipts(|receipts| {
+            receipts
+                .streams
+                .get(&WorkerId(2))
+                .is_some_and(|stream| stream.pending.as_ref() == Some(&certificate))
+        })
+        .await;
+    assert_eq!(
+        restored.as_ref().as_ref().unwrap().streams[&WorkerId(2)].pending,
+        Some(certificate.clone())
+    );
+    // Registration and the first healthy inventory both omitted the certificate.
+    // Neither observation acknowledges the still-undelivered pending body.
+    faults
+        .hold_receipt_acknowledgments
+        .store(true, Ordering::Relaxed);
+    faults.hold_receipt_delivery.store(false, Ordering::Relaxed);
+    let mut changed = context.worker.subscribe();
+    let wire_certificate = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Some(applied) = context.worker.reconcile().receipt_retirement
+                && applied.effect_id == certificate.effect.0
+            {
+                break applied;
+            }
+            changed.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        wire_certificate.attempts_through,
+        certificate.attempts_through.0
+    );
+    assert_eq!(
+        wire_certificate.effects_through,
+        certificate.effects_through.0
+    );
+    assert_eq!(
+        wire_certificate.reservations_through,
+        certificate.reservations_through.0
+    );
+    assert_eq!(wire_certificate.retain.len(), 1);
+    let binding = &wire_certificate.retain[0];
+    assert_eq!(binding.attempt_id, old.id.0);
+    assert_eq!(binding.execution_id, old.execution.0);
+    assert_eq!(binding.dispatch_effect_id, old.dispatch_effect.0);
+    assert_eq!(binding.reservation_id, certificate.retain[0].reservation.0);
+    assert_eq!(binding.cancel_effect_id, 0);
+    assert_eq!(context.worker.ledger_counts_for_test(), (1, 1, 1, 1));
+    let unacknowledged = runtime.service.subscribe_receipts().borrow().clone();
+    assert_eq!(
+        unacknowledged.as_ref().as_ref().unwrap().streams[&WorkerId(2)].pending,
+        Some(certificate.clone())
+    );
+
+    eprintln!("AUTOMATIC_RECEIPT_CUT: applied before acknowledgment");
+    // Worker application is not an authority acknowledgement until that exact
+    // body's authenticated inventory commits. Lose the coordinator at this cut.
+    let applied_session = context.worker.reconcile().session.unwrap().session_id;
+    runtime.shutdown().await;
+    let faults = Arc::new(QualificationFaults::default());
+    faults.hold_receipt_delivery.store(true, Ordering::Relaxed);
+    faults
+        .hold_receipt_acknowledgments
+        .store(true, Ordering::Relaxed);
+    runtime =
+        Runtime::start_with_receipts(&context, clock, faults.clone(), Some(address), true).await;
+    runtime
+        .wait(|view| {
+            view.workers
+                .first()
+                .is_some_and(|worker| worker.session.0 > applied_session)
+        })
+        .await;
+    let restored = runtime.service.subscribe_receipts().borrow().clone();
+    assert_eq!(
+        restored.as_ref().as_ref().unwrap().streams[&WorkerId(2)].pending,
+        Some(certificate.clone())
+    );
+    assert_eq!(
+        context.worker.reconcile().receipt_retirement,
+        Some(wire_certificate)
+    );
+    assert_eq!(context.worker.ledger_counts_for_test(), (1, 1, 1, 1));
+    faults
+        .hold_receipt_acknowledgments
+        .store(false, Ordering::Relaxed);
+    faults.hold_receipt_delivery.store(false, Ordering::Relaxed);
+    runtime
+        .wait_receipts(|receipts| {
+            receipts.streams.get(&WorkerId(2)).is_some_and(|stream| {
+                stream.pending.is_none()
+                    && stream
+                        .acknowledged
+                        .is_some_and(|floor| floor.effect == certificate.effect)
+            })
+        })
+        .await;
+
+    eprintln!("AUTOMATIC_RECEIPT_CUT: explicit acknowledgment");
+    let mut previous = certificate.effect.0;
+    for number in 1..16 {
+        let mut stream = runtime
+            .client
+            .execute(context.fast_request(number).await)
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            response(&receipt_terminal(&runtime, &context, &mut stream).await)
+                .result
+                .unwrap()
+                .exit_code,
+            0
+        );
+        eprintln!("AUTOMATIC_RECEIPT_PROGRESS: completed={number} previous={previous}");
+        let acknowledged = runtime
+            .wait_receipts(|receipts| {
+                receipts.streams.get(&WorkerId(2)).is_some_and(|stream| {
+                    !stream.dirty
+                        && stream.pending.is_none()
+                        && stream
+                            .acknowledged
+                            .is_some_and(|floor| floor.effect.0 > previous)
+                })
+            })
+            .await;
+        previous = acknowledged.as_ref().as_ref().unwrap().streams[&WorkerId(2)]
+            .acknowledged
+            .unwrap()
+            .effect
+            .0;
+        let inventory = context.worker.reconcile();
+        assert_eq!(inventory.receipt_retirement.unwrap().effect_id, previous);
+        assert_eq!(context.worker.ledger_counts_for_test(), (1, 1, 1, 1));
+        assert_eq!(inventory.attempts[0].attempt.unwrap().attempt_id, old.id.0);
+        assert_ne!(
+            inventory.attempts[0].phase,
+            AuthorityAttemptPhase::Quiescent as i32
+        );
+        assert!(!context.worker.admission_closed());
+        context.assert_once();
+    }
+    for number in 0..16 {
+        assert_eq!(
+            std::fs::read(context.directory.path().join(format!("completed-{number}"))).unwrap(),
+            b"x"
+        );
+    }
+    context.release();
+    let mut old_stream = runtime
+        .client
+        .wait_execution(WaitExecutionRequest { name: old_name })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        response(&receipt_terminal(&runtime, &context, &mut old_stream).await)
+            .result
+            .unwrap()
+            .exit_code,
+        0
+    );
+    runtime
+        .wait_receipts(|receipts| {
+            receipts.streams.get(&WorkerId(2)).is_some_and(|stream| {
+                !stream.dirty
+                    && stream.pending.is_none()
+                    && stream
+                        .acknowledged
+                        .is_some_and(|floor| floor.effect.0 > previous)
+            })
+        })
+        .await;
+    assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
+    assert!(!context.worker.admission_closed());
+    let completed = runtime
+        .wait(|view| view.workers[0].charged == Resources::default())
+        .await;
+    assert!(
+        completed
+            .reservations
+            .iter()
+            .all(|reservation| reservation.released)
+    );
+    stop.send_replace(true);
+    supervisor.await.unwrap().unwrap();
+    runtime.shutdown().await;
+    eprintln!(
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 16 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired"
+    );
 }
 
 #[nativelink_test]

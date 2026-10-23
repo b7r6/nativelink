@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use super::ClusterEpoch;
 
 pub const DIRECT_SCHEDULER: u16 = 1;
+pub const RECEIPT_RETIREMENT: u16 = 2;
 pub const MAX_FEATURES: usize = 8;
 pub const MAX_FORMAT_MEMBERS: usize = 64;
 pub const MAX_FORMAT_BYTES: usize = 64 * 1024;
@@ -42,25 +43,47 @@ pub struct AuthorityDomain {
 
 /// These profiles represent executable capabilities, never configuration bits
 /// accepted from a remote member's advertisement.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReaderCapabilities {
     Base,
     DirectScheduler,
+    ReceiptRetirement,
 }
 
 impl ReaderCapabilities {
     pub fn supports(self, features: &Features) -> bool {
-        features
-            .iter()
-            .all(|feature| self == Self::DirectScheduler && *feature == DIRECT_SCHEDULER)
+        features.iter().all(|feature| match self {
+            Self::Base => false,
+            Self::DirectScheduler => *feature == DIRECT_SCHEDULER,
+            Self::ReceiptRetirement => matches!(*feature, DIRECT_SCHEDULER | RECEIPT_RETIREMENT),
+        })
     }
+
+    /// Project to the frozen control record's decoder vocabulary. This value
+    /// does not certify support for the prepared feature set: the admission
+    /// registry must check the pinned live executable profile separately.
+    pub const fn encoding(self) -> ReaderEncoding {
+        match self {
+            Self::Base => ReaderEncoding::Base,
+            Self::DirectScheduler | Self::ReceiptRetirement => ReaderEncoding::DirectScheduler,
+        }
+    }
+}
+
+/// Frozen member-evidence vocabulary understood by the experimental base
+/// executable. New runtime profiles must not introduce new serialized variants
+/// into an uncommitted preparation and thereby break pre-activation rollback.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum ReaderEncoding {
+    Base,
+    DirectScheduler,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MemberEvidence {
     pub incarnation: u64,
-    pub reader: ReaderCapabilities,
+    pub reader: ReaderEncoding,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -251,6 +274,7 @@ impl ActiveFormat {
 #[derive(Debug)]
 pub(crate) struct MemberLease {
     evidence: MemberEvidence,
+    reader: ReaderCapabilities,
 }
 
 #[derive(Debug)]
@@ -481,8 +505,9 @@ impl AdmissionRegistry {
         let lease = Arc::new(MemberLease {
             evidence: MemberEvidence {
                 incarnation,
-                reader,
+                reader: reader.encoding(),
             },
+            reader,
         });
         state.members.insert(node, Arc::downgrade(&lease));
         state.used_incarnations.insert(node, incarnation);
@@ -516,7 +541,7 @@ impl AdmissionRegistry {
                 .get(id)
                 .and_then(Weak::upgrade)
                 .ok_or("required member has no admitted process")?;
-            if !lease.evidence.reader.supports(&required) {
+            if !lease.reader.supports(&required) {
                 return Err("required member cannot read the target format".into());
             }
             members.insert(*id, lease.evidence);
@@ -713,7 +738,7 @@ impl AdmissionRegistry {
                     .get(id)
                     .and_then(Weak::upgrade)
                     .ok_or("new member has no admitted process")?;
-                if !lease.evidence.reader.supports(&state.required) {
+                if !lease.reader.supports(&state.required) {
                     return Err("new member cannot read active format".into());
                 }
             }

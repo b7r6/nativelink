@@ -58,7 +58,7 @@ use tokio::sync::Mutex;
 use super::format::{
     ActiveFormat, AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, Features, FormatControl,
     FormatDecision, JournalProfile, MAX_FORMAT_BYTES, MAX_FORMAT_MEMBERS, MemberLease,
-    ReaderCapabilities, RecoveryEvidence,
+    RECEIPT_RETIREMENT, ReaderCapabilities, RecoveryEvidence,
 };
 use super::{ClusterEpoch, Limits, RecordedEvent, Reply, State};
 
@@ -503,6 +503,13 @@ impl AppliedState {
         validate_membership(self.membership.membership(), ErrorVerb::Read)?;
         let state =
             State::restore(&self.scheduler.bytes()?).map_err(|e| failure(ErrorVerb::Read, e))?;
+        if state.receipt_retirement_enabled() != self.format.required.contains(&RECEIPT_RETIREMENT)
+        {
+            return Err(failure(
+                ErrorVerb::Read,
+                "receipt retirement state disagrees with activated format",
+            ));
+        }
         if state.view().epoch != epoch {
             return Err(failure(
                 ErrorVerb::Read,
@@ -561,6 +568,16 @@ fn replay_format(
                     ErrorVerb::Read,
                     "application command feature epoch mismatch",
                 ));
+            } else if !active.required.contains(&RECEIPT_RETIREMENT)
+                && batch
+                    .events
+                    .iter()
+                    .any(|recorded| recorded.event.requires_receipt_retirement())
+            {
+                return Err(failure(
+                    ErrorVerb::Read,
+                    "receipt retirement command precedes feature activation",
+                ));
             }
         }
         EntryPayload::Membership(value) => {
@@ -568,6 +585,88 @@ fn replay_format(
             active.membership_changed();
         }
         EntryPayload::Blank => {}
+    }
+    Ok(())
+}
+
+/// Feature-bearing commands may arrive behind an unapplied activation. Check
+/// their preceding log sequence, not only the receiver's applied feature set.
+/// Plain controls remain readable without applying an unsupported target.
+fn validate_receipt_append(
+    tx: &WriteTransaction,
+    epoch: ClusterEpoch,
+    reader: ReaderCapabilities,
+    entries: &[Entry<TypeConfig>],
+) -> Result<()> {
+    let requires_receipt_retirement = |entry: &Entry<TypeConfig>| matches!(&entry.payload, EntryPayload::Normal(batch) if batch.events.iter().any(|recorded| recorded.event.requires_receipt_retirement()));
+    let Some(last_feature_index) = entries
+        .iter()
+        .filter(|entry| requires_receipt_retirement(entry))
+        .map(|entry| entry.log_id.index)
+        .max()
+    else {
+        return Ok(());
+    };
+    let meta = tx
+        .open_table(META)
+        .map_err(|e| failure(ErrorVerb::Read, e))?;
+    let applied: AppliedState = decode(
+        epoch,
+        meta.get("applied")
+            .map_err(|e| failure(ErrorVerb::Read, e))?
+            .ok_or_else(|| failure(ErrorVerb::Read, "missing applied state"))?
+            .value(),
+    )?;
+    applied.state(epoch, reader)?;
+    let logs = tx
+        .open_table(LOGS)
+        .map_err(|e| failure(ErrorVerb::Read, e))?;
+    let incoming: std::collections::BTreeMap<_, _> = entries
+        .iter()
+        .map(|entry| (entry.log_id.index, entry))
+        .collect();
+    if incoming.len() != entries.len() {
+        return Err(failure(
+            ErrorVerb::Write,
+            "duplicate positions in feature-bearing append",
+        ));
+    }
+    for entry in entries.iter().filter(|entry| {
+        requires_receipt_retirement(entry)
+            && applied
+                .last_applied
+                .is_some_and(|position| entry.log_id.index <= position.index)
+    }) {
+        let existing = logs
+            .get(entry.log_id.index)
+            .map_err(|e| failure(ErrorVerb::Read, e))?
+            .ok_or_else(|| failure(ErrorVerb::Write, "feature command precedes retained log"))?;
+        if decode_log(epoch, entry.log_id.index, existing.value())? != *entry {
+            return Err(failure(
+                ErrorVerb::Write,
+                "feature append would replace applied authority",
+            ));
+        }
+    }
+    let Some(start) = applied
+        .last_applied
+        .map_or(Some(0), |position| position.index.checked_add(1))
+    else {
+        return Ok(());
+    };
+    let mut active = applied.format;
+    let mut membership = applied.membership;
+    for index in start..=last_feature_index {
+        if let Some(entry) = incoming.get(&index) {
+            replay_format(&mut active, &mut membership, entry, reader)?;
+        } else {
+            let bytes = logs
+                .get(index)
+                .map_err(|e| failure(ErrorVerb::Read, e))?
+                .ok_or_else(|| failure(ErrorVerb::Write, "feature append has no preceding log"))?;
+            let entry = decode_log(epoch, index, bytes.value())?;
+            replay_format(&mut active, &mut membership, &entry, reader)?;
+        }
     }
     Ok(())
 }
@@ -1597,6 +1696,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
         let epoch = self.epoch;
         let entries: Vec<_> = entries.into_iter().collect();
         let profile = self.profile.clone();
+        let reader = self.reader;
         let result = async {
             // Validate every command and membership before beginning the write.
             // The completion callback must receive validation failures too.
@@ -1604,6 +1704,7 @@ impl RaftLogStorage<TypeConfig> for Journal {
                 validate_entry(entry, ErrorVerb::Write)?;
             }
             self.write(MeasuredOperation::Append, entries.len(), move |tx| {
+                validate_receipt_append(tx, epoch, reader, &entries)?;
                 for entry in &entries {
                     match &entry.payload {
                         EntryPayload::Normal(batch) if batch.control.is_some() => {
@@ -1758,7 +1859,16 @@ impl RaftStateMachine<TypeConfig> for Journal {
             let mut state = applied.state(epoch, reader)?;
             let mut replies = Vec::with_capacity(entries.len());
             for entry in entries {
+                let receipt_retirement_active =
+                    applied.format.required.contains(&RECEIPT_RETIREMENT);
                 replay_format(&mut applied.format, &mut applied.membership, &entry, reader)?;
+                if !receipt_retirement_active
+                    && applied.format.required.contains(&RECEIPT_RETIREMENT)
+                {
+                    state
+                        .enable_receipt_retirement()
+                        .map_err(|e| failure(ErrorVerb::Write, e))?;
+                }
                 applied.last_applied = Some(entry.log_id);
                 replies.push(match entry.payload {
                     EntryPayload::Blank => BatchReply::default(),

@@ -1,0 +1,27 @@
+[
+  {
+    "path": "nativelink-scheduler/design/categorical/automatic-coordinator.md",
+    "before_sha256": "ba85b25d74e561ff6c2d5f916e647ffa521c4c0c9482fb704f7dfbf735ba2646",
+    "after_sha256": "322e0c627dc5b0128531c2b20b4c8c3153d0bb32bca53d815a520cbbd8e7fa62"
+  },
+  {
+    "path": "nativelink-scheduler/design/categorical/receipt-retirement.md",
+    "before_sha256": "4ac56322225588ba446bd592b2339a8f7f6bf9efbae629d50172c75036d7732a",
+    "after_sha256": "c0d529dc0731b9035b3023238923125732bd25c001d0ec5fcf51cd66674ea0ac"
+  },
+  {
+    "path": "nativelink-service/src/authority_server.rs",
+    "before_sha256": "9d5c57b8ad4dbdb6808936aa7ee6475e60fae95a5d84965d83eca390669fea43",
+    "after_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e"
+  },
+  {
+    "path": "nativelink-worker/BUILD.bazel",
+    "before_sha256": "25f9d32a27ced883f5613ac71b45443e182b806f05b91103a68e385fe56a8d5e",
+    "after_sha256": "36479e22e1954fcf7b8f9c257c54c744d6f059b5d1595a500fb6fda29b4d486c"
+  },
+  {
+    "path": "nativelink-worker/tests/authority_rpc_test.rs",
+    "before_sha256": "1980cefa3f38bda6a32f98acdfa1d41f3466283bbac531d3ea42b7e26cee2086",
+    "after_sha256": "c0be65f2036d9eebf7e2934eb6267dec8f33efc5c033fcac7033fa34099a8231"
+  }
+]

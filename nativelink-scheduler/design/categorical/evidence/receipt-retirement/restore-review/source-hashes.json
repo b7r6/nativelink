@@ -1,0 +1,8 @@
+{
+  "nativelink-scheduler/src/authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+  "nativelink-scheduler/src/authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661",
+  "nativelink-scheduler/src/authority/receipt_retirement.rs": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e",
+  "nativelink-scheduler/src/authority/receipt_retirement_tests.rs": "3ca0263ea4bc34a11d1faf43ff135c48686d92bc2c889ac652bea4afa6fdf5f8",
+  "nativelink-scheduler/src/authority/tests.rs": "683ff055015a45ae3931e76f42f6fb53e1620c004b8bb24c735f17d948b56b10",
+  "nativelink-proto/genproto/com.github.trace_machina.nativelink.remote_execution.pb.rs": "d106ded0ccf0d724e7ed63f31bfe45bff9790a0e015d802dee6637813f5af4be"
+}

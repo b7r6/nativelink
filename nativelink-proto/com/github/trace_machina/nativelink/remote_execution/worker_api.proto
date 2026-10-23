@@ -84,6 +84,7 @@ enum AuthorityCapability {
     AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES = 3;
     AUTHORITY_CAPABILITY_CANDIDATE_RESULTS = 4;
     AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS = 5;
+    AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT = 6;
 }
 
 message AuthorityRegistration {
@@ -180,12 +181,42 @@ message AuthorityAttemptReport {
 
 /// Complete process-incarnation inventory, including uncertain launches,
 /// uncertain termination, retained candidates, and cancellation tombstones.
-/// Missing reports never prove cleanup. No receipt is evicted by this version;
-/// bounded lifetime admission stops when the recipient ledger is full.
+/// Missing reports never prove cleanup. A certificate acknowledges only receipt
+/// compaction, never process cleanup, result acceptance or resource release.
 message AuthorityReconciliation {
     AuthoritySession session = 1;
     repeated AuthorityAttemptReport attempts = 2;
     bool single_use_spent = 3;
+    /// Absent means no certificate was applied, never implicit acknowledgment.
+    AuthorityReceiptCertificate receipt_retirement = 4;
+}
+
+/// Exact identity exceptions retained below cumulative retirement watermarks.
+/// An unknown local attempt may still need its first dispatch or cancellation.
+message AuthorityRetainedReceipt {
+    uint64 attempt_id = 1;
+    uint64 execution_id = 2;
+    uint64 dispatch_effect_id = 3;
+    uint64 reservation_id = 4;
+    /// Zero means no cancellation was allocated at this certificate's cut.
+    uint64 cancel_effect_id = 5;
+}
+
+/// Immutable committed retirement intent, scoped by the envelope's process
+/// identity. effect_id is its stable authority effect identity and revision.
+/// The recipient retains only the latest certificate across reconnects.
+/// Qualification-only trusted issuance until the real authority outbox lands.
+message AuthorityReceiptCertificate {
+    uint64 effect_id = 1;
+    uint64 attempts_through = 2;
+    uint64 effects_through = 3;
+    uint64 reservations_through = 4;
+    repeated AuthorityRetainedReceipt retain = 5;
+}
+
+message AuthorityReceiptRetirement {
+    AuthoritySession session = 1;
+    AuthorityReceiptCertificate certificate = 2;
 }
 
 message AuthorityWorkerUpdate {
@@ -201,6 +232,7 @@ message AuthorityCoordinatorUpdate {
     oneof update {
         AuthorityRegistrationResult registration = 1;
         AuthorityCommand command = 2;
+        AuthorityReceiptRetirement retirement = 3;
     }
 }
 

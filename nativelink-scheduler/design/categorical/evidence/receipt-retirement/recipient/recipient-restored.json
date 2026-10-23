@@ -1,0 +1,18 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--profile",
+    "smol",
+    "-p",
+    "nativelink-worker",
+    "--test",
+    "authority_worker_test",
+    "--",
+    "--nocapture",
+    "--test-threads=1"
+  ],
+  "exit": 0,
+  "seconds": 24.75979342905339
+}

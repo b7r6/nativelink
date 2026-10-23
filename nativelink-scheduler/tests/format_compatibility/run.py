@@ -100,6 +100,7 @@ def run(args):
         "status": "running",
         "scope": "Synthesized frozen Base executable, envelope3/core5; no released format2/core4 compatibility",
         "pin": pin,
+        "writer_mode": args.writer_mode,
         "cases": [],
         "commands": commands,
         "fixture_source_sha256": {
@@ -153,6 +154,7 @@ def run(args):
             build_identity = hashlib.sha256((
                 sha256(source_tar) + sha256(HERE / fixture)
                 + (sha256(HERE / "base-only.patch") if role == "base" else "")
+                + (args.writer_mode if role == "upgraded" else "")
             ).encode()).hexdigest()
             role_target = target / f"{role}-{build_identity}"
             environment["CARGO_TARGET_DIR"] = str(role_target)
@@ -175,37 +177,52 @@ def run(args):
             manifest = source / "nativelink-scheduler/Cargo.toml"
             with manifest.open("a") as stream:
                 stream.write(f'\n[[bin]]\nname = "{binary_name}"\npath = "{binary_path}"\n')
+                if role == "upgraded":
+                    stream.write('\n[features]\ncompatibility-receipt-retirement = []\n')
             report[f"{role}_compiled_sources_sha256"] = {
                 path: sha256(source / path)
-                for path in pin["format_relevant_sources_sha256"]
+                for path in relevant_sources(revision)
                 if (source / path).is_file()
             }
             report[f"{role}_compiled_fixture_sha256"] = sha256(destination)
-            command([
+            build = [
                 "cargo", "build", "--locked", "--profile", "smol",
                 "-p", "nativelink-scheduler", "--bin", binary_name,
-            ], source, f"{role}-build")
+            ]
+            if role == "upgraded" and args.writer_mode != "direct":
+                build += ["--features", "compatibility-receipt-retirement"]
+            command(build, source, f"{role}-build")
             binary = output / binary_name
             shutil.copy2(role_target / "smol" / binary_name, binary)
             binaries[role] = binary
             report[f"{role}_binary_sha256"] = sha256(binary)
 
         artifacts = output / "artifacts"
-        command([binaries["upgraded"], artifacts], output, "upgraded-produce", timeout=120)
+        command([binaries["upgraded"], artifacts, args.writer_mode], output, "upgraded-produce", timeout=120)
         produced = json.loads((artifacts / "artifacts.json").read_text())
+        expected_features = {"direct": [1], "receipt": [2], "both": [1, 2]}[args.writer_mode]
+        if produced["writer_mode"] != args.writer_mode or produced["activated_features"] != expected_features:
+            raise AssertionError("producer activated a different feature set")
+        report["activated_features"] = produced["activated_features"]
+        report["activated_state_sha256"] = hashlib.sha256(produced["activated_state_json"].encode()).hexdigest()
         artifact_hashes = {name: sha256(artifacts / name) for name in produced["artifacts"]}
         report["artifact_sha256"] = artifact_hashes
         report["expected_state_sha256"] = hashlib.sha256(produced["state_json"].encode()).hexdigest()
         report["pending_effects"] = produced["pending_effects"]
         report["charged_reservations"] = produced["charged_reservations"]
+        activated_error = (
+            "reader cannot recover the activated authority format"
+            if args.writer_mode == "receipt"
+            else "data did not match any variant of untagged enum SchedulerSection"
+        )
         cases = [
             ("preactivation-journal", "open-journal", "preactivation.redb", True, "raft_recovered", None),
             ("preactivation-snapshot", "install-snapshot", "preactivation.snapshot.json", True, "snapshot_recovered", None),
             ("uncommitted-control-decode", "inspect-journal", "uncommitted-activation.redb", True, "artifact_decoded_without_admission", None),
             ("uncommitted-control-admission", "open-journal", "uncommitted-activation.redb", False, "journal_open", "process cannot participate in activated format"),
             ("committed-before-apply", "open-journal", "committed-before-apply.redb", False, "recover_admission", "unsupported or stale committed activation"),
-            ("activated-journal", "open-journal", "activated.redb", False, "recover_admission", "data did not match any variant of untagged enum SchedulerSection"),
-            ("activated-snapshot", "install-snapshot", "activated.snapshot.json", False, "install_snapshot", "data did not match any variant of untagged enum SchedulerSection"),
+            ("activated-journal", "open-journal", "activated.redb", False, "recover_admission", activated_error),
+            ("activated-snapshot", "install-snapshot", "activated.snapshot.json", False, "install_snapshot", activated_error),
         ]
         for name, mode, artifact, accepted, phase, expected_error in cases:
             case_dir = output / name
@@ -276,6 +293,7 @@ def main():
     run_parser = commands.add_parser("run", help="compile frozen Base and upgraded writer independently")
     run_parser.add_argument("--pin", type=Path, default=HERE / "frozen-base.json")
     run_parser.add_argument("--writer-revision")
+    run_parser.add_argument("--writer-mode", choices=["direct", "receipt", "both"], default="direct")
     run_parser.add_argument("--output", type=Path, required=True)
     run_parser.add_argument("--cargo-target-dir", type=Path)
     args = parser.parse_args()

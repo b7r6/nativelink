@@ -1,0 +1,164 @@
+[
+  {
+    "label": "retired-attempt-floor",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "retirement_fences_unknown_first_dispatch_and_forgotten_aliases",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 9.363830886024516,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "if target.attempt_id <= certificate.attempts_through && retained.is_none() {",
+      "after": "if false && target.attempt_id <= certificate.attempts_through && retained.is_none() {"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "retired-command-effect-floor",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "empty_receipt_certificate_still_fences_the_allocated_effect_domain",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 6.90276734798681,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "if command.effect_id <= certificate.effects_through\n",
+      "after": "if false && command.effect_id <= certificate.effects_through\n"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "certificate-effect-floor",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "empty_receipt_certificate_still_fences_the_allocated_effect_domain",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 8.533070958044846,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "if certificate.effect_id <= previous.effects_through {",
+      "after": "if false && certificate.effect_id <= previous.effects_through {"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "same-certificate-changed-body",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "retirement_fences_unknown_first_dispatch_and_forgotten_aliases",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 9.908504080027342,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "Err(invalid(\"Retirement identity changed contents\"))",
+      "after": "Ok(false)"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "postcut-cancel-identity",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "cancellation_after_certificate_cut_requires_an_absent_binding",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 7.916200852021575,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "&& (binding.cancel_effect_id != 0\n                            || report.cancel_effect_id <= certificate.effects_through)",
+      "after": "&& report.cancel_effect_id <= certificate.effects_through"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "single-use-spent-latch",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_worker_test",
+      "receipt_compaction_never_restores_single_use_admission",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "exit": 101,
+    "seconds": 11.298023745999672,
+    "baseline_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+    "replacement": {
+      "before": "ledger.retirement = Some(certificate);",
+      "after": "ledger.retirement = Some(certificate);\n        ledger.spent = false;"
+    },
+    "compiled": true,
+    "killed": true
+  }
+]

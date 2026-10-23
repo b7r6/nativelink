@@ -2,10 +2,13 @@
 
 Status: an implemented experimental journal protocol, with a trusted in-process
 admission fixture. The journal envelope is experimental format 3, its application
-batch is version 1, and its embedded scheduler snapshot is version 5. The base
+batch is version 1, and its base scheduler snapshot is version 5. The base
 writer stores scheduler JSON in a string; committed feature 1 changes that
 authority-bearing section into a direct JSON object while preserving the complete
-logical scheduler state and pending effects. Format 2 and earlier prototypes are
+logical scheduler state and pending effects. Committed feature 2 enables durable
+worker receipt retirement and scheduler snapshot version 6. The features are
+independent: feature 2 can use either the string or direct-object representation.
+Format 2 and earlier prototypes are
 rejected. No conversion from them, released-binary compatibility, production
 format stability, or deployment qualification is claimed.
 
@@ -74,6 +77,37 @@ include every voter in either side of a joint configuration and every retained
 learner that can receive authority state or become a voter. It must not mean
 only the members that answered a probe. A change to this set or its committed
 membership revision invalidates prepared activation evidence.
+
+### Frozen evidence vocabulary and newer executables
+
+`ReaderCapabilities` is a runtime-only executable profile. It is not serialized
+in a preparation. The serialized `MemberEvidence.reader` instead uses the frozen
+`ReaderEncoding` vocabulary: `Base` or `DirectScheduler`. A receipt-capable
+executable projects to `DirectScheduler`, whose spelling remains readable by the
+separately compiled experimental base reader. This projection describes the
+existing control encoding; it does not certify support for feature 2.
+
+The trusted admission registry retains the actual runtime profile on the pinned
+member lease. Preparation, replacement, recovery, and membership checks use that
+profile's supported features, never infer them from the serialized projection.
+Thus two processes can have identical wire reader levels while only one may
+participate in receipt-retirement activation. Closed-journal recovery still
+requires fresh compatible process admission. An old reader can preserve an
+uncommitted feature-2 control and must refuse its committed activation.
+
+Receipt retirement remains absent before activation. The upgraded writer emits
+the identical core-5 state and journal bytes, including snapshots and compaction.
+Applying feature 2 initializes the optional retirement component in the same
+transaction as active-format metadata and the applied position. Restore and
+snapshot installation require exact agreement between the active feature and
+component presence. A core-6 section before activation or a core-5 section after
+activation fails validation.
+
+Receipt commands require the feature at their position in the log. Append
+validation reconstructs the preceding suffix when those commands arrive before
+the preceding activation is applied, including controls received in the same append. It
+rejects a receipt command at the base epoch without preventing a capable lagging
+follower from receiving a valid activation and its suffix.
 
 ## Membership and transport capability gate
 

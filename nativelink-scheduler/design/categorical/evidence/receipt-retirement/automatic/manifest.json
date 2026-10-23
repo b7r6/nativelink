@@ -1,0 +1,540 @@
+{
+  "artifact": "automatic-committed-receipt-outbox-qualification",
+  "recorded_utc": "2026-10-23T01:41:30.722152+00:00",
+  "worktree": "/tmp/nativelink-categorical-runtime",
+  "git_head": "86fc7d55fd9a3950946652710ce816bd97393288",
+  "patch": {
+    "path": "/tmp/nativelink-automatic-receipts.patch",
+    "archived_path": "nativelink-automatic-receipts.patch",
+    "sha256": "889b75f39cc57a166e874e5d96b45ff961b4038377ab0302c044bd91acace0d9"
+  },
+  "source_snapshot": "frozen-source/manifest.json",
+  "source_files": [
+    {
+      "path": "nativelink-scheduler/design/categorical/automatic-coordinator.md",
+      "before_sha256": "ba85b25d74e561ff6c2d5f916e647ffa521c4c0c9482fb704f7dfbf735ba2646",
+      "after_sha256": "322e0c627dc5b0128531c2b20b4c8c3153d0bb32bca53d815a520cbbd8e7fa62"
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/receipt-retirement.md",
+      "before_sha256": "4ac56322225588ba446bd592b2339a8f7f6bf9efbae629d50172c75036d7732a",
+      "after_sha256": "c0d529dc0731b9035b3023238923125732bd25c001d0ec5fcf51cd66674ea0ac"
+    },
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "before_sha256": "9d5c57b8ad4dbdb6808936aa7ee6475e60fae95a5d84965d83eca390669fea43",
+      "after_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e"
+    },
+    {
+      "path": "nativelink-worker/BUILD.bazel",
+      "before_sha256": "25f9d32a27ced883f5613ac71b45443e182b806f05b91103a68e385fe56a8d5e",
+      "after_sha256": "36479e22e1954fcf7b8f9c257c54c744d6f059b5d1595a500fb6fda29b4d486c"
+    },
+    {
+      "path": "nativelink-worker/tests/authority_rpc_test.rs",
+      "before_sha256": "1980cefa3f38bda6a32f98acdfa1d41f3466283bbac531d3ea42b7e26cee2086",
+      "after_sha256": "c0be65f2036d9eebf7e2934eb6267dec8f33efc5c033fcac7033fa34099a8231"
+    }
+  ],
+  "source_restored_and_verified": true,
+  "dependencies": [
+    {
+      "path": "nativelink-worker/src/authority_worker.rs",
+      "sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab",
+      "parent_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab"
+    },
+    {
+      "path": "nativelink-worker/src/authority_worker_transport.rs",
+      "sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377",
+      "parent_sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/mod.rs",
+      "sha256": "6f55ef35dbb3147dc84433c8b7d481730175dbbad24cfab0ae8933dc85f0f854",
+      "parent_sha256": "6f55ef35dbb3147dc84433c8b7d481730175dbbad24cfab0ae8933dc85f0f854"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/types.rs",
+      "sha256": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661",
+      "parent_sha256": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/receipt_retirement.rs",
+      "sha256": "0bca43334752740ab2375c42852a1cb95ec06fd0871dd877cd6d37f52145a591",
+      "parent_sha256": "0bca43334752740ab2375c42852a1cb95ec06fd0871dd877cd6d37f52145a591"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/journal.rs",
+      "sha256": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+      "parent_sha256": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/format.rs",
+      "sha256": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+      "parent_sha256": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+      "parent_sha256": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494"
+    }
+  ],
+  "independence": "Service/transport/recipient implementation uses shared public receipt DTOs and Journal/Raft APIs. Candidate authority reducer/accounting implementations were copied and hashed opaquely, never read. No oracle implementation changed.",
+  "qualification_scope": [
+    "Explicit feature2 activation through Journal::activate_features and actual singleton Raft prepare/activate; default service constructors remain unactivated.",
+    "Before-issue restart, committed-before-wire restart, recipient-applied-before-ack restart, exact persisted certificate replay, and actual negotiated-session advancement.",
+    "Registration and a healthy reconciliation both reporting no certificate cannot acknowledge a pending certificate; test observes at least two inventories with delivery held.",
+    "16 real quiescent process completions beside one original active process with recipient ledger limit4; certificate retains the exact old hole, each completion marker occurs once, all receipts finally retire.",
+    "Receipt issue derives only from committed feature state; transport sends immutable pending certificates; only exact explicit fullbody certificate acknowledgment from current negotiated session commits retirement.",
+    "Ordinary observation/RPC waits stay20s; long-held physical witness has15min allowance. Dedicated moderate-timeout Bazel target avoids including this fixture twice."
+  ],
+  "baseline": {
+    "label": "adapter-baseline",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+      "--",
+      "--exact",
+      "--show-output"
+    ],
+    "exit": 0,
+    "seconds": 68.68288791901432,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    }
+  },
+  "restored": {
+    "label": "adapter-restored",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+      "--",
+      "--exact",
+      "--show-output"
+    ],
+    "exit": 0,
+    "seconds": 39.77886581997154,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    }
+  },
+  "mutations": [
+    {
+      "label": "mutation-implicit-absent-ack",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+        "--",
+        "--exact",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 36.56998789001955,
+      "environment": {
+        "CARGO_BUILD_JOBS": "8",
+        "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+      },
+      "baseline_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+      "replacement": {
+        "before": "        let (Some(identity), Some(certificate)) = (session.worker, certificate) else {\n            return Ok(());\n        };",
+        "after": "        let Some(identity) = session.worker else { return Ok(()); };\n        let certificate = certificate.or_else(|| {\n            self.receipts.as_ref().as_ref()\n                .and_then(|receipts| receipts.streams.get(&WorkerId(identity.worker_id)))\n                .and_then(|stream| stream.pending.as_ref())\n                .map(wire_receipt_certificate)\n        });\n        let Some(certificate) = certificate else { return Ok(()); };"
+      },
+      "compiled": true,
+      "killed": true
+    },
+    {
+      "label": "mutation-changed-wire-watermark",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+        "--",
+        "--exact",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 17.921912537014578,
+      "environment": {
+        "CARGO_BUILD_JOBS": "8",
+        "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+      },
+      "baseline_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+      "replacement": {
+        "before": "        effects_through: value.effects_through.0,",
+        "after": "        effects_through: value.effects_through.0 + 1,"
+      },
+      "compiled": true,
+      "killed": true
+    }
+  ],
+  "mutation_interpretation": [
+    "implicit-absent-ack compiles, then the no-certificate probe fails its bounded pending-state wait. Recorded metadata shows certificate acknowledged and pendingNone even though delivery is held. This is an observed semantic failure, not a compiler rejection.",
+    "changed-wire-watermark compiles, then explicit complete wire-certificate equality assertion fails. Transport projection must preserve the committed certificate body exactly."
+  ],
+  "strict_clippy": [
+    {
+      "label": "service-clippy-final",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 12.236329454986844,
+      "environment": {
+        "CARGO_BUILD_JOBS": "8",
+        "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+      }
+    },
+    {
+      "label": "worker-clippy-complete",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--lib",
+        "--test",
+        "authority_rpc_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 15.887646610965021,
+      "environment": {
+        "CARGO_BUILD_JOBS": "8",
+        "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+      }
+    }
+  ],
+  "compatibility": {
+    "result": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--test",
+        "authority_worker_test",
+        "--test",
+        "authority_scheduler_test",
+        "--",
+        "--show-output",
+        "--test-threads=1"
+      ],
+      "exit": 0,
+      "seconds": 115.3347931120079
+    },
+    "tests": 32,
+    "detail": "10RPC +4scheduler +18recipient tests passed. This suite predates the final None-inventory probe and dynamic-session fixture correction; final fixture baseline/restored runs cover those later test changes."
+  },
+  "extended_diagnostic": {
+    "result": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+        "--",
+        "--exact",
+        "--show-output"
+      ],
+      "exit": 0,
+      "seconds": 265.697689255001
+    },
+    "completions": 48,
+    "source_manifest": "diagnostic48-src/manifest.json",
+    "provenance": "Exact diagnostic48 variant reconstructed by reversing the known subsequent count16 and explicit absent-ack probe/counter edits; unchanged dependencies copied opaquely before root core resync. Not a source snapshot captured at compilation time.",
+    "detail": "245.42s fixture body; default committed fixture stays16 completions. This extended variant is supporting diagnostic evidence, not the final-source fixture result."
+  },
+  "preserved_failures": [
+    {
+      "log": "compile.log",
+      "detail": "Initial fixture helper scaffolding had unused-code diagnostics before fixture was written."
+    },
+    {
+      "log": "cutpoints-first.log",
+      "detail": "Restart attempted a new AdmissionRegistry and was rejected because persisted controls require closed-journal recovery. Fixed to Journal::recover_admission."
+    },
+    {
+      "log": "cutpoints-recovery.log",
+      "detail": "20s receipt wait expired without detailed metadata after73.87s fixture execution. Cause was not established; host contention is only a hypothesis."
+    },
+    {
+      "log": "cutpoints-diagnostic.log",
+      "detail": "Progressed32 completions, then20s Execute read expired near the original300s physical-witness limit. Failed run does not qualify48 completions. Later900s witness diagnostic passed48."
+    },
+    {
+      "log": "session-assumption-adapter-baseline.log",
+      "detail": "Hardcoded worker session>=4 waited after recipient application. Coordinator restarts can happen before worker connects. Fixed to require advancement beyond the actual observed applied session; no observation timeout change."
+    },
+    {
+      "log": "service-clippy.log",
+      "detail": "Initial check encountered candidate receipt-retirement strictClippy issue. Parent fixed it; dependency was resynced opaquely."
+    },
+    {
+      "log": "worker-clippy-fixed.log",
+      "detail": "Fixture predicate Send+Sync and Duration::from_mins style requirements corrected; final strictClippy passed."
+    }
+  ],
+  "exclusions": [
+    "Production authentication boundary and canonical activation/operator workflow remain outside this fixture.",
+    "Multi-replica service failover, external deployed storage durability, and production factory rollout are not certified.",
+    "Bazel qualification and repository precommit are performed by root after patch integration; their evidence is separate.",
+    "The broader categorical-elimination claim still depends on parent qualification gates and independent oracle evidence."
+  ],
+  "logs": [
+    {
+      "path": "adapter-baseline.log",
+      "sha256": "60bca7878bf8a8c9660d7bf0cd6fe247eff1a5a4c92741ad945d59230372f10f",
+      "bytes": 31635921,
+      "gzip_path": "adapter-baseline.log.gz",
+      "gzip_sha256": "97cef92034961e4aca5c7752b42692da13a8444990b13ffa3857ac83024e167e",
+      "gzip_bytes": 1480515,
+      "findings": [
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 16 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 57.07s"
+      ]
+    },
+    {
+      "path": "adapter-restored.log",
+      "sha256": "42c26786c059158987fa804c3847d0c3e6d51d486e2c797493a9a8e8eff72fe0",
+      "bytes": 29560017,
+      "gzip_path": "adapter-restored.log.gz",
+      "gzip_sha256": "b3eacc149df9bbcfae9a8d2d20469612d31372a2187fb7099e80c4103992b3e3",
+      "gzip_bytes": 1368766,
+      "findings": [
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 16 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 35.14s"
+      ]
+    },
+    {
+      "path": "compile.log",
+      "sha256": "b0570c9720c08716c830d771dbe79d51dfcd9af0f4c21964c98ae4d590aa0127",
+      "bytes": 1663,
+      "gzip_path": "compile.log.gz",
+      "gzip_sha256": "b5149c82b969b972cadf817d33dcb85c3356ae3d71de4c29edf4bc33c43cee7a",
+      "gzip_bytes": 651,
+      "findings": []
+    },
+    {
+      "path": "cutpoints-captured.log",
+      "sha256": "d2bd300ca0e4e19c1a6045a2d0d8b8f939f019724f2dab75619281a9969dbc09",
+      "bytes": 103545905,
+      "gzip_path": "cutpoints-captured.log.gz",
+      "gzip_sha256": "73b351a420baa9b36ee6134e88374ee90e9a4d0766b4d7e7b9431f75ebe79961",
+      "gzip_bytes": 4915662,
+      "findings": [
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 48 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 245.42s"
+      ]
+    },
+    {
+      "path": "cutpoints-diagnostic.log",
+      "sha256": "51430e4ed2ca10caf18445e501df430c5d35bb94b0e7124d4863180db63bc31b",
+      "bytes": 78337165,
+      "gzip_path": "cutpoints-diagnostic.log.gz",
+      "gzip_sha256": "218dc54a46f42114ecfa8c5097894aa944b6893a6d7c8db2008c69b2058e88cc",
+      "gzip_bytes": 3667046,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2225171) panicked at nativelink-worker/tests/authority_rpc_test.rs:518:10:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 334.02s"
+      ]
+    },
+    {
+      "path": "cutpoints-first.log",
+      "sha256": "088c886e10e762571a653946eb1f5525494d0ce422de7bdc6acf4a5365d81733",
+      "bytes": 2835751,
+      "gzip_path": "cutpoints-first.log.gz",
+      "gzip_sha256": "b2854729c4dd5361462d0e1d2722c0ac4c7e3833acecc58f6651b5d8a9467190",
+      "gzip_bytes": 133732,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2142133) panicked at nativelink-worker/tests/authority_rpc_test.rs:355:14:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 6.68s"
+      ]
+    },
+    {
+      "path": "cutpoints-recovery.log",
+      "sha256": "4a31c92e7c8a760bf10913e0ab3d83b8d72d42ba7f250a0dcc31aeadf3e78ef8",
+      "bytes": 19986787,
+      "gzip_path": "cutpoints-recovery.log.gz",
+      "gzip_sha256": "4c1e0698e9253f93f5030cfd28ea229879e47a00fe2efa5ed30d9cb7164b467a",
+      "gzip_bytes": 905270,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2170713) panicked at nativelink-worker/tests/authority_rpc_test.rs:507:10:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 73.87s"
+      ]
+    },
+    {
+      "path": "mutation-changed-wire-watermark.log",
+      "sha256": "88dadd6f389bc3a5c86514d8f38c04a437a9ed3848a0ef92a032cd1f1215bafb",
+      "bytes": 2800167,
+      "gzip_path": "mutation-changed-wire-watermark.log.gz",
+      "gzip_sha256": "5587e81e17f7f1b5e46a6dd8c3119b3cf5071d0743a7a72a9236d02392213178",
+      "gzip_bytes": 140577,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2622644) panicked at nativelink-worker/tests/authority_rpc_test.rs:718:5:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 1.70s"
+      ]
+    },
+    {
+      "path": "mutation-implicit-absent-ack.log",
+      "sha256": "ae9c814bfa75b998da82bc2e7af3e599ffd37a4767221e5bcc49a27e7b9d8010",
+      "bytes": 5846327,
+      "gzip_path": "mutation-implicit-absent-ack.log.gz",
+      "gzip_sha256": "a0b81af501a48baa75252b3434d68e969f2395c88acdd83922fdd742b4f4d9cd",
+      "gzip_bytes": 225578,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2601604) panicked at nativelink-worker/tests/authority_rpc_test.rs:507:13:",
+        "Receipt wait failed: deadline has elapsed; committed metadata: Ref { inner: RwLockReadGuard(PhantomData<std::sync::poison::rwlock::RwLockReadGuard<'_, alloc::sync::Arc<core::option::Option<nativelink_scheduler::authority::types::ReceiptRetirement>>>>, Some(ReceiptRetirement { streams: {WorkerId(2): ReceiptStream { incarnation: IncarnationId(3), acknowledged: Some(ReceiptFloors { effect: EffectId(4), attempts_through: AttemptId(2), effects_through: EffectId(4), reservations_through: ReservationId(2) }), pending: None, dirty: false }} })), has_changed: false }",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 21.92s"
+      ]
+    },
+    {
+      "path": "service-clippy-final.log",
+      "sha256": "672a21bc056805a630d841e19ef8ffb595f3585258747929efc06597c1f52d5d",
+      "bytes": 367,
+      "gzip_path": "service-clippy-final.log.gz",
+      "gzip_sha256": "fa26e667eda54b24b7bd75e6c3d1ae8800d79b3f456a634f2b86721d7a3bb16e",
+      "gzip_bytes": 206,
+      "findings": []
+    },
+    {
+      "path": "service-clippy-fixed.log",
+      "sha256": "d0697a4faa3dec36ceb1951e27593c8f0d5636d167a0e8ea7f4eb93b2dcbcc69",
+      "bytes": 367,
+      "gzip_path": "service-clippy-fixed.log.gz",
+      "gzip_sha256": "8c34e52c6396d1caa16dcc89d215d21c7155877b359399327f59a576c68ab4ae",
+      "gzip_bytes": 206,
+      "findings": []
+    },
+    {
+      "path": "service-clippy.log",
+      "sha256": "78a4f12cc978a7fb33cf00aa77b78af7b75a74031f60a5737a85778e134dc861",
+      "bytes": 964,
+      "gzip_path": "service-clippy.log.gz",
+      "gzip_sha256": "0ab853e698c43b6445b1176426d7dc051829dc7749fc10ebbfabaceb91031b4d",
+      "gzip_bytes": 475,
+      "findings": []
+    },
+    {
+      "path": "session-assumption-adapter-baseline.log",
+      "sha256": "e2d611e39d83c472ab12fe20697b719720a244240681495c9cc9b5c86c6f3f0a",
+      "bytes": 6241379,
+      "gzip_path": "session-assumption-adapter-baseline.log.gz",
+      "gzip_sha256": "2e75cf98cbaa12e1e7f2450b000d5396d89d6feca7af08cabdbb111289df8e1f",
+      "gzip_bytes": 243574,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (2554166) panicked at nativelink-worker/tests/authority_rpc_test.rs:478:10:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 22.33s"
+      ]
+    },
+    {
+      "path": "targets-final.log",
+      "sha256": "a5af5bbb961340dd909b1a33d4ac22d2d3721790aefe5ded2beeaad238264605",
+      "bytes": 58023053,
+      "gzip_path": "targets-final.log.gz",
+      "gzip_sha256": "ed4c3b621fec9403020874028e67a3f0d419a108d104276bfd7ace2e7448341f",
+      "gzip_bytes": 3006360,
+      "findings": [
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 16 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 51.78s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 28.35s",
+        "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.29s"
+      ]
+    },
+    {
+      "path": "worker-clippy-complete.log",
+      "sha256": "45e3ebf979ed004b395152c3e5fbf33e32fb209877105d757f2f227cf946cc87",
+      "bytes": 461,
+      "gzip_path": "worker-clippy-complete.log.gz",
+      "gzip_sha256": "37dcee8d18d7ced65ef99d1208e8940506386938ef665e87e84fefbe84f0b2b5",
+      "gzip_bytes": 215,
+      "findings": []
+    },
+    {
+      "path": "worker-clippy-final.log",
+      "sha256": "ffc87ad63ad986c0e3b1ac3bef518b18634dd35652801620f447f47fca00bffd",
+      "bytes": 265,
+      "gzip_path": "worker-clippy-final.log.gz",
+      "gzip_sha256": "1ce8cd06a0f5d81bde64f7f39d9a087f14078d417e2c9b1f4adc7371fe2eb81a",
+      "gzip_bytes": 188,
+      "findings": []
+    },
+    {
+      "path": "worker-clippy-fixed.log",
+      "sha256": "5dc8446769b270eba16784712e910d4ad340e572e371accb79a5135b908324e7",
+      "bytes": 2198,
+      "gzip_path": "worker-clippy-fixed.log.gz",
+      "gzip_sha256": "5b8238f6255833ef5696b48d1f038b7861bb00beecd39e125a8dc27151fcc821",
+      "gzip_bytes": 810,
+      "findings": []
+    },
+    {
+      "path": "worker-clippy.log",
+      "sha256": "589e9e424a5fe246385cd8d9a3bee48baa052eb004cfe9a461987d61ace8627c",
+      "bytes": 1058,
+      "gzip_path": "worker-clippy.log.gz",
+      "gzip_sha256": "ff5ce008170e60ba2c3fe5e9779df98f61bb43d42ddf2968c459f115a83518ba",
+      "gzip_bytes": 486,
+      "findings": []
+    }
+  ]
+}

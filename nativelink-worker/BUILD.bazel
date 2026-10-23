@@ -84,6 +84,10 @@ rust_test_suite(
         "tests/running_actions_manager_test.rs",
         "tests/worker_utils_test.rs",
     ],
+    args = [
+        "--skip",
+        "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+    ],
     compile_data = [
         "tests/utils/local_worker_test_utils.rs",
         "tests/utils/mock_running_actions_manager.rs",
@@ -126,6 +130,85 @@ rust_test_suite(
         "@platforms//os:macos": ["@crates//:libc"],
         "//conditions:default": [],
     }),
+)
+
+# The short suite skips this longer history; the dedicated target selects it.
+# Cargo runs it normally as part of the complete RPC test file.
+rust_test(
+    name = "authority_receipt_rpc_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_rpc_test.rs"],
+    args = [
+        "--exact",
+        "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+    ],
+    proc_macro_deps = [
+        "//nativelink-macro",
+        "@crates//:async-trait",
+    ],
+    deps = [
+        ":nativelink-worker",
+        "//nativelink-config",
+        "//nativelink-error",
+        "//nativelink-metric",
+        "//nativelink-proto",
+        "//nativelink-scheduler",
+        "//nativelink-service",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:async-lock",
+        "@crates//:bytes",
+        "@crates//:futures",
+        "@crates//:hyper-1.7.0",
+        "@crates//:pathdiff",
+        "@crates//:pin-project-lite",
+        "@crates//:pretty_assertions",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serial_test",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tokio-stream",
+        "@crates//:tonic",
+        "@crates//:tonic-prost",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+        "@crates//:uuid",
+        "@crates//:which",
+    ] + select({
+        "@platforms//os:linux": ["@crates//:libc"],
+        "@platforms//os:macos": ["@crates//:libc"],
+        "//conditions:default": [],
+    }),
+)
+
+rust_test(
+    name = "authority_publication_ordering_test",
+    timeout = "short",
+    srcs = ["tests/authority_publication_ordering_test.rs"],
+    proc_macro_deps = [
+        "//nativelink-macro",
+        "@crates//:async-trait",
+    ],
+    deps = [
+        "//nativelink-config",
+        "//nativelink-error",
+        "//nativelink-metric",
+        "//nativelink-proto",
+        "//nativelink-scheduler",
+        "//nativelink-service",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:bytes",
+        "@crates//:futures",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tonic",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
 )
 
 rust_test(

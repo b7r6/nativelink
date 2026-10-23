@@ -144,9 +144,49 @@ within the fixed limit.
 The byte capability introduced pure-state snapshot version 4, following version
 3's memory-target semantics. Version 5 additionally retains the original dispatch
 effect identity on every attempt, even after acceptance consumes its outbox
-intent. The maximum-width fixed-row serializer guard includes this field. This prevents an older writer from silently continuing
-admission without the new byte rule. This implementation makes no rolling
-upgrade, production migration, or activation claim.
+intent. The maximum-width fixed-row serializer guard includes this field.
+These historical byte checks do not qualify rolling upgrade or production
+migration. The later experimental activation protocol is described separately
+in [format-activation.md](format-activation.md).
+
+## Activated recipient-retirement credits
+
+Committed feature 2 introduces the optional receipt-retirement component and
+pure-state snapshot version 6. Before activation, the component is absent and
+version 5 bytes remain unchanged. Activation creates one dirty stream per
+current worker; it does not add an unfunded reserve to an already admitted pool.
+
+Each worker has at most one immutable pending certificate. Its retained bindings
+pin their existing attempt records until exact acknowledgement or accepted
+incarnation replacement. A released attempt named by a pending certificate
+therefore cannot retire early and remove the row paying for that binding.
+The attempt and its single retained binding fit together within the existing
+1024-byte attempt allowance. The worker, optional scheduling hold, acknowledged
+floors, and pending certificate header fit together within the existing two
+1024-byte worker allowances. Maximum-width serializer guards check both groups;
+restore checks their actual sizes. The optional component wrapper fits in the
+existing global-header allowance. The aggregate credit equation is unchanged.
+
+Bindings are limited to 1024. Their protobuf certificate fits 64 KiB; the
+separately bounded compact-JSON certificate fits 256 KiB because it includes
+field names. An acknowledgement command pays that certificate as its bounded
+payload and retains the existing 1024-byte frame allowance, so it fits the
+journal's 1 MiB batch. This certificate bound is independent of the configured
+request/result payload bound. It does not permit larger requests or results.
+
+Issuance also reserves every admitted execution's remaining finalization IDs
+before allocating its certificate from the shared effect counter. Oversized
+certificates and exhausted identity headroom refuse atomically. A fixture with
+1026 uncertain attempts retains all charges and refuses issuance; two actual
+cleanup transitions allow the same state to issue exactly 1024 exceptions.
+Acknowledgement clears only the immutable retirement intent and its pins. It
+cannot release a reservation or clear newer releases waiting for another
+certificate.
+
+An unreachable recipient may hold a pending certificate and its bounded pins
+indefinitely. These checks establish space safety and eventual compaction under
+delivery and acknowledgement, not a promise that disconnected workers keep
+making progress. Production worker counts and traffic bounds remain unqualified.
 
 ## A completed result must fit a commit command
 
@@ -164,8 +204,9 @@ excluding the separately bounded payload value: `Complete` 193 bytes,
 `MemoryFailure` 368, `LookupResult` 131, `Submit` 129, and `Register` 422. These
 figures include batch/event wrappers and maximum-width epoch, identities,
 resources, optional peak, and version. The contract reserves **1024 bytes** for
-framing. Tests serialize every current event variant in a real singleton batch
-and verify its unpaid frame fits that allowance.
+framing. Tests serialize the original event variants in real singleton batches
+and verify their unpaid frames fit that allowance. The activated receipt
+acknowledgement has the separately bounded certificate payload described above.
 
 ```text
 maximum singleton command <= 512 KiB + 1024 bytes

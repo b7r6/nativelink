@@ -1,0 +1,151 @@
+{
+  "baseline": "c54260986c4f3b7a1197dc75dae017dbc0a09489",
+  "candidate_source_sha256": {
+    "nativelink-scheduler/src/authority/format.rs": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+    "nativelink-scheduler/src/authority/journal.rs": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+    "nativelink-scheduler/src/authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/receipt_retirement.rs": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e",
+    "nativelink-scheduler/src/authority/receipt_retirement_tests.rs": "3ca0263ea4bc34a11d1faf43ff135c48686d92bc2c889ac652bea4afa6fdf5f8",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/tests.rs": "683ff055015a45ae3931e76f42f6fb53e1620c004b8bb24c735f17d948b56b10",
+    "nativelink-scheduler/src/authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661"
+  },
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "receipt_retirement_reference_test",
+        "--test",
+        "receipt_retirement_differential_test",
+        "--",
+        "--nocapture"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-receipt-differential-target-6c8d704b2daa1bfc"
+      },
+      "log": "cargo-tests.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "receipt_retirement_reference_test",
+        "--test",
+        "receipt_retirement_differential_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-receipt-differential-target-6c8d704b2daa1bfc"
+      },
+      "log": "cargo-clippy.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "bazel",
+        "test",
+        "//nativelink-scheduler:receipt_retirement_reference_test",
+        "//nativelink-scheduler:receipt_retirement_differential_test"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "log": "bazel-tests.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "/nix/store/8vn3l8abbbqakb5jv9g2845p9g0wbqav-rustfmt-preview-1.100.0-nightly-2026-08-26-x86_64-unknown-linux-gnu/bin/rustfmt",
+        "--check",
+        "--edition",
+        "2024",
+        "nativelink-scheduler/tests/receipt_retirement_differential_test.rs"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "output": "",
+      "returncode": 0
+    }
+  ],
+  "corrected_fixture_failure": "Initial replacement scenario reused SessionId2 on same-incarnation reconnect; core correctly returned Stale. Corrected adapter fixture to allocate SessionId3 independently. Frozen model/contract unchanged. Exact initial event trace retained.",
+  "corrected_style_failures": "Bazel Clippy initially rejected debug trace formatting, missing const, and collapsible-if in adapter. Corrected new adapter only. Final Bazel strict aspects and Cargo Clippy pass.",
+  "discarded_cache_failure": "First Clippy used a target that already held baseline State metadata. Opaque copy preserved older source timestamps, so Clippy reused obsolete metadata and reported missing new public methods. Final Cargo qualification uses fresh source-identified target6c8d704b2daa1bfc; no obsolete result counts as production failure or qualification.",
+  "files_sha256": {
+    "adapter.patch": "e72ff5347d302f0c11f9f922a0cce4bb1ae79f55ccfe0b0e27906eb454d30bc9",
+    "bazel-tests.log": "c1c4bd376465f661fb28f0bb7d5b6a4caa1bc7a532583c74a9bf7df4191141c9",
+    "build-base.bazel": "a710193c9ea3e4918d0dfca940cca979da7f010b097972eaa6bf481ca23425cc",
+    "candidate-authority/format.rs": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+    "candidate-authority/journal.rs": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+    "candidate-authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+    "candidate-authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "candidate-authority/receipt_retirement.rs": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e",
+    "candidate-authority/receipt_retirement_tests.rs": "3ca0263ea4bc34a11d1faf43ff135c48686d92bc2c889ac652bea4afa6fdf5f8",
+    "candidate-authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "candidate-authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "candidate-authority/tests.rs": "683ff055015a45ae3931e76f42f6fb53e1620c004b8bb24c735f17d948b56b10",
+    "candidate-authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661",
+    "candidate-inputs.json": "fab20db225092bd6c95f136ce74a842f71c31700a42be858d5caed58bfe5fefc",
+    "cargo-clippy.log": "7b1cd404336997dc9f506b261e2b91344bd458f989fb1912ade9de30b00c7482",
+    "cargo-tests.log": "40fb36b44176631ff45660fd8335f7fe58761911359dff1891e5f42a66de61fe",
+    "frozen-model-manifest.json": "1681cbc0ea972e95bb90294d4035d526b8d0673a5ad892ee87bfc33e56d92607",
+    "frozen-model.patch": "35e69e79c5c7a8866dbcc837521aa73a97f1b57b74ead78f5b514921a973a5e5",
+    "initial-bazel-style-failures.log": "28cd928c03d28512e69c3f63f46070057634f02034b206e1272688ce8ca61684",
+    "initial-fixture-session-event-trace.log": "020bcd4421afe970c46599c1481a89b00480f4ef30c94f3a4d73eeb48ba0c6ba",
+    "initial-fixture-session-failure.log": "aa40899d69ca7ae5417d31d953fcb1ccd8edee9e16e3c09186198fabfb47e957",
+    "initial-stale-baseline-metadata-clippy.log": "f9666e8f9c3eeecfe21121be605ba46a3f484da4e90013b000af1030611553f4",
+    "test-sources/nativelink-scheduler/BUILD.bazel": "bd25ffcf8484ccc16e0caa3eeb958b772ea2ecdb9833ab97097356ea32411e6d",
+    "test-sources/nativelink-scheduler/tests/receipt_retirement/README.md": "2169cde291f2a35d3c133e839d688a9f540e7b2d1eaea9a3ffc8ec9720fc510d",
+    "test-sources/nativelink-scheduler/tests/receipt_retirement/differential.rs": "fcda9769ecfd927ac5b455f71049a5796e1544a832168417888a21aa02aad34a",
+    "test-sources/nativelink-scheduler/tests/receipt_retirement/reference.rs": "d8a485ff33ffb06a80d8146bf5d0601cd9ba22e5f3c6ee37f27dd7c2be555315",
+    "test-sources/nativelink-scheduler/tests/receipt_retirement_differential_test.rs": "9f957a56ad148e56058a50b8276b8aca962c696000e5863383b88314dc533e41",
+    "test-sources/nativelink-scheduler/tests/receipt_retirement_reference_test.rs": "93f204c3a60ec2e762169b0add1375222beaf8a2c95592763173342dff906e26"
+  },
+  "frozen_model_source_sha256": {
+    "nativelink-scheduler/tests/receipt_retirement/README.md": "2169cde291f2a35d3c133e839d688a9f540e7b2d1eaea9a3ffc8ec9720fc510d",
+    "nativelink-scheduler/tests/receipt_retirement/differential.rs": "fcda9769ecfd927ac5b455f71049a5796e1544a832168417888a21aa02aad34a",
+    "nativelink-scheduler/tests/receipt_retirement/reference.rs": "d8a485ff33ffb06a80d8146bf5d0601cd9ba22e5f3c6ee37f27dd7c2be555315",
+    "nativelink-scheduler/tests/receipt_retirement_reference_test.rs": "93f204c3a60ec2e762169b0add1375222beaf8a2c95592763173342dff906e26"
+  },
+  "independence": "Adapter author inspected public types and the frozen independent model only; candidate authority implementation copied opaquely without reading reducer/module source. Expected lifecycle facts and all allocation cursors are updated from explicit scenario semantics; candidate observations are assertions only, never oracle inputs. Model source hashes remain exactly frozen.",
+  "limits": "Bounded reference exploration is model-only; six separately specified real-State histories establish differential coverage, not exhaustive equivalence. No production deployment or runtime cutover is established by this fixture.",
+  "reconstruction": "Start with baseline; overwrite authority files from candidate-authority; apply frozen-model.patch; replace scheduler BUILD.bazel with build-base.bazel; apply adapter.patch. The evidence test-sources directory also contains final exact test sources and final BUILD.",
+  "results": {
+    "actual_state_scenarios_passed": 6,
+    "bazel_targets_passed": 2,
+    "bounded_reference_actions": 10,
+    "bounded_reference_depth": 9,
+    "bounded_reference_states": 739,
+    "bounded_reference_transitions": 6520,
+    "cargo_clippy": "pass",
+    "nightly_rustfmt": "pass",
+    "production_counterexamples": 0,
+    "reference_tests_passed": 7
+  },
+  "test_binaries": {
+    "/tmp/nativelink-receipt-differential-target-6c8d704b2daa1bfc/smol/deps/receipt_retirement_differential_test-143689e86a4521dd": {
+      "bytes": 4541728,
+      "sha256": "8bb30afd7de0f119d3b188ea6d8237a54923ac28fe8d94320905ec2ff5d9d9b6"
+    },
+    "/tmp/nativelink-receipt-differential-target-6c8d704b2daa1bfc/smol/deps/receipt_retirement_reference_test-39b4f7de0d764830": {
+      "bytes": 3713376,
+      "sha256": "199a76e35f7766a4c135d64da1e118d5d776612fc6ff7cb0d4e2a15e1edceb72"
+    }
+  }
+}

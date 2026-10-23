@@ -23,15 +23,17 @@ use std::time::Duration;
 use nativelink_macro::nativelink_test;
 use nativelink_scheduler::authority::format::{
     AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, FormatControl, JournalProfile,
-    MAX_FEATURES, MAX_FORMAT_MEMBERS, MemberEvidence, Preparation, ReaderCapabilities,
+    MAX_FEATURES, MAX_FORMAT_MEMBERS, MemberEvidence, Preparation, RECEIPT_RETIREMENT,
+    ReaderCapabilities,
 };
 use nativelink_scheduler::authority::journal::{
-    Batch, Journal, JournalFault, Singleton, TypeConfig,
+    Batch, Journal, JournalFault, Singleton, SnapshotBuffer, TypeConfig,
 };
 use nativelink_scheduler::authority::{
     ActionKey, ClusterEpoch, EffectKind, Event, IncarnationId, Limits, OperationId, RecordedEvent,
-    Reply, Request, Resources, ResultPayload, SessionId, WorkerId,
+    Reply, Request, Resources, ResultPayload, SessionId, State, WorkerId,
 };
+use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
 use openraft::error::{InstallSnapshotError, RPCError, RaftError, RemoteError, Unreachable};
 use openraft::network::RPCOption;
 use openraft::raft::{
@@ -162,23 +164,27 @@ impl FormatCluster {
     }
 
     async fn with_voters(last_reader: ReaderCapabilities, voters: BTreeSet<u64>) -> Self {
+        Self::with_readers(
+            [
+                ReaderCapabilities::DirectScheduler,
+                ReaderCapabilities::DirectScheduler,
+                last_reader,
+            ],
+            voters,
+        )
+        .await
+    }
+
+    async fn with_readers(readers: [ReaderCapabilities; 3], voters: BTreeSet<u64>) -> Self {
         let mut cluster = Self {
             directory: Directory::new(),
             registry: AdmissionRegistry::new(DOMAIN),
             links: Arc::default(),
             nodes: BTreeMap::new(),
         };
-        for id in 1..=3 {
+        for (index, reader) in readers.into_iter().enumerate() {
             cluster
-                .start(
-                    id,
-                    if id == 3 {
-                        last_reader
-                    } else {
-                        ReaderCapabilities::DirectScheduler
-                    },
-                    1,
-                )
+                .start(u64::try_from(index + 1).unwrap(), reader, 1)
                 .await;
         }
         cluster.nodes[&1]
@@ -385,6 +391,7 @@ async fn upgraded_reader_writes_identical_base_artifacts_before_activation() {
     for (name, reader) in [
         ("base", ReaderCapabilities::Base),
         ("upgraded", ReaderCapabilities::DirectScheduler),
+        ("receipt_retirement", ReaderCapabilities::ReceiptRetirement),
     ] {
         let registry = AdmissionRegistry::new(DOMAIN);
         let mut journal = Journal::open_with_profile(
@@ -429,10 +436,12 @@ async fn upgraded_reader_writes_identical_base_artifacts_before_activation() {
         drop(journal);
         outputs.push((before, metadata(&directory.file(name))));
     }
-    assert_eq!(
-        outputs[0], outputs[1],
-        "capable executable alone must not upgrade any persisted bytes"
-    );
+    for output in &outputs[1..] {
+        assert_eq!(
+            &outputs[0], output,
+            "capable executable alone must not upgrade any persisted bytes"
+        );
+    }
 }
 
 #[nativelink_test]
@@ -497,13 +506,28 @@ async fn real_singleton_activation_preserves_pending_authority_and_refuses_old_r
 #[nativelink_test]
 async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays_from_old_snapshot()
 {
+    for (reader, features) in [
+        (
+            ReaderCapabilities::DirectScheduler,
+            BTreeSet::from([DIRECT_SCHEDULER]),
+        ),
+        (
+            ReaderCapabilities::ReceiptRetirement,
+            BTreeSet::from([RECEIPT_RETIREMENT]),
+        ),
+    ] {
+        check_activation_suffix(reader, features).await;
+    }
+}
+
+async fn check_activation_suffix(reader: ReaderCapabilities, features: BTreeSet<u16>) {
     let directory = Directory::new();
     let registry = AdmissionRegistry::new(DOMAIN);
     let node = Singleton::open_with_profile(
         directory.file("source"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 1),
+        profile(&registry, reader, 1),
     )
     .await
     .unwrap();
@@ -511,7 +535,7 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
     let old_snapshot = node.journal.clone().build_snapshot().await.unwrap();
     let prepared = node
         .journal
-        .prepare_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .prepare_features(&node.raft, features.clone())
         .await
         .unwrap();
     let response = node
@@ -553,18 +577,15 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
     );
     // Every prior process has stopped. Reconstruct the trusted fixture from
     // closed artifacts, then admit a later capable incarnation.
-    let recovered_registry = Journal::recover_admission(
-        DOMAIN,
-        ReaderCapabilities::DirectScheduler,
-        vec![(NODE, directory.file("source"))],
-    )
-    .await
-    .unwrap();
+    let recovered_registry =
+        Journal::recover_admission(DOMAIN, reader, vec![(NODE, directory.file("source"))])
+            .await
+            .unwrap();
     let mut journal = Journal::open_with_profile(
         directory.file("source"),
         NODE,
         Limits::default(),
-        profile(&recovered_registry, ReaderCapabilities::DirectScheduler, 2),
+        profile(&recovered_registry, reader, 2),
     )
     .await
     .unwrap();
@@ -589,7 +610,7 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
         directory.file("source"),
         NODE,
         Limits::default(),
-        profile(&recovered_registry, ReaderCapabilities::DirectScheduler, 3),
+        profile(&recovered_registry, reader, 3),
     )
     .await
     .unwrap();
@@ -604,7 +625,7 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
         directory.file("target"),
         NODE + 1,
         Limits::default(),
-        profile(&target_registry, ReaderCapabilities::DirectScheduler, 1),
+        profile(&target_registry, reader, 1),
     )
     .await
     .unwrap();
@@ -622,20 +643,35 @@ async fn committed_activation_suffix_blocks_old_startup_before_apply_and_replays
 
 #[nativelink_test]
 async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
+    for (reader, features) in [
+        (
+            ReaderCapabilities::DirectScheduler,
+            BTreeSet::from([DIRECT_SCHEDULER]),
+        ),
+        (
+            ReaderCapabilities::ReceiptRetirement,
+            BTreeSet::from([RECEIPT_RETIREMENT]),
+        ),
+    ] {
+        check_activation_cutpoints(reader, features).await;
+    }
+}
+
+async fn check_activation_cutpoints(reader: ReaderCapabilities, features: BTreeSet<u16>) {
     let directory = Directory::new();
     let registry = AdmissionRegistry::new(DOMAIN);
     let node = Singleton::open_with_profile(
         directory.file("journal"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 1),
+        profile(&registry, reader, 1),
     )
     .await
     .unwrap();
     node.write(submit(1)).await.unwrap();
     let prepared = node
         .journal
-        .prepare_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .prepare_features(&node.raft, features.clone())
         .await
         .unwrap();
     let response = node
@@ -650,6 +686,10 @@ async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
     let mut journal = node.journal.clone();
     node.shutdown().await.unwrap();
     let old = journal.read_applied().await.unwrap();
+    let mut expected = old.1.clone();
+    if features.contains(&RECEIPT_RETIREMENT) {
+        expected.enable_receipt_retirement().unwrap();
+    }
     let old_snapshot = journal.build_snapshot().await.unwrap();
     journal.inject_failure_once(JournalFault::BeforeCommit);
     assert!(journal.apply([activation.clone()]).await.is_err());
@@ -658,7 +698,7 @@ async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
     journal.inject_failure_once(JournalFault::AfterCommit);
     assert!(journal.apply([activation]).await.is_err());
     assert_eq!(journal.active_format().await.unwrap().feature_epoch, 1);
-    assert_eq!(journal.read_applied().await.unwrap().1, old.1);
+    assert_eq!(journal.read_applied().await.unwrap().1, expected);
     journal.inject_failure_once(JournalFault::BeforeCommit);
     assert!(journal.build_snapshot().await.is_err());
     assert_eq!(
@@ -674,7 +714,7 @@ async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
         directory.file("journal"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 2),
+        profile(&registry, reader, 2),
     )
     .await
     .unwrap();
@@ -683,7 +723,7 @@ async fn activation_and_snapshot_replacement_are_atomic_at_commit_cutpoints() {
         journal.get_current_snapshot().await.unwrap().unwrap().meta,
         installed.meta
     );
-    assert_eq!(journal.read_applied().await.unwrap().1, old.1);
+    assert_eq!(journal.read_applied().await.unwrap().1, expected);
 }
 
 #[nativelink_test]
@@ -1089,19 +1129,34 @@ async fn fresh_registry_recovers_capable_quorum_and_consensus_resolves_the_uncom
 
 #[nativelink_test]
 async fn activated_snapshot_install_is_atomic_and_rejects_incompatible_or_foreign_targets() {
+    for (reader, features) in [
+        (
+            ReaderCapabilities::DirectScheduler,
+            BTreeSet::from([DIRECT_SCHEDULER]),
+        ),
+        (
+            ReaderCapabilities::ReceiptRetirement,
+            BTreeSet::from([RECEIPT_RETIREMENT]),
+        ),
+    ] {
+        check_snapshot_install(reader, features).await;
+    }
+}
+
+async fn check_snapshot_install(reader: ReaderCapabilities, features: BTreeSet<u16>) {
     let directory = Directory::new();
     let registry = AdmissionRegistry::new(DOMAIN);
     let node = Singleton::open_with_profile(
         directory.file("source"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 1),
+        profile(&registry, reader, 1),
     )
     .await
     .unwrap();
     node.write(submit(1)).await.unwrap();
     node.journal
-        .activate_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .activate_features(&node.raft, features.clone())
         .await
         .unwrap();
     let snapshot = node.journal.clone().build_snapshot().await.unwrap();
@@ -1109,11 +1164,7 @@ async fn activated_snapshot_install_is_atomic_and_rejects_incompatible_or_foreig
     let mut target = Journal::fresh_volatile_with_profile(
         2,
         Limits::default(),
-        profile(
-            &AdmissionRegistry::new(DOMAIN),
-            ReaderCapabilities::DirectScheduler,
-            1,
-        ),
+        profile(&AdmissionRegistry::new(DOMAIN), reader, 1),
     )
     .await
     .unwrap();
@@ -1169,7 +1220,7 @@ async fn activated_snapshot_install_is_atomic_and_rejects_incompatible_or_foreig
         JournalProfile {
             domain: foreign,
             incarnation: 1,
-            reader: ReaderCapabilities::DirectScheduler,
+            reader,
             admission: AdmissionRegistry::new(foreign),
         },
     )
@@ -1190,13 +1241,32 @@ async fn activated_snapshot_install_is_atomic_and_rejects_incompatible_or_foreig
 
 #[nativelink_test]
 async fn activation_preserves_dispatch_uncertain_charge_and_accepted_publication_together() {
+    for (reader, features) in [
+        (
+            ReaderCapabilities::DirectScheduler,
+            BTreeSet::from([DIRECT_SCHEDULER]),
+        ),
+        (
+            ReaderCapabilities::ReceiptRetirement,
+            BTreeSet::from([RECEIPT_RETIREMENT]),
+        ),
+        (
+            ReaderCapabilities::ReceiptRetirement,
+            BTreeSet::from([DIRECT_SCHEDULER, RECEIPT_RETIREMENT]),
+        ),
+    ] {
+        check_mixed_activation(reader, features).await;
+    }
+}
+
+async fn check_mixed_activation(reader: ReaderCapabilities, features: BTreeSet<u16>) {
     let directory = Directory::new();
     let registry = AdmissionRegistry::new(DOMAIN);
     let node = Singleton::open_with_profile(
         directory.file("journal"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 1),
+        profile(&registry, reader, 1),
     )
     .await
     .unwrap();
@@ -1257,7 +1327,7 @@ async fn activation_preserves_dispatch_uncertain_charge_and_accepted_publication
     .await
     .unwrap();
     node.write(submit(4)).await.unwrap();
-    let expected = node.read().await.unwrap();
+    let mut expected = node.read().await.unwrap();
     let view = expected.view();
     assert!(
         view.effects
@@ -1281,8 +1351,11 @@ async fn activation_preserves_dispatch_uncertain_charge_and_accepted_publication
             .count(),
         2
     );
+    if features.contains(&RECEIPT_RETIREMENT) {
+        expected.enable_receipt_retirement().unwrap();
+    }
     node.journal
-        .activate_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .activate_features(&node.raft, features)
         .await
         .unwrap();
     assert_eq!(node.read().await.unwrap(), expected);
@@ -1296,7 +1369,7 @@ async fn activation_preserves_dispatch_uncertain_charge_and_accepted_publication
         directory.file("journal"),
         NODE,
         Limits::default(),
-        profile(&registry, ReaderCapabilities::DirectScheduler, 2),
+        profile(&registry, reader, 2),
     )
     .await
     .unwrap();
@@ -1316,6 +1389,446 @@ async fn activation_preserves_dispatch_uncertain_charge_and_accepted_publication
 }
 
 #[test]
+fn receipt_profile_preserves_frozen_member_evidence_vocabulary() {
+    let required = BTreeSet::from([RECEIPT_RETIREMENT]);
+    assert!(ReaderCapabilities::ReceiptRetirement.supports(&required));
+    assert!(!ReaderCapabilities::Base.supports(&required));
+    assert!(!ReaderCapabilities::DirectScheduler.supports(&required));
+    let preparation = Preparation {
+        domain: DOMAIN,
+        permit: 1,
+        from_epoch: 0,
+        target_epoch: 1,
+        required,
+        membership_revision: LogId::new(openraft::CommittedLeaderId::new(1, NODE), 0),
+        members: BTreeMap::from([(
+            NODE,
+            MemberEvidence {
+                incarnation: 1,
+                reader: ReaderCapabilities::ReceiptRetirement.encoding(),
+            },
+        )]),
+    };
+    for control in [
+        FormatControl::Prepare(preparation.clone()),
+        FormatControl::Activate(preparation),
+    ] {
+        let batch = Batch::format(control).unwrap();
+        let encoded = serde_json::to_vec(&batch).unwrap();
+        let text = String::from_utf8(encoded.clone()).unwrap();
+        assert!(text.contains("\"reader\":\"DirectScheduler\""));
+        assert!(!text.contains("ReceiptRetirement"));
+        assert_eq!(Batch::decode(&encoded).unwrap(), batch);
+    }
+}
+
+#[nativelink_test]
+async fn receipt_outbox_crosses_second_activation_and_restart_with_exact_acknowledgement() {
+    let directory = Directory::new();
+    let registry = AdmissionRegistry::new(DOMAIN);
+    let node = Singleton::open_with_profile(
+        directory.file("journal"),
+        NODE,
+        Limits::default(),
+        profile(&registry, ReaderCapabilities::ReceiptRetirement, 1),
+    )
+    .await
+    .unwrap();
+    let record = |event| RecordedEvent {
+        epoch: DOMAIN.epoch,
+        event,
+    };
+    let capacity = Resources {
+        cpu_millis: 100,
+        memory_bytes: 1024,
+        slots: 1,
+    };
+    node.write(record(Event::Register {
+        worker: WorkerId(1),
+        incarnation: IncarnationId(1),
+        session: SessionId(1),
+        properties: BTreeMap::new(),
+        capacity,
+        available: capacity,
+    }))
+    .await
+    .unwrap();
+    let mut command = submit(1);
+    if let Event::Submit { request, .. } = &mut command.event {
+        request.skip_cache_lookup = true;
+    }
+    node.write(command).await.unwrap();
+    node.write(record(Event::Match)).await.unwrap();
+    let attempt = node.read().await.unwrap().view().attempts[0];
+    node.journal
+        .activate_features(&node.raft, BTreeSet::from([DIRECT_SCHEDULER]))
+        .await
+        .unwrap();
+    let before = node.read().await.unwrap();
+    assert!(!before.receipt_retirement_enabled());
+    let before_json: serde_json::Value =
+        serde_json::from_slice(&before.snapshot().unwrap()).unwrap();
+    assert_eq!(before_json["version"], 5);
+    node.journal
+        .activate_features(
+            &node.raft,
+            BTreeSet::from([DIRECT_SCHEDULER, RECEIPT_RETIREMENT]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(node.journal.active_format().await.unwrap().feature_epoch, 2);
+    let mut expected = before;
+    expected.enable_receipt_retirement().unwrap();
+    assert_eq!(node.read().await.unwrap(), expected);
+    assert_eq!(
+        node.write(record(Event::IssueReceipts {
+            worker: WorkerId(1),
+            incarnation: IncarnationId(1),
+            after_ack: None,
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Applied
+    );
+    let pending = node
+        .read()
+        .await
+        .unwrap()
+        .receipt_retirement()
+        .unwrap()
+        .streams[&WorkerId(1)]
+        .pending
+        .clone()
+        .unwrap();
+    assert_eq!(pending.retain.len(), 1);
+    assert_eq!(pending.retain[0].attempt, attempt.id);
+    node.write(record(Event::Complete {
+        attempt: attempt.id,
+        worker: attempt.worker,
+        incarnation: attempt.incarnation,
+        result: ResultPayload {
+            digest: "failure".into(),
+            exit_code: 1,
+            error: None,
+            response: None,
+        },
+    }))
+    .await
+    .unwrap();
+    let expected = node.read().await.unwrap();
+    assert_eq!(
+        expected.receipt_retirement().unwrap().streams[&WorkerId(1)]
+            .pending
+            .as_ref(),
+        Some(&pending)
+    );
+    assert!(expected.receipt_retirement().unwrap().streams[&WorkerId(1)].dirty);
+    node.journal.clone().build_snapshot().await.unwrap();
+    node.shutdown().await.unwrap();
+    for reader in [
+        ReaderCapabilities::Base,
+        ReaderCapabilities::DirectScheduler,
+    ] {
+        assert!(
+            Journal::open_with_profile(
+                directory.file("journal"),
+                NODE,
+                Limits::default(),
+                profile(&registry, reader, 2)
+            )
+            .await
+            .is_err()
+        );
+    }
+    let node = Singleton::open_with_profile(
+        directory.file("journal"),
+        NODE,
+        Limits::default(),
+        profile(&registry, ReaderCapabilities::ReceiptRetirement, 2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(node.read().await.unwrap(), expected);
+    let mut wrong = pending.clone();
+    wrong.retain.clear();
+    assert!(matches!(
+        node.write(record(Event::AcknowledgeReceipts {
+            worker: WorkerId(1),
+            incarnation: IncarnationId(1),
+            certificate: wrong,
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Rejected(_)
+    ));
+    assert_eq!(node.read().await.unwrap(), expected);
+    assert_eq!(
+        node.write(record(Event::AcknowledgeReceipts {
+            worker: WorkerId(1),
+            incarnation: IncarnationId(1),
+            certificate: pending.clone(),
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Applied
+    );
+    let acknowledged = node.read().await.unwrap();
+    assert_eq!(acknowledged.view(), expected.view());
+    assert!(
+        acknowledged.receipt_retirement().unwrap().streams[&WorkerId(1)]
+            .pending
+            .is_none()
+    );
+    assert_eq!(
+        node.write(record(Event::IssueReceipts {
+            worker: WorkerId(1),
+            incarnation: IncarnationId(1),
+            after_ack: Some(pending.effect),
+        }))
+        .await
+        .unwrap()
+        .data,
+        Reply::Applied
+    );
+    let successor = node
+        .read()
+        .await
+        .unwrap()
+        .receipt_retirement()
+        .unwrap()
+        .streams[&WorkerId(1)]
+        .pending
+        .clone()
+        .unwrap();
+    assert!(successor.effect > pending.effects_through);
+    assert!(successor.retain.is_empty());
+    node.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn receipt_snapshot_feature_and_component_must_agree_before_installation() {
+    let directory = Directory::new();
+    let registry = AdmissionRegistry::new(DOMAIN);
+    let source = Singleton::open_with_profile(
+        directory.file("source"),
+        NODE,
+        Limits::default(),
+        profile(&registry, ReaderCapabilities::ReceiptRetirement, 1),
+    )
+    .await
+    .unwrap();
+    source
+        .journal
+        .activate_features(&source.raft, BTreeSet::from([RECEIPT_RETIREMENT]))
+        .await
+        .unwrap();
+    let snapshot = source.journal.clone().build_snapshot().await.unwrap();
+    for remove_component in [false, true] {
+        let mut envelope: serde_json::Value =
+            serde_json::from_slice(snapshot.snapshot.get_ref()).unwrap();
+        let mut payload: serde_json::Value =
+            serde_json::from_str(envelope["payload"].as_str().unwrap()).unwrap();
+        if remove_component {
+            payload["applied"]["scheduler"] = String::from_utf8(
+                State::new(DOMAIN.epoch, Limits::default())
+                    .unwrap()
+                    .snapshot()
+                    .unwrap(),
+            )
+            .unwrap()
+            .into();
+        } else {
+            payload["applied"]["format"] = serde_json::to_value(
+                nativelink_scheduler::authority::format::ActiveFormat::base(DOMAIN),
+            )
+            .unwrap();
+        }
+        let payload = serde_json::to_string(&payload).unwrap();
+        let mut hasher = DigestHasherFunc::Sha256.hasher();
+        hasher.update(payload.as_bytes());
+        envelope["length"] = payload.len().into();
+        envelope["checksum"] = hasher.finalize_digest().packed_hash().to_string().into();
+        envelope["payload"] = payload.into();
+        let forged =
+            Box::new(SnapshotBuffer::from_bytes(serde_json::to_vec(&envelope).unwrap()).unwrap());
+        let mut target = Journal::fresh_volatile_with_profile(
+            NODE + 1,
+            Limits::default(),
+            profile(
+                &AdmissionRegistry::new(DOMAIN),
+                ReaderCapabilities::ReceiptRetirement,
+                1,
+            ),
+        )
+        .await
+        .unwrap();
+        let before = target.read_applied().await.unwrap();
+        assert!(
+            target
+                .install_snapshot(&snapshot.meta, forged)
+                .await
+                .is_err()
+        );
+        assert_eq!(target.read_applied().await.unwrap(), before);
+        assert!(target.get_current_snapshot().await.unwrap().is_none());
+    }
+    source.shutdown().await.unwrap();
+}
+
+#[nativelink_test]
+async fn receipt_commands_require_activation_at_append_and_apply() {
+    for reader in [
+        ReaderCapabilities::Base,
+        ReaderCapabilities::DirectScheduler,
+        ReaderCapabilities::ReceiptRetirement,
+    ] {
+        let registry = AdmissionRegistry::new(DOMAIN);
+        let mut journal = Journal::fresh_volatile_with_profile(
+            NODE,
+            Limits::default(),
+            profile(&registry, reader, 1),
+        )
+        .await
+        .unwrap();
+        let old = journal.read_applied().await.unwrap();
+        let command = entry(
+            LogId::new(openraft::CommittedLeaderId::new(1, NODE), 0),
+            Batch::new([RecordedEvent {
+                epoch: DOMAIN.epoch,
+                event: Event::IssueReceipts {
+                    worker: WorkerId(1),
+                    incarnation: IncarnationId(1),
+                    after_ack: None,
+                },
+            }])
+            .unwrap(),
+        );
+        assert!(journal.blocking_append([command.clone()]).await.is_err());
+        assert!(journal.try_get_log_entries(0..=0).await.unwrap().is_empty());
+        assert!(journal.apply([command]).await.is_err());
+        assert_eq!(journal.read_applied().await.unwrap(), old);
+        assert!(!old.1.receipt_retirement_enabled());
+    }
+}
+
+#[nativelink_test]
+async fn actual_receipt_capability_is_required_despite_identical_wire_reader_levels() {
+    for voters in [BTreeSet::from([1, 2, 3]), BTreeSet::from([1, 2])] {
+        let mut cluster = FormatCluster::with_readers(
+            [
+                ReaderCapabilities::ReceiptRetirement,
+                ReaderCapabilities::ReceiptRetirement,
+                ReaderCapabilities::DirectScheduler,
+            ],
+            voters,
+        )
+        .await;
+        let registered = cluster.nodes[&1]
+            .raft
+            .client_write(
+                Batch::new([RecordedEvent {
+                    epoch: DOMAIN.epoch,
+                    event: Event::Register {
+                        worker: WorkerId(1),
+                        incarnation: IncarnationId(1),
+                        session: SessionId(1),
+                        properties: BTreeMap::new(),
+                        capacity: Resources::default(),
+                        available: Resources::default(),
+                    },
+                }])
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            cluster.nodes[&1]
+                .journal
+                .activate_features(
+                    &cluster.nodes[&1].raft,
+                    BTreeSet::from([RECEIPT_RETIREMENT])
+                )
+                .await
+                .unwrap_err()
+                .contains("required member cannot read")
+        );
+        cluster.nodes[&3]
+            .raft
+            .wait(Some(WAIT))
+            .applied_index_at_least(Some(registered.log_id.index), "worker replicated")
+            .await
+            .unwrap();
+        cluster.stop(3).await;
+        cluster
+            .start(3, ReaderCapabilities::ReceiptRetirement, 2)
+            .await;
+        cluster.isolate(3);
+        cluster.nodes[&1]
+            .journal
+            .activate_features(
+                &cluster.nodes[&1].raft,
+                BTreeSet::from([RECEIPT_RETIREMENT]),
+            )
+            .await
+            .unwrap();
+        let write = cluster.nodes[&1]
+            .raft
+            .client_write(
+                Batch::new([RecordedEvent {
+                    epoch: DOMAIN.epoch,
+                    event: Event::IssueReceipts {
+                        worker: WorkerId(1),
+                        incarnation: IncarnationId(1),
+                        after_ack: None,
+                    },
+                }])
+                .unwrap()
+                .at_feature_epoch(1),
+            )
+            .await
+            .unwrap();
+        assert_eq!(write.data.replies, vec![Reply::Applied]);
+        assert_eq!(
+            cluster.nodes[&3]
+                .journal
+                .active_format()
+                .await
+                .unwrap()
+                .feature_epoch,
+            0
+        );
+        assert!(
+            Journal::fresh_volatile_with_profile(
+                4,
+                Limits::default(),
+                profile(&cluster.registry, ReaderCapabilities::DirectScheduler, 1)
+            )
+            .await
+            .is_err()
+        );
+        cluster.links.lock().blocked.clear();
+        let expected = cluster.nodes[&1].journal.read_applied().await.unwrap().1;
+        assert!(expected.receipt_retirement_enabled());
+        for id in 1..=3 {
+            cluster.nodes[&id]
+                .raft
+                .wait(Some(WAIT))
+                .applied_index_at_least(Some(write.log_id.index), "receipt activation suffix")
+                .await
+                .unwrap();
+            assert_eq!(
+                cluster.nodes[&id].journal.read_applied().await.unwrap().1,
+                expected
+            );
+        }
+        cluster.shutdown().await;
+    }
+}
+
+#[test]
 fn future_feature_ids_remain_bounded_known_controls_without_becoming_active_sections() {
     let preparation = Preparation {
         domain: DOMAIN,
@@ -1328,7 +1841,7 @@ fn future_feature_ids_remain_bounded_known_controls_without_becoming_active_sect
             NODE,
             MemberEvidence {
                 incarnation: 1,
-                reader: ReaderCapabilities::DirectScheduler,
+                reader: ReaderCapabilities::DirectScheduler.encoding(),
             },
         )]),
     };
@@ -1351,7 +1864,7 @@ fn future_feature_ids_remain_bounded_known_controls_without_becoming_active_sect
                 id,
                 MemberEvidence {
                     incarnation: 1,
-                    reader: ReaderCapabilities::DirectScheduler,
+                    reader: ReaderCapabilities::DirectScheduler.encoding(),
                 },
             )
         })

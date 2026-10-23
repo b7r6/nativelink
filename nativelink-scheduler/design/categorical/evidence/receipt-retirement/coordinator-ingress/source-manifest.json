@@ -1,0 +1,12 @@
+[
+  {
+    "path": "nativelink-service/src/authority_server.rs",
+    "before_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+    "after_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d"
+  },
+  {
+    "path": "nativelink-scheduler/design/categorical/automatic-coordinator.md",
+    "before_sha256": "322e0c627dc5b0128531c2b20b4c8c3153d0bb32bca53d815a520cbbd8e7fa62",
+    "after_sha256": "ced1e5bf0dacef16a77a83a053db5e9a2ba3dc192982281134736d0e616a9ae4"
+  }
+]

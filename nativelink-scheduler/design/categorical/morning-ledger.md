@@ -171,7 +171,42 @@ retain these results and the exact source boundaries. The bridge is a bounded
 singleton test wrapper, and transport renewal does not prove that a remote
 application consumed a message.
 
-Remaining engineering includes finite recipient-ledger compaction,
+The next checkpoint adds [durable receipt retirement](receipt-authority.md) and
+its [automatic RPC delivery](receipt-retirement.md). The authority records one
+immutable pending certificate per worker incarnation, preserving every uncertain
+attempt and the existing finalization budget. Exact acknowledgment permits
+bounded recipient compaction without refunding authority resources. Independent
+comparison covers six real-State histories; its separate finite model explores
+739 states and 6520 transitions. Snapshot review preserves four malformed
+certificate cases and twelve coordinated zero-ID corruptions as regressions.
+
+Integrated Cargo checks pass 64 library, 15 format, seven reference, and six
+differential tests. Eighteen selected receipt and ingress mutations compile and
+fail their named assertions, with restored baselines passing. Actual RPC checks
+cross issuance, delivery, and acknowledgment restart cutpoints, then complete
+16 processes beside an old active attempt with a four-receipt limit. The longer
+48-completion run has separate source provenance. These are bounded fixtures,
+not workload capacity measurements.
+
+The first integrated Bazel run exposed a completed worker candidate waiting
+behind obsolete inventory snapshots while the coordinator continued committing.
+The service now coalesces complete snapshots before journal processing and avoids
+redundant accepted/progress/capacity commits. Standalone reports seal preceding
+snapshots and preserve ordering barriers. Causal tests cover a blocked consumer
+with 256 incoming inventories and updates arriving during a commit. The unchanged
+16-completion Bazel history now passes in 33.3 seconds; its earlier failed
+167-second run remains in the evidence. A separate format-suite timeout under
+heavy host load passes serially with its original timeout. [Checkpoint receipts](evidence/receipt-retirement/manifest.json)
+record these distinctions and source hashes.
+
+Three actual RPC [publication histories](publication-ordering.md) also pass:
+accepted A finishes after B and may overwrite the temporary sink, a revoked
+candidate creates no publication, and a direct client AC update races with an
+accepted worker effect. Original terminal Operations remain stable. The controlled
+sink models an external ambiguous request; this is not M6 ordered-head behavior
+or accepted-history relocation.
+
+Remaining engineering includes canonical integration of recipient compaction,
 replacement-incarnation fencing, deployed format admission, canonical
 construction and authenticated listeners, qualified physical stores and their
 replicated authority integration, sustained collection, migration/cutover, and
