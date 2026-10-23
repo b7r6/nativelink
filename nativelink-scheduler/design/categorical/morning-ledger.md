@@ -123,6 +123,12 @@ boundary qualification. [Recovery and physical receipts](evidence/physical-recov
 retain these focused checks; the earlier full workspace result remains scoped
 to its own checkpoint.
 
+The cluster suite now passes ten tests on Cargo and Bazel, including volatile
+recipient loss during snapshot transfer and leader loss after joint membership
+commits. Both compositions preserve pending authority; the old durable leader
+also converges after restart. [Composed recovery receipts](evidence/composed-recovery/manifest.json)
+record the exact fixture boundary and its initial cutpoint correction.
+
 Remaining engineering includes finite recipient-ledger
 compaction, replacement-incarnation fencing, feature activation and compatible
 writers, canonical ingress/listeners/effect drivers,

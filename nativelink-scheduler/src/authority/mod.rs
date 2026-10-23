@@ -1492,6 +1492,13 @@ impl State {
         OperationId(self.operation_watermark)
     }
 
+    /// Configured complete encoded-payload ceiling used by admission and
+    /// completion. Wire protobuf length alone does not establish this bound.
+    #[must_use]
+    pub const fn payload_limit_bytes(&self) -> usize {
+        self.limits.max_payload_bytes
+    }
+
     /// Recover the original dispatch identity even after its outbox was consumed.
     /// The association lasts until the entire execution can be safely retired.
     #[must_use]

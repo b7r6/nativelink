@@ -37,7 +37,7 @@ use openraft::raft::{
     AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
     VoteRequest, VoteResponse,
 };
-use openraft::storage::RaftLogStorage;
+use openraft::storage::{RaftLogStorage, RaftStateMachine};
 use openraft::{
     BasicNode, EntryPayload, Raft, RaftNetwork, RaftNetworkFactory, SnapshotMeta, SnapshotPolicy,
     StoredMembership, Vote,
@@ -74,6 +74,7 @@ struct Links {
     snapshot_chunks: usize,
     max_rpc_bytes: usize,
     hold_reply: Option<(u64, u64, RpcKind)>,
+    withhold_uniform_from: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -95,6 +96,7 @@ struct Fabric {
     snapshot_interrupted: Arc<Notify>,
     reply_held: Arc<Notify>,
     release_reply: Arc<Notify>,
+    uniform_withheld: Arc<Notify>,
 }
 
 impl Fabric {
@@ -197,6 +199,24 @@ impl RaftNetwork<TypeConfig> for Network {
     ) -> Result<AppendEntriesResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
         let peer = self.peer().map_err(unreachable)?;
         assert!(rpc.entries.len() <= MAX_APPEND_ENTRIES);
+        let withhold = self.fabric.links.lock().withhold_uniform_from == Some(self.from);
+        if withhold
+            && let Some(index) = rpc.entries.iter().position(|entry| {
+                matches!(&entry.payload, EntryPayload::Membership(membership)
+                    if membership.get_joint_config().len() == 1
+                        && membership.voter_ids().eq([1, 2, 4]))
+            })
+        {
+            // Deliver only the valid preceding prefix, including the commit
+            // marker for joint membership. The final uniform entry never
+            // reaches any recipient. This is an explicit sender cutpoint,
+            // not a claim that partial wire bytes form a valid RPC.
+            let mut prefix = rpc;
+            prefix.entries.truncate(index);
+            let _response = peer.append_entries(self.fabric.encode(&prefix)).await;
+            self.fabric.uniform_withheld.notify_one();
+            return Err(unreachable("uniform membership held before delivery"));
+        }
         self.fabric.links.lock().append_entries += rpc.entries.len();
         let response = peer.append_entries(self.fabric.encode(&rpc)).await;
         self.response_boundary(RpcKind::Append)
@@ -859,6 +879,106 @@ async fn interrupted_snapshot_cannot_publish_partial_state_and_new_learner_repla
 }
 
 #[nativelink_test]
+async fn leader_loss_after_joint_commit_preserves_effects_until_successor_finishes_membership() {
+    let mut cluster = Cluster::new().await;
+    let accepted = cluster.write(1, [submit(1), submit(2)]).await;
+    cluster.converge(1, accepted, &[1, 2, 3]).await;
+    let expected = cluster.read(1).await.snapshot().unwrap();
+    cluster.start(4).await;
+    cluster.nodes[&1]
+        .raft
+        .add_learner(4, BasicNode::default(), true)
+        .await
+        .unwrap();
+    cluster.fabric.links.lock().withhold_uniform_from = Some(1);
+    let leader = cluster.nodes[&1].raft.clone();
+    let changing = tokio::spawn(async move {
+        leader
+            .change_membership(BTreeSet::from([1, 2, 4]), false)
+            .await
+    });
+    tokio::time::timeout(WAIT, cluster.fabric.uniform_withheld.notified())
+        .await
+        .unwrap();
+    let (joint_position, joint) = cluster.nodes[&1]
+        .journal
+        .clone()
+        .applied_state()
+        .await
+        .unwrap();
+    assert_eq!(joint.membership().get_joint_config().len(), 2);
+    let joint_position = joint_position.unwrap();
+    for id in [2, 3, 4] {
+        cluster.nodes[&id]
+            .raft
+            .wait(Some(WAIT))
+            .applied_index_at_least(
+                Some(joint_position.index),
+                "joint membership committed at recipient",
+            )
+            .await
+            .unwrap();
+        let (_, membership) = cluster.nodes[&id]
+            .journal
+            .clone()
+            .applied_state()
+            .await
+            .unwrap();
+        assert_eq!(membership, joint);
+    }
+    cluster.stop(1).await;
+    assert!(
+        tokio::time::timeout(WAIT, changing)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
+    // Survivors 2,3,4 contain a majority of BOTH configurations. The fresh
+    // leader still has joint membership; the withheld final entry cannot be
+    // mistaken for a committed decision from the stopped leader.
+    cluster.elect(4).await;
+    assert_eq!(cluster.read(4).await.snapshot().unwrap(), expected);
+    let (_, membership) = cluster.nodes[&4]
+        .journal
+        .clone()
+        .applied_state()
+        .await
+        .unwrap();
+    assert_eq!(membership.membership().get_joint_config().len(), 2);
+    let finished = cluster.nodes[&4]
+        .raft
+        .change_membership(BTreeSet::from([1, 2, 4]), false)
+        .await
+        .unwrap();
+    cluster.converge(4, finished.log_id.index, &[2, 4]).await;
+    let (_, membership) = cluster.nodes[&4]
+        .journal
+        .clone()
+        .applied_state()
+        .await
+        .unwrap();
+    assert_eq!(
+        membership.membership().get_joint_config(),
+        &vec![BTreeSet::from([1, 2, 4])]
+    );
+    let next = cluster.write(4, [submit(3)]).await;
+    cluster.converge(4, next, &[2, 4]).await;
+    assert_eq!(cluster.read(4).await.view().effects.len(), 3);
+    cluster.fabric.links.lock().withhold_uniform_from = None;
+    cluster.start(1).await;
+    cluster.converge(4, next, &[1, 2, 4]).await;
+    let (_, recovered_membership) = cluster.nodes[&1]
+        .journal
+        .clone()
+        .applied_state()
+        .await
+        .unwrap();
+    assert_eq!(recovered_membership, membership);
+    cluster.shutdown().await;
+}
+
+#[nativelink_test]
 async fn all_durable_members_restart_without_reinitializing_their_authority() {
     let mut cluster = Cluster::new().await;
     let accepted = cluster.write(1, [submit(1), submit(2)]).await;
@@ -884,6 +1004,15 @@ async fn all_durable_members_restart_without_reinitializing_their_authority() {
 
 #[nativelink_test]
 async fn lost_volatile_voter_rejoins_as_fresh_learner_before_promotion() {
+    recover_lost_volatile_voter(false).await;
+}
+
+#[nativelink_test]
+async fn interrupted_volatile_snapshot_then_recipient_loss_requires_another_fresh_learner() {
+    recover_lost_volatile_voter(true).await;
+}
+
+async fn recover_lost_volatile_voter(lose_snapshot_recipient: bool) {
     let mut cluster = Cluster::with_backing(Backing::Volatile).await;
     let capacity = Resources {
         cpu_millis: 1000,
@@ -933,31 +1062,64 @@ async fn lost_volatile_voter_rejoins_as_fresh_learner_before_promotion() {
     cluster.assert_empty_learner(4).await;
     cluster.nodes[&4].raft.trigger().elect().await.unwrap();
     assert!(cluster.nodes[&4].raft.ensure_linearizable().await.is_err());
+    let replacement = if lose_snapshot_recipient {
+        cluster.fabric.links.lock().interrupt_snapshot = Some((1, 4));
+        cluster.nodes[&1]
+            .raft
+            .add_learner(4, BasicNode::default(), false)
+            .await
+            .unwrap();
+        tokio::time::timeout(WAIT, cluster.fabric.snapshot_interrupted.notified())
+            .await
+            .unwrap();
+        assert_eq!(cluster.fabric.links.lock().interrupted_snapshots, 1);
+        let (applied, state) = cluster.nodes[&4].journal.read_applied().await.unwrap();
+        assert!(applied.is_none());
+        assert!(state.view().operations.is_empty());
+        assert!(state.view().effects.is_empty());
+        assert!(state.view().reservations.is_empty());
+        // A received prefix can already have voting history. Losing even this
+        // learner's RAM requires another identity, never restart under ID 4.
+        cluster.stop(4).await;
+        assert!(cluster.try_start(4).await.is_err());
+        cluster.start(5).await;
+        cluster.assert_empty_learner(5).await;
+        cluster.fabric.heal();
+        5
+    } else {
+        4
+    };
     // The surviving quorum, not the empty member, admits a new learner. The
     // compacted dispatch and suffix lookup must both arrive before promotion.
     tokio::time::timeout(
         WAIT,
         cluster.nodes[&1]
             .raft
-            .add_learner(4, BasicNode::default(), true),
+            .add_learner(replacement, BasicNode::default(), true),
     )
     .await
     .unwrap()
     .unwrap();
-    cluster.converge(1, suffix, &[1, 2, 4]).await;
+    cluster.converge(1, suffix, &[1, 2, replacement]).await;
     {
-        let metrics = cluster.nodes[&4].raft.metrics();
+        let metrics = cluster.nodes[&replacement].raft.metrics();
         let metrics = metrics.borrow();
         assert!(
             !metrics
                 .membership_config
                 .membership()
                 .voter_ids()
-                .any(|id| id == 4)
+                .any(|id| id == replacement)
         );
     }
-    assert!(cluster.nodes[&4].raft.ensure_linearizable().await.is_err());
-    let restored = cluster.nodes[&4]
+    assert!(
+        cluster.nodes[&replacement]
+            .raft
+            .ensure_linearizable()
+            .await
+            .is_err()
+    );
+    let restored = cluster.nodes[&replacement]
         .journal
         .read_applied()
         .await
@@ -974,18 +1136,20 @@ async fn lost_volatile_voter_rejoins_as_fresh_learner_before_promotion() {
 
     let promotion = cluster.nodes[&1]
         .raft
-        .change_membership(BTreeSet::from([1, 2, 4]), false)
+        .change_membership(BTreeSet::from([1, 2, replacement]), false)
         .await
         .unwrap();
     cluster
-        .converge(1, promotion.log_id.index, &[1, 2, 4])
+        .converge(1, promotion.log_id.index, &[1, 2, replacement])
         .await;
     cluster.fabric.isolate(1);
-    cluster.elect(4).await;
-    let committed = cluster.write(4, [submit(4)]).await;
+    cluster.elect(replacement).await;
+    let committed = cluster.write(replacement, [submit(4)]).await;
     cluster.fabric.heal();
-    cluster.converge(4, committed, &[1, 2, 4]).await;
-    let state = cluster.read(4).await.view();
+    cluster
+        .converge(replacement, committed, &[1, 2, replacement])
+        .await;
+    let state = cluster.read(replacement).await.view();
     assert_eq!(state.operations.len(), 4);
     assert_eq!(state.effects.len(), 4);
     assert_eq!(state.reservations.len(), 1);

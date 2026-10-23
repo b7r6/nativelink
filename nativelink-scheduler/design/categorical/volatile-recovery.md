@@ -31,8 +31,8 @@ suite, shared-handle lifetime and complete loss, callback ordering and atomic
 outbox cutpoints, admission limits, and malformed membership/snapshot rejection.
 They use the same journal implementation as durable tests.
 
-The eight tests in `tests/authority_cluster_test.rs` include the existing durable
-histories and four new cases:
+The ten tests in `tests/authority_cluster_test.rs` include the existing durable
+histories and these additional cases:
 
 - A lost volatile voter returns under a fresh ID as an empty learner. It cannot
   serve a quorum read or acknowledge writes. A surviving quorum sends a compacted
@@ -54,7 +54,17 @@ histories and four new cases:
   controls preserve their original success or error. Error responses therefore
   cannot bypass the final identity check.
 
-The last case matters because OpenRaft's `cluster_name` is a tracing label.
+- A fresh volatile learner loses its received snapshot prefix and RAM. The
+  fixture refuses reuse of that learner ID and admits another fresh learner
+  through the surviving quorum. Complete snapshot plus suffix recovery retains
+  the pending dispatch and charge before promotion or an election.
+- A sender cutpoint withholds the final uniform membership entry after joint
+  membership commits. All recipients retain the joint configuration. After the
+  leader stops, survivors containing a majority of both configurations elect a
+  successor, finish membership, and preserve pending effects. Restarting the old
+  durable leader converges without treating its old proposal as committed.
+
+The domain cases matter because OpenRaft's `cluster_name` is a tracing label.
 Application events carry an epoch, but votes, membership entries, empty
 heartbeats, and snapshot transport also need an authenticated domain boundary.
 The fixture supplies trusted identity directly. It does not establish how a
@@ -78,9 +88,13 @@ workers or storage writes; external fencing or an isolated execution/storage
 domain remains necessary. Singleton volatile loss likewise cannot invent prior
 operations, publication acceptance, or ownership of old objects.
 
-Interrupted snapshot transfer combined with volatile recipient loss, and leader
-loss during joint membership promotion, remain untested compositions. Production
-membership allocation, durable bootstrap manifests, capability-aware
+[Composed recovery receipts](evidence/composed-recovery/manifest.json) retain the
+final ten-test Cargo and Bazel passes. The first joint-membership fixture used
+an overly broad sender cutpoint that also held an earlier membership catch-up;
+its failure is retained. The cutpoint now matches the intended final voter set.
+It delivers a valid preceding RPC prefix, not partially decoded wire bytes.
+
+Production membership allocation, durable bootstrap manifests, capability-aware
 peer admission, compatible persistent writers, and actual listener identity
 remain unimplemented. The explicit experimental format still rejects earlier
 prototype versions. This slice does not pass M3a/M3b as a whole or authorize a
