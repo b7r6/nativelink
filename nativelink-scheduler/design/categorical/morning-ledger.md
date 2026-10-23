@@ -322,10 +322,12 @@ and acknowledgement cannot alter the accepted terminal. An independent model
 and real-State adapter cover the contract, with eight compiled core faults
 caught. Feature-3 journal activation adds proposal ordering and staged preflight;
 independent review exposed two concurrency races that are now regression cases.
-Nine compiled format faults are detected. The frozen older-binary extension and
-RPC delivery integration remain separate qualification steps. Production
-factories and worker history configuration are unchanged, so this does not close
-M4a.2. [Design and receipts](accepted-history.md) record exact scope.
+Nine compiled format faults are detected. Integrated RPC delivery now checks both digest algorithms through a verifying
+CAS, exact retry after lost acknowledgement, failure, stale exclusion, and cache
+hits. Six compiled delivery faults are detected. Ordinary storage effects and
+history share four slots with rotating selection. The frozen older-binary
+extension remains a separate qualification step. Production factories and
+worker history configuration are unchanged, so this does not close M4a.2. [Design and receipts](accepted-history.md) record exact scope.
 
 ## Decisions made provisionally
 

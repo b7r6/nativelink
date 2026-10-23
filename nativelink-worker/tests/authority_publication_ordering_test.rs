@@ -316,6 +316,7 @@ impl Runtime {
                 instance: INSTANCE.into(),
                 principal: "trusted-synthetic-worker-fixture".into(),
                 cas: context.cas.clone(),
+                cas_namespace: [0; 32],
                 publication_sink: context.sink.clone(),
                 now: Arc::new(move || clock.load(Ordering::Relaxed)),
                 faults,
@@ -820,3 +821,6 @@ async fn direct_client_update_and_accepted_worker_write_share_mutable_ordering()
     drop(worker);
     runtime.shutdown().await;
 }
+
+#[path = "publication_history/cases.rs"]
+mod history;

@@ -43,6 +43,11 @@ use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::
 };
 use nativelink_proto::google::longrunning::{Operation, operation};
 use nativelink_scheduler::authority::journal::Singleton;
+use nativelink_scheduler::authority::accepted_history::{
+    AcceptedHistory, HistoryAlgorithm, HistoryAssociation, HistoryObject, HistoryOutcome, HistoryStatus,
+};
+use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, make_ctx_for_hash_func};
+use opentelemetry::context::FutureExt;
 use nativelink_scheduler::authority::request::RequestPayload;
 use nativelink_scheduler::authority::{
     ActionKey, AttemptId, Effect, EffectId, EffectKind, Event, ExecutionId, IncarnationId, ObservableState,
@@ -87,6 +92,7 @@ pub struct QualificationFaults {
     pub hold_completions: AtomicBool,
     pub hold_dispatches: AtomicBool,
     pub hold_publications: AtomicBool,
+    pub hold_history_publications: AtomicBool,
     pub candidate_reports: AtomicU64,
     pub hold_receipt_issues: AtomicBool,
     pub hold_receipt_delivery: AtomicBool,
@@ -99,6 +105,9 @@ pub struct QualificationConfig {
     pub instance: String,
     pub principal: String,
     pub cas: Store,
+    /// Explicit logical binding for accepted diagnostics in this CAS role.
+    /// This fixture fact does not certify provider placement or protection.
+    pub cas_namespace: [u8; 32],
     pub publication_sink: Store,
     /// Monotonic experimental ticks. This is not a calibrated deployment clock.
     pub now: Arc<dyn Fn() -> u64 + Send + Sync>,
@@ -110,6 +119,7 @@ pub struct AuthorityService {
     commands: mpsc::Sender<Input>,
     committed: watch::Receiver<Arc<ObservableState>>,
     receipts: watch::Receiver<Arc<Option<ReceiptRetirement>>>,
+    history: watch::Receiver<Arc<Option<AcceptedHistory>>>,
     instance: Arc<str>,
     principal: Arc<str>,
     cas: Store,
@@ -217,12 +227,15 @@ struct Driver {
     effects: JoinSet<(EffectId, Result<Event, String>)>,
     in_flight: BTreeSet<EffectId>,
     retry_at: BTreeMap<EffectId, Instant>,
+    storage_cursor: EffectId,
     restore_deadlines: bool,
     receipts_enabled: bool,
     receipts: Arc<Option<ReceiptRetirement>>,
     committed_receipts: watch::Sender<Arc<Option<ReceiptRetirement>>>,
     receipt_issue_due: bool,
     receipt_sent: BTreeMap<EffectId, (u64, Instant)>,
+    history: Arc<Option<AcceptedHistory>>,
+    committed_history: watch::Sender<Arc<Option<AcceptedHistory>>>,
 }
 
 impl AuthorityService {
@@ -243,6 +256,17 @@ impl AuthorityService {
                 "Experimental RPC requires at least 64 KiB committed payload capacity".to_owned(),
             );
         }
+        if initial
+            .accepted_history_namespace()
+            .is_some_and(|namespace| namespace != config.cas_namespace)
+        {
+            authority.shutdown().await?;
+            return Err(
+                "Accepted-history CAS namespace does not match committed authority".to_owned(),
+            );
+        }
+        let history = Arc::new(initial.accepted_history().cloned());
+        let (committed_history, history_receiver) = watch::channel(history.clone());
         let watermark = initial.ingress_watermark();
         let receipts_enabled = initial.receipt_retirement_enabled();
         let receipts = Arc::new(initial.receipt_retirement().cloned());
@@ -255,6 +279,7 @@ impl AuthorityService {
             commands,
             committed: receiver,
             receipts: receipt_receiver,
+            history: history_receiver,
             instance: Arc::from(config.instance.as_str()),
             principal: Arc::from(config.principal.as_str()),
             cas: config.cas.clone(),
@@ -271,12 +296,15 @@ impl AuthorityService {
             effects: JoinSet::new(),
             in_flight: BTreeSet::new(),
             retry_at: BTreeMap::new(),
+            storage_cursor: EffectId(0),
             restore_deadlines: true,
             receipts_enabled,
             receipts,
             committed_receipts,
             receipt_issue_due: true,
             receipt_sent: BTreeMap::new(),
+            history,
+            committed_history,
         };
         let task = background_spawn!(
             "experimental_authority_coordinator",
@@ -292,6 +320,11 @@ impl AuthorityService {
     /// Committed qualification metadata, independent of the observable model.
     pub fn subscribe_receipts(&self) -> watch::Receiver<Arc<Option<ReceiptRetirement>>> {
         self.receipts.clone()
+    }
+
+    /// Committed materialization metadata; terminal responses never gain links.
+    pub fn subscribe_history(&self) -> watch::Receiver<Arc<Option<AcceptedHistory>>> {
+        self.history.clone()
     }
 
     fn name(&self, operation: OperationId) -> String {
@@ -571,6 +604,11 @@ impl AuthorityWorkerApi for AuthorityService {
 
 impl Driver {
     async fn commit(&mut self, event: Event) -> Result<Reply, String> {
+        let history_effect = if let Event::HistoryPublication { effect, .. } = &event {
+            Some(*effect)
+        } else {
+            None
+        };
         let reply = self
             .authority
             .write(RecordedEvent {
@@ -580,6 +618,16 @@ impl Driver {
             .await?
             .data;
         let state = self.authority.read().await?;
+        if state
+            .accepted_history_namespace()
+            .is_some_and(|namespace| namespace != self.config.cas_namespace)
+        {
+            return Err(
+                "Accepted-history CAS namespace does not match committed authority".to_owned(),
+            );
+        }
+        self.history = Arc::new(state.accepted_history().cloned());
+        self.committed_history.send_replace(self.history.clone());
         self.watermark = state.ingress_watermark();
         self.receipts_enabled = state.receipt_retirement_enabled();
         self.receipts = Arc::new(state.receipt_retirement().cloned());
@@ -587,6 +635,22 @@ impl Driver {
         self.receipt_issue_due = true;
         self.state = Arc::new(state.view());
         self.committed.send_replace(self.state.clone());
+        if let Some(effect) = history_effect {
+            let association = self.history.as_ref().as_ref().and_then(|history| {
+                history
+                    .associations
+                    .values()
+                    .find(|row| row.effect == effect)
+            });
+            let operation_ids =
+                association.map(|row| history_operation_ids(&self.state, row.execution));
+            tracing::info!(
+                effect_id = effect.0,
+                ?operation_ids,
+                ?reply,
+                "Accepted history materialization outcome committed"
+            );
+        }
         Ok(reply)
     }
 
@@ -1234,7 +1298,23 @@ impl Driver {
     }
 
     fn pump_effects(&mut self) -> Result<(), String> {
-        let live: BTreeSet<_> = self.state.effects.iter().map(|effect| effect.id).collect();
+        let mut storage = BTreeMap::new();
+        if let Some(history) = self.history.as_ref() {
+            for association in history
+                .associations
+                .values()
+                .filter(|h| h.status == HistoryStatus::Pending)
+            {
+                storage.insert(association.effect, PendingStorage::History(association));
+            }
+        }
+        let live: BTreeSet<_> = self
+            .state
+            .effects
+            .iter()
+            .map(|effect| effect.id)
+            .chain(storage.keys().copied())
+            .collect();
         self.sent.retain(|effect, _| live.contains(effect));
         self.retry_at.retain(|effect, _| live.contains(effect));
         for effect in &self.state.effects {
@@ -1280,35 +1360,160 @@ impl Driver {
                     }
                 }
                 EffectKind::Lookup { .. } | EffectKind::PublishResult { .. } => {
-                    if self.in_flight.contains(&effect.id)
-                        || self.in_flight.len() >= 4
-                        || self
-                            .retry_at
-                            .get(&effect.id)
-                            .is_some_and(|at| *at > Instant::now())
-                        || (matches!(effect.kind, EffectKind::PublishResult { .. })
-                            && self.config.faults.hold_publications.load(Ordering::Relaxed))
-                    {
-                        continue;
-                    }
-                    self.in_flight.insert(effect.id);
-                    let effect = effect.clone();
-                    let sink = self.config.publication_sink.clone();
-                    self.effects.spawn(async move {
-                        let outcome = tokio::time::timeout(
-                            Duration::from_secs(5),
-                            storage_effect(&sink, &effect),
-                        )
-                        .await
-                        .map_err(|_| "Experimental sink timeout".to_owned())
-                        .and_then(|result| result);
-                        (effect.id, outcome)
-                    });
+                    storage.insert(effect.id, PendingStorage::Ordinary(effect));
                 }
             }
         }
+        // The two outboxes share globally allocated identities, retry timing,
+        // and one four-request bound. Rotate across their combined identities
+        // so expired retry timers cannot let old failures monopolize every slot.
+        let mut storage: Vec<_> = storage.into_iter().collect();
+        let split = storage.partition_point(|(id, _)| *id <= self.storage_cursor);
+        storage.rotate_left(split);
+        for (id, pending) in storage {
+            if self.in_flight.contains(&id)
+                || self.in_flight.len() >= 4
+                || self
+                    .retry_at
+                    .get(&id)
+                    .is_some_and(|at| *at > Instant::now())
+            {
+                continue;
+            }
+            let (sink, work) = match pending {
+                PendingStorage::Ordinary(effect) => {
+                    if matches!(effect.kind, EffectKind::PublishResult { .. })
+                        && self.config.faults.hold_publications.load(Ordering::Relaxed)
+                    {
+                        continue;
+                    }
+                    (
+                        self.config.publication_sink.clone(),
+                        StorageWork::Ordinary(effect.clone()),
+                    )
+                }
+                PendingStorage::History(association) => {
+                    if self
+                        .config
+                        .faults
+                        .hold_history_publications
+                        .load(Ordering::Relaxed)
+                    {
+                        continue;
+                    }
+                    let bytes = history_bytes(&self.state, association, self.config.cas_namespace)?;
+                    let operation_ids = history_operation_ids(&self.state, association.execution);
+                    tracing::info!(effect_id = id.0, execution_id = association.execution.0,
+                        ?operation_ids, object = ?association.recipe.object,
+                        "Accepted history delivery started");
+                    (
+                        self.config.cas.clone(),
+                        StorageWork::History(association.recipe.object, bytes),
+                    )
+                }
+            };
+            self.in_flight.insert(id);
+            self.storage_cursor = id;
+            self.effects.spawn(async move {
+                let outcome = tokio::time::timeout(Duration::from_secs(5), async {
+                    match work {
+                        StorageWork::Ordinary(effect) => storage_effect(&sink, &effect).await,
+                        StorageWork::History(object, bytes) => {
+                            let algorithm = match object.algorithm {
+                                HistoryAlgorithm::Sha256 => DigestHasherFunc::Sha256,
+                                HistoryAlgorithm::Blake3 => DigestHasherFunc::Blake3,
+                            };
+                            sink.update_oneshot(
+                                DigestInfo::new(object.hash, object.size_bytes),
+                                bytes,
+                            )
+                            .with_context(
+                                make_ctx_for_hash_func(algorithm)
+                                    .map_err(|error| error.to_string())?,
+                            )
+                            .await
+                            .map_err(|error| error.to_string())?;
+                            Ok(Event::HistoryPublication {
+                                effect: id,
+                                object,
+                                outcome: HistoryOutcome::Stored,
+                            })
+                        }
+                    }
+                })
+                .await
+                .map_err(|_| "Experimental sink timeout".to_owned())
+                .and_then(|result| result);
+                (id, outcome)
+            });
+        }
         Ok(())
     }
+}
+
+enum PendingStorage<'a> {
+    Ordinary(&'a Effect),
+    History(&'a HistoryAssociation),
+}
+
+enum StorageWork {
+    Ordinary(Effect),
+    History(HistoryObject, Bytes),
+}
+
+fn history_operation_ids(state: &ObservableState, execution: ExecutionId) -> Vec<u64> {
+    state
+        .operations
+        .iter()
+        .filter_map(|operation| {
+            (operation.execution == execution
+                && matches!(
+                    operation.terminal,
+                    Some(TerminalResult::Completed(_) | TerminalResult::ResourceFailed { .. })
+                ))
+            .then_some(operation.id.0)
+        })
+        .collect()
+}
+
+fn history_bytes(
+    state: &ObservableState,
+    association: &HistoryAssociation,
+    namespace: [u8; 32],
+) -> Result<Bytes, String> {
+    let object = association.recipe.object;
+    if object.namespace != namespace || association.epoch != state.epoch {
+        return Err("History delivery does not match authority namespace".to_owned());
+    }
+    let execution = state
+        .executions
+        .iter()
+        .find(|execution| execution.id == association.execution)
+        .ok_or("History execution missing")?;
+    let Some(TerminalResult::Completed(result) | TerminalResult::ResourceFailed { result, .. }) =
+        &execution.terminal
+    else {
+        return Err("History requires an accepted worker terminal".to_owned());
+    };
+    let response = result.require_response()?.encoded();
+    let mut fingerprint = DigestHasherFunc::Sha256.hasher();
+    fingerprint.update(response);
+    if **fingerprint.finalize_digest().packed_hash() != association.recipe.response_sha256 {
+        return Err("History response fingerprint changed".to_owned());
+    }
+    let mut bytes = association.recipe.prefix.clone();
+    bytes.extend_from_slice(response);
+    let mut hasher = match object.algorithm {
+        HistoryAlgorithm::Sha256 => DigestHasherFunc::Sha256.hasher(),
+        HistoryAlgorithm::Blake3 => DigestHasherFunc::Blake3.hasher(),
+    };
+    hasher.update(&bytes);
+    if **hasher.finalize_digest().packed_hash() != object.hash
+        || bytes.len() as u64 != object.size_bytes
+    {
+        return Err("History object bytes changed".to_owned());
+    }
+    Ok(bytes.into())
 }
 
 fn receipt_certificate(value: AuthorityReceiptCertificate) -> ReceiptCertificate {
@@ -1911,3 +2116,7 @@ mod tests {
         assert!(completion_payload(&ExecuteResponse::default()).is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "history_delivery_tests.rs"]
+mod history_delivery_tests;

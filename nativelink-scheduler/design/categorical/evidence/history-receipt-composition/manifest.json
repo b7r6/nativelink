@@ -1,0 +1,104 @@
+{
+  "scope": "Receipt retirement faults requalified after accepted-history core composition; does not qualify a deployment or physical retention.",
+  "reported_base_commit": "ec22f03826b67ebd6a39a3d8001a315241b39288",
+  "source_note": "Snapshot captured during b79dfeae062319dcd54e74c958441e8bebe64bc1 commit preflight; source hashes identify the composed core, not the older reported HEAD.",
+  "baseline_and_restored_tests": 14,
+  "compiled_semantic_faults_detected": 8,
+  "receipts": [
+    {
+      "file": "ack_erases_later_releases-compile.log.gz",
+      "source_sha256": "4827f9baab46bdc472e1915f84cc7ec66877ace3b913a7af419f94bb4c688a13",
+      "archive_sha256": "e81b3a3b8bd8f06db890e1b3f203441c19083339e9a18d27eae18b128e2c2970"
+    },
+    {
+      "file": "ack_erases_later_releases-test.log.gz",
+      "source_sha256": "ce6cf87590bfe07a071c91de0b3212d1a8da55e7805976e874917932d8339b4b",
+      "archive_sha256": "8cab186eccb920455239e218a24d1baa5e28501e58c04e001d5ca3db722a6733"
+    },
+    {
+      "file": "acknowledge_changed_body-compile.log.gz",
+      "source_sha256": "533e0df67ffd13d89740ad111697c4d390c2adf6e60cfb5397d32dc7e6f8da4a",
+      "archive_sha256": "89eed7e66a362993e86ba4d890f36c01a8af827c364f25e5a928e53d8c888fd2"
+    },
+    {
+      "file": "acknowledge_changed_body-test.log.gz",
+      "source_sha256": "89c423c922b325946aca5c64c9ff5be3030ebba6f1696fdb17b47fab48cef3fe",
+      "archive_sha256": "7c72d94237967079db14a74a15c4a1b7a10ed166b0eb3f7c176aa3d245f140a1"
+    },
+    {
+      "file": "baseline.log.gz",
+      "source_sha256": "1f6809e93d67ff076db0e3d0f19ac3a32c44e1d6ba12f5739b1be20ba9f3e017",
+      "archive_sha256": "fa7d068e9b2767e8aabb1712ec9f5310adb6623475af9177e5deea269e6fd9b7"
+    },
+    {
+      "file": "forget_pending_attempt_pins-compile.log.gz",
+      "source_sha256": "5f3347f19a1662f2a3f6d229b1a42a41a4713f52221f1272c113502c37ebb3b1",
+      "archive_sha256": "65cdba8ff0dfe1b35909f081974b163fe7cc1cd4c2d4c53e303e631ff521c0b9"
+    },
+    {
+      "file": "forget_pending_attempt_pins-test.log.gz",
+      "source_sha256": "9c4dfa30c7b5cdb27174fab8fbb08d53000f5354505f5310748426664b6cf62d",
+      "archive_sha256": "a7fc977ff2e093dea2be8e6a98f800051a8d844d930ee8977097b58b75c52d24"
+    },
+    {
+      "file": "omit_uncertain_exceptions-compile.log.gz",
+      "source_sha256": "2a7703bf4ab4fdf3e911a4760dbefa807a10581f726d3f357d52e152089868fe",
+      "archive_sha256": "cdf01f9ff2d7b71aef10c41a5073382d29850070ff4362e61a42841ec06d204d"
+    },
+    {
+      "file": "omit_uncertain_exceptions-test.log.gz",
+      "source_sha256": "1aefcb99b2033081b20d7f8588ca9cebac7f015b53508755f548ccf98be6b2d5",
+      "archive_sha256": "52a50d91631c16f0de10fa906e2b1c9aaba82299f0bc9ca646b8f5b2ea3c7b5e"
+    },
+    {
+      "file": "receipt_ack_refunds_resources-compile.log.gz",
+      "source_sha256": "035dbf545f9f8b8cd9fad81f12564ccd2a0c7a90f75596c9e26bed2bc70d7c24",
+      "archive_sha256": "3543796c179d58421c9dc36f011b21d9ff404fa47bc4f75f2fc5fd54d77a90d5"
+    },
+    {
+      "file": "receipt_ack_refunds_resources-test.log.gz",
+      "source_sha256": "07cff4f6fb42c4411b8ee4b27120e485289e68b7417deeb3a163633004ea97b5",
+      "archive_sha256": "00162d4b74bcff89facc9509964869be1790e900a51526ed2fce392adb0890d7"
+    },
+    {
+      "file": "release_does_not_schedule_retirement-compile.log.gz",
+      "source_sha256": "2654affb93e5dfd50e2639d9c67becb76e56eb657c953997b174b5e96bd84f84",
+      "archive_sha256": "2199be3483352e58d0cc967d31da86274e4eb09b13b388012cdb03b2fecef206"
+    },
+    {
+      "file": "release_does_not_schedule_retirement-test.log.gz",
+      "source_sha256": "4189f4ba31c8cc399e5ac7aec7cf37f1ad28dbebcbdb6ab96202eab619992ea4",
+      "archive_sha256": "cbb96e531af80a7ce7cd627cd4fb45a8a2d55230f8e44662f94df2e0a5d97817"
+    },
+    {
+      "file": "replacement_keeps_old_intent-compile.log.gz",
+      "source_sha256": "86c1f9f43046afad5f85309a1c4daa6e817b44cc871d9968a5b694dc337aa576",
+      "archive_sha256": "9ffeba3838c9999d80c57d69a6db7f1335d0bd04c059ca4dc2089d43d954e2a2"
+    },
+    {
+      "file": "replacement_keeps_old_intent-test.log.gz",
+      "source_sha256": "f3faa7fa43ee4bfecb7ed9e4b2dbb8c5a84f33eee128b350c40c0db8762665dc",
+      "archive_sha256": "bc65f44fc99334d88710d615c165896d4eee8b65664c2b8ac564b786433ab884"
+    },
+    {
+      "file": "report.json.gz",
+      "source_sha256": "b902b8c5dd13b4380702b4f6a224f9d7144f3a77d6ec9384e7b5c4d6b006e7c2",
+      "archive_sha256": "6dd0f8c7ea0a692a2c29bdf4d30dd945fb072864bc5655f8d3be730ce1e6746d"
+    },
+    {
+      "file": "restored.log.gz",
+      "source_sha256": "1a5a176cd66a7a68bfa4acf09934e903bb81204c32b139a81fe13c6e152f75c4",
+      "archive_sha256": "540b0396b81d55849162924ef5e3f6c51c595c4209e6167230f6048a930cbaf0"
+    },
+    {
+      "file": "spend_promised_finalization_id-compile.log.gz",
+      "source_sha256": "68833df52ad3e2d2b7c9cac8578635e2dec250676e551910da01f650a46e60c2",
+      "archive_sha256": "034f8c4463d9f6600c4c945cbd82b1dc041e02626503381eee6f6d15fc5820c6"
+    },
+    {
+      "file": "spend_promised_finalization_id-test.log.gz",
+      "source_sha256": "d0866bd199de4f7af49bf34e0976d447d8852eeca21e1e3edb5178b2fcad29bb",
+      "archive_sha256": "fc87d6a649681542bc29faf9742c72be9df0c159517cd192faefdba209d59abf"
+    }
+  ]
+}

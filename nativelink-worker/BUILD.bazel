@@ -186,6 +186,7 @@ rust_test(
     name = "authority_publication_ordering_test",
     timeout = "short",
     srcs = ["tests/authority_publication_ordering_test.rs"],
+    compile_data = ["tests/publication_history/cases.rs"],
     proc_macro_deps = [
         "//nativelink-macro",
         "@crates//:async-trait",

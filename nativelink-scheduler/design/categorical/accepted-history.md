@@ -1,6 +1,6 @@
 # Accepted diagnostic history
 
-This is an experimental authority component. Delivery is qualified separately.
+This is an experimental authority component and test-constructed delivery path.
 Production factories retain the legacy runtime. This document does not close
 M4a.2, the four-part M4a deployment gate, or the M5 protection contract.
 
@@ -64,9 +64,9 @@ provider identity, immutable placement, or protection against collection.
 
 Base and receipt-only snapshots retain their existing bytes until activation.
 The active core uses snapshot version 7. Existing terminals are recorded as
-terminals from before activation and receive no backfill. Existing unfinished actions
-must be representable and able to fund their additional metadata and identity
-credit before activation can succeed.
+terminals from before activation and receive no backfill. Existing unfinished
+actions must be representable and able to fund their additional metadata and
+identity credit before activation can succeed.
 
 Normal proposals pause while a preparation adding history is unresolved. The
 short enqueue gate orders proposal stamping and actual Raft enqueue; it is not
@@ -81,7 +81,22 @@ owner. Starting another service is not permission to abort a live activation
 helper. The registry and local proposal gate are trusted in-process experiment
 mechanisms; they are not distributed membership authentication.
 
-## Independent qualification
+## Delivery qualification
+
+The experimental coordinator reads history metadata and terminal payloads from
+the same committed state. It checks the explicit CAS namespace, response
+fingerprint, and complete object bytes before delivery. The CAS write carries
+the recorded digest algorithm in its context so verification stores use the
+correct algorithm. Successful materialization is then acknowledged through the
+authority with the original effect and exact object identity.
+
+Ordinary AC/lookup work and diagnostic work share four delivery futures and
+bounded retry bookkeeping. A rotating cursor across their combined identities
+prevents repeated old failures from monopolizing delivery when journal work
+outlasts the retry delay. A restart reconstructs pending work from the authority;
+an externally successful write whose acknowledgement was lost remains pending
+until an exact retry succeeds. This is logical CAS delivery, without M5 physical
+generation or serving-protection claims.
 
 The independent reference was frozen before its author inspected any history
 transition implementation. Its real-State adapter caught a canonical lowercase
@@ -90,6 +105,11 @@ corrected from the already frozen request contract; the reference itself did
 not change. Compiler diagnostic exposure, failed runs, source hashes, and exact
 qualification limits are preserved with the evidence.
 
-Core and journal receipts live in [core evidence](evidence/accepted-history-core/manifest.json),
-[format evidence](evidence/accepted-history-format/manifest.json), and
-[adapter evidence](evidence/accepted-history-differential/manifest.json).
+Receipts: [core](evidence/accepted-history-core/manifest.json),
+[format](evidence/accepted-history-format/manifest.json),
+[independent adapter](evidence/accepted-history-differential/manifest.json),
+and [delivery](evidence/accepted-history-delivery/manifest.json).
+
+The eight receipt-retirement faults also remain detected on the composed source;
+[composition receipts](evidence/history-receipt-composition/manifest.json) preserve
+the restored fourteen-test baseline and exact source snapshot.
