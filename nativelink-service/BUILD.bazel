@@ -13,6 +13,7 @@ rust_library(
         "src/ac_server.rs",
         "src/authority_deadline_tests.rs",
         "src/authority_listener.rs",
+        "src/authority_running_clock_tests.rs",
         "src/authority_server.rs",
         "src/authority_server/operations.rs",
         "src/bep_server.rs",

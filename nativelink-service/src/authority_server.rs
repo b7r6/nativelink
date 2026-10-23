@@ -1049,7 +1049,7 @@ impl Driver {
         if session.worker != Some(identity) || identity.cluster_epoch != self.state.epoch.0 {
             return Ok(());
         }
-        let Some(attempt) = self
+        let Some(mut attempt) = self
             .state
             .attempts
             .iter()
@@ -1097,6 +1097,31 @@ impl Driver {
                 .await?;
             }
             return Ok(());
+        }
+        if report_phase == AuthorityAttemptPhase::Running
+            && attempt.running_deadline.is_none()
+            && matches!(
+                attempt.phase,
+                Phase::Dispatching | Phase::Accepted | Phase::Preparing
+            )
+            && attempt.deadline.generation.checked_add(1).is_some()
+        {
+            // The first Running anchor must follow receipt of this valid report,
+            // even when the periodic timer has been delayed. Already-due expiry
+            // wins over the grant; reload authorization after the sweep.
+            self.time().await?;
+            let Some(current) = self
+                .state
+                .attempts
+                .iter()
+                .find(|value| value.id == attempt.id)
+            else {
+                return Ok(());
+            };
+            if !current.authorized {
+                return Ok(());
+            }
+            attempt = *current;
         }
         if attempt.phase == Phase::Dispatching {
             self.commit(Event::WorkerAccepted {
@@ -2143,3 +2168,7 @@ mod history_delivery_tests;
 #[cfg(test)]
 #[path = "authority_deadline_tests.rs"]
 mod deadline_tests;
+
+#[cfg(test)]
+#[path = "authority_running_clock_tests.rs"]
+mod running_clock_tests;

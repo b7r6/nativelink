@@ -4,8 +4,10 @@ This is a design proposal, not an implemented clock contract. The current
 qualification interface accepts arbitrary experimental ticks. The
 [deadline-driver repair](authority-deadline-driver.md) orders the recovery sweep
 and fixes upload expiry; its comparisons remain `deadline <= now`. No timeout
-projection, reducer event, snapshot, or runtime clock changes accompany this
-proposal.
+projection, reducer event or snapshot changes accompany this proposal. The
+separate [first Running sampling repair](authority-running-clock-sampling.md)
+orders observations from the existing injected clock; a fixed canonical clock
+source remains unimplemented.
 
 ## One clock and an explicit recovery policy
 
@@ -75,20 +77,20 @@ It does not prove the instant of the program's first instruction or measure CPU
 time. A promise measured from the later journal commit would be a different,
 stronger contract and is not established by the proof below.
 
-The current driver does not take that fresh sample. It normally advances time
-on its timer, and separately before interest renewal. Ordinary worker progress
-can therefore use `State.now` from arbitrarily earlier, after delayed timer
-selection or journal I/O. A one-tick allowance cannot repair an arbitrarily
-stale starting sample. For example, committing Running with stored time 0 after
-the process actually starts near time 10, then observing 11, expires a derived
-one-tick timeout immediately even with a strict `now > deadline` comparison.
+The [first Running sampling repair](authority-running-clock-sampling.md) now
+takes a fresh injected-clock sample before the first eligible Running grant and
+finishes already-due expiry proposals first. Previously this input could use
+`State.now` from arbitrarily earlier, after delayed timer selection or journal
+I/O. A one-tick allowance cannot repair that stale starting sample. The preserved
+regression reports Running at injected tick 10 while committed time is 0, then
+observes expiry at 11 against the old derived deadline 5. The repair removes this
+stale-anchor case without selecting units or changing quantization policy.
 
-A canonical duration guarantee therefore first requires a fresh monotonic
-observation, committed before the first Running grant is timestamped. The sample
-must follow receipt of the report. Refreshing before processing that input is
-one possible ordering; it also makes due expiries precede that input, which must
-be reviewed as protocol behavior. Sampling before waiting for an input is not
-sufficient. The first Running deadline remains fixed through later progress and
+A canonical duration guarantee requires a fresh monotonic observation committed
+before the first Running grant is timestamped. The experimental repair supplies
+the ordering for its injected clock; the fixed monotonic source and recovery
+binding remain pending. Sampling before waiting for an input is not sufficient.
+The first Running deadline remains fixed through later progress and
 reconciliation; reconnect cannot refresh the original execution duration.
 
 ## Quantization and the two implementation choices
@@ -174,5 +176,6 @@ enough.
 - Exercise checked exhaustion, incompatible bootstrap time-unit bindings, and
   due expiry with unresolved cancellation. Time alone must never release charge.
 
-These are pending qualification requirements. The existing deadline regression
-receipts establish neither this clock nor these duration guarantees.
+These are requirements for the full clock contract. The existing deadline and
+first Running sampling receipts cover bounded subsets; they establish neither
+the canonical clock nor these duration guarantees.
