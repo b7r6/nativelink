@@ -43,3 +43,6 @@ refusal without an acknowledgment, and cancellation while initial observation
 is held. They compare the complete scheduler snapshot and reopen the journal
 after shutdown. The cancellation witness establishes redb custody; descriptor
 role-lock lifetime is qualified separately by the filesystem and journal bridge.
+The [qualification receipt](evidence/fallible-authority-clock/manifest.json)
+records the exact sources, restored integration, independent review and four
+compiled negative controls.

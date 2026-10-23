@@ -7,6 +7,11 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
+Latest focused checkpoints add the capability-backed CAS/sink, checked clock
+failure path and local authority memory-breach receipts. Their receipts below
+separate standalone, syscall and integrated tests. Production construction,
+wire classification and the complete canonical clock contract remain open.
+
 Latest full integration at `4876ddd48c`: Cargo passed 2,007 tests with zero failures
 and eleven ignored cases; all 166 Bazel targets passed, including the two manual
 canonical-config targets. Of those targets, 134 executed and 32 were cached.
@@ -756,6 +761,59 @@ cases; the explicit redb target passed 35 and the default filesystem target 25.
 The receipt preserves two initial test-build failures and the correction that
 enabled redb on the Bazel test itself. No production constructor changed.
 
+## Storage, clock and memory reporting prerequisites
+
+The [canonical store bridge](../../../../tools/canonical-store/README.md) now
+implements the real store interface through descriptor capabilities. CAS verifies
+the complete digest and size; the temporary AC sink preserves opaque values.
+File sync, publication and all directory syncs precede success. Completed-upload
+queries and duplicates verify and sync existing content before acknowledging it.
+Root Bazel passed 17 store, 25 default filesystem and 35 redb filesystem cases.
+The final standalone binary passed fifteen actual syscall scenarios: three
+baselines and twelve injected file/directory sync failures. An independent held-read
+case checks four-operation admission and every role lock across cancellation;
+its compiled permit-release fault was detected on the preserved earlier source.
+[Receipts](evidence/canonical-store/manifest.json) distinguish that prefix from
+the final repository-lint repair and its repeated syscall qualification.
+Abandoned and duplicate temporary files still accumulate: lifetime disk bounds,
+cleanup, GC, worker materialization and production wiring remain absent.
+
+The [checked clock prerequisite](authority-fallible-clock.md) adds a fallible
+monotonic-seconds source and propagates observation failures through coordinator
+shutdown. Construction awaits its first observation and recovery sweep. Once
+polled, startup retains authority independently of caller cancellation until it
+can finish or shut down. Real-journal cases preserve the full scheduler snapshot
+and charges across errors; cancellation retains redb custody until shutdown.
+The restored integration built the server and passed 51 cases across seven
+targets, with one existing ignored listener case. Strict Cargo Clippy passed;
+four compiled faults were detected. [Exact receipts](evidence/fallible-authority-clock/manifest.json)
+retain source boundaries, initial lint failures and the separate bootstrap audit.
+Inclusive expiry comparisons, deadline headroom and persistent time/proposal
+binding remain open. A checked clock alone cannot reinterpret an old journal.
+
+The [local memory-breach receipt](authority-memory-breach.md) requires the exact
+typed grant, a sampled ceiling breach, a live-child probe, the first selected stop
+decision and a completed kill procedure. It survives upload failure independently
+of a finished result. Actual namespace tests exercise R and 2R under both digest
+algorithms while preserving stdout, stderr and output bytes. A supervised SIGKILL
+near the ceiling triggers heuristic telemetry with no receipt; the original
+PID-1 self-signal fixture failed and was corrected before qualification. All 175
+worker cases passed in Cargo and again in root Bazel, alongside twelve base RPC
+cases and a server build. Five compiled faults were detected, including fabricated
+heuristic evidence and receipt loss on upload failure.
+[Receipts](evidence/authority-memory-breach/manifest.json) preserve the tests and
+independent reviews. Wire versioning and coordinator MemoryFailure classification
+are the next step; receipt presence alone proves neither closure nor acceptance.
+
+The constructor audit also separates logical accepted-history namespace from the
+physical CAS identity, and authority-member incarnation from worker incarnation.
+Neither pair can be substituted. Reopen must validate persisted limits,
+membership, supported format/admission history and the canonical clock contract;
+readable ownership records do not supply those facts. Descriptor-to-Singleton
+construction and explicit listener wire ceilings are proceeding independently.
+Generic CAS batch/traversal accumulation and AC value decoding still need their
+own bounds before a service memory claim is justified.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions
@@ -767,7 +825,8 @@ enabled redb on the Bazel test itself. No production constructor changed.
    listener isolation, and strict configuration refusal plus the offline
    converter. The parser, converter and local mTLS fixture are implemented;
    physical namespace preflight, startup refusal ordering and the fixed clock
-   still need combined construction. Existing fixtures qualify parts of these behaviors; production
+   still need combined construction and persistent compatibility binding.
+   Existing fixtures qualify parts of these behaviors; production
    factories still select the legacy runtime. Unknown migration destinations must
    remain explicit blocking output from the converter.
 3. Measure combined execution, publication, lease and retirement demand, and

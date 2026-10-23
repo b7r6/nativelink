@@ -1,0 +1,48 @@
+{
+  "scope": "Followup qualification after repository Bazel lint policy rejected prefix source",
+  "commit": "922407598ba3fbfd21262d833d6d120f93861542",
+  "prefix_commit": "002802610795d37bf668bdc9b504916b3502bd23",
+  "prefix_archive": "/tmp/nativelink-canonical-store-evidence.tar.gz",
+  "prefix_archive_sha256": "a6aac778d147438e85ecf73b367f029e3daefb79a63ad45949e3fc3d22b38392",
+  "runtime_sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+  "binary_sha256": "35892f95b54921a971f65c12001a13c787201a3adaf3a069150c3601cd5cdd22",
+  "changes": [
+    "Borrow key and namespace errors; copy DigestInfo into ownedKey before blocking",
+    "Move fixed64KiB verification scratch buffer from stack to heap",
+    "Use checked range/test integer conversions",
+    "Make is_cas const and derive Debug on pair",
+    "Compile before_sync hook and calls only under cfg(test), removing production no-op",
+    "Normalize Code alias, explicit unit pattern, test witness stderr",
+    "Standalone Clippy nowdenies nursery andpedantic with applicable repository exceptions"
+  ],
+  "checks": {
+    "tests": "17 passed,0failed finalRustsource",
+    "strict_clippy": "all-targets -Dwarnings plus explicit nursery/pedanticdeny passed",
+    "hooks": "all applicable hooks passed",
+    "syscalls": "15 distinct finalbinary scenarios allpass:3baseline,12actualEIO atfile+temp/content/content.exec forupload/hasQueryWriteStatus/duplicate",
+    "bazel": "Parent root executed all3targets successfully:17store,25filesystemdefault,35filesystemredb; 545buildinputshashes identical acrossrun. Parent clock patch was an uncommitted service dependency in that root snapshot. Evidence/inputs are separate from author standalone build.",
+    "mutation": "compiled early-readpermitrelease negative control remains prefix evidence only; no mutationrerunclaimed forv2. Independent delta review confirms unchanged permit/output ownership logic."
+  },
+  "format_note": "FinalTOMLhook reordered only redundant_pub_crate/ref_option policy keys afterClippy; Rustsource unchanged, lintsettings identical.",
+  "limits": "All experimental scope limits in committed README andprefixqualification continue: no productionfactory/workermaterialization/globalmemory/diskbudget/GC/recovery/powerloss or hostilehost qualification.",
+  "documentation_commit": "cb718fc46365cdfc23a4eac4d6aee0e6de7ac448",
+  "root_bazel_input_capture": {
+    "manifest_basis": "sources-before-v2.json == sources-after-v2.json",
+    "expected": 545,
+    "captured_matching": 545,
+    "unavailable": [],
+    "older_at_snapshot": "sources-at-v2.json has544entries and predates authority_clock.rs; retained for provenance, not used as qualifiedmanifest",
+    "reconstructed_input": {
+      "path": "nativelink-service/src/authority_running_clock_tests.rs",
+      "sha256": "f4aa57d8c9ee637dcefe5be0fa0f1fd63f7d2e03505d447cfdff531494e942ee",
+      "source": "/tmp/nativelink-categorical-evidence/fallible-authority-clock/pre-timeout-authority_running_clock_tests.rs",
+      "provenance": "Parent reversed only the later2-second await timeout delta and verified exact bytes against the earlier545-entry snapshot; author independently rechecked SHA before inclusion."
+    }
+  },
+  "scan_bound_erratum": {
+    "successful_batch_bytes": 4294967296,
+    "maximum_failing_batch_bytes": 4295032832,
+    "reason": "Read-before-size-check can consume one additional64KiBbuffer on firstcorruptkey; batch stops immediately. This corrects the unqualified4GiBcost in prefixmanifest; no runtimechange."
+  },
+  "independent_review_sha256": "e1b73ed40d6185c8d2cee467c82911d56396f81735d9580cf1b7425c7c2d9c00"
+}

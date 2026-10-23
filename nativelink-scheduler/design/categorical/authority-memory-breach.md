@@ -41,3 +41,7 @@ classification change requires protocol version 2 before reconnect inventory,
 explicit evidence validation and preservation of the full captured response,
 including its output graph. This change makes no hard memory isolation or M6
 retention claim.
+
+The [qualification receipt](evidence/authority-memory-breach/manifest.json)
+separates standalone Cargo evidence, five compiled negative controls, independent
+reviews and the subsequent root Bazel integration.

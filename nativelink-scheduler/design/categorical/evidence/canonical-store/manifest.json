@@ -1,0 +1,58 @@
+{
+  "scope": "Isolated experimental StoreDriver bridge and actual local RPC acknowledgment qualification; no production factory or milestone completion.",
+  "root_source_commits": [
+    "9550d3bb50a640c6aae139fadb0b14b16dbf3844",
+    "5f570ef33e",
+    "fa35f79989"
+  ],
+  "author_source_commits": [
+    "002802610795d37bf668bdc9b504916b3502bd23",
+    "922407598ba3fbfd21262d833d6d120f93861542",
+    "cb718fc46365cdfc23a4eac4d6aee0e6de7ac448"
+  ],
+  "archives": {
+    "author-prefix.tar.gz": {
+      "sha256": "a6aac778d147438e85ecf73b367f029e3daefb79a63ad45949e3fc3d22b38392",
+      "bytes": 13725848
+    },
+    "author-qualified.tar.gz": {
+      "sha256": "f54df588908de45080b563a4effe2f3b2778eac929eecfcd39df19d3026bfad0",
+      "bytes": 7195934
+    }
+  },
+  "qualified_archive_entries_independently_verified": 608,
+  "integrated_source_matches": {
+    "tools/canonical-filesystem/src/capability.rs": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+    "tools/canonical-store/BUILD.bazel": "be6d65e14da5b69f924d5cbc343af6e0bfe05ce0f484a8c20cb570175ae9d914",
+    "tools/canonical-store/Cargo.lock": "ee4ba32d8b62b2a5f2d6df578077c9f11483e17669c14302dbeea17c5c002b45",
+    "tools/canonical-store/Cargo.toml": "83e15e93414cd0b676d315f738effdc31f443ebb53f8f745bc4ffdb0ca117ce1",
+    "tools/canonical-store/README.md": "2418c9db7d67931ce436b065c86b5e0171ef6778e8eca1afdf70e6d72f75ce4b",
+    "tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+    "tools/canonical-store/src/tests/rpc.rs": "e7002ea6afceea687180ca960222676248a376a5e694b65094212ea1f9976847",
+    "tools/canonical-store/src/tests.rs": "9698050a771db3490c0a36ad4aaf855b1444ad0212f4a8de38f1116d86d881c6"
+  },
+  "documentation_merge": {
+    "tools/canonical-filesystem/README.md": {
+      "author_sha256": "6bba8612405955502aa7a096574a5a4f1f9e55519ca6d1ec7d9e577cb6a70e30",
+      "integrated_sha256": "d51dc1dd83813b06966a2eb1376b2ac068651ecb412a907a2c19df91935ac10a"
+    }
+  },
+  "documentation_merge_reason": "Root retains independently integrated descriptor-journal documentation absent from author base; runtime and canonical-store sources match.",
+  "qualification_sha256": "67bfeb6c4cfb5c1df5abb61efc1ec3cf92d758bf3ea9b89c4d6b09f1c4d20395",
+  "tests": {
+    "author": 17,
+    "root_bazel_store": 17,
+    "root_bazel_filesystem_default": 25,
+    "root_bazel_filesystem_redb": 35,
+    "actual_fsync_scenarios_final_binary": 15,
+    "compiled_permit_mutant": "Detected on prefix source; not rerun or relabeled as final-source execution."
+  },
+  "limits": [
+    "64MiB per actual backend object/value,4sharedactiveoperations,1MiBinputchunk,64KiBIObuffer,64keysperhasbatch are experimental constants, not workload qualification.",
+    "No lifetime disk bound: abandoned and duplicate temporary files accumulate; no cleanup or GC.",
+    "No worker materialization or production wiring; host assumes cooperative owners and local rename/sync semantics.",
+    "Successful hasbatch reads atmost4GiB; corrupt failingbatch can consume oneadditional64KiB detectionbuffer.",
+    "System call success and injected EIO do not establish power-loss durability.",
+    "RootBazel runs include uncommitted fallibleclock dependency; all545 exactbefore/afterinputbytes archived."
+  ]
+}
