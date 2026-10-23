@@ -129,7 +129,7 @@ impl ActionCache for Upstream {
 }
 
 fn grpc(address: &str) -> Store {
-    Store::new(Arc::new(
+    Store::new(
         GrpcStore::new(&GrpcSpec {
             instance_name: "upstream-ac".to_owned(),
             endpoints: vec![GrpcEndpoint {
@@ -153,7 +153,7 @@ fn grpc(address: &str) -> Store {
             experimental_remote_cache_compression: Some(false),
         })
         .unwrap(),
-    ))
+    )
 }
 
 #[nativelink_test]

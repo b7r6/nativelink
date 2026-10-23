@@ -237,14 +237,14 @@ impl StoreDriver for Spy {
             Finish::Error => Err(make_err!(
                 Code::Unavailable,
                 "{}",
-                "backend diagnostic ".repeat(CAP)
+                "backend diagnostic ".repeat(1024)
             )),
             Finish::EofError => {
                 writer.send_eof()?;
                 Err(make_err!(
                     Code::Unavailable,
                     "{}",
-                    "backend diagnostic ".repeat(CAP)
+                    "backend diagnostic ".repeat(1024)
                 ))
             }
             Finish::Pending => futures::future::pending().await,
