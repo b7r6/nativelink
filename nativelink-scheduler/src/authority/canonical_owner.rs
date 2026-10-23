@@ -27,6 +27,8 @@ use super::{
     JournalDatabase, Limits, META, RecoveryExpectation, decode, failure, validate_metadata,
 };
 
+#[path = "canonical_cleanup.rs"]
+mod canonical_cleanup;
 #[path = "canonical_temporal.rs"]
 mod temporal;
 

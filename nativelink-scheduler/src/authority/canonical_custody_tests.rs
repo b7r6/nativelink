@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Existing shutdown/storage boundaries, before a canonical recovery runtime.
-//! The first two fixtures drive actual OpenRaft tasks. Remaining fixtures are
+//! The first two fixtures drive actual `OpenRaft` tasks. Remaining fixtures are
 //! explicitly private-reference and blocking-I/O controls, not Raft task proof.
 
 use std::collections::BTreeSet;
@@ -39,6 +39,9 @@ use crate::authority::journal::{
 use crate::authority::{ClusterEpoch, Limits};
 
 const WAIT: Duration = Duration::from_secs(10);
+
+#[path = "canonical_cleanup_tests.rs"]
+mod cleanup;
 
 async fn existing_singleton(fixture: &Fixture, reader: ReaderCapabilities) -> Singleton {
     let token = fixture.token(true);
