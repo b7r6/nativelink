@@ -92,7 +92,7 @@ impl AuthorityListeners {
             stores.add_store("authority_objects", config.cas.clone())?;
             let compression = RemoteCacheCompressionInstances::default();
             let cas = CasServer::new_authority(config.instance.clone(), config.cas.clone());
-            let bytestream = ByteStreamServer::new(
+            let bytestream = ByteStreamServer::new_authority(
                 &[WithInstanceName {
                     instance_name: config.instance.clone(),
                     config: ByteStreamConfig {

@@ -98,6 +98,19 @@ admission and late Action Cache encoding refusals. Its journal is a separate tes
 records the remaining aggregate memory and capability advertisement gaps;
 this fixture does not qualify a canonical server or aggregate memory admission.
 
+A separate test executable sets the process default to BLAKE3 before creating
+its runtime. Fixed listener CAS and AC requests with `Unknown`, and ByteStream
+resources without an algorithm, use SHA-256 consistently with Execute. Explicit
+BLAKE3 remains supported. Public legacy service constructors retain the process
+default. The test exercises fixed and legacy services through loopback HTTP/2.
+
+Fixed ByteStream requests use the local transfer facade even with a `GrpcStore`
+backend, preserving the selected algorithm and the 64 KiB read-frame limit.
+The remote fixture uses explicit upstream resource names; legacy upstream names
+remain outside this qualification. Completed `QueryWriteStatus` uses local
+storage presence, which a remote store implements through `FindMissingBlobs`.
+The active-upload UUID lookup remains a separate identity-binding residual.
+
 ## Filesystem boundary
 
 All backend namespace access uses opaque directory-relative handles. The only capability
@@ -125,6 +138,7 @@ physical generation or directory continuity.
 cargo test --manifest-path tools/canonical-store/Cargo.toml --locked --offline --profile smol
 cargo clippy --manifest-path tools/canonical-store/Cargo.toml --locked --offline --profile smol --all-targets -- -D warnings
 bazel test //tools/canonical-store:canonical_store_test
+bazel test //tools/canonical-store:fixed_digest_default_test
 ```
 
 The focused cases exercise both algorithms, algorithm partitioning, mutable

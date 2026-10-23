@@ -481,6 +481,7 @@ impl IdleStream {
 
 #[derive(Debug)]
 pub struct ByteStreamServer {
+    authority_admission: bool,
     instance_infos: HashMap<InstanceName, InstanceInfo>,
     reported_digest_function_mismatches: Mutex<HashSet<(DigestHasherFunc, DigestHasherFunc)>>,
 }
@@ -522,9 +523,30 @@ impl ByteStreamServer {
             );
         }
         Ok(Self {
+            authority_admission: false,
             instance_infos,
             reported_digest_function_mismatches: Mutex::new(HashSet::new()),
         })
+    }
+
+    /// Fixed listener construction keeps omitted algorithms independent of the
+    /// process default and retains the local transfer facade for remote stores.
+    pub(crate) fn new_authority(
+        configs: &[WithInstanceName<ByteStreamConfig>],
+        store_manager: &StoreManager,
+        remote_cache_compression_instances: &RemoteCacheCompressionInstances,
+    ) -> Result<Self, Error> {
+        let mut server = Self::new(configs, store_manager, remote_cache_compression_instances)?;
+        server.authority_admission = true;
+        Ok(server)
+    }
+
+    fn default_digest_function(&self) -> DigestHasherFunc {
+        if self.authority_admission {
+            DigestHasherFunc::Sha256
+        } else {
+            default_digest_hasher_func()
+        }
     }
 
     pub fn new_with_timeout(
@@ -1380,7 +1402,9 @@ impl ByteStreamServer {
         let digest = DigestInfo::try_new(resource_info.hash.as_ref(), resource_info.expected_size)?;
 
         // If we are a GrpcStore we shortcut here, as this is a special store.
-        if let Some(grpc_store) = store_clone.downcast_ref::<GrpcStore>(Some(digest.into())) {
+        if !self.authority_admission
+            && let Some(grpc_store) = store_clone.downcast_ref::<GrpcStore>(Some(digest.into()))
+        {
             return grpc_store
                 .query_write_status(Request::new(query_request.clone()))
                 .await;
@@ -1408,7 +1432,7 @@ impl ByteStreamServer {
         }
 
         let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(default_digest_hasher_func()),
+            || Ok(self.default_digest_function()),
             DigestHasherFunc::try_from,
         )?;
         let has_fut = store_clone
@@ -1473,13 +1497,15 @@ impl ByteStream for ByteStreamServer {
         let digest = DigestInfo::try_new(resource_info.hash.as_ref(), resource_info.expected_size)?;
 
         // If we are a GrpcStore we shortcut here, as this is a special store.
-        if let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into())) {
+        if !self.authority_admission
+            && let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into()))
+        {
             let stream = Box::pin(grpc_store.read(Request::new(read_request)).await?);
             return Ok(Response::new(stream));
         }
 
         let digest_function = resource_info.digest_function.as_deref().map_or_else(
-            || Ok(default_digest_hasher_func()),
+            || Ok(self.default_digest_function()),
             DigestHasherFunc::try_from,
         )?;
 
@@ -1590,16 +1616,21 @@ impl ByteStream for ByteStreamServer {
         .err_tip(|| "Invalid digest input in ByteStream::write")?;
 
         // If we are a GrpcStore we shortcut here, as this is a special store.
-        if let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into())) {
+        if !self.authority_admission
+            && let Some(grpc_store) = store.downcast_ref::<GrpcStore>(Some(digest.into()))
+        {
             let resp = grpc_store.write(stream).await.map_err(Into::into);
             return resp;
         }
 
-        let default_digest_function = default_digest_hasher_func();
+        let default_digest_function = self.default_digest_function();
         let digest_function = match stream.resource_info.digest_function.as_deref() {
             Some(value) => {
                 let digest_function = DigestHasherFunc::try_from(value)?;
-                if digest_function != default_digest_function
+                // The fixed role accepts both algorithms; global configuration
+                // advice applies only to legacy services.
+                if !self.authority_admission
+                    && digest_function != default_digest_function
                     && self
                         .reported_digest_function_mismatches
                         .lock()

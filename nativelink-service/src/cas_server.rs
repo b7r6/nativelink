@@ -206,6 +206,16 @@ const MAX_LAYOUT_BYTES_PER_CHUNK: u64 = 160;
 const CHUNK_CONCURRENCY: usize = 10;
 
 impl CasServer {
+    // The fixed role shares Execute's SHA256 default independently of the
+    // process default retained by legacy constructors.
+    fn digest_function(&self, requested: i32) -> i32 {
+        if self.authority_admission && requested == 0 {
+            DigestHasherFunc::Sha256.proto_digest_func().into()
+        } else {
+            requested
+        }
+    }
+
     pub fn new(
         configs: &[WithInstanceName<CasStoreConfig>],
         store_manager: &StoreManager,
@@ -1167,7 +1177,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<FindMissingBlobsRequest>,
     ) -> Result<Response<FindMissingBlobsResponse>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
         self.inner_find_missing_blobs(request)
             .instrument(error_span!("cas_server_find_missing_blobs"))
             .with_context(
@@ -1191,7 +1201,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<BatchUpdateBlobsRequest>,
     ) -> Result<Response<BatchUpdateBlobsResponse>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
 
         self.inner_batch_update_blobs(request)
             .instrument(error_span!("cas_server_batch_update_blobs"))
@@ -1216,7 +1226,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<BatchReadBlobsRequest>,
     ) -> Result<Response<BatchReadBlobsResponse>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
 
         self.inner_batch_read_blobs(request)
             .instrument(error_span!("cas_server_batch_read_blobs"))
@@ -1240,7 +1250,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<GetTreeRequest>,
     ) -> Result<Response<Self::GetTreeStream>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
 
         let resp = self
             .inner_get_tree(request)
@@ -1275,7 +1285,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<SplitBlobRequest>,
     ) -> Result<Response<SplitBlobResponse>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
         self.inner_split_blob(request)
             .instrument(error_span!("cas_server_split_blob"))
             .with_context(
@@ -1303,7 +1313,7 @@ impl ContentAddressableStorage for CasServer {
         grpc_request: Request<SpliceBlobRequest>,
     ) -> Result<Response<SpliceBlobResponse>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
         self.inner_splice_blob(request)
             .instrument(error_span!("cas_server_splice_blob"))
             .with_context(

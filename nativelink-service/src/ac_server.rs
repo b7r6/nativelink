@@ -29,7 +29,7 @@ use nativelink_store::ac_utils::{ESTIMATED_DIGEST_SIZE, get_and_decode_digest};
 use nativelink_store::grpc_store::GrpcStore;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::common::DigestInfo;
-use nativelink_util::digest_hasher::make_ctx_for_hash_func;
+use nativelink_util::digest_hasher::{DigestHasherFunc, make_ctx_for_hash_func};
 use nativelink_util::store_trait::{Store, StoreLike};
 use opentelemetry::context::FutureExt;
 use prost::Message;
@@ -60,6 +60,16 @@ impl Debug for AcServer {
 }
 
 impl AcServer {
+    // The fixed role shares Execute's SHA256 default independently of the
+    // process default retained by legacy constructors.
+    fn digest_function(&self, requested: i32) -> i32 {
+        if self.authority_admission && requested == 0 {
+            DigestHasherFunc::Sha256.proto_digest_func().into()
+        } else {
+            requested
+        }
+    }
+
     pub fn new(
         configs: &[WithInstanceName<AcStoreConfig>],
         store_manager: &StoreManager,
@@ -208,7 +218,7 @@ impl ActionCache for AcServer {
         grpc_request: Request<GetActionResultRequest>,
     ) -> Result<Response<ActionResult>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
         let result = self
             .inner_get_action_result(request)
             .instrument(error_span!("ac_server_get_action_result"))
@@ -239,7 +249,7 @@ impl ActionCache for AcServer {
         grpc_request: Request<UpdateActionResultRequest>,
     ) -> Result<Response<ActionResult>, Status> {
         let request = grpc_request.into_inner();
-        let digest_function = request.digest_function;
+        let digest_function = self.digest_function(request.digest_function);
         self.inner_update_action_result(request)
             .instrument(error_span!("ac_server_update_action_result"))
             .with_context(

@@ -49,3 +49,29 @@ rust_test(
         "@crates//:tracing-test",
     ],
 )
+
+# A separate process sets the global default before any test can initialize it.
+rust_test(
+    name = "fixed_digest_default_test",
+    srcs = ["tests/fixed_digest_default.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-canonical-store",
+        "//nativelink-config",
+        "//nativelink-proto",
+        "//nativelink-scheduler",
+        "//nativelink-service",
+        "//nativelink-store",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem",
+        "@crates//:bytes",
+        "@crates//:futures",
+        "@crates//:prost",
+        "@crates//:tokio",
+        "@crates//:tonic",
+        "@crates//:uuid",
+    ],
+)
