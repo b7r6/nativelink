@@ -66,8 +66,16 @@ The [candidate checkpoint](evidence/publication-terminal/manifest.json) passes
 54 candidate, eight existing comparison and nine physical cases in Cargo;
 strict Clippy passes for those three targets. The integrated Bazel run also
 passes all eight actual-worker cases. Sixteen new scenarios exercise the
-terminal extension. Candidate mutation qualification and comparison against the
-corrected terminal reference follow in separately recorded boundaries.
+terminal extension. The separate
+[mutation qualification](evidence/publication-terminal-mutations/manifest.json)
+compiled ten faulty variants: nine were detected, while removing only the
+snapshot byte-limit refusal survived all 54 cases. The complete snapshot gate
+and invariant checks remained present in that mutant. This finite fixture has
+no aggregate-overflow witness; future outer-byte reservation remains unproved.
+All sixteen frozen source hashes were restored before the 54/8/9 baseline passed
+again. The stale-interest-generation variant is detected by its changed reply,
+not by a new demonstration of successor revocation. Comparison against the
+[corrected terminal reference](terminal-outcome-restore-audit.md) is separate.
 
 The candidate author and its separate scenario author used the frozen terminal
 contract without reading the new terminal reference reducer or tests. The

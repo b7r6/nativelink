@@ -1,0 +1,656 @@
+{
+  "timestamp": "2026-10-23T06:51:36.279644+00:00",
+  "slice": "Test-only private-v4 exact no-graph worker terminal outcomes and lifecycle integration",
+  "worktree": "/tmp/nativelink-publication-terminal",
+  "worktree_base_commit": "65951b7db3c135ae5f7c1d68a4ffbbfb72a209b8",
+  "freeze_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+  "patch_sha256": "dd6ad9d7c17a2d4c8a1d07b4834c781367a0f1e60bce8243396343e63b7ca5e5",
+  "contract_sha256": "c1d21e6acefe0d32129753263ba4edbbd552a74115c5899535b221df49acbe3d",
+  "source_restored_and_verified": {
+    "nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "nativelink-scheduler/tests/publication_candidate/engine.rs": "aae00b9a1a413881df97b76026f9d0eed1aa681e88c1b72e4c93051db5f0d6c2",
+    "nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "nativelink-scheduler/tests/publication_candidate/terminal.rs": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+    "nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "4aa959cb0f6c9f0741e7045d36a064ca101a6a4a40e9f61d08f6658d043d1b3e",
+    "nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "3e6227a5ef1c744950e7eab23383d7d87fa8453890a95ad66352b19df3a795dd",
+    "nativelink-scheduler/tests/publication_candidate/types.rs": "524d2d0ff9216456147bf16fbf7fb87d0b003bbec119feb4a00ece5ef65d906c",
+    "nativelink-scheduler/tests/publication_candidate/validation.rs": "e0a85535114cce243ead22a6581f6af93738086e0133d75bdfe31d8091bae89e",
+    "nativelink-scheduler/BUILD.bazel": "62a81eb07ad0881d6a788a67500cd5ef3c6b97d0847a22c2beb2a720b6200e58",
+    "nativelink-scheduler/tests/publication_candidate/README.md": "78ca45c89276559da1f20d2af91920624e2feaba1a112746065bce5399abf3e8",
+    "nativelink-scheduler/src/authority/mod.rs": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+  },
+  "baseline": {
+    "pre_mutation_log": "baseline-final.log",
+    "post_mutation_log": "restored-baseline-final.log",
+    "post_mutation_results": [
+      "test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.45s",
+      "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s",
+      "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s"
+    ],
+    "command": "CARGO_TARGET_DIR=/tmp/nativelink-history-mutations-target CARGO_BUILD_JOBS=8 cargo test --locked --offline --profile=smol -p nativelink-scheduler --test publication_candidate_test --test publication_differential_test --test publication_physical_test",
+    "strict_clippy": "clippy-scheduler-second.log; three targets passed before immutable freeze, exact source restored after mutants",
+    "format_checks": [
+      "fmt-final.log",
+      "buildifier-final.log",
+      "diff-final.log"
+    ],
+    "worker_validation": "Owned by root through warm Bazel; no worker Cargo build in this worktree"
+  },
+  "scenario_count": 16,
+  "initial_independent_scenario_source": "ten-scenarios-before-implementation.rs",
+  "test_corrections": [
+    "Private now() accessor replaced by scheduler_view().now",
+    "Non-cacheable requests correctly receive separate executions and independent completions; preserved failed original expectation"
+  ],
+  "reproduced_pre_fix_failures": [
+    {
+      "source": "downgrade-repro-source.json",
+      "log": "downgrade-repro.log",
+      "claim": "Four ResourceFailed v4 snapshots incorrectly restored after deleting terminal metadata and downgrading private version."
+    },
+    {
+      "source": "memory-relations-repro-source.json",
+      "log": "memory-relations-repro.log",
+      "claim": "Ten local memory-evidence/target/attempt-order corruptions incorrectly restored across both digest algorithms."
+    },
+    {
+      "source": "lost-authority-repro-tests.json",
+      "log": "lost-authority-repro.log",
+      "claim": "Six retained retry/last-cancellation authority-erasure snapshots incorrectly restored across both algorithms."
+    },
+    {
+      "source": "idempotence-global-time-repro-tests.json",
+      "log": "idempotence-global-time-repro.log",
+      "claim": "Four global report/graph time inversions incorrectly restored; duplicate settled observation also changed snapshot and invalidated preparation under both algorithms."
+    }
+  ],
+  "compiled_mutation_results": {
+    "compiled": 10,
+    "detected": 9,
+    "survived": 1,
+    "invalid_runs": 0,
+    "runs": [
+      {
+        "name": "01-memory-to-complete",
+        "description": "Rewrite incoming memory-failure classification to Complete.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "79ce96044aeeda7ad2f82fe99bd4d3d7fc2df94467ca288e7265b836c741ee3d",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:48:22.643103+00:00",
+        "returncode": 101,
+        "seconds": 3.08,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 9 passed; 7 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.17s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::memory_report_evidence_and_attempt_sequence_remain_locally_consistent_on_restore ... FAILED",
+          "test cases::real_request_tests::terminal_tests::explicit_memory_reports_choose_all_actual_final_reasons_and_preserve_refunds ... FAILED",
+          "test cases::real_request_tests::terminal_tests::resource_failed_snapshot_cannot_discard_terminal_authority_by_downgrading ... FAILED",
+          "test cases::real_request_tests::terminal_tests::retry_records_and_terminal_mode_cannot_be_erased_from_retained_lifecycle ... FAILED",
+          "test cases::real_request_tests::terminal_tests::retained_report_time_cannot_follow_a_later_commit_on_another_execution ... FAILED",
+          "test cases::real_request_tests::terminal_tests::finite_terminal_capacity_retains_twenty_four_reports_and_sixteen_exact_handles ... FAILED",
+          "test cases::real_request_tests::terminal_tests::staged_retry_expiry_and_final_memory_failure_keep_each_original_write ... FAILED"
+        ],
+        "log_sha256": "7080e96fc3e0e4a0b34b0fb1e51da3d75fec70e551b8998de892eb6540d8d0be",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "02-drop-memory-peak",
+        "description": "Discard reported positive peak memory evidence before actual State decision.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "41075e7d5d184cb4e7ea7f7793cb873989cef5304671f1af511c0567ce636448",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:48:25.726694+00:00",
+        "returncode": 101,
+        "seconds": 6.98,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.39s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::memory_report_evidence_and_attempt_sequence_remain_locally_consistent_on_restore ... FAILED"
+        ],
+        "log_sha256": "f005a676eead652902016f5910f4e25cc4dff4b5682bc30d29fc26814667ccad",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "03-allow-result-graph",
+        "description": "Remove response.result=None gate while preserving payload/captured-response checks.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "12d757c39ff46f038a783fca900146b8d81e0a60f5a85f32ceebbe2964586976",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:48:32.712781+00:00",
+        "returncode": 101,
+        "seconds": 10.1,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.96s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::no_graph_report_refuses_graph_identity_and_false_quiescence_atomically ... FAILED"
+        ],
+        "log_sha256": "ac1c7db90d493262eaddfe706661b689f6af2e1fddaa7f4a14fe64856da00df1",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "04-early-cleanup",
+        "description": "Automatically refund terminal-execution reservations via Cleanup during credit reconciliation.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "0b8e723f4047f56f7f889b613026609ef5c0855c27b2a4ff2dec43f0e483c020",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:48:42.817560+00:00",
+        "returncode": 101,
+        "seconds": 10.13,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 12 passed; 4 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.49s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::interest_expiry_is_generation_fenced_and_advance_does_not_cancel ... FAILED",
+          "test cases::real_request_tests::terminal_tests::last_cancel_keeps_live_charge_and_unknown_writes_until_actual_cleanup ... FAILED",
+          "test cases::real_request_tests::terminal_tests::retry_records_and_terminal_mode_cannot_be_erased_from_retained_lifecycle ... FAILED",
+          "test cases::real_request_tests::terminal_tests::progress_and_execution_timers_cannot_revoke_successors_or_refund_live_work ... FAILED"
+        ],
+        "log_sha256": "d318504b2e65141270a108bfb9d4f0a384e56a2625742e6296462d2e2d79369a",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "05-current-worker-reauthorization",
+        "description": "Reauthorize retained report origin against current draining-worker status.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "3f4dd3ca1c2052073411f5510698c7d4a8834c95ff82d392a213eeced90f299c",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:48:53.092118+00:00",
+        "returncode": 101,
+        "seconds": 10.17,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.55s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::no_graph_complete_preserves_exact_real_request_matrix_without_cas_roots ... FAILED"
+        ],
+        "log_sha256": "9a4321cf5a52430ff38e1bd45df74d97f672b9eea7c0aaa88297eda39ff37ca0",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "06-no-global-time-order",
+        "description": "Remove report/graph global event-time order validation; preserve position uniqueness.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/terminal.rs",
+        "original_sha256": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+        "mutant_sha256": "3cb8a9d927465895808e5f593c9b8fcf17fc209b811a9b8cbe23cfe061845fd0",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:49:03.270408+00:00",
+        "returncode": 101,
+        "seconds": 8.73,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.42s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::retained_report_time_cannot_follow_a_later_commit_on_another_execution ... FAILED"
+        ],
+        "log_sha256": "7c355ef6a2561dcee92c1c43bc5532702f33d873ef43c8184513c06156b6bf82",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "07-duplicate-observe-mutates",
+        "description": "Remove private-v4 duplicate write-observation no-op shortcut.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/engine.rs",
+        "original_sha256": "aae00b9a1a413881df97b76026f9d0eed1aa681e88c1b72e4c93051db5f0d6c2",
+        "mutant_sha256": "8c371d3fcbee23c4d594575203efaab6be90c96b09b17261f4b1b91d881d998f",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:49:12.005739+00:00",
+        "returncode": 101,
+        "seconds": 12.88,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.83s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::repeated_write_observation_keeps_v4_preparation_and_preserves_legacy_behavior ... FAILED"
+        ],
+        "log_sha256": "56f5a97d6c2eec22245feb6d4737f391ffdf46b1e1aaf3888a0fa8c29fa9cd74",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "08-no-snapshot-byte-guard",
+        "description": "Remove only snapshot serialization byte-length admission guard; preserve validate, transaction snapshot gate and restore byte limit.",
+        "mutated_path": "nativelink-scheduler/tests/publication_candidate/engine.rs",
+        "original_sha256": "aae00b9a1a413881df97b76026f9d0eed1aa681e88c1b72e4c93051db5f0d6c2",
+        "mutant_sha256": "a6ad62bc6306eb879b552105db4366e3ac45d7b35c3497ba2ec4e825990337df",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:49:25.287141+00:00",
+        "returncode": 0,
+        "seconds": 26.89,
+        "compiled": true,
+        "detected": false,
+        "survived": true,
+        "outcome": "survived",
+        "result_lines": [
+          "test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.33s"
+        ],
+        "failed_tests": [],
+        "log_sha256": "210e137225877aa3736a09d40d52f2c3323bef7fc76eb6e2e63dff38f75a8a72",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "09-state-overwrites-cancelled",
+        "description": "Actual State terminal transition updates uninterested/cancelled joined operations.",
+        "mutated_path": "nativelink-scheduler/src/authority/mod.rs",
+        "original_sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+        "mutant_sha256": "c47703f12ebfcc89b665d94a23e3db8f86d8bed8d5486fe907d00ea94dc46aa0",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:49:52.178104+00:00",
+        "returncode": 101,
+        "seconds": 11.88,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.39s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::joined_cancel_and_late_cancel_preserve_each_operations_original_terminal ... FAILED"
+        ],
+        "log_sha256": "fe7379ccbd9623781507fe7ab3c2d4737ca7f92229f700c13fdd1a0fb20eb390",
+        "source_restored_to_frozen_hashes": true
+      },
+      {
+        "name": "10-state-no-interest-generation",
+        "description": "Actual State interest expiry ignores generation; preserves terminal/deadline checks.",
+        "mutated_path": "nativelink-scheduler/src/authority/mod.rs",
+        "original_sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+        "mutant_sha256": "10c19ffa1e12832aa9897902bd2473243dd15c3172a17b72b2690d7d133226db",
+        "frozen_manifest_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--profile=smol",
+          "-p",
+          "nativelink-scheduler",
+          "--test",
+          "publication_candidate_test",
+          "terminal_tests"
+        ],
+        "cwd": "/tmp/nativelink-publication-terminal",
+        "environment_overrides": {
+          "CARGO_TARGET_DIR": "/tmp/nativelink-history-mutations-target",
+          "CARGO_BUILD_JOBS": "8"
+        },
+        "started": "2026-10-23T06:50:04.306331+00:00",
+        "returncode": 101,
+        "seconds": 15.34,
+        "compiled": true,
+        "detected": true,
+        "survived": false,
+        "outcome": "detected",
+        "result_lines": [
+          "test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 38 filtered out; finished in 1.71s"
+        ],
+        "failed_tests": [
+          "test cases::real_request_tests::terminal_tests::interest_expiry_is_generation_fenced_and_advance_does_not_cancel ... FAILED"
+        ],
+        "log_sha256": "8918ee6113d2aa2768b71ad9b62db01c089943cc5bcd16cd40c81db573778cf2",
+        "source_restored_to_frozen_hashes": true
+      }
+    ],
+    "survivor_interpretation": "Removing only serialized snapshot byte-length admission refusal survives all 54 candidate tests. Invariants, transaction snapshot validation, and restore byte guard remained. No cap/assertion changes were made. No aggregate-overflow witness or complete future outer-metadata byte-reservation proof is established.",
+    "actual_state_fence_mutant_limit": "Generation-fence mutant is detected when a stale old-generation expiry wrongly returns TooEarly rather than Ignored before the renewed deadline. This case alone does not demonstrate a stale timer canceling after the renewed deadline."
+  },
+  "independence": {
+    "terminal_reference_implementation_or_tests_opened": false,
+    "frozen_before_mutations_and_external_comparison": true,
+    "incidental_search_exposure": "After final source freeze, an overly broad rg for mutation locations returned path/line matches from existing publication_head/reference.rs (MAX_SNAPSHOT guards only) and other reference paths. No such reference file was opened; this exposure informed no source/test change. Later searches were scoped to candidate and actual State files."
+  },
+  "qualified_scope": [
+    "Actual scheduler State decides Complete and MemoryFailure retry/final reasons from bounded captured requests and exact response bytes.",
+    "No-graph result=None gate, stable origin, report identity/idempotence, operation-specific cancellation, interest/progress/execution timer fencing, and physical charge lifetime have scenario evidence.",
+    "Unknown stage/write ownership survives cancellation, retry, final failure, expiry and late write observations without synthetic graph publication.",
+    "Local retained evidence consistency, canonical restore, private version gating and existing direct-client graph/head/serving preservation have scenario evidence.",
+    "All assertions run under SHA256 and BLAKE3 where the scenario varies digest algorithm."
+  ],
+  "remaining_boundaries": [
+    "Test-only private snapshot v4, no production RPC/authentication activation.",
+    "Durable accepted-history feature3 remains disabled and unqualified.",
+    "Worker report classification, quiescence and typed output closure remain trusted fixture inputs.",
+    "No snapshot authenticity or historical worker-capacity reconstruction claim.",
+    "Finite capacity scenarios do not prove complete future outer metadata byte reserve; pure byte guard mutation survived.",
+    "This evidence does not establish global scheduler/storage replacement or full categorical elimination."
+  ],
+  "artifact_sha256": {
+    "baseline-final.log": "7269ebe18834b06b664b5fe4df5b176c98ff839b0d04b4f4324e4bd5966bdcac",
+    "buildifier-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "clippy-scheduler-first.log": "4ebf9549e98c78e399a9f1e5a9cf6397d2c8adaf8700d898fe1f8634a3746e9a",
+    "clippy-scheduler-second.log": "52c304f2c3f667ac1a73aacebaf9526159ee1d4838405aa803acd5f544facfce",
+    "contract-v1.md": "c1d21e6acefe0d32129753263ba4edbbd552a74115c5899535b221df49acbe3d",
+    "diff-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/engine.rs": "b09b12b9bf366b15d7d3ab53be66022f08cee995b9d35f094e9a07bac0c7d7fe",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "de42e75d76c115eca92edc842d9f33262736b650875063f0b91e10ffb4acc620",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "fb3d984ab3cfe0ef66f0eaa5490c4e310ecb52290753ae296dfaf593ac189652",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "3e6227a5ef1c744950e7eab23383d7d87fa8453890a95ad66352b19df3a795dd",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/types.rs": "524d2d0ff9216456147bf16fbf7fb87d0b003bbec119feb4a00ece5ef65d906c",
+    "downgrade-repro-source/nativelink-scheduler/tests/publication_candidate/validation.rs": "7076145b3206a64e245b6c32ed3ce7e70a564361c95b3117b0b51246b3536ee2",
+    "downgrade-repro-source.json": "f49a74eb4023d5832a8e6f9605ce8ab99a282b41fcfaef28e40b10c6a9f6d937",
+    "downgrade-repro.log": "5b35821e7d7e17c9d2e8148bc3d4c39629c07cf6707e431b36c49f0b81fab62c",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/engine.rs": "b09b12b9bf366b15d7d3ab53be66022f08cee995b9d35f094e9a07bac0c7d7fe",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "6301b533117e1568cbce21b50fbf1ac1de110121377697bc0e30e8e4dbeca71e",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "5363984d8af68f4124d58e1cc24bf2e798c3f9cd9ac8ed3911e3210821ec32ee",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "d64eb4d20f66b192a36ed4ca65cf38e5943432718a46a3adf66dd5aaf47e8dec",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/types.rs": "b34c5ff5f316550ce0ac678a45ec6bac0d97cb658e022e6cb7c951adfbd2efa1",
+    "eleven-first-run-source/nativelink-scheduler/tests/publication_candidate/validation.rs": "7076145b3206a64e245b6c32ed3ce7e70a564361c95b3117b0b51246b3536ee2",
+    "eleven-first-run-source.json": "53aaa44ca0ebcb586a8bebce75da069b42f4e5abf5c778a633411d2c8eabbdfb",
+    "eleven-scenarios-first.log": "a319c0759bb18be55f2a58790212100c4933240464aac24fda0a6d71d9db929a",
+    "final-freeze/freeze.json": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+    "final-freeze/publication-terminal-rust.patch": "dd6ad9d7c17a2d4c8a1d07b4834c781367a0f1e60bce8243396343e63b7ca5e5",
+    "final-freeze/source/nativelink-scheduler/BUILD.bazel": "62a81eb07ad0881d6a788a67500cd5ef3c6b97d0847a22c2beb2a720b6200e58",
+    "final-freeze/source/nativelink-scheduler/src/authority/mod.rs": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/README.md": "78ca45c89276559da1f20d2af91920624e2feaba1a112746065bce5399abf3e8",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/engine.rs": "aae00b9a1a413881df97b76026f9d0eed1aa681e88c1b72e4c93051db5f0d6c2",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "01794a74e045a6f5125e8df83ee868ca6505636a7845208cf651c8da5cb1a7df",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "4aa959cb0f6c9f0741e7045d36a064ca101a6a4a40e9f61d08f6658d043d1b3e",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "3e6227a5ef1c744950e7eab23383d7d87fa8453890a95ad66352b19df3a795dd",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/types.rs": "524d2d0ff9216456147bf16fbf7fb87d0b003bbec119feb4a00ece5ef65d906c",
+    "final-freeze/source/nativelink-scheduler/tests/publication_candidate/validation.rs": "e0a85535114cce243ead22a6581f6af93738086e0133d75bdfe31d8091bae89e",
+    "first-compile-source/nativelink-scheduler/BUILD.bazel": "61588b53580e5df32db690ed067658e1a52121b8a216aa4488156d1327e75c99",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/engine.rs": "590a24fe51e68fc81dadca22bcd700312d4864b3b209f2a78ee9ca5eb5fec350",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "c0aaf56b012a2f7a19f25cc4485ff0182834ddda753381d375d09a950882ea6e",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "f22c2d3ebcbd7dda139b98dc760c238223d9131655e16533f48b8421320895f4",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "d64eb4d20f66b192a36ed4ca65cf38e5943432718a46a3adf66dd5aaf47e8dec",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/types.rs": "b34c5ff5f316550ce0ac678a45ec6bac0d97cb658e022e6cb7c951adfbd2efa1",
+    "first-compile-source/nativelink-scheduler/tests/publication_candidate/validation.rs": "7076145b3206a64e245b6c32ed3ce7e70a564361c95b3117b0b51246b3536ee2",
+    "first-compile-source.json": "51bab2c2d3e8ab8d93528c4adbabb798af6629a3e1bc95757fe394e3a6bab82b",
+    "first-compile.log": "534f402db2e7eb316ae71d8f110bbea812c51f8f0714c93459812645aaf4e74e",
+    "first-runtime.log": "61f6794451d458e230990418a28deaa91f3295c33103cc922908c2cf9fcb6421",
+    "fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/engine.rs": "b09b12b9bf366b15d7d3ab53be66022f08cee995b9d35f094e9a07bac0c7d7fe",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "dddc3f6b15b7653f4b8694cad0da921ef0365a749730025168b3ed9e455b10eb",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "7ac136225b5b7cf56cee58c2a82c4b1ee9f6f5f5307d5ff1ad16b46f8a089666",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "3e6227a5ef1c744950e7eab23383d7d87fa8453890a95ad66352b19df3a795dd",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/types.rs": "524d2d0ff9216456147bf16fbf7fb87d0b003bbec119feb4a00ece5ef65d906c",
+    "fourteen-corrected-source/nativelink-scheduler/tests/publication_candidate/validation.rs": "e0a85535114cce243ead22a6581f6af93738086e0133d75bdfe31d8091bae89e",
+    "fourteen-corrected-source.json": "94ccfd06957f0d1f77945f852779acaa146b6cce2e5a5f860b18b2ce71625e50",
+    "fourteen-corrected.log": "dc58324be73e608344637ecb3e671f4fe0a256cca05738779fcfcc7c9e1a68ec",
+    "full-scheduler-corrected.log": "ffe9b349884d8ba9fdda7844ade7ce90d2e7ff38949b60ea036ad742e07d4ddc",
+    "full-scheduler-first.log": "1cce949103b776ed81e33bae800d4c9e8cf72b3f72e7b0f7d4fa859db61b69bb",
+    "idempotence-global-time-repro-tests.json": "96670456e42be96b66d55f8cd8f4e4335101fe2271b8041f6a5831f72265f215",
+    "idempotence-global-time-repro-tests.rs": "ecb6e8091d2d446a193fe2c2c21d0f4b75bce58c39fa7a1e56630a82943d7663",
+    "idempotence-global-time-repro.log": "8e4348d17fac1741a295224381dc28e7bce367ee1fd46505dbf58543a29fc527",
+    "initial-nine-scenarios.json": "d7840e162364ce104570bef9295fed48dfa33c38e3fe37538618280a6f085e9c",
+    "initial-nine-scenarios.rs": "9243fefafc093401db71265e3c46ca25f8798886209c81b681c145c5262b29c3",
+    "lost-authority-repro-tests.json": "b957e05f8c43297dc443f2b844409cee140d1a77c7628827bb915455f271fdf5",
+    "lost-authority-repro-tests.rs": "7ac136225b5b7cf56cee58c2a82c4b1ee9f6f5f5307d5ff1ad16b46f8a089666",
+    "lost-authority-repro.log": "a7a7823cbca4e2c7afe53a2459e925753eea7611bf53a8da191143a332e8d8fc",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/cases.rs": "585d12b1016ac9febfa8bdc09bf7757d95c0e1b17440fce5dbb8259f23ccf515",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/direct_client.rs": "32c17d97419b8134bf64bfd727a6758be542e404b3e46a7d06c3302cb3028aa8",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/direct_client_tests.rs": "423990db964bbb842c3aaa0add25a5982899d6b127a9b93ccd57d7b1b47d7210",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/engine.rs": "b09b12b9bf366b15d7d3ab53be66022f08cee995b9d35f094e9a07bac0c7d7fe",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "73bbd69fed791b245eb9a70048fb1df277e1ddcdf1dd3e04aa6f6652634c1d39",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/terminal.rs": "de42e75d76c115eca92edc842d9f33262736b650875063f0b91e10ffb4acc620",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/terminal_tests.rs": "44ad53697386bbd938b2a2b267966ff9f2576dd7fdd22137608534e07d8d98db",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/terminal_types.rs": "3e6227a5ef1c744950e7eab23383d7d87fa8453890a95ad66352b19df3a795dd",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/types.rs": "524d2d0ff9216456147bf16fbf7fb87d0b003bbec119feb4a00ece5ef65d906c",
+    "memory-relations-repro-source/nativelink-scheduler/tests/publication_candidate/validation.rs": "7076145b3206a64e245b6c32ed3ce7e70a564361c95b3117b0b51246b3536ee2",
+    "memory-relations-repro-source.json": "02b619d400e42e614cb22ace2e7156abf145b411276045521e2b3b54dddec08d",
+    "memory-relations-repro.log": "5759e9e0cd03c50935c6d0b751b0f95d55668d12d2c2c5cb61763d0aae909561",
+    "mutants/01-memory-to-complete/nativelink-scheduler/tests/publication_candidate/terminal.rs": "79ce96044aeeda7ad2f82fe99bd4d3d7fc2df94467ca288e7265b836c741ee3d",
+    "mutants/01-memory-to-complete/run.json": "59d3a0b1623b1c4fa0394ad0ac842373a0d3df0f6bbbfc47e026b50195bbd2b9",
+    "mutants/01-memory-to-complete/test.log": "7080e96fc3e0e4a0b34b0fb1e51da3d75fec70e551b8998de892eb6540d8d0be",
+    "mutants/02-drop-memory-peak/nativelink-scheduler/tests/publication_candidate/terminal.rs": "41075e7d5d184cb4e7ea7f7793cb873989cef5304671f1af511c0567ce636448",
+    "mutants/02-drop-memory-peak/run.json": "9302632bf7e9245b22f97a566ab6b80fbc317425c014d3b8f4d5ea3d709a5ff0",
+    "mutants/02-drop-memory-peak/test.log": "f005a676eead652902016f5910f4e25cc4dff4b5682bc30d29fc26814667ccad",
+    "mutants/03-allow-result-graph/nativelink-scheduler/tests/publication_candidate/terminal.rs": "12d757c39ff46f038a783fca900146b8d81e0a60f5a85f32ceebbe2964586976",
+    "mutants/03-allow-result-graph/run.json": "d3cbe467a4fea791c7df0db733bde9ea7d429db70c946f267af3b317686cb639",
+    "mutants/03-allow-result-graph/test.log": "ac1c7db90d493262eaddfe706661b689f6af2e1fddaa7f4a14fe64856da00df1",
+    "mutants/04-early-cleanup/nativelink-scheduler/tests/publication_candidate/terminal.rs": "0b8e723f4047f56f7f889b613026609ef5c0855c27b2a4ff2dec43f0e483c020",
+    "mutants/04-early-cleanup/run.json": "2fffdbfe659935137c926f28f24b119d033f01c6be08cdd70946e2c04db0a06b",
+    "mutants/04-early-cleanup/test.log": "d318504b2e65141270a108bfb9d4f0a384e56a2625742e6296462d2e2d79369a",
+    "mutants/05-current-worker-reauthorization/nativelink-scheduler/tests/publication_candidate/terminal.rs": "3f4dd3ca1c2052073411f5510698c7d4a8834c95ff82d392a213eeced90f299c",
+    "mutants/05-current-worker-reauthorization/run.json": "0ac0432bec925da025bf89b8b200cb6c589c0295e42fe96bccc0b13b2923c8d5",
+    "mutants/05-current-worker-reauthorization/test.log": "9a4321cf5a52430ff38e1bd45df74d97f672b9eea7c0aaa88297eda39ff37ca0",
+    "mutants/06-no-global-time-order/nativelink-scheduler/tests/publication_candidate/terminal.rs": "3cb8a9d927465895808e5f593c9b8fcf17fc209b811a9b8cbe23cfe061845fd0",
+    "mutants/06-no-global-time-order/run.json": "45a8980536709c03f8680372a021b67b9414a4cfce171761e899e9bc466fcd78",
+    "mutants/06-no-global-time-order/test.log": "7c355ef6a2561dcee92c1c43bc5532702f33d873ef43c8184513c06156b6bf82",
+    "mutants/07-duplicate-observe-mutates/nativelink-scheduler/tests/publication_candidate/engine.rs": "8c371d3fcbee23c4d594575203efaab6be90c96b09b17261f4b1b91d881d998f",
+    "mutants/07-duplicate-observe-mutates/run.json": "0b1b75c85e7493fbf997c8b0b2dad83155d3df99529d0e38f172cee2d15e4eba",
+    "mutants/07-duplicate-observe-mutates/test.log": "56f5a97d6c2eec22245feb6d4737f391ffdf46b1e1aaf3888a0fa8c29fa9cd74",
+    "mutants/08-no-snapshot-byte-guard/nativelink-scheduler/tests/publication_candidate/engine.rs": "a6ad62bc6306eb879b552105db4366e3ac45d7b35c3497ba2ec4e825990337df",
+    "mutants/08-no-snapshot-byte-guard/run.json": "e02ea8f1a4ab317bbfefb1aeddddf79bd565733d334fa89eeccab6874c506584",
+    "mutants/08-no-snapshot-byte-guard/test.log": "210e137225877aa3736a09d40d52f2c3323bef7fc76eb6e2e63dff38f75a8a72",
+    "mutants/09-state-overwrites-cancelled/nativelink-scheduler/src/authority/mod.rs": "c47703f12ebfcc89b665d94a23e3db8f86d8bed8d5486fe907d00ea94dc46aa0",
+    "mutants/09-state-overwrites-cancelled/run.json": "874336ccb11e637bc389a184e9ef9091b773d5f793b19696e1b42178b774eb5a",
+    "mutants/09-state-overwrites-cancelled/test.log": "fe7379ccbd9623781507fe7ab3c2d4737ca7f92229f700c13fdd1a0fb20eb390",
+    "mutants/10-state-no-interest-generation/nativelink-scheduler/src/authority/mod.rs": "10c19ffa1e12832aa9897902bd2473243dd15c3172a17b72b2690d7d133226db",
+    "mutants/10-state-no-interest-generation/run.json": "000f1a68c603919c417a2a167c968143a0eab1a705f00783d747ed91806d8271",
+    "mutants/10-state-no-interest-generation/test.log": "8918ee6113d2aa2768b71ad9b62db01c089943cc5bcd16cd40c81db573778cf2",
+    "mutants/restoration.json": "560f2d3847dbe3ec94b777de433482a568604b798b96514e595bc6526b26d1db",
+    "mutants/results.json": "569d5b3373accec5fc3624855bec79fae8330b53c0dead21a125cd4e6abcb9e9",
+    "restored-baseline-final.log": "b19ce2a22714376bb0b96a8ede979bf069edf54fdaf647f7b833014ddebb9dbf",
+    "run_mutants.py": "59e3803c6420de98e94f073d83cc2b39b56de02e8ba73c86de8202c93806b863",
+    "ten-scenarios-accessor-fixed.rs": "aea79a1e6601b87bb2897809307daebdc351cebdc8f48f3edc60e8d0e64df072",
+    "ten-scenarios-before-implementation.json": "42e6088a4b09aeb0e8ed047c0891ab231b438f52a0053d3bb3d9eab23fc0ac46",
+    "ten-scenarios-before-implementation.rs": "f22c2d3ebcbd7dda139b98dc760c238223d9131655e16533f48b8421320895f4",
+    "ten-scenarios-corrected.log": "8cce378f133297468702f46453e0186c615ee208ff0c2a162bb06c49b2352b7c",
+    "write_manifest.py": "18276bcca4f35bcfb08b1130c30ad5f11424f0cde7154a94a3fc6e731f9efdd8"
+  }
+}

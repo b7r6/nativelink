@@ -499,9 +499,14 @@ Review reproduced and fixed locally contradictory restore evidence, older-format
 downgrades, and duplicate write observations that invalidated preparation.
 The source was frozen before reading the new terminal oracle. Cargo passes
 54 candidate, eight existing comparison and nine physical cases; integrated
-Bazel also passes all eight worker cases. Candidate mutations, the corrected
-terminal-oracle comparison and the broad workspace refresh have separate pending
-receipts. Production role construction and every categorical gate remain open.
+Bazel also passes all eight worker cases. The later
+[candidate mutation campaign](evidence/publication-terminal-mutations/manifest.json)
+compiled ten variants and detected nine. Removing only the snapshot byte-length
+refusal survived all 54 cases, so aggregate-overflow coverage remains explicitly
+missing. All source hashes were restored before the 54/8/9 baseline passed again.
+The corrected terminal-oracle comparison and broad workspace refresh retain
+separate pending receipts. Production role construction and every categorical
+gate remain open.
 
 ## Decisions made provisionally
 
