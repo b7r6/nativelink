@@ -485,6 +485,7 @@ rust_test(
     srcs = ["tests/publication_candidate_test.rs"],
     compile_data = [
         "tests/publication_candidate/capacity.rs",
+        "tests/publication_candidate/snapshot_boundary_tests.rs",
         "tests/publication_candidate/real_request_tests.rs",
         "tests/publication_candidate/direct_client_tests.rs",
         "tests/publication_candidate/terminal_tests.rs",

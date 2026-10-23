@@ -68,16 +68,19 @@ a currently authorized attempt on restore.
 
 Every accepted outer mutation also serializes its canonical snapshot before the
 swap and refuses snapshots above the unchanged 2 MiB ceiling. This is a bound on
-the proposed state, not a reservation for every future outer byte. The scheduler's
-credit does not cover the extra outer copies of results, closures, operation
-payloads, nested child encoding, or Coarse capture records. A complete residual
-byte reserve for those fields remains unqualified.
+the proposed state. The additive
+[snapshot byte ledger](../../design/categorical/publication-snapshot-bound.md)
+bounds every valid state of the current finite alphabet at 2,022,804 bytes,
+including outer copies and nested child encoding. Restore restricts retention to
+the outer alphabet's Allocating and Closing phases with no capture or mark
+records. FinishClose and Mark remain excluded. This bound does not qualify
+production sizing or reserve additional retry-stage rows.
 
 The finite capacity histories fill 8 stages, 16 operations, 64 generations,
 8 workers, all 128 write rows, and (for successful results) all 112 root rows and
 16 serving grants. They use 256-byte qualified action strings with JSON escaping,
 4094-byte property maps, near-limit complete result payloads, wide numeric IDs,
-repeated scheduler progress, and all 64 cohort capture transitions. Every exposed
+repeated scheduler progress, and all 64 cohort fence transitions. Every exposed
 state snapshots and restores canonically. The largest measured snapshots after
 payload qualification are 1,082,981 bytes for success and 1,039,398 bytes for error;
 these witnesses are not a worst-case proof for all histories. No aggregate
@@ -155,8 +158,9 @@ vector and quiescence; cancellation or exhaustion alone cannot refund capacity.
 The successor admits at most three classified reports per execution, 24 reports
 and eight terminal acceptances overall. Operation associations fit the existing
 16-operation bound. Admission already reserves these finite row counts through
-the execution and operation caps; complete future outer-byte and retry-stage
-reserves remain unqualified. The complete proposed snapshot must fit 2 MiB before
+the execution and operation caps. The snapshot byte ledger covers the complete
+outer encoding; additional retry-stage reserves remain unqualified. The complete
+proposed snapshot must fit 2 MiB before
 any transaction becomes visible. Ignored events preserve authoritative snapshot
 bytes even when the disposable index has been lost.
 

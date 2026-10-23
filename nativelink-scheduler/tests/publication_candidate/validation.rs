@@ -77,6 +77,15 @@ impl PublicationAuthority {
                 .any(|credit| credit.physical_remaining > MAX_MEMBERS)
             || !retention.deletes.is_empty()
             || retention.generations.values().any(|row| row.retired)
+            // The outer alphabet exposes Seal + BeginClose atomically, never
+            // FinishClose or Mark. A valid child snapshot alone cannot extend
+            // that alphabet with retained copies of captured root closures.
+            || retention.cohorts.values().any(|row| {
+                !matches!(row.phase, r::Phase::Allocating | r::Phase::Closing)
+                    || !row.captured.is_empty()
+                    || row.cursor != 0
+                    || !row.marked.is_empty()
+            })
             || retention.limits.roots != ROOT_CAP
             || retention.limits.writes != WRITE_CAP
             || retention.limits.generations != MAX_PHYSICAL
