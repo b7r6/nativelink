@@ -1,0 +1,60 @@
+{
+  "slice": "ByteStream terminal backend future lifetime",
+  "source_commit": "a8fc2c0a2735ccbb6c8fcc700ffbc5365548eb28",
+  "tests_commit": "6803019044d5b4c7cd1c7e2aa730241d5924b51c",
+  "execution_owner": "Root agent executed all Bazel commands. Storage reviewer independently inspected source, raw logs, BEP, copied executables and source hashes; packaging ran no Rust.",
+  "runtime_candidate_manifest_sha256": "5e968b1175927dd4637caa7bc111f2004e81d6a11b8f1ed6ff579bf64bd15f29",
+  "runtime_source_sha256": "d8b0cea01d6211e2075b1685e681fbf37eaea7e6a89f57badb2ef2a4b060ad15",
+  "fixture_sha256": "6909dd9d889484ed64b548bb28ebef43ba0d33e665bd5fc361dbf3e0d0b0d5f6",
+  "source_boundary": "Twelve selected inputs are copied for the original and runtime candidate. Every execution records 1350 source input hashes unchanged before/after; independent review matched original and restored sets to their recorded git commits. Those 1350 complete file bodies are not all bundled.",
+  "behavior": "Retain Fuse on the stored backend future itself. A guard whose backend future has returned Ready removes its upload entry instead of parking an unusable future; a pending backend remains resumable after a client error. Captured digest context and identity rules remain unchanged.",
+  "original": {
+    "passed": 1,
+    "failed": 5,
+    "filtered": 40,
+    "actual_uncached_runs": 1,
+    "interpretation": "Two production async-resumed-after-completion panics occurred: postEOF fresh retry and nonzero resume. The preEOF fresh retry failed directly on a disconnected writer; two other tests failed direct stale-progress assertions. No setup or compiler failure is counted."
+  },
+  "fixed_initial": {
+    "passed": 6,
+    "failed": 0,
+    "filtered": 40,
+    "actual_uncached_runs": 1
+  },
+  "compiled_faults": [
+    {
+      "name": "park-terminal",
+      "interpretation": "Fuse remains intact while terminal cleanup is bypassed. The stale-progress query directly observes4 instead of0 at completion.rs:152; no timeout or repoll panic is counted.",
+      "binary_sha256": "918b05ffd1ab3a41bbcf84f135637d9932f9d66686bc8ae9dee4352230b9321c"
+    },
+    {
+      "name": "discard-pending",
+      "interpretation": "Pending work is removed. Its positive-control query directly observes0 instead of4 at completion.rs:254. Later resume and content assertions are not reached by this mutant.",
+      "binary_sha256": "6e3d3eaa40177c6b09b2f06e0cc5fab40c0475299ab63811b38151bfd7cb784e"
+    }
+  ],
+  "restored": {
+    "passed": 6,
+    "failed": 0,
+    "filtered": 40,
+    "actual_uncached_runs": 1,
+    "explicit_nocache_test_results": true,
+    "binary_equals_fixed_initial": true,
+    "binary_sha256": "a9f0a68b799f60c3ecfd170905e8fe84e7628b27afaf43bb296de2839915e752"
+  },
+  "review_receipts": {
+    "source-review.json": "9c252fca8e56ba41ba932dacc021aace5ab60a73094e24ec43a46e02de30259a",
+    "runtime-and-original-review.json": "72a950533036d305d9ccabf98523005ef9bd9396f094fccf9b0c4888415fe800",
+    "compiled-controls-restoration-review.json": "06f69f63fa02cdbabe7ee1d497e2137a59186169ce6c40d498fd7e5e2628d69a"
+  },
+  "review_copy_policy": "New reviewer run copies and package staging use hardlinks to immutable evidence to avoid redundant ELF allocation. Archive content is deduplicated by SHA256 chunks and is self-contained.",
+  "historical_review_prerequisite": "The first reviewer artifact checker expected executionInfo.exitCode on successful BEP results; Bazel omits that default-zero field. The corrected checker verifies PASSED status for successful results and explicit101 for failures. review-prerequisite.json records this tooling issue; it is not a semantic failure.",
+  "later_boundary": "A broader root run reported an unused qualification warning for nativelink_error::Code::Unavailable in the frozen fixture. Root plans a fixture-only spelling correction and separate strict/broad qualification. This packet deliberately retains the old exact fixture and makes no strict-Clippy or later combined-integration claim.",
+  "limits": [
+    "All six new cases use fixed listeners; legacy compatibility and combined root integration are separate receipts.",
+    "active_uploads accounting is source-reviewed only. No direct metric fault qualification is claimed.",
+    "Early backend success is a deliberately invalid store that tests future ownership, not content integrity or honest storage acknowledgement.",
+    "Observed future Ready determines cleanup; external backend signals, EOF, byte counts and client errors do not substitute for it.",
+    "No aggregate registry-memory bound, arbitrary backend panic/noncooperative-work proof, production activation, or completion of the broader categorical plan follows."
+  ]
+}

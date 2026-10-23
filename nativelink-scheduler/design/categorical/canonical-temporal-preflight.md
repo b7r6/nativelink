@@ -56,3 +56,30 @@ The queue fixture alone clones the private Journal before starting a separate
 audit. Releasing the original owner while that audit retains the database tests
 the extra alias's custody. The public owner exposes no such alias or audit, so
 this fixture is not evidence of an early public release acknowledgement.
+
+## Qualification
+
+The [author receipt](evidence/canonical-temporal-preflight/manifest.json)
+preserves an original 33-test baseline: eleven pass and 22 fail at semantic
+refusal assertions. Adding the audit and two custody controls passes all 35
+focused tests. The restored regression passes 151 library tests and one external
+API test, with one existing ignored test; strict all-target checks pass.
+
+Sixteen compiled control executions cover fifteen distinct mutated sources and
+executables. Twelve fail their intended semantic assertions; four selected
+oracles survive because other checks still reject the fixture. In particular,
+generic request identity and per-operation payload validation make the selected
+execution-payload guard redundant. The batch checks also cannot be isolated by
+their shared fixture. The initial interest mutation fails compilation on an unused
+import and is excluded from detection counts. Its corrected source compiles.
+
+All original, fixed, mutated and restored executables are retained in the
+[executable supplement](evidence/canonical-temporal-preflight/executables-manifest.json).
+Both restored executables match their initial qualified binaries. Independent
+source and artifact reviews are distinct from root's actual Bazel execution.
+
+The [combined root receipt](evidence/temporal-terminal-root-integration/manifest.json)
+records twelve executed targets, 421 Rust passes, two ignored tests and the server
+build alongside the upload repairs. Sixteen of seventeen selected author inputs
+match; the external API test retains root's earlier Bazel tracing dependency.
+No production constructor, clock or serving gate follows from these results.

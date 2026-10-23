@@ -1,0 +1,124 @@
+{
+  "source_commit": "a8fc2c0a2735ccbb6c8fcc700ffbc5365548eb28",
+  "format": "sha256-chunked-evidence-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2586,
+      "sha256": "b8f4b690072b5306fceb36b92b41a379a44884fdd7457b5de9f478f6bcd28291"
+    },
+    {
+      "path": "author-01.tar.gz",
+      "bytes": 6435870,
+      "sha256": "5469d6e3342069cb42545d14bcc6a5fd4d8b1d56289b7cc5c493afc2f94e2ca0"
+    },
+    {
+      "path": "author-02.tar.gz",
+      "bytes": 9510591,
+      "sha256": "744507cf3648df6c22067ab5246433691633221fe39a425021419db5206807c6"
+    },
+    {
+      "path": "author-03.tar.gz",
+      "bytes": 2675920,
+      "sha256": "1ccddb8660965ecd16fb20b4111c36210456f72b4f3c35913c87cd3b938da845"
+    },
+    {
+      "path": "author-04.tar.gz",
+      "bytes": 9910041,
+      "sha256": "1755b486117232708e8c0b2a320c2a1c195c21e48e8f4125864d499695397226"
+    },
+    {
+      "path": "author-05.tar.gz",
+      "bytes": 9793796,
+      "sha256": "a6733bfccdfac77efd1a99f15608a09839340c5321ff93b194c9d8b09096bf0f"
+    },
+    {
+      "path": "author-06.tar.gz",
+      "bytes": 6927721,
+      "sha256": "966fe1c39f6cf69b81960c14acb922122187f74b1fe92f18031a6c2be62221f6"
+    },
+    {
+      "path": "author-07.tar.gz",
+      "bytes": 2411922,
+      "sha256": "a41d55457f49b7a2e419a640e7e6bd40746540acdc5432c48643798981857823"
+    },
+    {
+      "path": "author-08.tar.gz",
+      "bytes": 9682147,
+      "sha256": "16be3bcd1a8f8d0aa61d7d3192d14537e97cce43032298c49ed42f354eba34ae"
+    },
+    {
+      "path": "author-09.tar.gz",
+      "bytes": 4796275,
+      "sha256": "41ed010a796d3834e7f334c96da1161ba2c3bfc4718508789a3b0ee332b529ee"
+    },
+    {
+      "path": "author-10.tar.gz",
+      "bytes": 2788115,
+      "sha256": "d73d542a455196aff1eaa1e03b0debdf74e217e3f2758c17d8d4c7f6e450a52a"
+    },
+    {
+      "path": "author-11.tar.gz",
+      "bytes": 2411763,
+      "sha256": "33f5f5bb29f2760969ba3cb5024315844601d64f0f2a36f34e5ad44f828b4877"
+    },
+    {
+      "path": "author-12.tar.gz",
+      "bytes": 5552018,
+      "sha256": "76970d4796cfff194fe086b9b8f6b3f5ad590afd3f051a774b0e0476632a44ed"
+    },
+    {
+      "path": "author-13.tar.gz",
+      "bytes": 6479451,
+      "sha256": "c1b18f9460382c49dd8da47a3bd4aaad789d6ea4d8a1e97bd758634b45b69a31"
+    },
+    {
+      "path": "author-14.tar.gz",
+      "bytes": 1873611,
+      "sha256": "84cba308038c5b31c05cc5c82c6beec1c1ede9680def06642009c4160b1be87c"
+    },
+    {
+      "path": "build-package.py",
+      "bytes": 3905,
+      "sha256": "258c7b57f4020033b8fc5579836eb5cd67d87d4d8ceba6409f526a58ded248d5"
+    },
+    {
+      "path": "package-verification.json",
+      "bytes": 391,
+      "sha256": "5468e461399ea9d3f8854347bb26d536f51af3b3161c22ad2f0fae785990d826"
+    },
+    {
+      "path": "package-verification.log",
+      "bytes": 336,
+      "sha256": "19195e4b68c2d3500f3c086a9ea8b1c61c70403368849abacba338050f1b9793"
+    },
+    {
+      "path": "package.json",
+      "bytes": 80968,
+      "sha256": "a83b4ded8d2a1cc1d9cccc80f6fce7d44b5d3630229de0323f9d52e0d0e75f54"
+    },
+    {
+      "path": "packet.py",
+      "bytes": 5578,
+      "sha256": "3f96b13094079214bfeca2346581a54bbdb782237873b5f5be651d6172633d0b"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 4716,
+      "sha256": "5768ecafd549f66c0ef54f0deeaafc7f0de7f287f1933c0ca36bd6eff7538b58"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 35906,
+      "sha256": "e43643bde927df421cbb5df0357d2ca21e31e33d551c6f1158f7d9d024464c98"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 4228,
+      "sha256": "57788aeed91b0a27f8390a45ff0c7fd24df6f3195a4034a5c9fb59c84ac0e178"
+    }
+  ],
+  "artifact_count": 23,
+  "artifact_bytes": 81387855,
+  "package_verification": "package-verification.json"
+}

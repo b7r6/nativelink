@@ -1153,6 +1153,28 @@ Root verified every archived chunk and reconstructed file; its separate seven
 executed Bazel targets pass 169 Rust tests and build the server. These two source
 boundaries and their prerequisite differences remain explicit in the receipts.
 
+The subsequent [backend completion repair](bytestream-terminal-update.md) removes
+completed upload futures from resumable state. Original source fails five of six
+HTTP/2 cases, including two completed-future polling panics; the pending-resume
+control passes. Corrected and restored source passes all six, and two compiled
+faults fail the intended progress assertions. The old fixture and later strict
+qualification cleanup retain separate source and executable boundaries.
+
+The [temporal owner audit](canonical-temporal-preflight.md) validates applied,
+snapshot and every retained log row before returning an inert owner. Its original
+33 tests pass eleven and expose 22 incorrect admissions; the restored scheduler
+suite passes 151 plus the external API test. Sixteen compiled control executions
+produce twelve semantic detections and four surviving oracles, not sixteen
+detections. Root's combined twelve-target run executes 421 passing Rust tests,
+with two ignored, and builds the server. The later fixture-only correction passes
+45 overlapping listener tests and strict service checks.
+
+Recovery custody remains the next boundary. Actual state-machine and spawned
+snapshot fixtures demonstrate that core shutdown can finish while storage work
+retains the journal and namespace locks. A private database drain is being
+qualified before introducing a supervised recovered owner. This does not change
+the existing inert release API or establish a serving runtime.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions

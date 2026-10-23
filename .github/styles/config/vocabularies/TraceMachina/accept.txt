@@ -513,3 +513,4 @@ serializer
 predeclared
 ELFs
 terminality
+[Uu]ncached
