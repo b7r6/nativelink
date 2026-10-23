@@ -29,9 +29,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use futures::stream;
-use nativelink_config::cas_server::{
-    AcStoreConfig, ByteStreamConfig, WithInstanceName,
-};
+use nativelink_config::cas_server::{ByteStreamConfig, WithInstanceName};
 use nativelink_proto::build::bazel::remote::execution::v2::execution_server::ExecutionServer;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
 use nativelink_proto::google::longrunning::operations_server::OperationsServer;
@@ -50,7 +48,7 @@ use crate::wire_compression::RemoteCacheCompressionInstances;
 
 // Per-message wire ceilings, including protobuf envelopes. These do not bound
 // concurrent RPCs or allocations made by a service before response encoding.
-const CACHE_MESSAGE_BYTES: usize = 1024 * 1024;
+pub(crate) const CACHE_MESSAGE_BYTES: usize = 1024 * 1024;
 const WORKER_MESSAGE_BYTES: usize = 1024 * 1024;
 const CONTROL_MESSAGE_BYTES: usize = 64 * 1024;
 const OPERATION_MESSAGE_BYTES: usize = 128 * 1024;
@@ -92,7 +90,6 @@ impl AuthorityListeners {
         let prepared = (|| {
             let stores = StoreManager::new();
             stores.add_store("authority_objects", config.cas.clone())?;
-            stores.add_store("authority_sink", config.publication_sink.clone())?;
             let compression = RemoteCacheCompressionInstances::default();
             let cas = CasServer::new_authority(config.instance.clone(), config.cas.clone());
             let bytestream = ByteStreamServer::new(
@@ -107,16 +104,8 @@ impl AuthorityListeners {
                 &stores,
                 &compression,
             )?;
-            let ac = AcServer::new(
-                &[WithInstanceName {
-                    instance_name: config.instance.clone(),
-                    config: AcStoreConfig {
-                        ac_store: "authority_sink".to_owned(),
-                        read_only: false,
-                    },
-                }],
-                &stores,
-            )?;
+            let ac =
+                AcServer::new_authority(config.instance.clone(), config.publication_sink.clone());
             Ok::<_, nativelink_error::Error>((cas, bytestream, ac))
         })();
         let (cas, bytestream, ac) = match prepared {

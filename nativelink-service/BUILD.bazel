@@ -11,6 +11,7 @@ rust_library(
     name = "nativelink-service",
     srcs = [
         "src/ac_server.rs",
+        "src/ac_server/authority.rs",
         "src/ac_server/authority_rpc_tests.rs",
         "src/ac_server/authority_tests.rs",
         "src/authority_clock.rs",

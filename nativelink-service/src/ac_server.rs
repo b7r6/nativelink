@@ -36,6 +36,8 @@ use prost::Message;
 use tonic::{Request, Response, Status};
 use tracing::{Instrument, Level, error, error_span, instrument};
 
+mod authority;
+
 #[cfg(test)]
 #[path = "ac_server/authority_tests.rs"]
 mod authority_tests;
@@ -47,6 +49,7 @@ pub struct AcStoreInfo {
 }
 
 pub struct AcServer {
+    authority_admission: bool,
     stores: HashMap<String, AcStoreInfo>,
 }
 
@@ -75,8 +78,23 @@ impl AcServer {
             );
         }
         Ok(Self {
+            authority_admission: false,
             stores: stores.clone(),
         })
+    }
+
+    /// The fixed client route remains writable; no caller-selected policy.
+    pub(crate) fn new_authority(instance: String, store: Store) -> Self {
+        Self {
+            authority_admission: true,
+            stores: HashMap::from([(
+                instance,
+                AcStoreInfo {
+                    store,
+                    read_only: false,
+                },
+            )]),
+        }
     }
 
     pub fn into_service(self) -> Server<Self> {
@@ -87,6 +105,9 @@ impl AcServer {
         &self,
         request: GetActionResultRequest,
     ) -> Result<Response<ActionResult>, Error> {
+        if self.authority_admission {
+            return authority::get(self, request).await;
+        }
         let instance_name = &request.instance_name;
         let store_info = self
             .stores
@@ -126,6 +147,9 @@ impl AcServer {
         &self,
         request: UpdateActionResultRequest,
     ) -> Result<Response<ActionResult>, Error> {
+        if self.authority_admission {
+            return authority::update(self, request).await;
+        }
         let instance_name = &request.instance_name;
         let store_info = self
             .stores

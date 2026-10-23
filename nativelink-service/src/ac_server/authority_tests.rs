@@ -56,9 +56,7 @@ fn legacy(store: Store) -> AcServer {
 }
 
 fn fixed(store: Store) -> AcServer {
-    // The first qualification run deliberately exercises the existing path.
-    // Only this constructor shim changes when fixed admission is implemented.
-    legacy(store)
+    AcServer::new_authority(INSTANCE.to_owned(), store)
 }
 
 fn key(size: i64) -> Digest {
