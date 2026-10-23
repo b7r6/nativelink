@@ -1,0 +1,217 @@
+{
+  "scope": "Independent read-only namespace review; documentation-only follow-up. No runtime qualification or recovery semantic changes.",
+  "reviewed_commit": "a967496c59ae8890e4be018bce5be13d71a3056a",
+  "cases": 14,
+  "receipts": [
+    {
+      "file": "fsync-error-1.strace.gz",
+      "source_sha256": "822768e3edf835928bdcf9dd0eae4a924ba145f54082dc3005e3121496297f0c",
+      "archive_sha256": "a7d6d7dea1e12f62eb73bc0aead8de69943f5b29ea210243a734f2cdf7bc82d0"
+    },
+    {
+      "file": "fsync-error-2.strace.gz",
+      "source_sha256": "3ea1d686ba83069e8e486597d75302d91a989224adbd4c7321a0763098331f0b",
+      "archive_sha256": "150ab8ba6e0eb8e51fc2e957f2ef6d97f56e0dab81be4a8c1bd5fa9366f8c59f"
+    },
+    {
+      "file": "fsync-error-3.strace.gz",
+      "source_sha256": "1b12725e69c03abcb39c8c125f776b35c1baef7e6b27ae849fa368487ee30d5e",
+      "archive_sha256": "40abccefa2ffb037bce71d7f76be511f5b0dee02c961d1a294f1574be12fc04f"
+    },
+    {
+      "file": "fsync-error-4.strace.gz",
+      "source_sha256": "44df9a26ce37b6c6f49ab3a3e7fcda2a15a980340cb6969bb191b78141ffbacb",
+      "archive_sha256": "58fe7c261c7f3885bf91ea70034f93cd63fa89146f0c11c2c66ff54077829481"
+    },
+    {
+      "file": "fsync-error-5.strace.gz",
+      "source_sha256": "4e0c3c3e1506d6e71b738a3e19bf96ab3fec6c922a8f9b3335aecf4a200c6993",
+      "archive_sha256": "529ffd8097ac7a183de1c3bd7c207607ef964034c3aa0b00d1a68ba45ceb24e9"
+    },
+    {
+      "file": "fsync-error-6.strace.gz",
+      "source_sha256": "c2d2920fec4b4d61590ca64aceeede847e039cf49c1725f54c602ec5f9abae45",
+      "archive_sha256": "f80684ffe3ad2a49f65d2f084933fd79d5c9181262a5844330e92f8c9674425d"
+    },
+    {
+      "file": "fsync-error-7.strace.gz",
+      "source_sha256": "14bf77ca8a6a7536289c1ac95dca753d634d97f13220c58a9483090226550308",
+      "archive_sha256": "69c79232e29f0c16eb94f6488435c1aa1af06de324131e5b5a5482dfea08bdda"
+    },
+    {
+      "file": "fsync-error-8.strace.gz",
+      "source_sha256": "f1ec934d6f42e4d0fb5c078faccd5290150aaca12a7d0010fd47da83e7484525",
+      "archive_sha256": "379b17854de6deac40507c7a7aafb7421ae7320c8c4a367207c4e0aace0c4894"
+    },
+    {
+      "file": "harness/Cargo.lock.gz",
+      "source_sha256": "3e50740501b906a11def2b57e86bca7686cf9f5af692a7aaae46651cada7bbbc",
+      "archive_sha256": "c960f2a351ad06c773f46035cfdab536a2f82c59fe050624e7b9b399b25beebb"
+    },
+    {
+      "file": "harness/Cargo.toml.gz",
+      "source_sha256": "20f286d4a6470e7021aa365732e37242cab79bb16d4b46d7b5acdee348dc7f3c",
+      "archive_sha256": "b9f8e810516a00792a6a8457f33dc67a71403c455bb41bcafa5d54e5d716e495"
+    },
+    {
+      "file": "harness/src/main.rs.gz",
+      "source_sha256": "20a562516ae845d4f18d3849ff5ef86e3b604f7c3eae13ed0b20afd2a1eaed2a",
+      "archive_sha256": "8210d8c9056a6f3cf4a0770dff46f2e94784eef37c8ae259176fb8d74a70100d"
+    },
+    {
+      "file": "manifest.json.gz",
+      "source_sha256": "d2ed422e4e9c8e0cf396a1ac7a17efa3c267012345eee8541ea9fd463119d2ee",
+      "archive_sha256": "8ffecb4af59219ec3c32468fb1dda9049e7a7d2fbb54a766d58b1e11d9611608"
+    },
+    {
+      "file": "results.json.gz",
+      "source_sha256": "98fa34652e1b426b667b2993fecfcfb1e0b3ba3c8c0ca776c466589067e4a20e",
+      "archive_sha256": "bd4ccc0542c20bdf1dbc16344ca6cc45a1b112878da40611fe540675af57216b"
+    },
+    {
+      "file": "review-metadata.json.gz",
+      "source_sha256": "0e8afc05314c2768c122ab619667cd669ff1df18c3fadc30185d9a7cfe3b7837",
+      "archive_sha256": "ed8db63021c9a87d12d41c6ad23e2e9d3a93f2db75f209a87d681a7ebbd39666"
+    },
+    {
+      "file": "review.md.gz",
+      "source_sha256": "3184822ea247c3aef1d6dfd51723886fdff2da89e213493a49e2713b29720bfc",
+      "archive_sha256": "0e7b1d1ab4309b45b22efe75fde81ef149b0a8547b6344f923c6c880fb8a048f"
+    },
+    {
+      "file": "run.py.gz",
+      "source_sha256": "a7cc33ebe0640b51fffad1f14d19731951bc14ff86bad11917788de9c21bf65e",
+      "archive_sha256": "40ec312c00fc50272aeaa8d3365e3e58b1ee5acafee00f25a457f04f5dfbbefe"
+    },
+    {
+      "file": "source/tools/canonical-config/BUILD.bazel.gz",
+      "source_sha256": "1db5d4dcfeef148425396a0a702197b9847d974199228bf084c147dafbfbc03a",
+      "archive_sha256": "bd388da4e4cd6967d7e9fda1d9a32e680f2a00a33f3ca599e5e7d9312a79bd14"
+    },
+    {
+      "file": "source/tools/canonical-config/Cargo.lock.gz",
+      "source_sha256": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+      "archive_sha256": "a584d5edcb05a275fcc76ff66cb218dcb06f84cd496402bc3aea23368d3a046f"
+    },
+    {
+      "file": "source/tools/canonical-config/Cargo.toml.gz",
+      "source_sha256": "044d831a3b5cd0381fe15a3bb14d1a1d97fc628524e5cd16fef92b5bbbfe6448",
+      "archive_sha256": "3603088c6e6623e9936201b1c2ba0d917ce744f4af0531a6157ea5799c3fc832"
+    },
+    {
+      "file": "source/tools/canonical-config/README.md.gz",
+      "source_sha256": "e12289e923faebc9d8651c28e6eeb4bf7a1155c89faf9ccf82b64cdc5af29ec3",
+      "archive_sha256": "0086abbd032123fcaa44c5c5a1814122ddcac68050d32d590b86c4564f9fdb78"
+    },
+    {
+      "file": "source/tools/canonical-config/fixtures/canonical.json.gz",
+      "source_sha256": "9b20a7b9642ec2a6f6954002e8c360cca366e0a6c13372b4aca9de817015a7f3",
+      "archive_sha256": "09965bd852c5346183a3a93e002475efdc97ff57d9770cb1068f2b264f1f412c"
+    },
+    {
+      "file": "source/tools/canonical-config/fixtures/legacy.json.gz",
+      "source_sha256": "40bce75237fb1a2684856a79240a61c6aa1298fb032a54726a6f36a0fb9849b5",
+      "archive_sha256": "99383b644ac27e2b61e8667144b18ef34a7a7ff5872a7799102165006f984fd9"
+    },
+    {
+      "file": "source/tools/canonical-config/fixtures/mapping.json.gz",
+      "source_sha256": "336959e64e87998a1accb8c53b9029a211eb910d2df2bc2be4e152d51cf41753",
+      "archive_sha256": "f5f82d809ae007b6b4257190ea2ff8df26b0a73e151e6f3b0134915236e29f98"
+    },
+    {
+      "file": "source/tools/canonical-config/src/bin/convert.rs.gz",
+      "source_sha256": "d09c9da2d3cc0409afdc78384afd4bc53a07fe6db557ea4921a0e8855bbb3dc6",
+      "archive_sha256": "e538911546e354545862d7ab34281afddb9c364764a7959e4254e08b0822e943"
+    },
+    {
+      "file": "source/tools/canonical-config/src/conversion.rs.gz",
+      "source_sha256": "414f34593160d1e94c03733d53916042893ae86f5167a8f2979ccd0d7a6fc9e6",
+      "archive_sha256": "74da349f12227ff05c2231579aed400840f1af835f6a8492fc0a0be608e95eca"
+    },
+    {
+      "file": "source/tools/canonical-config/src/conversion_tests.rs.gz",
+      "source_sha256": "a5cdbabc616c059eb0ddd3249b1ccac4ae19b0a7e6dc2a035832cef8384c8a05",
+      "archive_sha256": "0878cf305e39c64f2ac095d1d2ad41b70d14293c6cbb216fdd3a661d844f8d1e"
+    },
+    {
+      "file": "source/tools/canonical-config/src/legacy.rs.gz",
+      "source_sha256": "3a55473a769fa2be8f33a3fc8049018c21f131757c8d841730c995e0f7b93eed",
+      "archive_sha256": "68f701c3b7bf57c68e05a344397c6807aab456d7341558c5f7c8128feb081ff5"
+    },
+    {
+      "file": "source/tools/canonical-config/src/lib.rs.gz",
+      "source_sha256": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+      "archive_sha256": "92b7f065978ae5509e819b232d61432832d2f2a586c546bde7d21213ffeac175"
+    },
+    {
+      "file": "source/tools/canonical-config/src/parse.rs.gz",
+      "source_sha256": "89dbbc2078525156e73bba6377bdaacd79568e6f9208536fd78147aa4d979943",
+      "archive_sha256": "cb07abf398da5256eb685b76b55b0fda4783f586fa690a74dcad9a2015b0576f"
+    },
+    {
+      "file": "source/tools/canonical-config/src/schema.rs.gz",
+      "source_sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "archive_sha256": "e1ef8b9b17d39f667f1f16a59ef7434fcf487ac0b86f82532dcae719ee87379c"
+    },
+    {
+      "file": "source/tools/canonical-config/tests/parser.rs.gz",
+      "source_sha256": "cf6d6039a6029aa5a555318945a64cf06e19ebbcdbb8c43104cca6b6d830a8ae",
+      "archive_sha256": "05c32457e526f9ff746f01140de0b6b4381a1266af5fd978c6f1a1eb5cb22b32"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/BUILD.bazel.gz",
+      "source_sha256": "97e289db5e8fcc38c8ab5893f0847fb5c4b5b2952da94e1ee769d475d6a615f0",
+      "archive_sha256": "af621dbc9761b181fc417758cfc3d8c7e0c4213e8e4071f8f3b6219d591a2ac6"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/Cargo.lock.gz",
+      "source_sha256": "1e5b39409e628a26973f5757cc79c49ea14a140d1ea06f0526ecb579c03e6cf0",
+      "archive_sha256": "179ad1d192a294d1bf0bfbc7113d5f1ae2255e7ea5b44ffbb221f6303b914adf"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/Cargo.toml.gz",
+      "source_sha256": "76e070d2ed7802838dd06eff9d92d21df99c72a7fe2e8632d8484d4a589031bf",
+      "archive_sha256": "283ee94c46d1f1b43fcc137657ef938e75f6e2927755034593d6f28feb63ff53"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/README.md.gz",
+      "source_sha256": "b3aa72c69799b5d76c109fff74367b70cd3c493cf4a5dea80e61ea0ecfed2a30",
+      "archive_sha256": "08622815e8964e8ed882874bc2d76016a3ead26bd0aae093ab28bfed4daf3d31"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/src/lib.rs.gz",
+      "source_sha256": "e64d69404346b2520e19a06e84f3a57c94a3e02d2242362ebf21f7249ce880d1",
+      "archive_sha256": "ce822b5fbb26cc1f12ee49184cea8e4fabc0718c1ee738563cfa4025b5595cdc"
+    },
+    {
+      "file": "source/tools/canonical-filesystem/src/tests.rs.gz",
+      "source_sha256": "248c8869dbc7e7dfb13787f47b2150c63ef1cb65b50b9389250e430b6b857430",
+      "archive_sha256": "4b6e3c309cd6c65ccfae4989bcb254bcb4964ce72cea512c6980f8f060a63026"
+    },
+    {
+      "file": "source-sha256.json.gz",
+      "source_sha256": "886b7c6d4912699757c65ced5a020d45d0d23c7315bf176cc060ad6a97e50d55",
+      "archive_sha256": "2d83570e02c784b5fd63ab0886c247b2a39ce5e2bbd34bed8b46e542641a84de"
+    },
+    {
+      "file": "write-error-1.strace.gz",
+      "source_sha256": "51f807a882751f855c64da2b924d00db1ca09d24c81d81b329b804c861c36abc",
+      "archive_sha256": "b0e998f7935fa5786400f8847a0a15d57505b649067972cfcdd1ae457f24e0a3"
+    },
+    {
+      "file": "write-error-2.strace.gz",
+      "source_sha256": "6adecddd800295e83da081bb241f302ac76c2c018ec8717c50a8fc711270fc42",
+      "archive_sha256": "dd3a531783635732ae46c9657c9a092fc4c2336d14973224347d2de9f35aa97a"
+    },
+    {
+      "file": "write-error-3.strace.gz",
+      "source_sha256": "09ac4618e797a7cb25a5fc2cf3dcaf35dbff3924e6e56ac3eab3668fe671d396",
+      "archive_sha256": "fc676e4bf57c79de9631eff31704991df09311bda451332746e419d63e2c9340"
+    },
+    {
+      "file": "write-error-4.strace.gz",
+      "source_sha256": "31f172dd1e3666c6398edb390a8532f63e6f25cf300cabdf18a34f0330fe4abc",
+      "archive_sha256": "5a8e4017ccbddb9c7e3e61e41af1a6503a7fdd18397743901b3d1f09ff21f8ca"
+    }
+  ]
+}

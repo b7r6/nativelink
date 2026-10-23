@@ -94,6 +94,8 @@ struct Root {
 /// All participants must honor these locks. Legacy constructors do not. This
 /// guard does not protect against other users of the filesystem, mount changes,
 /// or a path-based store reopening a different directory after a rename.
+/// Persisted device/inode observations cannot distinguish a replacement after
+/// inode reuse or prove physical-directory continuity across restoration.
 #[derive(Debug)]
 pub struct Ownership {
     roots: Vec<Root>,
@@ -150,11 +152,14 @@ impl Ownership {
         Ok(owned)
     }
 
-    /// Reopen exact namespace ownership, never execution authority.
+    /// Reopen matching namespace records, never execution authority.
     ///
-    /// All four durable records must agree with the requested domain/roles and
-    /// opened physical directories. This does not validate their data, prepare
-    /// them for a legacy store, restore authority, or admit a worker incarnation.
+    /// All four currently readable records must agree with the requested
+    /// domain/roles and opened device/inode observations. This operation does
+    /// not sync records: matching records can remain after a failed cold-claim
+    /// sync and do not prove historical durability or directory continuity.
+    /// This does not validate data, prepare roots for a legacy store, restore
+    /// authority, or admit a worker incarnation.
     pub fn reopen(manifest: &Manifest) -> Result<Self, Error> {
         let owned = Self::preflight(manifest)?;
         for root in &owned.roots {

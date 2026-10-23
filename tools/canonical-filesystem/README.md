@@ -42,18 +42,28 @@ not a stable migration format.
 `Ownership::reopen` takes the same locks and requires all four exact matching
 records. Reads use `O_NOFOLLOW` and `O_NONBLOCK`, require regular files and are limited to
 64 KiB. Unknown, duplicate, missing or malformed record fields fail. Changed
-domain, namespace, role, physical directories or execution configuration fail
-without rewriting records. Reopen does not scan, validate, prune, or alter data.
-Copying records onto replacement directories fails because device/inode binding
-changes. Restore or copy to a new physical placement needs a separate reviewed
-relocation procedure; automatic rebinding is absent.
+domain, namespace, role, execution configuration or observed device/inode
+bindings fail without rewriting records. Reopen does not scan, validate, prune,
+or alter data.
+Copying records onto replacement directories fails when their observed
+device/inode pairs differ. Those pairs can be reused after deletion: a stopped
+CAS directory was deleted and recreated with the same pair on its first
+allocation, and copying its saved record made reopen accept. Current
+observations therefore do not prove a persistent physical generation or a
+directory's historical continuity. Directory replacement, metadata restoration,
+cloning and relocation need separate reviewed evidence. No stronger physical
+generation basis is qualified here; this remains a runtime integration blocker.
 
 No rollback deletes records after an I/O error. A crash leaving only a subset of
 the four records, or a truncated record, causes both cold claim and reopen to
-fail. Neither operation automatically adopts, repairs, cleans up, or infers that a cold
-initialization finished. Review must establish what happened. A completed group
-of records only proves this namespace protocol completed under its filesystem
-assumptions; no authority or worker necessarily started.
+fail. Neither operation repairs or cleans up those partial states. Review must
+establish what happened. Four matching readable records establish current
+binding observations, not successful completion of every historical sync.
+Injected errors on the last record sync and the last directory sync each made
+cold claim fail while leaving all four exact records readable; reopen accepted
+both states. Reopen performs no sync and does not establish durable recovery.
+No authority or worker necessarily started. The runtime durability and recovery
+gates remain unresolved.
 
 Worker incarnation deliberately does not belong to persistent namespace
 identity. Reopening a worker directory grants no registration, process identity,
@@ -111,8 +121,13 @@ dirty or absent, symlink roots/ancestors/records, ordinary aliases/overlap,
 wrong domain/namespace/role, copied records on replaced directories, partial
 initialization, torn records, and caller mutation. The partial-initialization
 tests construct persisted crash shapes; they are not power-loss experiments.
-No test here establishes process admission, journal durability, store data
-durability, old-domain fencing, TLS exclusion, or complete M4a cutover.
+An independent [boundary review receipt](../../nativelink-scheduler/design/categorical/evidence/canonical-filesystem-review/README.md)
+records the inode-reuse and final-sync witnesses above, plus actual injected
+failures at all eight sync sites and four record writes and a FIFO refusal
+without blocking. These 14 cases preserve the frozen source, harness, results
+and syscall traces; injected syscall errors are not power-loss experiments. No test here
+establishes process admission, journal durability, store data durability,
+old-domain fencing, TLS exclusion, or complete M4a cutover.
 
 The standalone Cargo lock uses existing repository versions and checksums.
 The library adds no dependency to the server or pure parser. Bazel targets are
