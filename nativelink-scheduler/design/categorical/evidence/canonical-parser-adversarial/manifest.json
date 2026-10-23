@@ -1,0 +1,9 @@
+{
+  "archive": "author-evidence.tar.gz",
+  "archive_sha256": "46a1ba3ea410f0207ca0faf3c8a045555f2a2b09f3c92846cec53c48c5088065",
+  "author_commit": "8cea5328267f56055e822b748d69828b48641c28",
+  "author_manifest_sha256": "a5382e0d367606f265f6dbbc02c392a4372a9ee6a44e1efed5a4338a34b6712e",
+  "final_validation_sha256": "c8c9970c20ad3188a8f5130a6615317096bb7025eb3619c809902351c02f3af4",
+  "schema_version": 1,
+  "scope": "2253 frozen parser cases in4506 main/thread subprocesses;19 final package tests; no implementation defect found. Root package verification is separate."
+}

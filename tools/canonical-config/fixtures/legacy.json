@@ -1,20 +1,4 @@
 {
-  "stores": [
-    {
-      "name": "source-cas",
-      "filesystem": {
-        "content_path": "/source/cas/content",
-        "temp_path": "/source/cas/temp"
-      }
-    },
-    {
-      "name": "source-ac",
-      "filesystem": {
-        "content_path": "/source/ac/content",
-        "temp_path": "/source/ac/temp"
-      }
-    }
-  ],
   "schedulers": [
     {
       "name": "source-scheduler",
@@ -30,29 +14,16 @@
         }
       },
       "services": {
-        "cas": [
-          {
-            "instance_name": "build",
-            "cas_store": "source-cas"
-          }
-        ],
         "ac": [
           {
-            "instance_name": "build",
-            "ac_store": "source-ac"
+            "ac_store": "source-ac",
+            "instance_name": "build"
           }
         ],
         "bytestream": [
           {
-            "instance_name": "build",
-            "cas_store": "source-cas"
-          }
-        ],
-        "execution": [
-          {
-            "instance_name": "build",
             "cas_store": "source-cas",
-            "scheduler": "source-scheduler"
+            "instance_name": "build"
           }
         ],
         "capabilities": [
@@ -61,6 +32,19 @@
             "remote_execution": {
               "scheduler": "source-scheduler"
             }
+          }
+        ],
+        "cas": [
+          {
+            "cas_store": "source-cas",
+            "instance_name": "build"
+          }
+        ],
+        "execution": [
+          {
+            "cas_store": "source-cas",
+            "instance_name": "build",
+            "scheduler": "source-scheduler"
           }
         ]
       }
@@ -73,21 +57,37 @@
         }
       },
       "services": {
-        "worker_api": {
-          "scheduler": "source-scheduler"
-        },
-        "cas": [
-          {
-            "instance_name": "build",
-            "cas_store": "source-cas"
-          }
-        ],
         "bytestream": [
           {
-            "instance_name": "build",
-            "cas_store": "source-cas"
+            "cas_store": "source-cas",
+            "instance_name": "build"
           }
-        ]
+        ],
+        "cas": [
+          {
+            "cas_store": "source-cas",
+            "instance_name": "build"
+          }
+        ],
+        "worker_api": {
+          "scheduler": "source-scheduler"
+        }
+      }
+    }
+  ],
+  "stores": [
+    {
+      "name": "source-cas",
+      "filesystem": {
+        "content_path": "/source/cas/content",
+        "temp_path": "/source/cas/temp"
+      }
+    },
+    {
+      "name": "source-ac",
+      "filesystem": {
+        "content_path": "/source/ac/content",
+        "temp_path": "/source/ac/temp"
       }
     }
   ]

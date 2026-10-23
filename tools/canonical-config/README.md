@@ -114,7 +114,7 @@ integer tokens above the unsigned 32-bit range. Accepted decimal integers retain
 exact precision, including values above the IEEE-754 exact-integer range.
 
 Both inputs are limited to 1 MiB, 32 nesting levels, 16,384 values and 4,096 bytes
-per string/key. Duplicate keys, nonfinite numbers, non-object roots and strings
+per string/key. Duplicate keys, non-finite numbers, non-object roots and strings
 containing `$` or `~` fail; no interpolation is resolved. Unsupported-feature
 diagnostics are bounded to 128 entries and 2,048-byte paths, with an explicit
 incomplete-inventory blocker on exhaustion. Raw parser errors and unsupported

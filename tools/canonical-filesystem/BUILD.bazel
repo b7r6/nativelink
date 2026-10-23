@@ -16,8 +16,10 @@ rust_library(
 
 rust_test(
     name = "ownership_test",
-    srcs = ["src/tests.rs"],
-    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    compile_data = [
+        "src/tests.rs",
+        "//tools/canonical-config:fixtures/canonical.json",
+    ],
     crate = ":nativelink-canonical-filesystem",
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],

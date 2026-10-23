@@ -1,51 +1,51 @@
 {
-  "format": "experimental_singleton_filesystem_v1",
-  "instance_name": "build",
   "authority": {
-    "node_id": 1,
     "cluster_epoch": 2,
+    "journal_root": "/proposed/authority",
     "namespace": 3,
-    "principal": "local-build-clients",
-    "journal_root": "/proposed/authority"
+    "node_id": 1,
+    "principal": "local-build-clients"
   },
   "cas": {
     "namespace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "root": "/proposed/cas"
   },
-  "temporary_action_cache": {
-    "namespace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "root": "/proposed/ac"
-  },
+  "format": "experimental_singleton_filesystem_v1",
+  "instance_name": "build",
   "listeners": {
     "client": {
       "bind_address": "127.0.0.1:5100",
       "certificate_file": "/credentials/client-server.pem",
-      "key_file": "/credentials/client-server.key",
-      "client_ca_file": "/credentials/client-clients-ca.pem"
+      "client_ca_file": "/credentials/client-clients-ca.pem",
+      "key_file": "/credentials/client-server.key"
     },
     "worker": {
       "bind_address": "127.0.0.1:5101",
       "certificate_file": "/credentials/worker-server.pem",
-      "key_file": "/credentials/worker-server.key",
-      "client_ca_file": "/credentials/worker-clients-ca.pem"
+      "client_ca_file": "/credentials/worker-clients-ca.pem",
+      "key_file": "/credentials/worker-server.key"
     }
   },
+  "temporary_action_cache": {
+    "namespace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "root": "/proposed/ac"
+  },
   "worker": {
-    "worker_id": 4,
-    "incarnation_id": 5,
-    "execution_configuration_id": "local-toolchain-v1",
-    "root": "/proposed/worker",
     "capacity": {
       "cpu_millis": 2000,
       "memory_bytes": 1073741824,
       "slots": 2
     },
+    "execution_configuration_id": "local-toolchain-v1",
+    "incarnation_id": 5,
+    "root": "/proposed/worker",
     "transfer": {
       "address": "127.0.0.1:5101",
-      "server_name": "worker.local",
-      "server_ca_file": "/credentials/worker-server-ca.pem",
       "certificate_file": "/credentials/worker-client.pem",
-      "key_file": "/credentials/worker-client.key"
-    }
+      "key_file": "/credentials/worker-client.key",
+      "server_ca_file": "/credentials/worker-server-ca.pem",
+      "server_name": "worker.local"
+    },
+    "worker_id": 4
   }
 }

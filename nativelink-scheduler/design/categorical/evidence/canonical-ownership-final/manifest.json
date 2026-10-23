@@ -1,0 +1,60 @@
+{
+  "artifacts": [
+    {
+      "archive": "bazel-final.json.gz",
+      "archive_sha256": "5be19e5b6ac8d9f53658528dffd2c00f30a9e85b1a00047f9b2f66f6fda3468a",
+      "sha256": "a41e6a74d2bb4312a430688a900218fcf3b9695312dbb2721cf9a99d6e2d3f9b",
+      "source": "bazel-final.json"
+    },
+    {
+      "archive": "bazel-final.log.gz",
+      "archive_sha256": "6314769ef2e906ecf385574efe6eba7cef85303464bf81cf81c7b668446669ae",
+      "sha256": "6ad8fd1a4369c0146707ee511dc6e7e9d528a8760f4f7b13815010283c899bf1",
+      "source": "bazel-final.log"
+    },
+    {
+      "archive": "cargo-canonical.json.gz",
+      "archive_sha256": "f061715d562f7c5e61e5a3890fbaf679820ec0c034266f4d93c3addf200267a9",
+      "sha256": "ce98b7eaea19e8d4155c7117fb4d13edb69a33d8f9a002be0cf710ccd121fafa",
+      "source": "cargo-canonical.json"
+    },
+    {
+      "archive": "cargo-canonical.log.gz",
+      "archive_sha256": "1d784662a30d66475390b7a7e3a161004d31d8954d5c99b956f33aaec0220ad6",
+      "sha256": "925c8be5cddb68112789e3e9a2dc256a7e763940e16042ac8d6f47846f5f6616",
+      "source": "cargo-canonical.log"
+    },
+    {
+      "archive": "cargo-ownership.json.gz",
+      "archive_sha256": "027097c9e32dc567ea9258cbc5190dd0cab5153332f9a9caffe137c77ed6d861",
+      "sha256": "c22da1c3e387e486a6d19fb77a256f91d9e4acae99eaf10b03c5ec6352bca9af",
+      "source": "cargo-ownership.json"
+    },
+    {
+      "archive": "cargo-ownership.log.gz",
+      "archive_sha256": "7b486040049c9f713aff08fc7c2aff7333d60cd8de6909b4cb63f18818decc96",
+      "sha256": "ab4af91e9865b4703d227a16a47a7903ab79612f5169700f63847d279313951c",
+      "source": "cargo-ownership.log"
+    },
+    {
+      "archive": "change.patch.gz",
+      "archive_sha256": "8b408c93759ebf36708d036df4c22435a00d3fb8c542b3be775fd8c226e770e2",
+      "sha256": "0ffd64600a748ebcc88a4455f7d75146625cce8b0c5f51f708e41f642ee21a87",
+      "source": "change.patch"
+    },
+    {
+      "archive": "source-after.json.gz",
+      "archive_sha256": "f77b641e5370f369f685a5a7a3fe5e56129378e664ff3786c362082ea9158fa1",
+      "sha256": "8c7b1bafa4be620f5b439c895de11a2d33e06f7c05696b1df30e4fd1e33720f7",
+      "source": "source-after.json"
+    },
+    {
+      "archive": "source-before.json.gz",
+      "archive_sha256": "4de54ff3e465cb2af05f239751a0a2433eb0b07419b8d19efea20938e962db6e",
+      "sha256": "66740584b576bad47d8c14b4cac2ebf50a8888f03a8ecc00822c1ba9ff0479c1",
+      "source": "source-before.json"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Finalroot 19 canonicalconfig and13 ownership Cargo cases +allthree manualBazel targets pass on finalformattedfixtures; JSON/TOML values unchanged; frozenhashes match"
+}

@@ -7,11 +7,19 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused integration: the standalone parser and converter pass both manual
-Bazel targets, the converter binary builds, and the fixed listener suite passes.
-The integrated listener binary also passes all four explicit local mTLS cases.
-[Receipts](evidence/canonical-listener-integration/manifest.json) record the
-source boundary, build and binary hashes, and the initial misspelled target.
+Latest full integration at `4876ddd48c`: Cargo passed 2,007 tests with zero failures
+and eleven ignored cases; all 166 Bazel targets passed, including the two manual
+canonical-config targets. Of those targets, 134 executed and 32 were cached.
+The integrated listener binary also passed all four explicit local mTLS cases.
+[Workspace receipts](evidence/authority-construction-workspace/manifest.json)
+record the exact commands, 475 unchanged source/build inputs and binary hashes.
+Later standalone package changes passed their separate manual targets: nineteen
+parser/converter cases and thirteen namespace ownership cases. Their
+[integration receipt](evidence/canonical-ownership-integration/manifest.json)
+retains an initial Bazel rule error and the corrected build. Final formatted
+fixtures also pass both Cargo packages and all three manual Bazel targets;
+[final receipts](evidence/canonical-ownership-final/manifest.json) separate that
+source boundary. These additions do not inherit the earlier full-workspace totals.
 The preceding integration passed all 22 selected Bazel targets across the service crate,
 publication candidate/comparisons, physical fixture, and worker publication.
 [Integration receipts](evidence/construction-integration/manifest.json) retain
@@ -607,6 +615,42 @@ or unsupported facts emit blockers with no candidate; even complete proposals
 remain unqualified for deployment. [Author receipts](evidence/canonical-config/manifest.json)
 retain actual legacy-schema acceptance, source/dependency hashes and successful
 and refused CLI syscall observations. No runtime consumes this format yet.
+
+The [deadline driver repair](authority-deadline-driver.md) fixes two reproduced
+failures. A restored due-interest sweep now commits before the first queued
+observation; a retained running deadline no longer masks upload progress expiry.
+The final fixtures each fail when their specific fix is omitted, then pass the
+repaired driver. Actual worker RPCs retain the resource charge through revocation
+until matching cleanup; their manual cleanup is protocol evidence, not physical
+process termination. [Author receipts](evidence/authority-deadline-driver/manifest.json)
+preserve both failures, independent omission controls, final passes and exact
+validation overlays. No reducer, request projection, format or clock policy changed.
+
+The [parser adversarial campaign](evidence/canonical-parser-adversarial/manifest.json)
+ran 2,253 frozen cases in 4,506 fresh processes using both the main stack and
+a 2 MiB thread stack. No case crashed, timed out or accepted a legacy key.
+The parser implementation stayed unchanged; two added regressions check escaped
+key equivalence and precise integer identities. The pinned reader's conservative
+integer limits are documented. Eighteen private binary visibility warnings were
+also removed; the package now passes nineteen tests and strict lint checks.
+
+The isolated [filesystem ownership library](../../../../tools/canonical-filesystem/README.md)
+checks four existing roots before cold initialization, holds cooperative directory
+locks, writes role/domain records relative to pinned descriptors, and refuses
+partial or conflicting records. Thirteen cases pass on Cargo and Bazel. An
+[independent fourteen-case review](evidence/canonical-filesystem-review/manifest.json)
+also reproduced two limits: directory inode reuse can admit a copied old record,
+and all records can remain readable after a final sync fails. The API and docs
+now distinguish observed identities from durable physical generations and readable
+records from historical initialization success. These are runtime blockers, not
+qualification of copied namespaces or power-loss recovery. A path-based store
+still cannot safely consume this guard; no runtime calls it.
+
+The [clock proposal](authority-clock-proposal.md) records another construction
+prerequisite. A persisted monotonic base and fresh origin can conservatively
+exclude downtime, but integer rounding and stale samples can expire requested
+durations early. Fresh sampling, deadline comparison, overflow and bootstrap
+compatibility need explicit qualification. The proposal changes no runtime clock.
 
 ## Next work and facts for the morning
 
