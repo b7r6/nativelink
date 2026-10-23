@@ -683,8 +683,18 @@ also executed and passed. The candidate and underlying scheduler implementations
 are unchanged. All six separately compiled
 [reference faults](evidence/prepared-memory-reference-mutations/manifest.json)
 were detected, with 29-case baseline and restored passes. These fault checks and
-the collaborative reference correction remain distinct from the pending
-command-by-command comparison.
+the collaborative reference correction remain distinct qualification steps.
+
+The subsequent [command-by-command comparison](prepared-memory-differential.md)
+passes 34 histories across both digest algorithms, including all five audit
+regressions. Eighteen cases pass before and after seven detected compiled faults;
+strict Clippy, hooks and an independent adapter review also pass. The new target
+executed successfully in Bazel with 151 unchanged scheduler source/build inputs.
+Every command prefix is restored and compared, including rejected commands and
+duplicates. The bounded domain has one execution, up to three attempts and a
+preinstalled physical catalogue; it does not qualify global physical-capacity
+admission. Neither engine changed for this comparison, and the original
+reference's failures remain preserved.
 
 ## Next work and facts for the morning
 

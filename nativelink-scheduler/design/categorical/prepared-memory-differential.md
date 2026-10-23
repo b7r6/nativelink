@@ -127,3 +127,23 @@ not a production activation, provider proof, unbounded equivalence theorem,
 global capacity proof, or evidence that the original reference freeze had no
 errors. Candidate and reference mutation checks and preserved first-run artifacts
 are recorded separately with their exact source and command results.
+
+## Executed qualification
+
+All eighteen cases passed after the adapter review and again after restoring
+the source from seven separately compiled faults. Each faulty executable ran
+its exact named comparison case and failed a semantic assertion. The faults
+change memory classification, current graph evidence, retry staging protection,
+final failure reason, operation protection, duplicate acceptance, or peak-growth
+evidence. The corrupt-snapshot validation fault is excluded: restoring valid
+history prefixes does not test refusal of corrupt snapshots.
+
+Strict Clippy and repository hooks passed. The independent adapter review and
+the [author receipt](evidence/prepared-memory-differential/manifest.json) retain
+the frozen source, first compiler/style diagnostics, literal fault replacements,
+each compilation and test result, and the restored source checks. No semantic
+disagreement occurred against the audited reference during this campaign.
+The [integrated Bazel receipt](evidence/prepared-memory-differential-integration/manifest.json)
+records a separate executed pass of the eighteen-case target and 151 unchanged
+scheduler source/build inputs. These checks do not repeat the earlier full
+workspace checkpoint.

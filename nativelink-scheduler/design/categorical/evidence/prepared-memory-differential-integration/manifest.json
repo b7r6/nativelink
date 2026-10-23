@@ -1,0 +1,23 @@
+{
+  "executed_targets": 1,
+  "files": {
+    "bazel.log.gz": {
+      "sha256": "ea1e5f8980d1c07fe8615441f1b740aac77bb66dedab59fabd485c58e8961e65",
+      "uncompressed_sha256": "00b8172714e78d481034510e4e6abbc4003217d4ba2941c4ae62eea1cfc95020"
+    },
+    "before.json.gz": {
+      "sha256": "85aa45c0ccd6b7e686fbb496c47fc576d9195beb2307ee56a958a3a5b08bae72",
+      "uncompressed_sha256": "8ccfe0041a49d99d7b11896b8e2ce8b829640cc75942f914cb7c98da12fcf8b2"
+    },
+    "result.json.gz": {
+      "sha256": "4fb3f1781a4f3a5eebee38b5a0e8102c16d62047db09603624798bcf282da916",
+      "uncompressed_sha256": "d9e194a01b89ac296549b04bd4d228f309e52bab0b10f4d7b65e33d264bfe3c3"
+    }
+  },
+  "head": "fd963152b9c443baeaff44f3ccee2fa5afa614e2",
+  "passing_targets": 1,
+  "schema_version": 1,
+  "scope": "New prepared_memory_differential_test target, eighteen cases. Does not rerun or inherit full workspace totals.",
+  "source_count": 151,
+  "sources_unchanged": true
+}
