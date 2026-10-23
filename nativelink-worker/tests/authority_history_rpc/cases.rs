@@ -148,6 +148,21 @@ fn history_bytes(action: DigestInfo, response: &[u8]) -> Vec<u8> {
 }
 
 async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool, exit_code: i32) {
+    process_history_with_manager(
+        algorithm,
+        do_not_cache,
+        exit_code,
+        ManagerConstruction::LegacyPublication,
+    )
+    .await;
+}
+
+async fn process_history_with_manager(
+    algorithm: DigestHasherFunc,
+    do_not_cache: bool,
+    exit_code: i32,
+    construction: ManagerConstruction,
+) {
     if !namespaces() {
         return;
     }
@@ -160,8 +175,15 @@ async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool,
         },
         Store::new(contents.clone()),
     );
-    let context =
-        Context::with_slow_store(false, Store::new(verified), Duration::from_secs(10)).await;
+    let context = Context::with_manager(
+        false,
+        Store::new(verified),
+        Duration::from_secs(10),
+        8,
+        Duration::from_secs(30),
+        construction,
+    )
+    .await;
     let marker = context.directory.path().join("executed");
     let release = context.directory.path().join("release");
     let (request, action, action_bytes) = context
@@ -206,7 +228,8 @@ async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool,
     let clock = Arc::new(AtomicU64::new(0));
     let faults = Arc::new(QualificationFaults::default());
     // Ordinary publication is held throughout, so an AC write can only have
-    // come from the worker's deliberately configured legacy Everything policy.
+    // come from the worker. The original fixture enables legacy Everything;
+    // the additive construction has no publisher at all.
     faults.hold_publications.store(true, Ordering::Relaxed);
     faults
         .hold_history_publications
@@ -227,7 +250,12 @@ async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool,
         )
     );
     runtime.wait(|view| view.workers.len() == 1).await;
-    let mut stream = runtime.client.execute(request).await.unwrap().into_inner();
+    let mut stream = runtime
+        .client
+        .execute(request.clone())
+        .await
+        .unwrap()
+        .into_inner();
     let name = next_operation(&mut stream).await.name;
     let running = runtime
         .wait(|view| {
@@ -317,17 +345,18 @@ async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool,
         panic!("Accepted operation has no response");
     };
     assert_eq!(captured.value, candidate.encode_to_vec());
-    if do_not_cache {
-        assert!(
-            !runtime
-                .service
-                .subscribe()
-                .borrow()
-                .effects
-                .iter()
-                .any(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
-        );
-    }
+    let cacheable_success = !do_not_cache && exit_code == 0;
+    assert_eq!(
+        runtime
+            .service
+            .subscribe()
+            .borrow()
+            .effects
+            .iter()
+            .filter(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
+            .count(),
+        usize::from(cacheable_success)
+    );
     let pending = runtime
         .history_association(execution, HistoryStatus::Pending)
         .await;
@@ -384,11 +413,51 @@ async fn actual_process_history(algorithm: DigestHasherFunc, do_not_cache: bool,
     context.assert_once();
     assert_eq!(context.history.len_for_test(), 0);
     assert_eq!(context.ac.len_for_test(), 0);
+    if cacheable_success {
+        // Only the authority has the sink handle. Its accepted effect survives
+        // both restarts before publication is allowed to run.
+        faults.hold_publications.store(false, Ordering::Relaxed);
+        runtime
+            .wait(|view| {
+                !view
+                    .effects
+                    .iter()
+                    .any(|effect| matches!(effect.kind, EffectKind::PublishResult { .. }))
+            })
+            .await;
+        let stored = ActionResult::decode(
+            context
+                .ac
+                .get_part_unchunked(action, 0, None)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            Some(stored),
+            decoded.execute_response.as_ref().unwrap().result
+        );
+        let mut lookup = request;
+        lookup.skip_cache_lookup = false;
+        let mut cached = runtime.client.execute(lookup).await.unwrap().into_inner();
+        let cached_response = response(&terminal(&mut cached).await);
+        assert!(cached_response.cached_result);
+        assert_eq!(
+            cached_response.result,
+            decoded.execute_response.as_ref().unwrap().result
+        );
+        runtime.assert_history_terminal(&accepted).await;
+        context.assert_once();
+    }
     stop.send_replace(true);
     supervisor.await.unwrap().unwrap();
     runtime.shutdown().await;
+    let construction = match construction {
+        ManagerConstruction::LegacyPublication => "legacy-enabled",
+        ManagerConstruction::AuthorityOnly => "authority-only",
+    };
     eprintln!(
-        "AUTHORITY_REAL_PROCESS_HISTORY: namespaces executed; algorithm={algorithm}; do_not_cache={do_not_cache}; exit_code={exit_code}; inputs/output/stdout/stderr verified in CAS; legacy Everything bypassed; feature2+3 accepted candidate preserved; pending history survived restart; exact captured response history verified in CAS; terminal unchanged"
+        "AUTHORITY_REAL_PROCESS_HISTORY: namespaces executed; algorithm={algorithm}; do_not_cache={do_not_cache}; exit_code={exit_code}; construction={construction}; inputs/output/stdout/stderr verified in CAS; worker did not publish; feature2+3 accepted candidate preserved; pending history survived restart; exact captured response history verified in CAS; terminal unchanged"
     );
 }
 
@@ -410,4 +479,19 @@ async fn blake3_do_not_cache_real_process_publishes_accepted_history_after_resta
 #[nativelink_test]
 async fn blake3_nonzero_exit_real_process_publishes_accepted_history_after_restart() {
     actual_process_history(DigestHasherFunc::Blake3, false, 7).await;
+}
+
+#[nativelink_test]
+async fn authority_only_manager_preserves_real_process_history_across_restart() {
+    for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
+        for (do_not_cache, exit_code) in [(true, 0), (false, 7), (false, 0)] {
+            process_history_with_manager(
+                algorithm,
+                do_not_cache,
+                exit_code,
+                ManagerConstruction::AuthorityOnly,
+            )
+            .await;
+        }
+    }
 }

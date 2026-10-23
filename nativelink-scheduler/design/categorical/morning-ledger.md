@@ -7,7 +7,11 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest verification: 1,979 full-workspace Cargo passes, then 13 passes for the
+Latest worker change: authority-only construction retains no legacy publication
+handle. Its 163-case Cargo regression and all 17 worker Bazel targets pass;
+[construction receipts](evidence/authority-construction/manifest.json) separate
+the source boundaries. The preceding full workspace checkpoint recorded
+1,979 full-workspace Cargo passes, then 13 passes for the
 additive terminal comparison, and all 163 integrated Bazel targets passed. The
 [receipts](evidence/publication-terminal-workspace/manifest.json) separate the
 source checkpoints and ten ignored Cargo cases. Production factories remain
@@ -538,6 +542,17 @@ cached; all 497 recorded source/build files stayed unchanged. The only code/buil
 delta between those checkpoints is the new four-file test harness and its Bazel
 target. Those totals are executed test cases/targets, not unique proofs or
 provider qualification; inherited tests and ignored provider cases stay explicit.
+
+[Authority worker construction](authority-construction.md) now accepts only
+execution/CAS inputs and holds no legacy AC/history publisher. Accidental calls
+to the old publication method refuse before changing the result. Six actual
+process histories cover both hash algorithms and three cache policies, accepted
+history through restart, and delayed accepted AC effects. The 163-case Cargo
+worker regression passed; after a logging-only lint correction, all 17 worker
+Bazel targets passed. Existing legacy-enabled fixtures and production factory
+behavior remain intact. Fixed listener roles and strict canonical configuration
+are the next construction boundaries; this does not close M4a.1 or M4a.2 in the
+product.
 
 ## Next work and facts for the morning
 

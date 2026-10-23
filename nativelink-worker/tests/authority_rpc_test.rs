@@ -49,7 +49,7 @@ use nativelink_util::store_trait::{Store, StoreLike};
 use nativelink_worker::authority_worker::AuthorityWorker;
 use nativelink_worker::authority_worker_transport::run_reconnecting;
 use nativelink_worker::namespace_utils;
-use nativelink_worker::running_actions_manager::{ExecutionConfiguration, PersistentWorkersSettings, RunningActionsManagerArgs, RunningActionsManagerImpl, UseNamespaces};
+use nativelink_worker::running_actions_manager::{AuthorityRunningActionsManagerArgs, ExecutionConfiguration, PersistentWorkersSettings, RunningActionsManagerArgs, RunningActionsManagerImpl, UseNamespaces};
 use opentelemetry::context::FutureExt;
 use prost::Message;
 use tempfile::TempDir;
@@ -87,6 +87,12 @@ struct Context {
     authority_incarnation: AtomicU64,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum ManagerConstruction {
+    LegacyPublication,
+    AuthorityOnly,
+}
+
 impl Context {
     async fn new(single_use: bool) -> Self {
         Self::with_slow_store(
@@ -115,6 +121,25 @@ impl Context {
         receipts: usize,
         action_timeout: Duration,
     ) -> Self {
+        Self::with_manager(
+            single_use,
+            slow,
+            download_timeout,
+            receipts,
+            action_timeout,
+            ManagerConstruction::LegacyPublication,
+        )
+        .await
+    }
+
+    async fn with_manager(
+        single_use: bool,
+        slow: Store,
+        download_timeout: Duration,
+        receipts: usize,
+        action_timeout: Duration,
+        construction: ManagerConstruction,
+    ) -> Self {
         let directory = TempDir::new().unwrap();
         let filesystem = FilesystemSpec {
             content_path: directory
@@ -141,40 +166,63 @@ impl Context {
         let history = MemoryStore::new(&MemorySpec::default());
         let actions = directory.path().join("actions");
         std::fs::create_dir(&actions).unwrap();
+        let execution = AuthorityRunningActionsManagerArgs {
+            root_action_directory: actions.to_string_lossy().into_owned(),
+            execution_configuration: ExecutionConfiguration {
+                persistent_workers: PersistentWorkersSettings {
+                    enabled: false,
+                    ..PersistentWorkersSettings::default()
+                },
+                ..ExecutionConfiguration::default()
+            },
+            cas_store: cas.clone(),
+            max_action_timeout: action_timeout,
+            max_upload_timeout: Duration::from_secs(10),
+            max_download_timeout: download_timeout,
+            max_cleanup_wait: Duration::from_secs(10),
+            max_cleanup_backoff: Duration::from_millis(10),
+            timeout_handled_externally: false,
+            directory_cache: None,
+            active_input_leases: true,
+            readonly_input_mounts: Vec::new(),
+            use_namespaces: UseNamespaces::Yes,
+        };
         let manager = Arc::new(
-            RunningActionsManagerImpl::new(RunningActionsManagerArgs {
-                root_action_directory: actions.to_string_lossy().into_owned(),
-                execution_configuration: ExecutionConfiguration {
-                    persistent_workers: PersistentWorkersSettings {
-                        enabled: false,
-                        ..PersistentWorkersSettings::default()
-                    },
-                    ..ExecutionConfiguration::default()
-                },
-                cas_store: cas.clone(),
-                // Deliberately configure the legacy publication facility. The new
-                // recipient must not use it, even when the old policy says upload.
-                ac_store: Some(Store::new(ac.clone())),
-                historical_store: Store::new(history.clone()),
-                upload_action_result_config: &UploadActionResultConfig {
-                    upload_ac_results_strategy: UploadCacheResultsStrategy::Everything,
-                    upload_historical_results_strategy: Some(
-                        UploadCacheResultsStrategy::Everything,
-                    ),
-                    success_message_template: "legacy history link must not appear".to_owned(),
-                    ..UploadActionResultConfig::default()
-                },
-                max_action_timeout: action_timeout,
-                max_upload_timeout: Duration::from_secs(10),
-                max_download_timeout: download_timeout,
-                max_cleanup_wait: Duration::from_secs(10),
-                max_cleanup_backoff: Duration::from_millis(10),
-                timeout_handled_externally: false,
-                directory_cache: None,
-                active_input_leases: true,
-                readonly_input_mounts: Vec::new(),
-                use_namespaces: UseNamespaces::Yes,
-            })
+            match construction {
+                ManagerConstruction::AuthorityOnly => {
+                    RunningActionsManagerImpl::new_authority(execution)
+                }
+                // Preserve the original bypass regressions with deliberately enabled
+                // legacy publishers. The additive authority path never receives them.
+                ManagerConstruction::LegacyPublication => {
+                    RunningActionsManagerImpl::new(RunningActionsManagerArgs {
+                        root_action_directory: execution.root_action_directory,
+                        execution_configuration: execution.execution_configuration,
+                        cas_store: execution.cas_store,
+                        ac_store: Some(Store::new(ac.clone())),
+                        historical_store: Store::new(history.clone()),
+                        upload_action_result_config: &UploadActionResultConfig {
+                            upload_ac_results_strategy: UploadCacheResultsStrategy::Everything,
+                            upload_historical_results_strategy: Some(
+                                UploadCacheResultsStrategy::Everything,
+                            ),
+                            success_message_template: "legacy history link must not appear"
+                                .to_owned(),
+                            ..UploadActionResultConfig::default()
+                        },
+                        max_action_timeout: execution.max_action_timeout,
+                        max_upload_timeout: execution.max_upload_timeout,
+                        max_download_timeout: execution.max_download_timeout,
+                        max_cleanup_wait: execution.max_cleanup_wait,
+                        max_cleanup_backoff: execution.max_cleanup_backoff,
+                        timeout_handled_externally: execution.timeout_handled_externally,
+                        directory_cache: execution.directory_cache,
+                        active_input_leases: execution.active_input_leases,
+                        readonly_input_mounts: execution.readonly_input_mounts,
+                        use_namespaces: execution.use_namespaces,
+                    })
+                }
+            }
             .unwrap(),
         );
         let worker = AuthorityWorker::new(

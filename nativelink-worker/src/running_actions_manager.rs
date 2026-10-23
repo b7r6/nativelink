@@ -5135,6 +5135,28 @@ pub enum UseNamespaces {
     },
 }
 
+/// Execution inputs for an authority-owned worker. This constructor vocabulary
+/// deliberately has no AC/history destinations, publication policies or response
+/// templates. Canonical runtime construction remains reachable through test wiring.
+#[derive(Debug)]
+pub struct AuthorityRunningActionsManagerArgs {
+    pub root_action_directory: String,
+    pub execution_configuration: ExecutionConfiguration,
+    pub cas_store: Arc<FastSlowStore>,
+    pub max_action_timeout: Duration,
+    pub max_upload_timeout: Duration,
+    pub max_download_timeout: Duration,
+    pub max_cleanup_wait: Duration,
+    pub max_cleanup_backoff: Duration,
+    pub timeout_handled_externally: bool,
+    pub directory_cache: Option<Arc<crate::directory_cache::DirectoryCache>>,
+    pub active_input_leases: bool,
+    #[cfg(target_os = "linux")]
+    pub readonly_input_mounts: Vec<String>,
+    #[cfg(target_os = "linux")]
+    pub use_namespaces: UseNamespaces,
+}
+
 #[derive(Debug)]
 pub struct RunningActionsManagerArgs<'a> {
     pub root_action_directory: String,
@@ -5159,6 +5181,29 @@ pub struct RunningActionsManagerArgs<'a> {
     pub readonly_input_mounts: Vec<String>,
     #[cfg(target_os = "linux")]
     pub use_namespaces: UseNamespaces,
+}
+
+impl RunningActionsManagerArgs<'_> {
+    fn into_execution(self) -> AuthorityRunningActionsManagerArgs {
+        let args = self;
+        AuthorityRunningActionsManagerArgs {
+            root_action_directory: args.root_action_directory,
+            execution_configuration: args.execution_configuration,
+            cas_store: args.cas_store,
+            max_action_timeout: args.max_action_timeout,
+            max_upload_timeout: args.max_upload_timeout,
+            max_download_timeout: args.max_download_timeout,
+            max_cleanup_wait: args.max_cleanup_wait,
+            max_cleanup_backoff: args.max_cleanup_backoff,
+            timeout_handled_externally: args.timeout_handled_externally,
+            directory_cache: args.directory_cache,
+            active_input_leases: args.active_input_leases,
+            #[cfg(target_os = "linux")]
+            readonly_input_mounts: args.readonly_input_mounts,
+            #[cfg(target_os = "linux")]
+            use_namespaces: args.use_namespaces,
+        }
+    }
 }
 
 /// The mark that an operation's directory is being cleaned; dropping it
@@ -5188,7 +5233,8 @@ pub struct RunningActionsManagerImpl {
     execution_configuration: ExecutionConfiguration,
     cas_store: Arc<FastSlowStore>,
     filesystem_store: Arc<FilesystemStore>,
-    upload_action_results: UploadActionResults,
+    // Authority construction retains no legacy publisher or destination handle.
+    upload_action_results: Option<UploadActionResults>,
     max_action_timeout: Duration,
     max_upload_timeout: Duration,
     max_download_timeout: Duration,
@@ -5269,6 +5315,34 @@ impl RunningActionsManagerImpl {
         args: RunningActionsManagerArgs<'_>,
         callbacks: Callbacks,
     ) -> Result<Self, Error> {
+        let config = args.upload_action_result_config;
+        let ac_store = args.ac_store.clone();
+        let historical_store = args.historical_store.clone();
+        Self::new_execution(args.into_execution(), callbacks, || {
+            UploadActionResults::new(config, ac_store, historical_store)
+                .err_tip(|| "During RunningActionsManagerImpl construction")
+                .map(Some)
+        })
+    }
+
+    /// Build the experimental authority worker without legacy publication
+    /// capabilities. No store placeholders or disabled upload policies are used.
+    pub fn new_authority(args: AuthorityRunningActionsManagerArgs) -> Result<Self, Error> {
+        Self::new_execution(
+            args,
+            Callbacks {
+                now_fn: SystemTime::now,
+                sleep_fn: |duration| Box::pin(tokio::time::sleep(duration)),
+            },
+            || Ok(None),
+        )
+    }
+
+    fn new_execution(
+        args: AuthorityRunningActionsManagerArgs,
+        callbacks: Callbacks,
+        create_publisher: impl FnOnce() -> Result<Option<UploadActionResults>, Error>,
+    ) -> Result<Self, Error> {
         #[cfg(target_os = "linux")]
         {
             crate::input_mounts::validate_paths(&args.readonly_input_mounts)?;
@@ -5306,12 +5380,7 @@ impl RunningActionsManagerImpl {
             input_pool_hint,
             cas_store: args.cas_store,
             filesystem_store,
-            upload_action_results: UploadActionResults::new(
-                args.upload_action_result_config,
-                args.ac_store,
-                args.historical_store,
-            )
-            .err_tip(|| "During RunningActionsManagerImpl construction")?,
+            upload_action_results: create_publisher()?,
             max_action_timeout: args.max_action_timeout,
             pod_memory_limit_kb: pod_memory_limit_kb(),
             max_upload_timeout: args.max_upload_timeout,
@@ -5898,13 +5967,15 @@ impl RunningActionsManager for RunningActionsManagerImpl {
         action_result: &mut ActionResult,
         hasher: DigestHasherFunc,
     ) -> Result<(), Error> {
+        let publisher = self.upload_action_results.as_ref().ok_or_else(|| {
+            make_err!(
+                Code::FailedPrecondition,
+                "Authority workers cannot publish action cache or accepted history results"
+            )
+        })?;
         self.metrics
             .cache_action_result
-            .wrap(self.upload_action_results.cache_action_result(
-                action_info,
-                action_result,
-                hasher,
-            ))
+            .wrap(publisher.cache_action_result(action_info, action_result, hasher))
             .await
     }
 

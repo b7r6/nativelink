@@ -97,10 +97,10 @@ mod tests {
     #[cfg(target_family = "unix")]
     use nativelink_worker::running_actions_manager::free_disk_kb;
     use nativelink_worker::running_actions_manager::{
-        Callbacks, ExecutionConfiguration, KillReason, PersistentWorkersSettings,
-        ResourceEnforcement, RunningAction, RunningActionImpl, RunningActionsManager,
-        RunningActionsManagerArgs, RunningActionsManagerImpl, classify_outcome,
-        download_to_directory, log_excerpt, parse_kb_field,
+        AuthorityRunningActionsManagerArgs, Callbacks, ExecutionConfiguration, KillReason,
+        PersistentWorkersSettings, ResourceEnforcement, RunningAction, RunningActionImpl,
+        RunningActionsManager, RunningActionsManagerArgs, RunningActionsManagerImpl,
+        classify_outcome, download_to_directory, log_excerpt, parse_kb_field,
     };
     use pretty_assertions::assert_eq;
     use prost::Message;
@@ -7401,6 +7401,80 @@ exit 1
         assert!(logs_contain(
             "Command returned non-zero exit code exit_code=1 stdout=\"\" stderr=\"\" command=[\"true\"]"
         ));
+        Ok(())
+    }
+
+    #[nativelink_test]
+    async fn authority_manager_refuses_legacy_publication_without_mutating_results_or_cas()
+    -> Result<(), Error> {
+        let (_fast, contents, cas, unused_ac) = setup_stores().await?;
+        let sentinel = DigestInfo::new([91; 32], 8);
+        contents
+            .update_oneshot(sentinel, Bytes::from_static(b"sentinel"))
+            .await?;
+        let manager =
+            RunningActionsManagerImpl::new_authority(AuthorityRunningActionsManagerArgs {
+                root_action_directory: make_temp_path("authority_publication_refusal"),
+                execution_configuration: ExecutionConfiguration::default(),
+                cas_store: cas,
+                max_action_timeout: Duration::from_secs(30),
+                max_upload_timeout: Duration::from_secs(10),
+                max_download_timeout: Duration::from_secs(10),
+                max_cleanup_wait: Duration::from_secs(10),
+                max_cleanup_backoff: Duration::from_millis(10),
+                timeout_handled_externally: false,
+                directory_cache: None,
+                active_input_leases: true,
+                #[cfg(target_os = "linux")]
+                readonly_input_mounts: Vec::new(),
+                #[cfg(target_os = "linux")]
+                use_namespaces: use_namespaces(),
+            })?;
+        for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
+            for failed in [false, true] {
+                let original = ActionResult {
+                    output_files: vec![FileInfo {
+                        name_or_path: NameOrPath::Path("output".to_owned()),
+                        digest: DigestInfo::new([17; 32], 19),
+                        is_executable: true,
+                    }],
+                    stdout_digest: DigestInfo::new([23; 32], 29),
+                    stderr_digest: DigestInfo::new([31; 32], 37),
+                    exit_code: if failed { 7 } else { 0 },
+                    error: failed.then(|| make_input_err!("preserve the original failure")),
+                    message: "preserve the exact worker diagnostic".to_owned(),
+                    server_logs: HashMap::from([("log".to_owned(), sentinel)]),
+                    execution_metadata: ExecutionMetadata {
+                        worker: "authority-worker".to_owned(),
+                        queued_timestamp: make_system_time(41),
+                        ..ActionResult::default().execution_metadata
+                    },
+                    ..ActionResult::default()
+                };
+                let mut candidate = original.clone();
+                for _ in 0..2 {
+                    let error = manager
+                        .cache_action_result(
+                            DigestInfo::new([43; 32], 47),
+                            &mut candidate,
+                            algorithm,
+                        )
+                        .await
+                        .unwrap_err();
+                    assert_eq!(error.code, Code::FailedPrecondition);
+                    assert_eq!(candidate, original);
+                    assert_eq!(contents.len_for_test(), 1);
+                    assert_eq!(unused_ac.len_for_test(), 0);
+                    assert_eq!(
+                        contents
+                            .get_part_unchunked(sentinel, 0, None)
+                            .await?
+                            .as_ref(),
+                        b"sentinel"
+                    );
+                }
+            }
+        }
         Ok(())
     }
 
