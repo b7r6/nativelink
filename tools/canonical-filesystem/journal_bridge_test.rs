@@ -66,7 +66,7 @@ impl Fixture {
         Self { root, manifest }
     }
 
-    fn binding(&self) -> JournalBinding {
+    const fn binding(&self) -> JournalBinding {
         JournalBinding {
             node_id: self.manifest.authority.node_id,
             domain: AuthorityDomain {
