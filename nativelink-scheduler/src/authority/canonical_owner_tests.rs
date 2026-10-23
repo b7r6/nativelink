@@ -31,6 +31,9 @@ use super::super::{AppliedState, RecordedEvent, Singleton, decode, encode};
 use super::*;
 use crate::authority::Event;
 
+#[path = "canonical_temporal_tests.rs"]
+mod temporal;
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 type BeforeCurrent = Box<dyn FnOnce(&Database) + Send>;

@@ -81,6 +81,7 @@ rust_library(
         "src/authority/canonical_binding_tests.rs",
         "src/authority/canonical_owner.rs",
         "src/authority/canonical_owner_tests.rs",
+        "src/authority/canonical_temporal_tests.rs",
         "src/authority/format.rs",
         "src/authority/journal.rs",
         "src/authority/journal_factory_tests.rs",
