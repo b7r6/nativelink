@@ -1049,3 +1049,6 @@ fn restore_refuses_torn_history_conflicting_identity_downgrade_and_oversize() {
     assert!(Model::restore(&trailing).is_err());
     assert!(Model::restore(&vec![0; MAX_SNAPSHOT + 1]).is_err());
 }
+
+#[path = "audit_tests.rs"]
+mod audit_tests;

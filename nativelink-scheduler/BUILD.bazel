@@ -491,6 +491,7 @@ rust_test(
         "tests/publication_candidate/real_request_tests.rs",
         "tests/publication_candidate/direct_client_tests.rs",
         "tests/publication_candidate/prepared_memory_tests.rs",
+        "tests/publication_candidate/prepared_memory_audit_tests.rs",
         "tests/publication_candidate/terminal_tests.rs",
         "tests/publication_candidate/cases.rs",
         "tests/publication_candidate/binding.rs",
@@ -612,6 +613,7 @@ rust_test(
     compile_data = [
         "tests/authority/reference.rs",
         "tests/prepared_memory/cases.rs",
+        "tests/prepared_memory/audit_tests.rs",
         "tests/prepared_memory/head.rs",
         "tests/prepared_memory/reference.rs",
         "tests/prepared_memory/types.rs",

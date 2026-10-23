@@ -869,3 +869,6 @@ fn prepared_memory_activation_refusal_preserves_older_format_atomically() {
     unchanged(&state, encoded.as_bytes());
     assert!(state.terminal_reports().is_none());
 }
+
+#[path = "prepared_memory_audit_tests.rs"]
+mod audit_tests;
