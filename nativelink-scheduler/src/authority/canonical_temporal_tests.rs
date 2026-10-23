@@ -155,6 +155,9 @@ async fn temporal_cancelled_audit_retains_owned_journal_queue() {
     assert!(queue.try_lock().is_ok());
 }
 
+#[path = "canonical_recovery_clock_tests.rs"]
+mod recovery_clock;
+
 type Stored = (Vec<(String, Vec<u8>)>, Vec<(u64, Vec<u8>)>);
 
 fn digest(bytes: &[u8]) -> Digest {

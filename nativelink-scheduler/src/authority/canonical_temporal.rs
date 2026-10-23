@@ -33,7 +33,7 @@ use crate::authority::{
 // Protobuf permits 315576000000 seconds plus fractional nanoseconds. The
 // seconds profile rounds that fraction up and reserves one strict-expiry tick.
 const MAX_FINITE_TIMEOUT: u64 = 315_576_000_001;
-const MAX_CLOCK: u64 = u64::MAX - (MAX_FINITE_TIMEOUT + 1);
+pub(super) const MAX_CLOCK: u64 = u64::MAX - (MAX_FINITE_TIMEOUT + 1);
 
 fn request(request: &Request) -> Result<()> {
     // Projection validation makes MAX mean an omitted Action timeout, rather
@@ -182,13 +182,21 @@ fn applied(
     Ok(result)
 }
 
+/// Persisted applied facts from the audited transaction, before suffix staging.
+/// This projection is not a Raft read barrier or permission to seed a clock.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct AppliedFacts {
+    pub(super) last_applied: Option<LogId<u64>>,
+    pub(super) now: u64,
+}
+
 pub(super) async fn audit(
     journal: &Journal,
     domain: AuthorityDomain,
     contract: CanonicalContract,
     phase: CanonicalBootstrap,
     #[cfg(test)] during_temporal: Option<Box<dyn FnOnce() + Send>>,
-) -> Result<()> {
+) -> Result<AppliedFacts> {
     let node_id = journal.node_id;
     journal
         .io(MeasuredOperation::ReadLogs, 0, move |database| {
@@ -227,6 +235,10 @@ pub(super) async fn audit(
             let mut staged: AppliedState = read(&table, domain.epoch, "applied")?;
             let mut staged_state = applied(&staged, domain, contract)?;
             let applied_position = staged.last_applied;
+            let facts = AppliedFacts {
+                last_applied: applied_position,
+                now: staged_state.now,
+            };
             let mut membership = staged.membership.clone();
             let mut snapshot = None;
             let mut committed: Option<LogId<u64>> = None;
@@ -345,7 +357,7 @@ pub(super) async fn audit(
             if phase == CanonicalBootstrap::Sealed {
                 validate_singleton_recovery(node_id, frontier, &membership, snapshot.as_ref())?;
             }
-            Ok(())
+            Ok(facts)
         })
         .await
 }

@@ -1063,6 +1063,8 @@ pub struct Journal {
     proposal_gate: Arc<Mutex<()>>,
     history_apply_pause: Arc<std::sync::Mutex<Option<HistoryApplyPause>>>,
     feature_prepare_pause: Arc<std::sync::Mutex<Option<HistoryApplyPause>>>,
+    #[cfg(test)]
+    canonical_base_apply_pause: Arc<std::sync::Mutex<Option<HistoryApplyPause>>>,
     fault: Arc<AtomicU8>,
     measurements: Arc<MeasurementCounters>,
     node_id: u64,
@@ -1178,6 +1180,8 @@ impl Journal {
             ),
             history_apply_pause: Arc::new(std::sync::Mutex::new(None)),
             feature_prepare_pause: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            canonical_base_apply_pause: Arc::new(std::sync::Mutex::new(None)),
             fault: Arc::new(AtomicU8::new(0)),
             measurements: Arc::new(MeasurementCounters::default()),
             node_id,
@@ -2271,6 +2275,24 @@ impl Journal {
         (observed, release)
     }
 
+    // The real canonical Base apply path pauses before Journal.io, so a read
+    // barrier test cannot accidentally pass by waiting for the I/O queue.
+    #[cfg(test)]
+    fn pause_canonical_base_apply_once(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (reached, observed) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        let mut slot = self
+            .canonical_base_apply_pause
+            .lock()
+            .expect("canonical Base apply pause poisoned");
+        assert!(slot.is_none(), "canonical Base apply pause already armed");
+        *slot = Some(HistoryApplyPause {
+            reached,
+            release: released,
+        });
+        (observed, release)
+    }
+
     /// Enable in-memory measurement for this opened journal and its clones.
     /// Counters begin at zero and reset on reopen; bootstrap is not included
     /// when enabled only after `Singleton::open` returns.
@@ -2583,6 +2605,30 @@ impl RaftStateMachine<TypeConfig> for Journal {
                 .release
                 .await
                 .map_err(|e| failure(ErrorVerb::Write, e))?;
+        }
+        #[cfg(test)]
+        {
+            let pause = if self.canonical_contract.is_some()
+                && entries.iter().any(|entry| {
+                    matches!(
+                        &entry.payload,
+                        EntryPayload::Normal(batch) if batch.control.is_none()
+                    )
+                }) {
+                self.canonical_base_apply_pause
+                    .lock()
+                    .expect("canonical Base apply pause poisoned")
+                    .take()
+            } else {
+                None
+            };
+            if let Some(pause) = pause {
+                let _observed = pause.reached.send(());
+                pause
+                    .release
+                    .await
+                    .map_err(|e| failure(ErrorVerb::Write, e))?;
+            }
         }
         let epoch = self.epoch;
         let reader = self.reader;

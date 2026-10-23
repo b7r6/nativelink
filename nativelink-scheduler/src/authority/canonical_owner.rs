@@ -31,6 +31,14 @@ use super::{
 mod canonical_cleanup;
 #[path = "canonical_recovery.rs"]
 mod canonical_recovery;
+// Private staged recovery component; the supervised public owner is separate.
+#[allow(
+    dead_code,
+    reason = "private clock awaits qualified supervisor composition"
+)]
+#[path = "canonical_clock.rs"]
+mod canonical_clock;
+
 #[path = "canonical_temporal.rs"]
 mod temporal;
 
