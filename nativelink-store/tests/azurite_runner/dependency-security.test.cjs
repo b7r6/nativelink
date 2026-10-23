@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const { once } = require("node:events");
+const http = require("node:http");
 const { createRequire } = require("node:module");
 const { test } = require("node:test");
 
@@ -45,58 +47,97 @@ test("the telemetry SDK bounds incoming baggage entries", () => {
 	assert.equal(propagation.getBaggage(context).getAllEntries().length, 180);
 });
 
-// Azurite reaches follow-redirects through axios. A cross-origin redirect
-// must not carry credentials, whether the headers are an array (GHSA-q3jh-wrc6-jgq8)
-// or a declared sensitive name contains a regex metacharacter (GHSA-8r9p-f939-6h3c).
-test("follow-redirects strips credentials on a cross-origin redirect", async () => {
-	const http = require("node:http");
+// Exercise the copy used by Azurite's axios dependency, across two local origins.
+async function headersAfterRedirect(headers, sensitiveHeaders = []) {
 	const axiosRequire = createRequire(require.resolve("axios/package.json"));
 	const { http: followHttp } = axiosRequire("follow-redirects");
-
-	const listen = (handler) =>
-		new Promise((resolve) => {
-			const server = http.createServer(handler);
-			server.listen(0, "127.0.0.1", () => resolve(server));
-		});
-	const received = [];
-	const target = await listen((req, res) => {
-		received.push(req.headers);
+	let originHeaders;
+	let targetHeaders;
+	let request;
+	const target = http.createServer((req, res) => {
+		targetHeaders = req.headers;
 		res.end("ok");
 	});
-	const origin = await listen((_req, res) => {
+	const origin = http.createServer((req, res) => {
+		originHeaders = req.headers;
 		res.writeHead(302, {
 			location: `http://127.0.0.1:${target.address().port}/`,
 		});
 		res.end();
 	});
-	const fetchThroughRedirect = (options) =>
-		new Promise((resolve) => {
-			const req = followHttp.request(
-				{ host: "127.0.0.1", port: origin.address().port, path: "/", ...options },
-				(res) => res.resume().on("end", () => resolve(null)),
-			);
-			req.on("error", resolve);
-			req.end();
-		});
 
 	try {
-		// A loud rejection of array headers is as safe as stripping them.
-		const arrayError = await fetchThroughRedirect({
-			headers: ["Authorization", "Bearer secret", "Cookie", "session=secret"],
+		target.listen(0, "127.0.0.1");
+		await once(target, "listening");
+		origin.listen(0, "127.0.0.1");
+		await once(origin, "listening");
+		const host = `127.0.0.1:${origin.address().port}`;
+		request = followHttp.request(`http://${host}/`, {
+			// Node does not add Host to raw array headers. Without it the old
+			// library gets HTTP 400 before the redirect, masking the actual leak.
+			headers: Array.isArray(headers)
+				? ["Host", host, ...headers]
+				: { Host: host, ...headers },
+			sensitiveHeaders,
 		});
-		const declaredError = await fetchThroughRedirect({
-			headers: { "X-Api^Key": "secret", "X-Token|Secret": "secret" },
-			sensitiveHeaders: ["X-Api^Key", "X-Token|Secret"],
-		});
-		assert.equal(declaredError, null);
-		assert.equal(received.length, arrayError ? 1 : 2);
-		for (const headers of received) {
-			for (const name of ["authorization", "cookie", "x-api^key", "x-token|secret"]) {
-				assert.equal(headers[name], undefined, `${name} leaked across origins`);
-			}
-		}
+		request.setTimeout(5000, () =>
+			request.destroy(new Error("redirect timed out")),
+		);
+		const response = once(request, "response");
+		request.end();
+		const [res] = await response;
+		res.resume();
+		await once(res, "end");
+		assert.equal(res.statusCode, 200);
+		assert.ok(originHeaders, "request must reach the redirecting origin");
+		assert.ok(targetHeaders, "request must reach the redirect target");
+		return { originHeaders, targetHeaders };
 	} finally {
-		origin.close();
-		target.close();
+		request?.destroy();
+		await Promise.all(
+			[origin, target].map(
+				(server) => new Promise((resolve) => server.close(resolve)),
+			),
+		);
 	}
+}
+
+test("follow-redirects strips array-form credentials across origins", async () => {
+	// GHSA-q3jh-wrc6-jgq8: raw arrays bypassed the credential header filter.
+	const credentials = {
+		Authorization: "Bearer secret",
+		Cookie: "session=secret",
+		"Proxy-Authorization": "Basic secret",
+	};
+	const { originHeaders, targetHeaders } = await headersAfterRedirect([
+		...Object.entries(credentials).flat(),
+		"X-Trace",
+		"kept",
+	]);
+	for (const [name, value] of Object.entries(credentials)) {
+		assert.equal(originHeaders[name.toLowerCase()], value);
+		assert.equal(
+			targetHeaders[name.toLowerCase()],
+			undefined,
+			`${name} leaked across origins`,
+		);
+	}
+	assert.equal(targetHeaders["x-trace"], "kept");
 });
+
+for (const name of ["X-Api^Key", "X-Token|Secret"]) {
+	test(`follow-redirects strips the declared sensitive header ${name}`, async () => {
+		// GHSA-8r9p-f939-6h3c: both legal header-name metacharacters need escaping.
+		const { originHeaders, targetHeaders } = await headersAfterRedirect(
+			{ [name]: "secret", "X-Trace": "kept" },
+			[name],
+		);
+		assert.equal(originHeaders[name.toLowerCase()], "secret");
+		assert.equal(
+			targetHeaders[name.toLowerCase()],
+			undefined,
+			`${name} leaked across origins`,
+		);
+		assert.equal(targetHeaders["x-trace"], "kept");
+	});
+}
