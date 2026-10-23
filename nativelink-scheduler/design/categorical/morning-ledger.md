@@ -7,9 +7,10 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add bounded fixed CAS and AC admission, digest
-context for captured requests and replayed effects, private canonical journal
-binding, membership and persisted-limit preflight, and memory-breach reporting.
+Latest focused checkpoints add synchronized namespace commitments, bounded-read
+producer completion, bounded fixed CAS and AC admission, digest context for
+captured requests and replayed effects, private canonical journal binding,
+membership and persisted-limit preflight, and memory-breach reporting.
 Their receipts separate independent source review, original failures, author
 fault controls and root integration. Production construction, combined admission
 and the complete canonical clock contract remain open.
@@ -27,6 +28,16 @@ reduced concurrency does not prove load independence. The
 [previous checkpoint](evidence/canonical-construction-checkpoint/manifest.json)
 at `e6978139cf` remains a separate source boundary. Later changes do not inherit
 these full-run totals.
+
+The later focused checkpoint at `d1c304281b` passed all eight selected targets
+and the server build: 303 Rust test passes, one normally ignored TLS case,
+61.204 seconds and 1,337 unchanged tracked inputs. All eight targets executed;
+none used cached test results. Namespace source matches all ten final author
+inputs; bounded-read source matches eight of nine, with the BUILD list retaining
+both the existing timeout fixture and the new read-lifetime fixture. The
+[combined receipt](evidence/authority-bounded-read-lifetime/manifest.json)
+preserves the root original-source failure and exact integration logs. These
+counts overlap earlier checks; no fresh explicit TLS run is claimed here.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
@@ -998,6 +1009,50 @@ cases. The [receipt](evidence/authority-ac-admission/manifest.json) keeps these
 source boundaries distinct. Complete range delivery remains a backend premise;
 upstream decoding, spare allocation, global concurrency and physical IO are not
 bounded by this handler. Cancellation cannot undo an uncertain remote write.
+
+## Current namespace synchronization and bounded-read completion
+
+The filesystem ownership capability now derives a versioned SHA256 commitment
+from the fixed manifest identities and all four role device/inode pairs. It
+validates all four exact namespace records before any synchronization, retains
+their descriptors through eight file/parent syncs, and checks pinned-root
+attachment before and after. The opaque non-Clone token retains all four locks.
+Path names and explicitly excluded runtime facts do not affect the commitment;
+that exclusion does not authorize changing those facts. Existing hardlinked
+record acceptance is preserved.
+
+Final author source passed 45 all-feature and 35 default-feature tests, strict
+Clippy and repository hooks. Ten actual syscall cases cover success, each of
+the eight targeted sync failures, and late invalid input with zero syncs. Six
+compiled fault controls were detected on earlier source with identical runtime
+and selected oracle bodies; the final textual golden fixture conversion has
+separate source and binary boundaries. Root independently checked framing and
+then integrated all ten final inputs unchanged. The
+[author receipt](evidence/canonical-namespace-resynchronization/manifest.json)
+and [root supplement](evidence/canonical-namespace-resynchronization/root-integration.json)
+retain those distinctions, including eleven executable artifacts. This token
+establishes current validation, synchronization and cooperative lock custody;
+it does not recover a historical acknowledgment or grant journal, serving,
+physical-generation or worker authority.
+
+The fixed authority's bounded Action/Command reader now gives its producer
+future ownership of the channel writer. A producer that returns successfully
+without EOF closes the channel and produces an error instead of leaving the
+collector waiting forever. Producer errors still propagate even after EOF;
+excess bytes still cancel the producer. The runtime change adds six lines and
+removes one, without adding a timeout or changing the byte limit or digest
+context.
+
+Five fixtures cover missing EOF, producer errors before and after EOF, empty
+and exact-limit success, excess-byte cancellation, and a producer that remains
+pending after EOF. Both author and root original-source runs passed four cases
+and failed the missing-EOF case at its first empty iteration; the later partial
+iteration was not reached. Author fixed/restored suites passed 28 service,
+15 listener and 24 canonical-store tests, with one normally ignored TLS case;
+three compiled behavioral faults were detected. The
+[receipt](evidence/authority-bounded-read-lifetime/manifest.json) preserves exact
+sources, binaries, review and root integration. Arbitrary blocking backends,
+false EOF, whole-value completeness and physical IO remain separate premises.
 
 ## Next work and facts for the morning
 
