@@ -7,7 +7,10 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest worker change: authority-only construction retains no legacy publication
+Latest integration: all 22 selected Bazel targets pass across the service crate,
+publication candidate/comparisons, physical fixture, and worker publication.
+[Integration receipts](evidence/construction-integration/manifest.json) retain
+the exact source and an initial library lint failure. Authority-only construction retains no legacy publication
 handle. Its 163-case Cargo regression and all 17 worker Bazel targets pass;
 [construction receipts](evidence/authority-construction/manifest.json) separate
 the source boundaries. The preceding full workspace checkpoint recorded
@@ -562,13 +565,31 @@ caught and corrected that missing bound. Full authority RPC Cargo passes 17
 cases, service units pass six, and focused Bazel targets pass. The fixed listener
 mount is integrated separately; production construction remains unchanged.
 
+The [snapshot byte bound](publication-snapshot-bound.md) now accounts for at most
+2,022,804 bytes under the current finite schema, below 2 MiB by 74,348 bytes.
+The missing premise was outer restore: it accepted valid child retention states
+outside its own exposed transitions. Restore now rejects those states. Four new
+cases reproduced prior acceptance; all 58 candidate cases pass. The bound
+explains the surviving guard mutation within this reviewed domain, without
+lowering caps or claiming a new mutation kill. It is not a production memory or
+future retry-capacity proof. [Author receipts](evidence/publication-snapshot-bound/manifest.json)
+preserve the reproduced failures and per-field calculation.
+
+The [fixed listeners](authority-listener-construction.md) now mount complete
+client transfer routes, Capabilities, and committed Operations alongside
+Execution and AC. Worker routes expose only the authority Worker API, CAS and
+ByteStream. The same immediate store handle cannot occupy both object and sink
+roles. All 22 selected integration targets pass, including the full service
+crate and an additional client-only Operations case. The library-wide lint run
+also caught a wildcard import omitted from the earlier focused target coverage;
+explicit imports fix it. Actual mTLS exclusion is the next local qualification.
+
 ## Next work and facts for the morning
 
-1. Resolve the surviving aggregate-byte guard mutation with a valid history that
-   crosses the existing limit, including atomic refusal and recovery, or establish
-   that all permitted field/count bounds keep the limit unreachable. Changing the
-   cap just to obtain a failing test would not settle the obligation. Future byte
-   headroom and retry-stage capacity need their own argument.
+1. Maintain the finite snapshot bound when fields, caps, or exposed transitions
+   change. The current bound and repaired restore premise explain the surviving
+   guard mutation. Future byte headroom and retry-stage capacity still need their
+   own argument.
 2. Resume the plan's M4a.1 through M4a.4 product sequence: canonical role
    construction, removal of legacy worker publication/history bypasses, fixed
    listener isolation, and strict configuration refusal plus the offline

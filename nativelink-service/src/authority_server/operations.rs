@@ -15,14 +15,21 @@
 //! Operations use the same committed observation, cancellation, and delivery
 //! paths as Execute/WaitExecution. Deletion remains authority retention policy.
 
+use std::time::Duration;
+
 use futures::StreamExt;
+use nativelink_proto::build::bazel::remote::execution::v2::WaitExecutionRequest;
+use nativelink_proto::build::bazel::remote::execution::v2::execution_server::Execution;
 use nativelink_proto::google::longrunning::operations_server::Operations;
 use nativelink_proto::google::longrunning::{
     CancelOperationRequest, DeleteOperationRequest, GetOperationRequest, ListOperationsRequest,
-    ListOperationsResponse, WaitOperationRequest,
+    ListOperationsResponse, Operation, WaitOperationRequest,
 };
+use tokio::sync::oneshot;
+use tokio::time::Instant;
+use tonic::{Request, Response, Status};
 
-use super::*;
+use super::{AuthorityService, Input};
 
 #[tonic::async_trait]
 impl Operations for AuthorityService {
@@ -135,11 +142,16 @@ fn wait_deadline(timeout: prost_types::Duration) -> Result<Instant, Status> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use nativelink_config::stores::MemorySpec;
     use nativelink_macro::nativelink_test;
     use nativelink_scheduler::authority::{ClusterEpoch, Limits, State};
     use nativelink_store::memory_store::MemoryStore;
+    use nativelink_util::store_trait::Store;
+    use tokio::sync::{Semaphore, mpsc, watch};
 
+    use super::super::{OperationId, QUEUE};
     use super::*;
 
     #[nativelink_test]

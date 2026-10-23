@@ -1,0 +1,111 @@
+{
+  "scope": "Integrated fixed authority listener roles, committed Operations client-only mount, and finite publication restore-domain repair.",
+  "base_commit": "d0f9baa135319be0170d4446774f47a1e5eb03f9",
+  "source_files": 210,
+  "source_unchanged_during_corrected_run": true,
+  "bazel": {
+    "status": "PASS",
+    "test_targets": 22,
+    "executed": 22,
+    "cached": 0,
+    "elapsed_seconds": 128.929,
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "//nativelink-service/...",
+      "//nativelink-scheduler:publication_candidate_test",
+      "//nativelink-scheduler:publication_differential_test",
+      "//nativelink-scheduler:publication_physical_test",
+      "//nativelink-scheduler:terminal_outcome_differential_test",
+      "//nativelink-worker:authority_publication_ordering_test"
+    ]
+  },
+  "changes": [
+    "Mount Operations only on fixed client listener; additional wirecase verifiesworkerGet/CancelunservedandclientGet/Cancel/Waitcommittedterminal.",
+    "Explicit imports replace wildcard import in production Operations module after library-wide strictClippy caught it. Earlier focused unit/test targets had not selected libraryClippy.",
+    "Integrate isolated listener and snapshot repair withoutchangingtheirruntime/validatorsemantics."
+  ],
+  "snapshot_bound": {
+    "bytes": 2022804,
+    "limit": 2097152,
+    "headroom": 74348,
+    "basis": "Source-derived conservative field/count accounting plus outerrestore restrictingretention toexposedalphabet. Notanoverflowwitnessorfuturebyte-reserveproof.",
+    "author_evidence": "../publication-snapshot-bound/manifest.json"
+  },
+  "limits": [
+    "No fullworkspaceclaimatthissourcecheckpoint.",
+    "No TLSworkercredentialexclusionqualifiedyetforthishelper; separateworkunderway.",
+    "No canonicalruntimeconfigurationorproductioncutover.",
+    "Earliermutationbyteguard-survivalreceiptsremainunchanged; no newmutantkillclaimed."
+  ],
+  "receipts": [
+    {
+      "file": "integration.patch.gz",
+      "source_sha256": "123e91a00158ab9d205fdcde9562fd2980b3e9b24f8eb3bdd6f0933872b7be88",
+      "archive_sha256": "f91889b4f423f076174308e258f270e66568feef70e8f94d63c2ea84559ca3ce"
+    },
+    {
+      "file": "publication-bound.json.gz",
+      "source_sha256": "275c019b67a82e549af8aaf97fc232e980fbf8c73e1403f123897525afa53950",
+      "archive_sha256": "a502582cdcc4e2e3539451ac8eed99f406c36fc6ed60d5d30e89ab74bac8e077"
+    },
+    {
+      "file": "root-bazel-integration-corrected.json.gz",
+      "source_sha256": "96ed66a3aa5aa8d1db685ff2154fcbd4a3e81703e7550a07c69ac438518ee16a",
+      "archive_sha256": "0aa222608349a97328ab3f36db1ae82a65a6ec9a16be67725e13d55f5dda1750"
+    },
+    {
+      "file": "root-bazel-integration-corrected.log.gz",
+      "source_sha256": "a7d6235751465ff25e82dd5d9c0c39891b4c52e71e2e3f3f94e932fe14b8c584",
+      "archive_sha256": "833fb743020e86aca483d6051503b1a0c1e21d1027749cab10197b80817f581f"
+    },
+    {
+      "file": "root-bazel-integration.json.gz",
+      "source_sha256": "7df2533594e1f2618416199063cf81246d448b923ce0344ceb185e8eec484a17",
+      "archive_sha256": "9a8e22a7721f0d57ff01c2bd43d6723f0f3d16356b00a3f9da9d89ec447b55bc"
+    },
+    {
+      "file": "root-bazel-integration.log.gz",
+      "source_sha256": "4303e4bb8536ef8e083e2f49d4398776123c481f1460cae3d4c48953e5fd49a4",
+      "archive_sha256": "8c1b1297b33abb54142ccd601ba1152cf648ff3e1d426cb2a5fa2bcc22ad073d"
+    },
+    {
+      "file": "source-after.json.gz",
+      "source_sha256": "afe6cfa927eddd56b6a4492b2e3a5bc7b1076b33f93d9013c00813579f86d0f1",
+      "archive_sha256": "f448e4d6cdab5fffbfe1bf20be13a1afe9f1b81743b38ebedf70a89db3aeb373"
+    },
+    {
+      "file": "source-before.json.gz",
+      "source_sha256": "afe6cfa927eddd56b6a4492b2e3a5bc7b1076b33f93d9013c00813579f86d0f1",
+      "archive_sha256": "f448e4d6cdab5fffbfe1bf20be13a1afe9f1b81743b38ebedf70a89db3aeb373"
+    },
+    {
+      "file": "source-corrected-after.json.gz",
+      "source_sha256": "7016d6fa7becc0024225153517b86e7937ffae9f193587ec8aa50ab247ee6265",
+      "archive_sha256": "3a790e0c5a5bcdb82a930e3cac1cc722b8b5a7bff7e0f4a133cbb6dd900cce9a"
+    },
+    {
+      "file": "source-corrected-before.json.gz",
+      "source_sha256": "7016d6fa7becc0024225153517b86e7937ffae9f193587ec8aa50ab247ee6265",
+      "archive_sha256": "3a790e0c5a5bcdb82a930e3cac1cc722b8b5a7bff7e0f4a133cbb6dd900cce9a"
+    },
+    {
+      "file": "nativelink-scheduler-publication_candidate_test.log.gz",
+      "source_sha256": "65e58004d6fccba155da459870d2ed283f5f5182a1eb6419fe44cd626b918894",
+      "archive_sha256": "a705e0fd87e21073d189322871448742d0d836d54a77ce8b664b251644bac8f8"
+    },
+    {
+      "file": "nativelink-service-integration_tests-authority_listener_test_test.log.gz",
+      "source_sha256": "6b50d3f74aa15085c7e0786079dae638e7c381b1c0c8d65057cd59d46566f873",
+      "archive_sha256": "a49d5c8147e1fde1710db998d399fd1e27a33411b52c1542636058384c135a64"
+    },
+    {
+      "file": "nativelink-scheduler-terminal_outcome_differential_test.log.gz",
+      "source_sha256": "6b2d01eb8a3afe27aaa27006643e4793b22ed83bbdd887df01fdea8d893df364",
+      "archive_sha256": "d7871d8b3bd933fbd044dd862eb2eacc09ec9aa3c1384da0a6c488ad28d4d83b"
+    }
+  ]
+}

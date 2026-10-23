@@ -16,8 +16,8 @@
 //!
 //! No production binary or configuration selects this construction. The worker
 //! listener has exactly Worker API, CAS and `ByteStream`; the client listener has
-//! Execution, `ActionCache`, CAS, `ByteStream` and Capabilities. Their opaque handles
-//! cannot accept extra routes. Operations remains outside this local slice.
+//! Execution, Operations, `ActionCache`, CAS, `ByteStream` and Capabilities. Their
+//! opaque handles cannot accept extra routes.
 //! The caller owns transport security and must exclude worker credentials from
 //! every writable client route. Separate sockets alone do not enforce that.
 //!
@@ -34,6 +34,7 @@ use nativelink_config::cas_server::{
 };
 use nativelink_proto::build::bazel::remote::execution::v2::execution_server::ExecutionServer;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
+use nativelink_proto::google::longrunning::operations_server::OperationsServer;
 use nativelink_scheduler::authority::journal::Singleton;
 use nativelink_store::store_manager::StoreManager;
 use tokio::net::TcpListener;
@@ -139,6 +140,7 @@ impl AuthorityListeners {
             routes: Routes::new(
                 ExecutionServer::new(service.clone()).max_encoding_message_size(128 * 1024),
             )
+            .add_service(OperationsServer::new(service.clone()))
             .add_service(ac.into_service())
             .add_service(cas)
             .add_service(bytestream)

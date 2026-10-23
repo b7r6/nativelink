@@ -12,7 +12,7 @@ listener handles with fixed routes:
 | Listener | Services |
 | --- | --- |
 | Worker | AuthorityWorkerApi, CAS, ByteStream |
-| Client | Execution, ActionCache, CAS, ByteStream, Capabilities |
+| Client | Execution, Operations, ActionCache, CAS, ByteStream, Capabilities |
 
 The handles expose only `serve`, accepting an existing tonic transport builder,
 bound TCP listener and shutdown future. They do not expose a route builder or a
@@ -22,7 +22,8 @@ listener. No legacy scheduler is constructed. The additive
 `CapabilitiesServer::new_authority` advertises execution, SHA256 and BLAKE3, and
 writable client ActionCache, with no optional node properties, compression or
 chunking. The existing configurable capabilities constructor is unchanged.
-Operations cancellation/listing is not mounted. Existing capabilities behavior
+[Operations](authority-operations.md) Get, Cancel and Wait are mounted only on
+the client role; List and Delete remain unimplemented. Existing capabilities behavior
 for unknown instances is unchanged and is not a strict instance admission gate.
 
 The constructor rejects exactly the same immediate `Arc<dyn StoreDriver>` in
@@ -65,4 +66,7 @@ configuration converter, production entry point, or deployment is supplied here.
 The [qualification receipt](evidence/authority-listener-construction/manifest.json)
 records source hashes, the initial shutdown-race failure, strict Clippy, the
 three listener cases and 68 existing service regression cases. Root integration
-and Bazel verification are separate from this isolated Cargo receipt.
+and Bazel verification are separate from this isolated Cargo receipt. The later
+Operations mount has an additional wire case: valid Get and Cancel requests are
+answered with `Unimplemented` on the worker role while client Cancel, Wait and Get return the exact
+committed cancellation.

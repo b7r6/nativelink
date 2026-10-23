@@ -644,3 +644,6 @@ async fn sha256_fixed_routes_and_accepted_publication() {
 async fn blake3_fixed_routes_and_accepted_publication() {
     fixed_routes_and_accepted_publication(DigestHasherFunc::Blake3).await;
 }
+
+#[path = "authority_listener/operations.rs"]
+mod operations;

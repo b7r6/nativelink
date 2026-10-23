@@ -48,6 +48,6 @@ initial formatting/compiler failures, successful checks, and source review.
 
 These histories do not qualify production authentication, every cancellation
 delivery cutpoint, or the canonical configuration entry point. Existing worker
-tests separately cover cancellation receipts and uncertain reservations. Mounting
-Operations on the fixed client role requires the listener construction change;
-the worker role must not expose this client service.
+tests separately cover cancellation receipts and uncertain reservations. The
+later fixed-listener integration mounts Operations on the client role and checks
+that valid Get and Cancel requests return `Unimplemented` on the worker role.
