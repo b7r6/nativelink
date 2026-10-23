@@ -55,3 +55,11 @@ Execution counts, exact baseline failures, compiled mutation observations, sourc
 hashes, and restored test binaries belong in the qualification packet. A compiler
 failure is not a semantic mutant detection. A failure in setup or a positive
 control is distinguished from reaching a later negative assertion.
+
+The [root integration receipt](evidence/authority-bytestream-identity/root-integration.json)
+records seven executed Bazel targets and the server build at `a6bcfb158a`:
+169 Rust tests pass and one local TLS fixture remains normally ignored. The
+source remains unchanged across that run, with all 1,349 tracked inputs verified
+against its commit. Identity runtime and fixtures match the author source exactly;
+four prerequisite inputs retain earlier root dependency and diagnostic changes.
+The packet includes all seven executed binaries and independent source reviews.

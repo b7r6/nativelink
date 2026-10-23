@@ -1,0 +1,221 @@
+{
+  "scope": "Independent root integration of fixed ByteStream exact upload identity. No production construction, aggregate admission or deployment qualification.",
+  "root_source_commit": "a6bcfb158a43a54806e8b4fc50033149acaf90b3",
+  "author_source_commit": "7b1feba8deb858bd8aafd80ec7d2fa7c2e0e9272",
+  "run": {
+    "exit_code": 0,
+    "elapsed_seconds": 80.27120829408523,
+    "targets": 7,
+    "passed": 7,
+    "executed": 7,
+    "rust_counts_from_logs": [
+      169,
+      0,
+      1
+    ],
+    "source_inputs_unchanged": 1349
+  },
+  "git_source_verified": true,
+  "author_comparison": {
+    "manifest_sha256": "c51ca3b0ae213d7924769d6d8d5ba856667870e7cd72e06a2161d160af93ceba",
+    "exact": {
+      "nativelink-service/tests/authority_listener_test.rs": "1e177c60e36e6e2c0d948d9cf89cadc03956119a88a155bd6de280f368e389e8",
+      "nativelink-service/tests/authority_listener/bytestream_identity.rs": "f9a5fe3b59e52286e3cf51c88cc5ba42ebf69905ebb3b17007e0c9012a59893e",
+      "nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs": "118676dc5d41cc882ea4b6c51a9eb09e162c2552f97f96a8a12f4354a08849ba",
+      "nativelink-service/BUILD.bazel": "6f0f1988bd806c8294569d8836503f636886af495616b94fd1793d5aebb216bb",
+      "nativelink-service/src/bytestream_server.rs": "0e201d4b5c35dae6d70acc82107785823304a562ac3a2248dad5834ab9bd4fa8",
+      "nativelink-service/src/authority_listener.rs": "3db24fad0e299ad06d0de39e8d54dc5b23fc55756a0a41767b0739f8fcb378a2",
+      "nativelink-util/src/proto_stream_utils.rs": "35c542021213fa4dd4fd3944d21f1888063b5dfd8e7475404a6a32fb1cc59de1",
+      "nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "nativelink-service/src/bytestream_read_completion_tests.rs": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+      "nativelink-scheduler/design/categorical/authority-bytestream-identity.md": "1542012250e967f17890fb27a08bae974b03fbfe9b8b775245582b9dd02875b0",
+      "tools/canonical-store/Cargo.toml": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+      "tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "tools/canonical-store/src/tests.rs": "f8fd728232203e1aa9e631ff3dad9eb119abbd9048de9b7e53b57d2339cd49cc"
+    },
+    "different": {
+      "Cargo.toml": {
+        "author": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "root": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+      },
+      "Cargo.lock": {
+        "author": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "root": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+      },
+      "tools/canonical-store/Cargo.lock": {
+        "author": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+        "root": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7"
+      },
+      "tools/canonical-store/tests/fixed_digest_default.rs": {
+        "author": "b847920a860d1fa6febc53daed90da7f9ded59dce96c006b0af6b376202c4266",
+        "root": "06f3a39bb7034b2e891f22ea208e8f7d2eec84f9ce76df2218ef472eaa75b5d7"
+      }
+    }
+  },
+  "source_difference_explanation": "13 of 17 author inputs are exact. Root retains earlier canonical owner Cargo dependency edges in two lockfiles and the workspace manifest, plus the already-qualified stdout-to-stderr fixed-digest test marker. Runtime and all identity fixtures are exact.",
+  "hooks": {
+    "command": [
+      "pre-commit",
+      "run",
+      "--config",
+      "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+      "--files",
+      "nativelink-scheduler/design/categorical/authority-bytestream-identity.md",
+      "nativelink-service/BUILD.bazel",
+      "nativelink-service/src/bytestream_server.rs",
+      "nativelink-service/tests/authority_listener/bytestream_identity.rs",
+      "nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs",
+      "nativelink-service/tests/authority_listener_test.rs"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 10.59096967393998
+  },
+  "archive": {
+    "path": "root-integration.tar.gz",
+    "bytes": 393576,
+    "sha256": "01635dd0e9cdad0895f2c52ec4b790cbb931ea14239184abafbc66430f6ab3f1",
+    "files": {
+      "author-source-comparison.json": "328d723313ee0ba90a118649827fa6f1a2745673e589346f96e3d63734a9222a",
+      "author-source.json": "c51ca3b0ae213d7924769d6d8d5ba856667870e7cd72e06a2161d160af93ceba",
+      "author-to-root.patch": "b0ba52093295d46082475ae6df741733944b867310a321878f73c970f2a96340",
+      "build-and-test.log": "1953d8affb71c61ee36bcd9b5f428407c2c76e32aee7829eb01bcb1a05925da1",
+      "command.json": "f7ea995bdd5ee63c8e4cf1ffa2049219ef8d718ba48ab9160e1c0cd16c80f89c",
+      "head.txt": "c4d93a53edab6e73d240d9aa6802dd0ff72d427090cce335cd7818fc90e9037a",
+      "hooks.json": "115d41e82d4b436d51d688514d163b1d443dfa74767995e98bcc701acb4d3d3a",
+      "hooks.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "independent-root-review/review.json": "c11b8e932874fd192767fa9bfd374d2985a03f1256487b7f3d58df097798eace",
+      "independent-root-review/runtime-candidate.json": "3fbc0f9d95fcb3f66767bb5d3b8db3de466d27be054b0a11c476b3756d54d2f1",
+      "independent-root-review/runtime-parser-preserved.json": "816cb99c57da42bbc87ed799f5139d54ea5fdf07d50b82accf3171538fcbe14d",
+      "independent-root-review/runtime-review.json": "a6c17dc5b06cf139e3d951f613d296fd6185c71e6626cf4476854a48976fc5c9",
+      "independent-root-review/runtime-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-root-review/runtime-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "independent-root-review/runtime-source/nativelink-scheduler/design/categorical/authority-bytestream-identity.md": "1542012250e967f17890fb27a08bae974b03fbfe9b8b775245582b9dd02875b0",
+      "independent-root-review/runtime-source/nativelink-service/BUILD.bazel": "6f0f1988bd806c8294569d8836503f636886af495616b94fd1793d5aebb216bb",
+      "independent-root-review/runtime-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "independent-root-review/runtime-source/nativelink-service/src/authority_listener.rs": "3db24fad0e299ad06d0de39e8d54dc5b23fc55756a0a41767b0739f8fcb378a2",
+      "independent-root-review/runtime-source/nativelink-service/src/bytestream_read_completion_tests.rs": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+      "independent-root-review/runtime-source/nativelink-service/src/bytestream_server.rs": "0e201d4b5c35dae6d70acc82107785823304a562ac3a2248dad5834ab9bd4fa8",
+      "independent-root-review/runtime-source/nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs": "949aaa3c78a0ca8c4aaac308ccc84283f2f20eac10985ac7879b53a91c4c2d0f",
+      "independent-root-review/runtime-source/nativelink-service/tests/authority_listener/bytestream_identity.rs": "45080bfae9653767065f92b9f991072c0fcde446a52bd2db8687f5bd7fa33e19",
+      "independent-root-review/runtime-source/nativelink-service/tests/authority_listener_test.rs": "1e177c60e36e6e2c0d948d9cf89cadc03956119a88a155bd6de280f368e389e8",
+      "independent-root-review/runtime-source/nativelink-util/src/proto_stream_utils.rs": "35c542021213fa4dd4fd3944d21f1888063b5dfd8e7475404a6a32fb1cc59de1",
+      "independent-root-review/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-root-review/source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "independent-root-review/source/nativelink-service/BUILD.bazel": "e65a154c53d96468ee9c10b91c38bcee68c8b4d0c1a40cb6161ab86d56f9ced9",
+      "independent-root-review/source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "independent-root-review/source/nativelink-service/src/authority_listener.rs": "3db24fad0e299ad06d0de39e8d54dc5b23fc55756a0a41767b0739f8fcb378a2",
+      "independent-root-review/source/nativelink-service/src/bytestream_server.rs": "83380e3c24640cad4e89f6b2b7444a18ce9fefba70c13cec017da4d8e48b5b8e",
+      "independent-root-review/source/nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs": "949aaa3c78a0ca8c4aaac308ccc84283f2f20eac10985ac7879b53a91c4c2d0f",
+      "independent-root-review/source/nativelink-service/tests/authority_listener/bytestream_identity.rs": "45080bfae9653767065f92b9f991072c0fcde446a52bd2db8687f5bd7fa33e19",
+      "independent-root-review/source/nativelink-service/tests/authority_listener_test.rs": "1e177c60e36e6e2c0d948d9cf89cadc03956119a88a155bd6de280f368e389e8",
+      "independent-root-review/source/nativelink-util/src/proto_stream_utils.rs": "35c542021213fa4dd4fd3944d21f1888063b5dfd8e7475404a6a32fb1cc59de1",
+      "independent-root-review/tests-admission.json": "993308b7adabd22263f0264e44bcb236a0f0e308a49300f2d37a43955b7740bf",
+      "independent-root-review/tests-corrected.json": "4fe8c9dd1ffd8cc322a111e9e843f910c82b8c8e68805fad122b5e9681c819f7",
+      "independent-root-review/tests-first.json": "a78248d021af00963a1704464f5d4e948c29b40b4c21cf445b2b401a3c5c45ff",
+      "package.py": "9a73f02153c390895494f48d942a082a16785bcc101c894440088ec38b825e16",
+      "result.json": "c741954a0a0116df22315f209c4a0eee143484124cc918f5bf8a591d03cd1a6d",
+      "root-source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "root-source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "root-source/tools/canonical-store/Cargo.lock": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7",
+      "root-source/tools/canonical-store/tests/fixed_digest_default.rs": "06f3a39bb7034b2e891f22ea208e8f7d2eec84f9ce76df2218ef472eaa75b5d7",
+      "run.py": "4dda883099a2f886cc834805f612c058047e531af8fbcbf2a39a2af081f1686e",
+      "sources-after.json": "962d87aea5e4068aeb47043e387cfbe57413fdb8b5cb5d3602715eb1382ca2b0",
+      "sources-before.json": "962d87aea5e4068aeb47043e387cfbe57413fdb8b5cb5d3602715eb1382ca2b0",
+      "status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summaries.json": "9606ecc387fbd5636e9158fc40183804c2b28359d10ca70083d88fcdd712554c",
+      "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "b9e6ca2656beb4a9124b065be2081c302f4b2ae4e4f1c8e62dbdd645e3afe656",
+      "testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "7f286e38607bb595c2e5509e5d068d33aca5cad9bb24e72e0df38de00770cde8",
+      "testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "08f82a5f4a23e6c8eeafde8d56c5479b8d4d414d5fdcf133513f5916471b5e5b",
+      "testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "54779d6a46e743d701c06d2b76a826d2af2c48b6e63ac1b9527d7cc9bd5e8245",
+      "testlogs/nativelink-service/unit_test/test.log": "c2c94269c3e55606806135151052353c31db6fd0d36a0d44864b2f00aa692615",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "95e36e05d819882d87ac0e706a4f64d26a942f735fa00efb48ae20745158a7fd",
+      "testlogs/tools/canonical-store/fixed_digest_default_test/test.log": "9e6b0b24818f94f154a6e1b817a9649513d4bbb1bdafe520f3337cb7faf9e849"
+    }
+  },
+  "executable_archives": [
+    {
+      "path": "root-executable-authority_listener_test_test.tar.gz",
+      "bytes": 19924154,
+      "sha256": "530c67374447e622c6f06ad45e416ead088a2a4a0da2833b9b8e20622ff54a5a",
+      "member": {
+        "path": "binaries/nativelink-service/integration_tests/authority_listener_test_test",
+        "bytes": 110660848,
+        "sha256": "357150ddb6b04e36f08b95a8816b490d3658658e0f71883bb26ee1f7a68d62ee"
+      }
+    },
+    {
+      "path": "root-executable-bytestream_server_test_test.tar.gz",
+      "bytes": 30684504,
+      "sha256": "0670bb3e4a4807ffa2efa85e54704f32343731d7fe18330f919f7e8490c79c9f",
+      "member": {
+        "path": "binaries/nativelink-service/integration_tests/bytestream_server_test_test",
+        "bytes": 168878848,
+        "sha256": "facd0f3245a1274c7fefe7f57464a40af18ec672c2b0eb09dceb8e5d302c7926"
+      }
+    },
+    {
+      "path": "root-executable-grpc_wire_compression_test_test.tar.gz",
+      "bytes": 12642480,
+      "sha256": "d86e74e848545c3e06a63b5e06f81aaa4183eb4fd2b3c2de3bb17ae7794b3b78",
+      "member": {
+        "path": "binaries/nativelink-service/integration_tests/grpc_wire_compression_test_test",
+        "bytes": 61685744,
+        "sha256": "1683dc55c56972676c612483daeac75ac7a1c4a2db6a9d4ca034c953adbf54e3"
+      }
+    },
+    {
+      "path": "root-executable-wire_compression_test_test.tar.gz",
+      "bytes": 6310903,
+      "sha256": "9a2de5c556a9bd0aca856068b90496a432b07c623bf01a1f5853d1ef79b14913",
+      "member": {
+        "path": "binaries/nativelink-service/integration_tests/wire_compression_test_test",
+        "bytes": 26385392,
+        "sha256": "b4b66991938ef331d9072e90df1c63885dc87d9dafbfad285e4d71f2be23c217"
+      }
+    },
+    {
+      "path": "root-executable-unit_test.tar.gz",
+      "bytes": 18599364,
+      "sha256": "9e2b2ff403e929d852cec50e0657c47b316141c20b28dddcb93ce0eb57b20d0d",
+      "member": {
+        "path": "binaries/nativelink-service/unit_test",
+        "bytes": 98514688,
+        "sha256": "91a3508aa41e08b87a3c201823373ec1d5b1fa0c88e96357d0462257aab70b9e"
+      }
+    },
+    {
+      "path": "root-executable-canonical_store_test.tar.gz",
+      "bytes": 18795660,
+      "sha256": "c047100c2aaff48a07729867fdcf825590809843186f033e52239b58da0a99ad",
+      "member": {
+        "path": "binaries/tools/canonical-store/canonical_store_test",
+        "bytes": 103579560,
+        "sha256": "9e80db742463b824358145719e690b2c99d57f8838207e02710bbbdc9f558196"
+      }
+    },
+    {
+      "path": "root-executable-fixed_digest_default_test.tar.gz",
+      "bytes": 18237272,
+      "sha256": "f854f6cb1faf2ca57f82ff6aad92d2a2d4188c8adb4ff0e7fe3991b335156c44",
+      "member": {
+        "path": "binaries/tools/canonical-store/fixed_digest_default_test",
+        "bytes": 99081600,
+        "sha256": "de4bb433ff19a5082f5666e72f3f51835e9b7ee3ce06f758346564ad2e6a553e"
+      }
+    }
+  ],
+  "external_build_events": {
+    "events.jsonl": {
+      "bytes": 571045,
+      "sha256": "06d9f1f867173c0de78dfbb28366a44b80f183f2315af6adf258372796fe6fd5"
+    }
+  },
+  "limits": [
+    "All seven targets actually executed; the build also includes the server. Counts overlap author suites and earlier root checks.",
+    "One local TLS fixture remains normally ignored; no fresh explicit TLS execution is claimed.",
+    "Author original failures, corrected fixture baseline, strict Cargo checks, compiled mutations and restoration have separate source and evidence boundaries.",
+    "Source review is distinct from reviewer execution; the archived independent reviews state their scope.",
+    "No bound on global upload registry cardinality, aggregate heap or lifetime, arbitrary backend completion, or physical durability.",
+    "All M0-M9 qualification gates and production cutover remain open."
+  ]
+}

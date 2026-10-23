@@ -7,7 +7,8 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add an inert canonical journal owner, fixed listener
+Latest focused checkpoints add exact fixed upload identity, an inert canonical
+journal owner, fixed listener
 digest defaults, ByteStream read
 producer completion, synchronized namespace commitments, bounded fixed CAS and AC
 admission, digest context for
@@ -70,6 +71,18 @@ compiler controls, the author sync matrix and independent reviews. Its restored
 source passes 116 scheduler unit tests, one API test, 47 filesystem tests and
 three strict Clippy configurations. All nine archives and 1,134 mapped files
 were independently checked after copying the packet into this checkout.
+
+The fixed upload-identity checkpoint at `a6bcfb158a` passed all seven selected
+Bazel targets and the server build: 169 Rust test passes, one normally ignored
+TLS case and 80.271 seconds. All seven targets executed with no cached test
+results. The run retained 1,349 unchanged tracked inputs, verified against the
+commit. Thirteen of seventeen author inputs match exactly, including runtime and
+identity fixtures; the root retains earlier owner dependency edges and its
+stderr diagnostic marker in the other four. The
+[root receipt](evidence/authority-bytestream-identity/root-integration.json)
+preserves logs, all seven executed binaries and independent source reviews.
+Original failures and compiled mutation qualification remain separate author
+evidence. These counts do not extend the earlier full-workspace checkpoint.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
@@ -1120,10 +1133,19 @@ is separate from the root stderr-marker integration. Nineteen distinct author
 and root executables are retained by the
 [root supplement](evidence/fixed-listener-digest-default/root-integration.json).
 
-Neither repair changes production role construction. Active upload identity,
-aggregate transfer admission and the complete canonical clock remain open.
+Neither repair changes production role construction. Aggregate transfer
+admission and the complete canonical clock remain open.
 Legacy-name GrpcStore upstream servers still require refusal or adaptation before
 canonical construction; the qualified upstream uses modern resource names.
+
+The subsequent [upload-identity repair](authority-bytestream-identity.md) keys
+fixed uploads by exact raw UUID, resolved algorithm, hash and size within each
+instance. Active exact collisions refuse; absent nonzero resumes cannot insert
+idle progress. Single-message writes retain the tracked guard until backend
+completion. Each consumed nonempty later resource name must equal the first
+within a Write RPC. Existing parser admission and legacy construction remain.
+The registry still has no aggregate quota; this closes the identity slice without
+establishing a total transfer-memory bound.
 
 ## Next work and facts for the morning
 
