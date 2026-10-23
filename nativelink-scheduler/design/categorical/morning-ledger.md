@@ -1,10 +1,18 @@
 # Morning ledger
 
-2026-10-22. Questions and external dependencies are collected here so independent
-implementation can continue without interrupting the user. This is not a request
+Started 2026-10-22; updated through 2026-10-23. Questions and external dependencies
+are collected here so independent implementation can continue without interrupting
+the user. This is not a request
 for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
+
+Latest verification: 1,979 full-workspace Cargo passes, then 13 passes for the
+additive terminal comparison, and all 163 integrated Bazel targets passed. The
+[receipts](evidence/publication-terminal-workspace/manifest.json) separate the
+source checkpoints and ten ignored Cargo cases. Production factories remain
+legacy and every categorical gate remains open. Start with
+[next work and missing facts](#next-work-and-facts-for-the-morning).
 
 ## Implementation checkpoint
 
@@ -420,8 +428,8 @@ passes the complete Cargo workspace with 1,866 tests, zero failures and ten igno
 cases, and all 160 Bazel targets. All 431 recorded source and build files remain
 unchanged across those runs. Independent review then found that the inventory
 and new real-request adapter must also validate each joined operation's original
-request. That correction and a real-to-synthetic snapshot-mode refusal are being
-qualified separately; these workspace totals do not include those later changes.
+request. That correction and a real-to-synthetic snapshot-mode refusal were
+qualified at the following checkpoint; these workspace totals exclude those later changes.
 
 The [real-request correction](publication-real-request.md) now passes its
 integrated Bazel checks: 30 candidate, nine physical, six independent-comparison,
@@ -475,7 +483,7 @@ original evidence archive remain preserved in the
 Full pre-commit exposed an entry-point-only formatter check; a separately recorded
 formatting delta now passes explicit child checks, full hooks and repeated root
 Bazel. Two integrated Rust hashes changed, with original mutation evidence intact.
-No comparison against the successor candidate is claimed yet. Graph-bearing
+At that checkpoint, comparison against the successor candidate was still pending. Graph-bearing
 resource failures, active history, physical collection, durable publication
 formats and production cutover remain outside this checkpoint.
 
@@ -504,9 +512,60 @@ Bazel also passes all eight worker cases. The later
 compiled ten variants and detected nine. Removing only the snapshot byte-length
 refusal survived all 54 cases, so aggregate-overflow coverage remains explicitly
 missing. All source hashes were restored before the 54/8/9 baseline passed again.
-The corrected terminal-oracle comparison and broad workspace refresh retain
-separate pending receipts. Production role construction and every categorical
+The corrected terminal-oracle comparison and broad workspace refresh have
+separate receipts below. Production role construction and every categorical
 gate remain open.
+
+The [terminal comparison](terminal-outcome-differential.md) now checks the frozen
+candidate against the corrected independent reference. Five new paired histories
+exercise both digest algorithms; eight inherited component cases also run in the
+13-case target. All pass in author and integrated Cargo/Bazel runs. All three compiled
+faulty variants fail unchanged assertions, and all 25 engine/support hashes were
+restored. Every command compares scheduler state, each original operation request,
+report provenance and retained storage relations, then restores both engines
+before the suffix continues. Native commit counts and refusal categories retain
+explicit limits; the adapter does not invent oracle graph semantics. The
+[separate receipts](evidence/publication-terminal-differential/manifest.json)
+preserve the first observer-serialization and replacement-quarantine fixture
+failures, the corrected source, and independent review.
+
+The [final workspace receipts](evidence/publication-terminal-workspace/manifest.json)
+record 1,979 Cargo passes, zero failures and ten ignored cases at commit
+`a6cf4c1213`, with all 493 source/build files unchanged during that run. The new
+comparison was then added and passed its separate 13-case Cargo run. All 163
+Bazel test targets passed on that integrated state, with 52 executed and 111
+cached; all 497 recorded source/build files stayed unchanged. The only code/build
+delta between those checkpoints is the new four-file test harness and its Bazel
+target. Those totals are executed test cases/targets, not unique proofs or
+provider qualification; inherited tests and ignored provider cases stay explicit.
+
+## Next work and facts for the morning
+
+1. Resolve the surviving aggregate-byte guard mutation with a valid history that
+   crosses the existing limit, including atomic refusal and recovery, or establish
+   that all permitted field/count bounds keep the limit unreachable. Changing the
+   cap just to obtain a failing test would not settle the obligation. Future byte
+   headroom and retry-stage capacity need their own argument.
+2. Resume the plan's M4a.1 through M4a.4 product sequence: canonical role
+   construction, removal of legacy worker publication/history bypasses, fixed
+   listener isolation, and strict configuration refusal plus the offline
+   converter. Existing fixtures qualify parts of these behaviors; production
+   factories still select the legacy runtime. Unknown migration destinations must
+   remain explicit blocking output from the converter.
+3. Measure combined execution, publication, lease and retirement demand, and
+   finish the canonical worker/gateway acknowledgment path. Local composition and
+   synthetic budget work can proceed without production telemetry. Later M6
+   work includes graph-bearing resource failures, protected accepted history,
+   durable publication formats and activation suffixes; sustained collection and
+   safe deletion of old runtime choices remain later gates.
+
+Production qualification needs representative workload distributions and the
+Lane B baseline; intended listener/trust and credential boundaries; ownership of
+object, journal and legacy sink namespaces; filesystem placement and Azure
+lifecycle assumptions; existing data/migration destinations; and supported
+serving, reconnect and deadline guarantees. These facts are saved for the morning.
+They do not block all independent implementation, and no missing fact is replaced
+by a guessed production default.
 
 ## Decisions made provisionally
 
@@ -557,4 +616,5 @@ Missing telemetry blocks unknown-workload claims and format freeze, not useful
 independent work. No document here marks M0, M1, or any later gate passed. Update
 the root-owned evidence with exact commands and actual coverage before reporting
 a completed gate; retain the smallest unresolved counterexample and next patch
-boundary. No production service has been changed by this documentation task.
+boundary. Production factories and listeners still construct the legacy runtime;
+this checkpoint does not establish production cutover.

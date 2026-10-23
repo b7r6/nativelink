@@ -1,0 +1,377 @@
+{
+  "scope": "Finite common-command comparison of independently frozen terminal candidate and corrected independent reference; no production activation.",
+  "author_manifest_sha256": "cc55dfa53b34b3df89ebbb7145133ca961f15abe7ff9514494a09bbe1cb49496",
+  "author_archive_sha256": "7ad21acaa75e4061d4b7158176cca51271af11918e5cdba998fb0ced89f7441d",
+  "author_final_freeze_sha256": "2a6ea9fe5f06bb4451cfcee79c4ad8dafee520f60f03076061d71a9aa927d176",
+  "candidate_freeze_sha256": "5dbe52245602eb65721ea6b72961de2e0235a8d173e9497c3a5d60524665e72b",
+  "reference_freeze_sha256": "e79061b6240bd4d6219b644308c43cef937d7d87bc98a0dfb0a553dfd35ca1c0",
+  "checks": {
+    "cargo_author": 13,
+    "cargo_root": 13,
+    "bazel_root": 13,
+    "new_paired_tests": 5,
+    "inherited_component_tests": 8,
+    "algorithms": [
+      "SHA256",
+      "BLAKE3"
+    ],
+    "compiled_causal_faults_detected": 3,
+    "author_engine_support_hashes_restored": 25,
+    "strict_clippy": "PASS",
+    "explicit_four_file_rustfmt": "PASS",
+    "independent_adapter_review": "PASS within declared alphabet"
+  },
+  "limits": [
+    "skip-cache-lookup admission; positive fresh operation/report IDs",
+    "exactly eight fresh members per Stage; adapter clone spans candidate allocation plus staging",
+    "one namespace/incarnation, physical generation equals allocation order",
+    "native positions checked before mapping; native commit cardinality not equated",
+    "refusal classes collapsed to rejected, while complete unchanged snapshots required",
+    "one seeded Publication root and exact local candidate head preservation; no fabricated reference AC semantics",
+    "no graph/direct publication transitions after setup, seeded Operation/Serving roots, object graph proof, collector, performance, or future capacity/byte proof",
+    "duplicate admission and repeated abandonment return semantics excluded explicitly",
+    "pure snapshot-byte guard mutation not exercised by these three counterfactuals; existing candidate campaign residual remains"
+  ],
+  "root_integration": {
+    "base_head": "a6cf4c1213ecc122f40372c7d9a623ec530b2725",
+    "patch_sha256": "e4fd2f2377fe40a41663609296d1e468087e15dd8456e7eacd94321bf41dab27",
+    "rust_and_documentation_match_author_final_freeze": true,
+    "new_bazel_target_exactly_matches_author_freeze": true,
+    "root_build_sha256": "7a628cb8009b7d2b213cc37d0019223a8dcc5096681cea46203227a1070ae5bd",
+    "root_build_delta_from_author": "Previously committed terminal compile_data and restore-audit target retained; exact new target unchanged.",
+    "engine_support_files": {
+      "exact": 24,
+      "previously_committed_format_only_case_file": 1,
+      "both_engine_reducers_exact": true,
+      "case_file_imported_by_differential": false
+    },
+    "cargo": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "terminal_outcome_differential_test",
+        "--profile",
+        "smol",
+        "-j",
+        "8",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0
+    },
+    "bazel": {
+      "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=8 //...",
+      "passed_targets": 163,
+      "executed": 52,
+      "cached": 111,
+      "new_target_cases": 13,
+      "new_target_seconds": 29.6
+    },
+    "read_only_root_review": "Inspected neutral command mapping, per-engine native position check, all original Request observations, exact retention/physical mappings and restore-before-suffix behavior. No frozen engine source changed."
+  },
+  "receipts": [
+    {
+      "file": "author/cargo-after-mutations.log.gz",
+      "source_sha256": "2b21163e01e6633fac57053fdfbb75636c7d687ae073d1987722e0a9a8f10d31",
+      "archive_sha256": "48444d4d5fe7c455a9803b24fc5fd07e3fd89b18daf5efa07692182d38882e8f"
+    },
+    {
+      "file": "author/cargo-baseline-final.log.gz",
+      "source_sha256": "95bf5549559f3fe8565a1130e02de0058773a5707313bce61d218402cd22a24c",
+      "archive_sha256": "51e392aaafbd4cec0d0c060b1d1e5e93f9cf4044fcee62d3b1abdd41d323c082"
+    },
+    {
+      "file": "author/cargo-first.log.gz",
+      "source_sha256": "137409d0ce783494a864f9bc621d21db567e2d8cacf9592f85517beaa33e895a",
+      "archive_sha256": "59315a142fd3b47cdeb18cd47f0de521127386f797638afafa4ef0690ff87d77"
+    },
+    {
+      "file": "author/cargo-second.log.gz",
+      "source_sha256": "aa6707d0ce5b3b224e13f198e86fa81e47ddd752d1b245b6b26eac6db5d3e40e",
+      "archive_sha256": "8c950a7a4522307e55f2c4d1a96dc3b369e322e5929ad2a01cdbe900a095cacf"
+    },
+    {
+      "file": "author/cargo-third.log.gz",
+      "source_sha256": "29504c23d82472ee4f2f659f525e1523775695302be81cd777b1207b1c6b658b",
+      "archive_sha256": "792976eda58b269cac5fba966842337f6c23b46ed84b13efa1bb9cc35391501d"
+    },
+    {
+      "file": "author/cases-before-quarantine-correction.rs.gz",
+      "source_sha256": "f8bc0566b28931771c7e35c878e9bf95958930edbd632915a8d6ffdccefda6d2",
+      "archive_sha256": "f000e78dba0e0584a8463415a9d7f504437c1025561cfe86f19bf4d27bd2c1be"
+    },
+    {
+      "file": "author/clippy-final.log.gz",
+      "source_sha256": "83b83e918f0e838c244c8c5441c6769ae4f6fbe311ffaef529acb15a3d06c80b",
+      "archive_sha256": "7ed3555ba39c8cdf62574f123777a511a4c451a93555c5766dac7b938208f100"
+    },
+    {
+      "file": "author/clippy-first.log.gz",
+      "source_sha256": "1a562bf2c804511dd981b1f5eddc3b33131bc0638bf1756342a12c246e9bd3d2",
+      "archive_sha256": "d2f8db192caf625fa361b4d1dd82d4e439e30730eaf2941ba21fa71f3af582d0"
+    },
+    {
+      "file": "author/clippy-second.log.gz",
+      "source_sha256": "fb7b11b8223574fd143dd6b33b38cfbb4d2c4eccbddae3d693ca3f22a9f9f1fc",
+      "archive_sha256": "dd7c36715fc57041b7fa4b930e7714b490fd6e0dcd4156f2a1caf864b4fe5ceb"
+    },
+    {
+      "file": "author/counterfactuals/01-memory-to-complete/nativelink-scheduler/tests/publication_candidate/terminal.rs.gz",
+      "source_sha256": "79ce96044aeeda7ad2f82fe99bd4d3d7fc2df94467ca288e7265b836c741ee3d",
+      "archive_sha256": "29325b8fa2b0d6d4103a57354c3799eceeed40409e07dfdadf660d2021435de9"
+    },
+    {
+      "file": "author/counterfactuals/01-memory-to-complete/run.json.gz",
+      "source_sha256": "f57806a64b15605607c4727cc927b455318a2aa51a29c116e0022deffa36203d",
+      "archive_sha256": "71f81ab5e341012edbabdc2a19c2a0332985df2f0813f14256af5645a4a93eb8"
+    },
+    {
+      "file": "author/counterfactuals/01-memory-to-complete/test.log.gz",
+      "source_sha256": "e81adc5594ea2a7139be1bd167e8fd086f476d0f23c9a318eb285a272c62f93e",
+      "archive_sha256": "5ec99dbebcd36010e2b273d07b3a07eb7c3df0c49a4e2c49419c34476cfb0943"
+    },
+    {
+      "file": "author/counterfactuals/02-drop-memory-peak/nativelink-scheduler/tests/publication_candidate/terminal.rs.gz",
+      "source_sha256": "41075e7d5d184cb4e7ea7f7793cb873989cef5304671f1af511c0567ce636448",
+      "archive_sha256": "ca225f5233c214431c6a76b6acef758e97aec403e6d6aaf7c8bd6008ebd12971"
+    },
+    {
+      "file": "author/counterfactuals/02-drop-memory-peak/run.json.gz",
+      "source_sha256": "55b8314e5956798309d68905410235d364e4bed8b67d98887b615c236997760f",
+      "archive_sha256": "b3a2244028d724873203d99b4cba4da5071e6a99c6ebec3e04f1b0a7b1b30857"
+    },
+    {
+      "file": "author/counterfactuals/02-drop-memory-peak/test.log.gz",
+      "source_sha256": "f0b2a81eed842480bcf737f25d505d24a1fe3372621dfcbee38bda3b2f3b926d",
+      "archive_sha256": "e84219a6d33492157ed5252066112f4ffd14a1490833eb3ee242c193cab72391"
+    },
+    {
+      "file": "author/counterfactuals/07-duplicate-observe-mutates/nativelink-scheduler/tests/publication_candidate/engine.rs.gz",
+      "source_sha256": "8c371d3fcbee23c4d594575203efaab6be90c96b09b17261f4b1b91d881d998f",
+      "archive_sha256": "509fff6f559e290257824ba657cca2afa13c74dc6b7c02cb2f5d3d33cb7637b3"
+    },
+    {
+      "file": "author/counterfactuals/07-duplicate-observe-mutates/run.json.gz",
+      "source_sha256": "cf7359d987305db6df3a774b0d4329ff2fb3fe5631f3302110100348c8372ec4",
+      "archive_sha256": "2fd036407e7971f76e22d40dd644d8b15364fbd56b3bf7c8273bd9f0c9f4cda1"
+    },
+    {
+      "file": "author/counterfactuals/07-duplicate-observe-mutates/test.log.gz",
+      "source_sha256": "531751eef41e44c370564eb212471ee318f912eb83a94f4860047c243d86dc97",
+      "archive_sha256": "852b63e090ad5a4365639b50b65f759eb2a3b03f201d3b27079d7ea031a2386f"
+    },
+    {
+      "file": "author/counterfactuals/results.json.gz",
+      "source_sha256": "c03bb2bb9a6a9da1822cf31cfc426edabe02fb709bfe9e1f89fad74d0cf93439",
+      "archive_sha256": "6569d584f0b99798014f4d29e0f2e92281ea11c60db9a4b9a30942ebacbca14c"
+    },
+    {
+      "file": "author/counterfactuals.log.gz",
+      "source_sha256": "700a4feb44fae3cb6ef13cea5742fe92d8093fedda86337f28bd972c10c7188a",
+      "archive_sha256": "d8b5459e0912d83e1b3ecf53c226cfad5b61c2017ac858dc444f857a8c17200a"
+    },
+    {
+      "file": "author/engines-after-mutations.json.gz",
+      "source_sha256": "a08345cb17cfbd11e9a9f320cd3b0d12a46752acd3df4c30287ab7fadef0dea5",
+      "archive_sha256": "d74aef3edad019f56746fbb9444480deeb74176285f5a89601badfab9345aca3"
+    },
+    {
+      "file": "author/engines-before-mutations.json.gz",
+      "source_sha256": "a08345cb17cfbd11e9a9f320cd3b0d12a46752acd3df4c30287ab7fadef0dea5",
+      "archive_sha256": "d74aef3edad019f56746fbb9444480deeb74176285f5a89601badfab9345aca3"
+    },
+    {
+      "file": "author/final-freeze/manifest.json.gz",
+      "source_sha256": "2a6ea9fe5f06bb4451cfcee79c4ad8dafee520f60f03076061d71a9aa927d176",
+      "archive_sha256": "973489033e9c0c6ad925b1e4b5b68902014609ea281c34b90899311fb83f3031"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "1291d843df4d44880dbcc6409b2df918c3d49ea07f618f32baf8ce4a75c5a722",
+      "archive_sha256": "fdd2179344539916a54dd9bd688c65c77f8fe4dc991d033cd7715ff07a6e4856"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/design/categorical/terminal-outcome-differential.md.gz",
+      "source_sha256": "59895e7017844556013f510a9a04a9b8da9e55eb5ef9890599a7efd22eb38cdb",
+      "archive_sha256": "2d71ac26d93fcb1ce5161470fcc197b184602098339d12d57b326df51ca5973d"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/adapter.rs.gz",
+      "source_sha256": "5af07a0494810d9701c54a517404eef1927b2d528aa792d9743baf4b034b3178",
+      "archive_sha256": "09203c7121f6aee0e3132259613ce8c1bfa987128c0370196b1847541c82e00b"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/cases.rs.gz",
+      "source_sha256": "8189e8fc58584ea476ddb06c452650f7d52e83294d249f70c7985b486d7d230e",
+      "archive_sha256": "8ad946300c854793bab8fa377be5923b0f934bb6886ac5e872f46292152d0112"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/fixtures.rs.gz",
+      "source_sha256": "83a61404657bc565fbe7b85b50019c9f16bbcde3be6a098628400297ca38fa84",
+      "archive_sha256": "07504b87192807886f950f4fe924f1c7c2df67795099212d51f1b87b3355319a"
+    },
+    {
+      "file": "author/final-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential_test.rs.gz",
+      "source_sha256": "65d2a157542231f4393db4405b4223955bb8ac9b70379423dc5a0f7536aa0e5f",
+      "archive_sha256": "3f71f9a91394d2daf1c62670724eda821755121dfc2704e609e3a5542e466132"
+    },
+    {
+      "file": "author/first-authored-source/nativelink-scheduler/tests/terminal_outcome_differential/adapter.rs.gz",
+      "source_sha256": "03569c85c3284653bd3fc86484fbdd9a6536fc2de87a9c7d07f2faeddabd2733",
+      "archive_sha256": "ab59becbe0f32c3340c89e98f6c902f024a9de4d74a95164028abebc6062e131"
+    },
+    {
+      "file": "author/first-authored-source/nativelink-scheduler/tests/terminal_outcome_differential/cases.rs.gz",
+      "source_sha256": "f8bc0566b28931771c7e35c878e9bf95958930edbd632915a8d6ffdccefda6d2",
+      "archive_sha256": "f000e78dba0e0584a8463415a9d7f504437c1025561cfe86f19bf4d27bd2c1be"
+    },
+    {
+      "file": "author/first-authored-source/nativelink-scheduler/tests/terminal_outcome_differential/fixtures.rs.gz",
+      "source_sha256": "730dfe4c5af4f0baf1573b946b1928e59f87e509a42a690b86de9460eddcd032",
+      "archive_sha256": "e4a979f4b00d2ecb2ae23fbbc5652c4b91f3e2d79f9a978e2c9aad0e3cd0f8b9"
+    },
+    {
+      "file": "author/first-authored-source/nativelink-scheduler/tests/terminal_outcome_differential_test.rs.gz",
+      "source_sha256": "c6af59077161c1e50ad33964a6af1dca8dafb4cefb1448811fcd277dbd084e61",
+      "archive_sha256": "2f80934942970051792cfc157f6c035802b1b2b6ce3a9930ad2cdf2fd2b62142"
+    },
+    {
+      "file": "author/harness-freeze/manifest.json.gz",
+      "source_sha256": "6419ce07af43f611bdb9e73eac737f4820d80dc4ef82fc1714e6b43170516ceb",
+      "archive_sha256": "9e4a6395aa852541fd6fdf0eabd5941d3b6051e6218dacca83154babc069e4ab"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "1291d843df4d44880dbcc6409b2df918c3d49ea07f618f32baf8ce4a75c5a722",
+      "archive_sha256": "fdd2179344539916a54dd9bd688c65c77f8fe4dc991d033cd7715ff07a6e4856"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/design/categorical/terminal-outcome-differential.md.gz",
+      "source_sha256": "15fe5633855bea8856d244dc3385b154941f7eca07be9bdc46e988677e0326d3",
+      "archive_sha256": "c2e3019fbbbdffca5d9bde17a8985c9e8aed90a7b6c6f7ed73c5b91dca4ba315"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/adapter.rs.gz",
+      "source_sha256": "5af07a0494810d9701c54a517404eef1927b2d528aa792d9743baf4b034b3178",
+      "archive_sha256": "09203c7121f6aee0e3132259613ce8c1bfa987128c0370196b1847541c82e00b"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/cases.rs.gz",
+      "source_sha256": "8189e8fc58584ea476ddb06c452650f7d52e83294d249f70c7985b486d7d230e",
+      "archive_sha256": "8ad946300c854793bab8fa377be5923b0f934bb6886ac5e872f46292152d0112"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential/fixtures.rs.gz",
+      "source_sha256": "83a61404657bc565fbe7b85b50019c9f16bbcde3be6a098628400297ca38fa84",
+      "archive_sha256": "07504b87192807886f950f4fe924f1c7c2df67795099212d51f1b87b3355319a"
+    },
+    {
+      "file": "author/harness-freeze/source/nativelink-scheduler/tests/terminal_outcome_differential_test.rs.gz",
+      "source_sha256": "65d2a157542231f4393db4405b4223955bb8ac9b70379423dc5a0f7536aa0e5f",
+      "archive_sha256": "3f71f9a91394d2daf1c62670724eda821755121dfc2704e609e3a5542e466132"
+    },
+    {
+      "file": "author/independent-adapter-review.md.gz",
+      "source_sha256": "aa46be7ad5b8ea060ce1bd41a2f60d82819adc97a55253b54b5f83c21ea5e0a1",
+      "archive_sha256": "04df88e152831ced6d56285f51750e2b66f2898228d09a91bf2bc43e8425f8ea"
+    },
+    {
+      "file": "author/independent-review.json.gz",
+      "source_sha256": "e095d512c8c5fb55b92a3f37386f569097c4de61f533f479faeeed0a25912866",
+      "archive_sha256": "4f50fe7115696004a70fd13256a0903112474cccab3f8b60d4b20f14b9b64706"
+    },
+    {
+      "file": "author/qualification.json.gz",
+      "source_sha256": "edb5f9cf32d219812d2af5a8d0f00a6b9cd911085e0eec9b9a3c2c28c1431927",
+      "archive_sha256": "db55e7058348318e4a2e13ccc93d92db854ef280bc123e25a1bb6f0d574515d0"
+    },
+    {
+      "file": "author/root-build-integration.diff.gz",
+      "source_sha256": "ae831c7b36b7c97f0969dd99b62a7eb0c9f000b880bb14c43201aa3a2328d09e",
+      "archive_sha256": "3adc103f0369717f108a989fa33ce1c0d9f24cb043891dfb25e35afa601d10c5"
+    },
+    {
+      "file": "author/run-counterfactuals.py.gz",
+      "source_sha256": "834491c5d09f92947a00270342d734818b85dad5eab8f7c251acf6c7b160b1fb",
+      "archive_sha256": "67596387b096eb54570a0375665ad293f7b44191dc653d3217447d93f6f346a3"
+    },
+    {
+      "file": "author/style-0.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "author/style-1.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "author/style-2.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "author/style-3.log.gz",
+      "source_sha256": "0a7b3383a57e4469f82b37f53b216f7d5501dc8b4174a90404e9310c27db2635",
+      "archive_sha256": "0694125db18285168317daa3329e547f00161cc5097908af356b015308f41fa6"
+    },
+    {
+      "file": "author/terminal-outcome-differential.patch.gz",
+      "source_sha256": "e4fd2f2377fe40a41663609296d1e468087e15dd8456e7eacd94321bf41dab27",
+      "archive_sha256": "073a9a91c485a681482be1a2d46bbd4767832ad7d59675982a52048306bd515d"
+    },
+    {
+      "file": "author/vale-final.log.gz",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "author/manifest.json.gz",
+      "source_sha256": "cc55dfa53b34b3df89ebbb7145133ca961f15abe7ff9514494a09bbe1cb49496",
+      "archive_sha256": "1f4610ca012f509f01fa01be10fd6d34b98eab7d1e18940e80c8fac1e814b8f3"
+    },
+    {
+      "file": "root/root-integration.json.gz",
+      "source_sha256": "92eb4060e93fa605a902fd558f1f25e90939c8ded75f19648c11b15a9521c9a3",
+      "archive_sha256": "f995b7d9c2d0d4648981162ab9dc819e63ba07032004f8b14700de0356e96104"
+    },
+    {
+      "file": "root/root-engine-compatibility.json.gz",
+      "source_sha256": "9ad525a55e1aafe0c1310bc35ed9e0b90c68cb5d3f325a47ebd866f922dc68c7",
+      "archive_sha256": "592e3af9397fc321a15273bfa243cb59fb221a9cc524298d95fc91f4e4322c57"
+    },
+    {
+      "file": "root/root-existing-reference-format.diff.gz",
+      "source_sha256": "350ad08cdf05309666566b33cae4242da45b14c729728f2cc325372e028ad9d1",
+      "archive_sha256": "3244716b3c45ac3eb16ba64b0104747dbd08a7f876a2b0bbc46d893f91604f22"
+    },
+    {
+      "file": "root/root-terminal-differential-cargo.log.gz",
+      "source_sha256": "3330fde2170cfb5f4cd7267d91289e68fa27566c52986bdc7c3c01e5abb073f9",
+      "archive_sha256": "049a2ed91edd44560c13e53345b226329a1e91d4f088dcc84e22ae01897eaf80"
+    },
+    {
+      "file": "root/root-terminal-differential-cargo-exit.json.gz",
+      "source_sha256": "2b02f7e11842769a11f0ffc976767b70bffc28c0a817a5627a572240be5c7f21",
+      "archive_sha256": "e5596eccd2d20a7eb5b833b4bb692b959fa4f195df005a0a85e4e00e9ea3480f"
+    },
+    {
+      "file": "root/root-terminal-differential-test.log.gz",
+      "source_sha256": "ff4c4196f865cb35cc1b8b013fe1a9d4fb20c69e8fec27e8d670654ae7ada780",
+      "archive_sha256": "f63886df7d3c7a1f5c72509cb60804b071034e97d25275531b8f580aec7f8f54"
+    },
+    {
+      "file": "root/root-terminal-differential-test.xml.gz",
+      "source_sha256": "e4678512624d1a2fde56cd68fa5f23baa896ac1938362faa2908d8193bc21e76",
+      "archive_sha256": "651fcd6191347109b64ba271f059eda0f8f9bac7f7d513aff98cc357e3f3ee04"
+    }
+  ]
+}

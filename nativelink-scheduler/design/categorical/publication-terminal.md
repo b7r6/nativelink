@@ -74,8 +74,11 @@ and invariant checks remained present in that mutant. This finite fixture has
 no aggregate-overflow witness; future outer-byte reservation remains unproved.
 All sixteen frozen source hashes were restored before the 54/8/9 baseline passed
 again. The stale-interest-generation variant is detected by its changed reply,
-not by a new demonstration of successor revocation. Comparison against the
-[corrected terminal reference](terminal-outcome-restore-audit.md) is separate.
+not by a new demonstration of successor revocation. The separate
+[terminal comparison](terminal-outcome-differential.md) now runs five paired
+histories against the corrected independent reference, plus eight inherited
+component cases. Both algorithms pass, with three compiled comparison faults
+detected. Its documented common alphabet does not extend the byte-bound claim.
 
 The candidate author and its separate scenario author used the frozen terminal
 contract without reading the new terminal reference reducer or tests. The

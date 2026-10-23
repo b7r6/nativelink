@@ -1,8 +1,11 @@
 # Shared-authority representation and measurement gate
 
-Status: unqualified design candidate, 2026-10-22. A bounded scheduler/journal
-experiment is recorded below; publication, retention, and provider costs remain
-unmeasured. This memo is not permission to freeze a production representation.
+Status: unqualified design candidate, updated 2026-10-23. Bounded scheduler/journal
+experiments are recorded below; combined publication, retention, and provider
+costs remain unqualified. Later [typed retention](typed-retention-bridge.md),
+[Azure](physical-azure.md), and [physical publication](publication-physical.md)
+fixtures add functional evidence, without a combined workload measurement.
+This memo is not permission to freeze a production representation.
 See [contract.md](contract.md) and root-owned
 `evidence/` for implementation and measurement receipts as they become available.
 
@@ -262,11 +265,11 @@ snapshot headroom.
 | Closure shape | Outputs, distinct transitive blobs, bytes, cohort span, reuse distribution | No measured representative distribution |
 | Log/write demand | Logical commands, proposals, entries, replication bytes, durable bytes, batches and delay separately | Serial/concurrent proposals and bounded application batches measured, with durable transaction counts; replication/write amplification, production aggregation delay, and combined load missing |
 | Read demand | Barrier quorum traffic, applied-state latency, any grouping linearization argument | Singleton barrier/decode measured; network quorum missing |
-| Apply/state | CPU/event, pending effect bytes, root/cohort/index memory, bounded batch latency | Bounded scheduler apply/snapshot measured; retention state missing |
-| Closure/provider | Traversal, hashing, uploads, conditional operations, request retries and throttle | Not measured |
+| Apply/state | CPU/event, pending effect bytes, root/cohort/index memory, bounded batch latency | Bounded scheduler apply/snapshot measured; finite publication/retention encodings tested separately; combined cost under load missing |
+| Closure/provider | Traversal, hashing, uploads, conditional operations, request retries and throttle | Functional typed-closure and filesystem/Azurite fixtures pass; combined cost, throughput and provider throttling remain unmeasured |
 | Recovery | Snapshot size/time, concurrent load, catch-up/restart, install/truncation cutpoints | Singleton snapshot/reopen measured; actual three-member partition, learner catch-up, interrupted snapshot and restart tested; combined load missing |
 | Collection | Scan/retire/delete rates, new-acquisition stalls, orphan lag, retained/copy amplification | Not measured |
-| Protection refinement | Coarse state versus independent per-generation protection, renewal progress, fair drain | Finite abstract comparison and five killed mutations; typed closures and actual providers missing |
+| Protection refinement | Coarse state versus independent per-generation protection, renewal progress, fair drain | Finite independent comparison, typed-closure composition and filesystem/Azurite fixtures pass; sustained collection and fair drain under combined load remain unqualified |
 | Control | Pinned workload/hardware, hard bounds, baseline and saturation/recovery objectives declared in advance | Not calibrated |
 
 For each family `i`, record logical event rate `lambda_i`, average and tail

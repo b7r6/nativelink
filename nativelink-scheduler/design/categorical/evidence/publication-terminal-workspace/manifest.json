@@ -1,0 +1,159 @@
+{
+  "scope": "Full Cargo at committed terminal candidate/corrected oracle boundary, then focused additive comparison Cargo and full Bazel on its integrated source.",
+  "base_head": "a6cf4c1213ecc122f40372c7d9a623ec530b2725",
+  "cargo": {
+    "command": "cargo test --locked --offline --all --profile smol -j 8 -- --test-threads=8",
+    "exit_code": 0,
+    "result_summaries": 166,
+    "passed": 1979,
+    "failed": 0,
+    "ignored": 10,
+    "source_files": 493,
+    "source_unchanged": true,
+    "head": "a6cf4c1213ecc122f40372c7d9a623ec530b2725",
+    "ignored_lines": [
+      "test add_action_smoke_test ... ignored, needs rewrite to use workers (like test_multiple_clients_subscribe_to_same_action)",
+      "test azurite_runner::sas::tests::print_a_sas_url_for_manual_curl_testing ... ignored, Manual verification tool: requires a live Azurite instance with a hardcoded port, not runnable unattended in CI",
+      "test azurite_runner::tests::manually_verify_create_container ... ignored, Manual verification tool: requires a live Azurite instance with a hardcoded port, not runnable unattended in CI",
+      "test test_scheduler_store_operations ... ignored, Broken with local mongo, only needed when we use this for a scheduler backend",
+      "test azurite_runner::sas::tests::print_a_sas_url_for_manual_curl_testing ... ignored, Manual verification tool: requires a live Azurite instance with a hardcoded port, not runnable unattended in CI",
+      "test azurite_runner::tests::manually_verify_create_container ... ignored, Manual verification tool: requires a live Azurite instance with a hardcoded port, not runnable unattended in CI",
+      "test local_azurite_blake3_retention_contract ... ignored, Explicit local qualification: requires the pinned Azurite runner; select this exact test with --ignored, and missing dependencies fail",
+      "test local_azurite_exact_generation_contract ... ignored, Explicit local qualification: install tests/azurite_runner dependencies, then select local_azurite_exact_generation_contract with --ignored; missing Azurite is a hard failure",
+      "test local_azurite_typed_retention_contract ... ignored, Explicit local qualification: requires the pinned Azurite runner; select this exact test with --ignored, and missing dependencies fail",
+      "test stress_test_multi_worker_cas ... ignored, longer-running stress test"
+    ]
+  },
+  "additive_cargo": {
+    "command": "cargo test --locked --offline -p nativelink-scheduler --test terminal_outcome_differential_test --profile smol -j 8 -- --test-threads=8",
+    "status": "PASS",
+    "passed": 13,
+    "failed": 0,
+    "ignored": 0
+  },
+  "bazel": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=8 //...",
+    "status": "PASS",
+    "targets": 163,
+    "executed": 52,
+    "cached": 111,
+    "elapsed_seconds": 271.523,
+    "source_files": 497,
+    "source_unchanged_during_run": true
+  },
+  "between_full_runs": "Added four differential Rust files and one Bazel target. No prior Rust/runtime/engine source changed. Do not attribute the full Cargo count to the later additive source boundary.",
+  "limits": [
+    "Test totals include inherited cases; they do not count unique semantic histories.",
+    "Ten ignored Cargo cases are enumerated in cargo-result and confer no provider/manual/stress qualification.",
+    "Both full runs completed without code changes during execution; there was a separately recorded additive test change between them.",
+    "Surviving snapshot byte-guard mutant remains unresolved; no future byte-reserve or production capacity claim.",
+    "All categorical gates and production cutover remain open."
+  ],
+  "receipts": [
+    {
+      "file": "capture-source.py.gz",
+      "source_sha256": "2d6f51ffebb31b963b9026c908e6b0ad6423563974882bc6fb44e6ccde0b4014",
+      "archive_sha256": "35961185b893100fd492867210b96afb00bed0960483967e92ddb0036df839cd"
+    },
+    {
+      "file": "cargo-all.log.gz",
+      "source_sha256": "8a149a29df67b6746dce728c901eda765fa3b6a2da7be68f8c1b749f7bb8c671",
+      "archive_sha256": "745aa3a2018f775bd07052f5b9de941ac4475025ba2c93b8c602b3b8a350650f"
+    },
+    {
+      "file": "cargo-result.json.gz",
+      "source_sha256": "b9f222984241f88f4100cc081770959f4b1aee7753b72ce97f0c913b1156f06a",
+      "archive_sha256": "2369589723ee71da3e86645428ab621525909fe04eda4c19c7d0d1f1cd3fd47f"
+    },
+    {
+      "file": "source-before.json.gz",
+      "source_sha256": "983d2de30eaf3af66efcdd350d8ccb1dd874a824775122e82caa945f1f2a3ff0",
+      "archive_sha256": "b5b7eca83a611a00a9da3b0fcac065933f432ab4445fe4439fae2009d294d153"
+    },
+    {
+      "file": "source-after-cargo.json.gz",
+      "source_sha256": "983d2de30eaf3af66efcdd350d8ccb1dd874a824775122e82caa945f1f2a3ff0",
+      "archive_sha256": "b5b7eca83a611a00a9da3b0fcac065933f432ab4445fe4439fae2009d294d153"
+    },
+    {
+      "file": "source-before-bazel.json.gz",
+      "source_sha256": "69c8a3b5bb8979e79fd68e20900c06d7958a7103efbbce30f72ef232d02320e2",
+      "archive_sha256": "1d35ea63031235f8f807ec9485c995a8bdd8f2f9cd4b5eddf523365ff4dd8725"
+    },
+    {
+      "file": "source-after-bazel.json.gz",
+      "source_sha256": "69c8a3b5bb8979e79fd68e20900c06d7958a7103efbbce30f72ef232d02320e2",
+      "archive_sha256": "1d35ea63031235f8f807ec9485c995a8bdd8f2f9cd4b5eddf523365ff4dd8725"
+    },
+    {
+      "file": "cargo-to-bazel-source-delta.json.gz",
+      "source_sha256": "3075625c086214a6342a6da2397514164f539b45cc61d9cfcb8034e47ae7f3ea",
+      "archive_sha256": "c78b90d7b0e40fcaf3dc820829f7222696af5827ffcd1ab195907daa24122ff0"
+    },
+    {
+      "file": "root-bazel-all.log.gz",
+      "source_sha256": "9ea3d6ca60799f18e21bb4db329083cec1b58577ffff39a752d229e8870389bd",
+      "archive_sha256": "8b87c477b73c3a2a7c39e66583366bdcc8c041679a6af9243895db42acfdb234"
+    },
+    {
+      "file": "root-bazel-exit.json.gz",
+      "source_sha256": "050a551c28b45b64316efd064c3b394db06f6884d8f794a9d77c89459fc63a7f",
+      "archive_sha256": "06b7fb0698ed9c3f3370ff2a7d96e7da144adc3bc54b96028512476bf18ad004"
+    },
+    {
+      "file": "root-terminal-differential-cargo.log.gz",
+      "source_sha256": "3330fde2170cfb5f4cd7267d91289e68fa27566c52986bdc7c3c01e5abb073f9",
+      "archive_sha256": "049a2ed91edd44560c13e53345b226329a1e91d4f088dcc84e22ae01897eaf80"
+    },
+    {
+      "file": "root-terminal-differential-cargo-exit.json.gz",
+      "source_sha256": "2b02f7e11842769a11f0ffc976767b70bffc28c0a817a5627a572240be5c7f21",
+      "archive_sha256": "e5596eccd2d20a7eb5b833b4bb692b959fa4f195df005a0a85e4e00e9ea3480f"
+    },
+    {
+      "file": "root-integration.json.gz",
+      "source_sha256": "92eb4060e93fa605a902fd558f1f25e90939c8ded75f19648c11b15a9521c9a3",
+      "archive_sha256": "f995b7d9c2d0d4648981162ab9dc819e63ba07032004f8b14700de0356e96104"
+    },
+    {
+      "file": "integrated-source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "7a628cb8009b7d2b213cc37d0019223a8dcc5096681cea46203227a1070ae5bd",
+      "archive_sha256": "d20f4c8134c416c058eac1126ec04385c805ee5b3e980a836bceedde30b49ef2"
+    },
+    {
+      "file": "integrated-source/nativelink-scheduler/tests/terminal_outcome_differential/adapter.rs.gz",
+      "source_sha256": "5af07a0494810d9701c54a517404eef1927b2d528aa792d9743baf4b034b3178",
+      "archive_sha256": "09203c7121f6aee0e3132259613ce8c1bfa987128c0370196b1847541c82e00b"
+    },
+    {
+      "file": "integrated-source/nativelink-scheduler/tests/terminal_outcome_differential/cases.rs.gz",
+      "source_sha256": "8189e8fc58584ea476ddb06c452650f7d52e83294d249f70c7985b486d7d230e",
+      "archive_sha256": "8ad946300c854793bab8fa377be5923b0f934bb6886ac5e872f46292152d0112"
+    },
+    {
+      "file": "integrated-source/nativelink-scheduler/tests/terminal_outcome_differential/fixtures.rs.gz",
+      "source_sha256": "83a61404657bc565fbe7b85b50019c9f16bbcde3be6a098628400297ca38fa84",
+      "archive_sha256": "07504b87192807886f950f4fe924f1c7c2df67795099212d51f1b87b3355319a"
+    },
+    {
+      "file": "integrated-source/nativelink-scheduler/tests/terminal_outcome_differential_test.rs.gz",
+      "source_sha256": "65d2a157542231f4393db4405b4223955bb8ac9b70379423dc5a0f7536aa0e5f",
+      "archive_sha256": "3f71f9a91394d2daf1c62670724eda821755121dfc2704e609e3a5542e466132"
+    },
+    {
+      "file": "root-pre-commit.log.gz",
+      "source_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "archive_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d"
+    },
+    {
+      "file": "root-pre-commit-exit.json.gz",
+      "source_sha256": "bd6114fb14ffbbd3c1ef92a3e714d7282381a1df894891b2ffa4a30f70cc79a5",
+      "archive_sha256": "5d13f619504b45d593cc9d0450e38e96a677fb7b7f714c8c31709e01c78288f9"
+    }
+  ],
+  "pre_commit": {
+    "command": "pre-commit run",
+    "status": "PASS",
+    "source_files_unchanged_after_hooks": 497
+  }
+}
