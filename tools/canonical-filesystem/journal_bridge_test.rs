@@ -537,3 +537,49 @@ async fn singleton_existing_uninitialized_membership_is_not_adopted() {
     let journal = open(&fixture, fixture.directory(&owner), false).await;
     assert!(journal.read_applied().await.unwrap().0.is_none());
 }
+
+#[nativelink_test]
+async fn persisted_limit_refusal_releases_custody_without_replacing_state() {
+    let fixture = Fixture::new();
+    let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let mut journal = open(&fixture, directory, true).await;
+    let vote = Vote::new_committed(4, fixture.binding().node_id);
+    journal.save_vote(&vote).await.unwrap();
+    let state = journal.read_applied().await.unwrap();
+    drop(journal);
+    let owner = fixture.released_owner().await;
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let profile = fixture.profile();
+    let result = Journal::open_from_factory(
+        fixture.binding(),
+        fixture.binding().node_id,
+        Limits {
+            max_workers: Limits::default().max_workers - 1,
+            ..Limits::default()
+        },
+        profile.clone(),
+        move || directory.reopen().map(carrier),
+    )
+    .await;
+    assert!(result.is_err(), "descriptor reopen accepted changed limits");
+    // Refusal releases the database's four ownership locks. Reusing the exact
+    // registry/incarnation also shows it was refused before registration.
+    let owner = fixture.released_owner().await;
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let mut journal = Journal::open_from_factory(
+        fixture.binding(),
+        fixture.binding().node_id,
+        Limits::default(),
+        profile,
+        move || directory.reopen().map(carrier),
+    )
+    .await
+    .unwrap();
+    fixture.assert_all_locked();
+    assert_eq!(journal.read_vote().await.unwrap(), Some(vote));
+    assert_eq!(journal.read_applied().await.unwrap(), state);
+}
