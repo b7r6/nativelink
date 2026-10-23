@@ -86,8 +86,15 @@ impl PublicationAuthority {
 
     fn report_identity(&self, report: &NoGraphReport) -> Result<(), Error> {
         Self::no_graph_payload(&report.result)?;
+        self.report_origin(&report.origin, report.kind)
+    }
+
+    pub(super) fn report_origin(
+        &self,
+        origin: &WorkerOrigin,
+        kind: TerminalReportKind,
+    ) -> Result<(), Error> {
         let view = self.scheduler.view();
-        let origin = &report.origin;
         if origin.epoch != view.epoch {
             return Err(Error::Unauthorized);
         }
@@ -112,7 +119,7 @@ impl PublicationAuthority {
         }
         if let TerminalReportKind::MemoryFailure {
             charged, quiescent, ..
-        } = report.kind
+        } = kind
         {
             let reservation = view
                 .reservations
@@ -144,6 +151,9 @@ impl PublicationAuthority {
             };
         }
         self.report_identity(&report)?;
+        if self.metadata.prepared_memory_at.is_some() {
+            self.check_report_slot(id, &report.origin)?;
+        }
         if terminal.reports.len() >= MAX_STAGES * a::MAX_ATTEMPTS as usize
             || terminal
                 .reports
@@ -289,10 +299,12 @@ impl PublicationAuthority {
     }
 
     pub(super) fn validate_terminal_state(&self) -> Result<(), Error> {
+        self.validate_prepared_memory()?;
         let Some(terminal_state) = &self.metadata.terminal else {
             return Ok(());
         };
         let view = self.scheduler.view();
+        let records = self.all_classified_reports()?;
         if terminal_state.enabled_at == 0
             || terminal_state.enabled_at > self.metadata.commit
             || terminal_state.reports.len() > MAX_STAGES * a::MAX_ATTEMPTS as usize
@@ -311,10 +323,9 @@ impl PublicationAuthority {
             .values()
             .map(|accepted| (accepted.commit, accepted.at))
             .chain(
-                terminal_state
-                    .reports
-                    .values()
-                    .map(|report| (report.position, report.at)),
+                records
+                    .iter()
+                    .map(|(_, report, _)| (report.position, report.at)),
             )
             .collect::<Vec<_>>();
         dated_positions.sort_unstable_by_key(|(position, _)| *position);
@@ -324,9 +335,14 @@ impl PublicationAuthority {
         let mut attempts = BTreeSet::new();
         let mut counts = BTreeMap::<a::ExecutionId, usize>::new();
         let mut expected_accepted = BTreeMap::new();
-        for (id, record) in &terminal_state.reports {
-            self.report_identity(&record.report)
-                .map_err(|_| Error::Corrupt)?;
+        for (id, record, graph_stage) in &records {
+            if graph_stage.is_none() {
+                self.report_identity(&record.report)
+                    .map_err(|_| Error::Corrupt)?;
+            } else {
+                self.report_origin(&record.report.origin, record.report.kind)
+                    .map_err(|_| Error::Corrupt)?;
+            }
             let report = &record.report;
             let origin = &report.origin;
             let execution = view
@@ -352,7 +368,9 @@ impl PublicationAuthority {
                 || record.at > view.now
                 || record.at < execution.enqueue_at
                 || execution.terminal_at.is_some_and(|at| record.at > at)
-                || !positions.insert(record.position)
+                || !((graph_stage.is_some()
+                    && matches!(record.disposition, ReportDisposition::Terminal(_)))
+                    || positions.insert(record.position))
                 || !attempts.insert(origin.attempt)
                 || attempt.authorized
                 || !reservation.released
@@ -365,7 +383,7 @@ impl PublicationAuthority {
                 .filter(|row| row.execution == origin.execution)
                 .filter(|row| row.id <= origin.attempt)
                 .count();
-            if terminal_state.reports.values().any(|earlier| {
+            if records.iter().any(|(_, earlier, _)| {
                 earlier.report.origin.execution == origin.execution
                     && earlier.report.origin.attempt < origin.attempt
                     && (earlier.position >= record.position || earlier.at > record.at)
@@ -493,22 +511,24 @@ impl PublicationAuthority {
                             .get(&accepted.stage)
                             .ok_or(Error::Corrupt)?;
                         if matches!(stage.candidate.publisher, Publisher::Worker { execution, .. } if execution == origin.execution)
+                            && Some(accepted.stage) != *graph_stage
                         {
                             return Err(Error::Corrupt);
                         }
                     }
-                    if expected_accepted
-                        .insert(
-                            origin.execution,
-                            NoGraphAcceptance {
-                                report_id: *id,
-                                origin: origin.clone(),
-                                terminal: value.clone(),
-                                position: record.position,
-                                at: record.at,
-                            },
-                        )
-                        .is_some()
+                    if graph_stage.is_none()
+                        && expected_accepted
+                            .insert(
+                                origin.execution,
+                                NoGraphAcceptance {
+                                    report_id: *id,
+                                    origin: origin.clone(),
+                                    terminal: value.clone(),
+                                    position: record.position,
+                                    at: record.at,
+                                },
+                            )
+                            .is_some()
                     {
                         return Err(Error::Corrupt);
                     }
@@ -567,10 +587,9 @@ impl PublicationAuthority {
                 if reservation.charged != expected_target {
                     return Err(Error::Corrupt);
                 }
-                if let Some(record) = terminal_state
-                    .reports
-                    .values()
-                    .find(|record| record.report.origin.attempt == attempt.id)
+                if let Some((_, record, _)) = records
+                    .iter()
+                    .find(|(_, record, _)| record.report.origin.attempt == attempt.id)
                     && let ReportDisposition::Retry { target } = record.disposition
                 {
                     expected_target = target;
@@ -582,7 +601,8 @@ impl PublicationAuthority {
             if let Some(terminal) = &execution.terminal {
                 match terminal {
                     a::TerminalResult::ResourceFailed { .. } => {
-                        if !terminal_state.accepted.contains_key(&execution.id) {
+                        if !terminal_state.accepted.contains_key(&execution.id)
+                            && !records.iter().any(|(_, record, graph)| graph.is_some() && record.report.origin.execution == execution.id && matches!(&record.disposition, ReportDisposition::Terminal(value) if value == terminal)) {
                             return Err(Error::Corrupt);
                         }
                     }

@@ -172,3 +172,13 @@ accessor/coalescing corrections, candidate review fixes, restored baseline check
 and compiled mutations. Neither these scenarios nor the separate reference
 qualify graph-bearing ResourceFailed preparation, history protection, production
 RPC routing, collectors or durable activation.
+
+## Prepared memory successor
+
+The additive [private-v5 candidate](prepared_memory.rs) accepts a prepared graph
+with an explicit MemoryFailure classification. Its
+[contract and limits](../../design/categorical/publication-prepared-memory.md)
+keep the exact response and closure in the existing stage and let actual State
+decide retry or ResourceFailed at acceptance. The no-graph alphabet above remains
+unchanged. Accepted history, production routing and durable formats remain
+outside this experiment.

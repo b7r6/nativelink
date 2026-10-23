@@ -1,10 +1,11 @@
 # Publication snapshot byte bound
 
 The finite publication candidate has a conservative canonical snapshot bound of
-**2,022,804 bytes**, below its unchanged 2,097,152-byte limit by 74,348 bytes.
+**2,026,948 bytes**, below its unchanged 2,097,152-byte limit by 70,204 bytes.
 This covers the exposed synthetic, real-request, direct-authorization and
-private-v4 terminal alphabets, including arbitrary snapshots accepted by the
-repaired outer validation. It is a size bound on valid states, not a claim about
+private-v4 terminal and private-v5 prepared memory alphabets, including canonical
+serialization of every restored state accepted by the repaired outer validation. It is
+a size bound on valid states, not a claim about
 production memory, admission throughput, collection, or retry-stage availability.
 
 ## The restore premise
@@ -46,8 +47,18 @@ inventory checks detect added or removed fields; they do not prove Rust field
 types, enum variants, semantic invariants, or the correctness of this argument.
 Changes to any of those premises require another review.
 
+The outer input retains child snapshots as byte arrays. Child restoration may
+accept whitespace or other JSON spelling outside the canonical form within those
+arrays; the
+outer canonical check does not normalize those bytes. The bound describes
+`snapshot()` of a validated state, including a restored state, rather than every
+accepted input byte string. The unchanged 2 MiB input guard still bounds raw
+restore input before parsing.
+
 This ledger was derived against source baseline
-`0318e72abb0ea6973ec136868019cd50ef44e8b6` plus the outer cohort restriction above.
+`0318e72abb0ea6973ec136868019cd50ef44e8b6` plus the outer cohort restriction above. The private-v5 refresh adds a 518-byte
+classification and decision allowance to each of the eight stages. It retains
+the original payload, raw result and closure bounds.
 Line links identify that baseline's definitions; the calculator checks the
 current checkout's field inventory. The snapshot guard remains a separate
 defense against future omissions. No claim here depends on killing its compiled
@@ -142,14 +153,14 @@ raw-byte subtrees are excluded. The calculator lists every field explicitly.
 | [`NamespaceBinding`](../../tests/publication_candidate/engine.rs#L46) | 64 | 197 |
 | [`Physical`](../../tests/publication_candidate/engine.rs#L53) | 64 | 437 |
 | [`Credit`](../../tests/publication_candidate/engine.rs#L61), including two prior stage IDs | 8 | 152 |
-| [`Stage`](../../tests/publication_candidate/types.rs#L141), candidate, eight members, eight writes and full preparation copy | 8 | 10,988 |
+| [`Stage`](../../tests/publication_candidate/types.rs#L141), candidate, eight members, eight writes, full preparation and private-v5 memory metadata | 8 | 11,506 |
 | [`Accepted`](../../tests/publication_candidate/types.rs#L155) | 8 | 169 |
 | [`Operation`](../../tests/publication_candidate/types.rs#L165) | 16 | 1,709 |
 | [`Grant`](../../tests/publication_candidate/types.rs#L176) | 16 | 102 |
 | [`UpdateAuthorization`](../../tests/publication_candidate/direct_client.rs#L21) | 8 | 1,652 |
 | [`ClassifiedReport`](../../tests/publication_candidate/terminal_types.rs#L67), origin and full memory evidence | 24 | 2,112 |
 | [`NoGraphAcceptance`](../../tests/publication_candidate/terminal_types.rs#L75) | 8 | 1,911 |
-| **Fixed subtotal** | | **239,216** |
+| **Fixed subtotal** | | **243,360** |
 
 Additional fields and payloads contribute:
 
@@ -157,7 +168,7 @@ Additional fields and payloads contribute:
 | --- | --- | ---: |
 | `actions`, `heads`, `real.actions` label keys | 24 × (1,538 + 24) | 37,488 |
 | Eight original [`ActionBinding`](../../tests/publication_candidate/real_request.rs#L51) values | 8 × 4,096 | 32,768 |
-| Metadata, real/terminal headers and scalar counters | Fixed allowance | 4,096 |
+| Metadata, real/terminal headers, private-v5 activation position and scalar counters | Fixed allowance | 4,096 |
 | Trusted principal and execution configuration | 2 × 1,538 | 3,076 |
 | Terminal operation links | 16 × 44 | 704 |
 | Synthetic client IDs | 8 × 21 | 168 |
@@ -165,7 +176,7 @@ Additional fields and payloads contribute:
 | Report results, terminal dispositions, acceptance results | (24 + 8 + 8) × 4,096 | 163,840 |
 | Raw candidate `result_bytes` arrays | 8 × (4 × 4,096 + 1) | 131,080 |
 | Retry disposition wrapper slack | 24 × 256 | 6,144 |
-| **Metadata total, including fixed rows** | | **749,652** |
+| **Metadata total, including fixed rows** | | **753,796** |
 
 [`validate_candidate`](../../tests/publication_candidate/engine.rs#L641) bounds
 each stage's raw result bytes and complete response. The array allowance above
@@ -183,9 +194,21 @@ bounds each result at 4,096 JSON bytes. A retry wrapper is 44 bytes larger than
 the terminal placeholder used in the table; the calculation reserves 256 extra
 bytes for every report. All graph and no-graph maxima are charged together.
 
+Private-v5 memory stages retain the report ID, epoch, original charged vector,
+optional peak and quiescence. Their decision retains the acceptance command
+arguments, position, time and either a retry vector or terminal reason. The
+retry wrapper is the larger branch. These fields cost at most 518 additional
+bytes per stage. They reference the existing candidate response and closure;
+there is no second retained graph payload or closure ledger. Validation may
+build a temporary combined report view, which is absent from the snapshot.
+The shared identity budget counts both graph stages and no-graph reports, while
+this conservative ledger still charges all eight graph stages and all 24
+no-graph rows together. Stage abandonment releases protection but never removes
+the retained candidate or classification. History remains disabled.
+
 ## Scope and remaining obligations
 
-The sum is `1,058,032 + 214,096 + 749,652 + 1,024 = 2,022,804` bytes. The final
+The sum is `1,058,032 + 214,096 + 753,796 + 1,024 = 2,026,948` bytes. The final
 1,024-byte allowance covers the outer wrapper; its actual empty shape is 57
 bytes. Repeated worker registration replaces bounded properties, while capacity,
 heartbeat, progress and clock changes alter fixed-width fields. Grants, clients,

@@ -276,6 +276,22 @@ metadata = {
             "closure": [member] * 8,
         },
         "authorized_at": U64,
+        "memory": {
+            "report": {
+                "id": U64,
+                "epoch": U64,
+                "charged": resources,
+                "peak_memory_bytes": U64,
+                "quiescent": False,
+            },
+            "decision": {
+                "publication": U64,
+                "until": U64,
+                "position": U64,
+                "at": U64,
+                "disposition": {"Retry": {"target": resources}},
+            },
+        },
         "until": U64,
         "root": 112,
         "writes": {str(U64 - i): physical_key for i in range(8)},
@@ -350,6 +366,10 @@ metadata_counts = {
     "report": 24,
     "no_graph": 8,
 }
+# Retry carries the largest private-v5 disposition; terminal stores only reason.
+assert len(encoded(metadata["stage"]["memory"]["decision"]["disposition"])) >= len(
+    encoded({"Terminal": {"reason": "AttemptBudgetExhausted"}})
+)
 metadata_placeholders = {
     "stage": 2,
     "operation": 1,
@@ -370,6 +390,9 @@ for name, shape in {
     "Candidate": metadata["stage"]["candidate"],
     "Evidence": metadata["stage"]["preparation"],
     "Stage": metadata["stage"],
+    "PreparedMemoryStage": metadata["stage"]["memory"],
+    "PreparedMemoryReport": metadata["stage"]["memory"]["report"],
+    "PreparedMemoryDecision": metadata["stage"]["memory"]["decision"],
     "Accepted": metadata["accepted"],
     "Operation": metadata["operation"],
     "Grant": metadata["grant"],
@@ -467,6 +490,7 @@ fields(
         "clients",
         "update_authorizations",
         "terminal",
+        "prepared_memory_at",
         "namespaces",
         "physical",
         "stages",
@@ -495,8 +519,8 @@ total = scheduler_total + retention_total + metadata_total + 1024
 assert (scheduler_total, retention_total, metadata_total, total) == (
     1058032,
     214096,
-    749652,
-    2022804,
+    753796,
+    2026948,
 )
 assert total < 2 * 1024 * 1024
 print(

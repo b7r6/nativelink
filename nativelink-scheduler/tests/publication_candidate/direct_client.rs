@@ -27,7 +27,9 @@ pub(super) struct UpdateAuthorization {
 
 impl Metadata {
     pub(super) fn snapshot_version(&self) -> u32 {
-        if self.terminal.is_some() {
+        if self.prepared_memory_at.is_some() {
+            5
+        } else if self.terminal.is_some() {
             4
         } else if !self.update_authorizations.is_empty() {
             3

@@ -1686,3 +1686,6 @@ fn retained_report_time_cannot_follow_a_later_commit_on_another_execution() {
         "commit/time order reversed across executions: {accepted_corruptions:?}"
     );
 }
+
+#[path = "prepared_memory_tests.rs"]
+mod prepared_memory_tests;

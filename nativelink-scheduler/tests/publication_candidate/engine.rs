@@ -34,6 +34,9 @@ use direct_client::UpdateAuthorization;
 #[path = "terminal.rs"]
 mod terminal;
 
+#[path = "prepared_memory.rs"]
+mod prepared_memory;
+
 #[path = "validation.rs"]
 mod validation;
 
@@ -81,6 +84,8 @@ struct Metadata {
     update_authorizations: BTreeMap<u64, UpdateAuthorization>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     terminal: Option<TerminalState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prepared_memory_at: Option<u64>,
     namespaces: Vec<NamespaceBinding>,
     physical: Vec<Physical>,
     stages: BTreeMap<u64, Stage>,
@@ -147,6 +152,7 @@ impl PublicationAuthority {
                 clients: BTreeSet::new(),
                 update_authorizations: BTreeMap::new(),
                 terminal: None,
+                prepared_memory_at: None,
                 namespaces: Vec::new(),
                 physical: Vec::new(),
                 stages: BTreeMap::new(),
@@ -752,7 +758,11 @@ impl PublicationAuthority {
         Ok(())
     }
 
-    fn validate_worker_stage(&self, candidate: &Candidate) -> Result<(), Error> {
+    fn validate_worker_stage(
+        &self,
+        candidate: &Candidate,
+        memory: Option<&PreparedMemoryReport>,
+    ) -> Result<(), Error> {
         if let Publisher::Worker {
             attempt,
             worker,
@@ -763,15 +773,28 @@ impl PublicationAuthority {
             // Admission must not let a stale publisher spend the current
             // execution's single stage credit. Reuse the actual reducer's
             // authority check; this preview and every effect it emits are
-            // discarded. Publish repeats Complete on its outer commit clone.
+            // discarded. Acceptance repeats the classified event on its outer
+            // commit clone, including its current capacity-dependent decision.
             let mut preview = self.scheduler.clone();
             if let a::Reply::Rejected(reason) = preview.apply(a::RecordedEvent {
                 epoch: EPOCH,
-                event: a::Event::Complete {
-                    attempt,
-                    worker,
-                    incarnation,
-                    result: candidate.response.clone(),
+                event: if let Some(report) = memory {
+                    a::Event::MemoryFailure {
+                        attempt,
+                        worker,
+                        incarnation,
+                        charged: report.charged,
+                        peak_memory_bytes: report.peak_memory_bytes,
+                        quiescent: report.quiescent,
+                        result: candidate.response.clone(),
+                    }
+                } else {
+                    a::Event::Complete {
+                        attempt,
+                        worker,
+                        incarnation,
+                        result: candidate.response.clone(),
+                    }
                 },
             }) {
                 return Err(Error::Scheduler(reason));
@@ -787,6 +810,17 @@ impl PublicationAuthority {
         until: u64,
         writes: BTreeMap<u64, Key>,
     ) -> Result<(), Error> {
+        self.stage_inner(id, candidate, None, until, writes)
+    }
+
+    fn stage_inner(
+        &mut self,
+        id: u64,
+        candidate: Candidate,
+        memory: Option<PreparedMemoryReport>,
+        until: u64,
+        writes: BTreeMap<u64, Key>,
+    ) -> Result<(), Error> {
         self.transaction(|next| {
             if id == 0 || next.metadata.stages.contains_key(&id) {
                 return Err(Error::Conflict);
@@ -798,7 +832,11 @@ impl PublicationAuthority {
                 return Err(Error::Bounds);
             }
             next.validate_candidate(&candidate)?;
-            next.validate_worker_stage(&candidate)?;
+            if let Some(report) = &memory {
+                next.validate_memory_identity(&candidate, report)?;
+                next.reserve_memory_report(&candidate, report)?;
+            }
+            next.validate_worker_stage(&candidate, memory.as_ref())?;
             next.validate_current_update(&candidate)?;
             match candidate.publisher {
                 Publisher::Worker { execution, .. } => {
@@ -859,6 +897,10 @@ impl PublicationAuthority {
                 id,
                 Stage {
                     candidate,
+                    memory: memory.map(|report| PreparedMemoryStage {
+                        report,
+                        decision: None,
+                    }),
                     authorized_at,
                     until,
                     root,
@@ -951,6 +993,13 @@ impl PublicationAuthority {
                 return Err(Error::Invalid);
             }
             let stage = next.metadata.stages.get(&id).ok_or(Error::Invalid)?;
+            if stage
+                .memory
+                .as_ref()
+                .is_some_and(|memory| memory.decision.is_some())
+            {
+                return Err(Error::Conflict);
+            }
             next.validate_evidence(
                 stage,
                 &evidence,
@@ -1046,6 +1095,7 @@ impl PublicationAuthority {
             if publication == 0 || next.metadata.accepted.contains_key(&publication) { return Err(Error::Conflict); }
             if !next.valid_until(until, LEASE_TICKS) { return Err(Error::Bounds); }
             let stage = next.metadata.stages.get(&stage_id).ok_or(Error::Invalid)?.clone();
+            if stage.memory.is_some() { return Err(Error::Invalid); }
             let preparation = stage.preparation.as_ref().ok_or(Error::Incomplete)?;
             next.validate_evidence(&stage, preparation, until)?;
             next.validate_candidate(&stage.candidate)?;

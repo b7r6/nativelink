@@ -141,6 +141,8 @@ pub(crate) enum StageState {
 pub(crate) struct Stage {
     pub(crate) candidate: Candidate,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) memory: Option<PreparedMemoryStage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) authorized_at: Option<u64>,
     pub(crate) until: u64,
     pub(crate) root: u64,
@@ -149,6 +151,41 @@ pub(crate) struct Stage {
     pub(crate) outcomes: BTreeMap<u64, bool>,
     pub(crate) preparation: Option<Evidence>,
     pub(crate) state: StageState,
+}
+/// Private-v5 classification; response and graph remain solely in Candidate.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PreparedMemoryReport {
+    pub(crate) id: u64,
+    pub(crate) epoch: a::ClusterEpoch,
+    pub(crate) charged: a::Resources,
+    pub(crate) peak_memory_bytes: Option<u64>,
+    pub(crate) quiescent: bool,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[allow(
+    variant_size_differences,
+    reason = "A retry carries a resource vector; a terminal stores only its reason."
+)]
+pub(crate) enum PreparedMemoryDisposition {
+    Retry { target: a::Resources },
+    Terminal { reason: a::ResourceFailureReason },
+}
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PreparedMemoryDecision {
+    pub(crate) publication: u64,
+    pub(crate) until: u64,
+    pub(crate) position: u64,
+    pub(crate) at: u64,
+    pub(crate) disposition: PreparedMemoryDisposition,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PreparedMemoryStage {
+    pub(crate) report: PreparedMemoryReport,
+    pub(crate) decision: Option<PreparedMemoryDecision>,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

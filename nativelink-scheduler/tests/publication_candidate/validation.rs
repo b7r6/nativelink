@@ -355,8 +355,7 @@ impl PublicationAuthority {
                         .find(|row| row.id == attempt)
                         .ok_or(Error::Corrupt)?;
                     if !self.request_matches_action(&candidate.action, &entry.request)
-                        || entry.terminal.as_ref()
-                            != Some(&a::TerminalResult::Completed(candidate.response.clone()))
+                        || entry.terminal != Self::stage_terminal(stage)
                         || receipt.execution != execution
                         || receipt.worker != worker
                         || receipt.incarnation != incarnation
@@ -369,7 +368,8 @@ impl PublicationAuthority {
                     {
                         return Err(Error::Corrupt);
                     }
-                    !entry.request.do_not_cache
+                    stage.memory.is_none()
+                        && !entry.request.do_not_cache
                         && candidate.response.exit_code == 0
                         && candidate.response.error.is_none()
                 }
@@ -479,8 +479,12 @@ impl PublicationAuthority {
                         .get(&r::RootId(root))
                         .ok_or(Error::Corrupt)?;
                     if operation.payload.as_ref().is_none_or(|payload| {
-                        actual.terminal.as_ref()
-                            != Some(&a::TerminalResult::Completed(payload.clone()))
+                        actual.terminal
+                            != if operation.cached {
+                                Some(a::TerminalResult::Completed(payload.clone()))
+                            } else {
+                                Self::stage_terminal(&meta.stages[&accepted.stage])
+                            }
                             || payload.require_response().is_err()
                     }) || candidate.action != operation.action
                         || protection.kind != r::RootKind::Operation
@@ -498,7 +502,8 @@ impl PublicationAuthority {
                             cached_result: true,
                             ..ExecuteResponse::default()
                         };
-                        if execution.attempts_started != 0
+                        if !accepted.eligible
+                            || execution.attempts_started != 0
                             || operation
                                 .payload
                                 .as_ref()
@@ -520,8 +525,13 @@ impl PublicationAuthority {
                 (None, None)
                     if operation.payload.is_none()
                         && !operation.cached
-                        && (!matches!(actual.terminal, Some(a::TerminalResult::Completed(_)))
-                            || self.operation_has_no_graph(*id, actual.terminal.as_ref())) => {}
+                        && (!matches!(
+                            actual.terminal,
+                            Some(
+                                a::TerminalResult::Completed(_)
+                                    | a::TerminalResult::ResourceFailed { .. }
+                            )
+                        ) || self.operation_has_no_graph(*id, actual.terminal.as_ref())) => {}
                 _ => return Err(Error::Corrupt),
             }
         }
