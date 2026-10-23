@@ -903,14 +903,31 @@ This is constructor admission: public experimental Raft handles can still change
 membership afterward. Synthetic histories do not certify an actual migration,
 historical quorum decisions or every internal index in an older snapshot.
 
+Fixed authority CAS handlers now admit at most 64 entries and 64 KiB per batch,
+checking combined actual and declared sizes before storage calls. Reads require
+the selected digest, exact length, genuine EOF and a successful producer.
+GetTree completes a bounded traversal before pagination, counts repeated and
+missing children before enqueue, and binds continuation to the instance, digest,
+root and observed traversal. Direct gRPC forwarding cannot bypass these checks.
+All nine new RPC fixtures failed against the old handlers. The fixed integration
+passed eight Bazel targets (seven executed, one cached), with 150 logged passes,
+one ignored TLS case, a server build and 559 unchanged inputs. A fresh run of the
+ignored local mTLS fixture passed all four scenarios. The
+[receipt](evidence/authority-cas-admission/manifest.json) preserves author tests,
+twelve detected compiled faults, the initial compilation failure and the later
+combined-total fixture. Raw byte limits do not establish a decoded heap bound;
+arbitrary backends can allocate or start blocking work before collector refusal.
+AC decoding, ByteStream registry growth and global concurrency remain open.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
 membership, supported format/admission history and the canonical clock contract;
 readable ownership records do not supply those facts. Descriptor-to-Singleton
 construction and explicit listener wire ceilings now have separate implementations.
-Generic CAS batch/traversal accumulation and AC value decoding still need their
-own bounds before a service memory claim is justified.
+Fixed CAS batch/traversal limits now have a separate implementation. AC value
+decoding and combined service admission still need their own bounds before a
+service memory claim is justified.
 
 ## Next work and facts for the morning
 
