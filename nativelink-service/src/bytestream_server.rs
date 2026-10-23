@@ -1752,3 +1752,7 @@ impl ByteStream for ByteStreamServer {
             .map_err(Into::into)
     }
 }
+
+#[cfg(test)]
+#[path = "bytestream_read_completion_tests.rs"]
+mod read_completion_tests;

@@ -23,6 +23,7 @@ rust_library(
         "src/authority_storage_read_tests.rs",
         "src/authority_timeout_tests.rs",
         "src/bep_server.rs",
+        "src/bytestream_read_completion_tests.rs",
         "src/bytestream_server.rs",
         "src/capabilities_server.rs",
         "src/cas_server.rs",
