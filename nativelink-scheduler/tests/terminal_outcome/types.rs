@@ -120,6 +120,10 @@ pub(crate) enum Disposition {
 pub(crate) struct ReportRecord {
     pub report: Report,
     pub execution: a::ExecutionId,
+    /// Position/time of the classified report, including a retry. This is not
+    /// an accepted execution terminal or fabricated worker-result origin.
+    pub position: u64,
+    pub now: u64,
     pub disposition: Disposition,
 }
 

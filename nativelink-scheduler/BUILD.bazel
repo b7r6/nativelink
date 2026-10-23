@@ -601,6 +601,31 @@ rust_test(
 )
 
 rust_test(
+    name = "terminal_outcome_restore_audit_test",
+    srcs = ["tests/terminal_outcome_restore_audit_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/terminal_outcome/cases.rs",
+        "tests/terminal_outcome/reference.rs",
+        "tests/terminal_outcome/restore_audit.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
     name = "activation_inventory_test",
     srcs = ["tests/activation_inventory_test.rs"],
     compile_data = [

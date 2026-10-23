@@ -31,6 +31,17 @@ hashes differ only through formatting. Semantic independence is preserved, but
 integration no longer has byte identity for those two files. No comparison against
 the successor candidate has been completed at this boundary.
 
+A later [restore audit](terminal-outcome-restore-audit.md) preserved eight compiled
+counterexamples against this exact original freeze. Its separate correction
+requires local consistency of retained memory grants, report positions and clocks,
+and final reasons. Private snapshot v2 refuses v1 without inventing missing
+history. The original 29-case target and the 44-case audit target pass in Cargo
+and root Bazel: the audit embeds all original cases, so there are 44 unique cases.
+All 22 compiled mutations are detected, including reruns of the original twelve.
+The [corrective receipt](evidence/terminal-outcome-restore-audit/manifest.json)
+keeps the original 29/12 qualification distinct. Current worker capacity does not
+replace historical evidence; full historical eligibility remains outside scope.
+
 The bounded model checks the entire proposed 2 MiB snapshot before committing.
 It reserves finite row and stage/member capacity, and tests refusal when a retry
 would borrow another execution's reserved capacity. This does not prove prepaid

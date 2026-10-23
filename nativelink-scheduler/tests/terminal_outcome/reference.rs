@@ -29,7 +29,9 @@ use sha2::{Digest, Sha256};
 use super::types::*;
 use super::{m1, protocol as r, retention};
 
-const FORMAT: &str = "independent-no-graph-terminals-v1";
+// Version 1 did not retain classified-retry ordering witnesses. Refuse its
+// private snapshots; do not invent positions or clocks while restoring them.
+const FORMAT: &str = "independent-no-graph-terminals-v2";
 const EPOCH: a::ClusterEpoch = a::ClusterEpoch(1);
 const COHORT: r::CohortId = r::CohortId(1);
 
@@ -389,6 +391,8 @@ impl Model {
             ReportRecord {
                 report: report.clone(),
                 execution,
+                position,
+                now: after.now,
                 disposition: disposition.clone(),
             },
         );
@@ -944,6 +948,7 @@ impl Model {
                 return Err(Refusal::Invalid);
             }
         }
+        self.check_report_history(&view)?;
         for (id, stage) in &self.stages {
             let root = view
                 .retention
@@ -990,6 +995,144 @@ impl Model {
                     .iter()
                     .any(|trial| (trial.id, trial.execution) == (stage.attempt, stage.execution))
             {
+                return Err(Refusal::Invalid);
+            }
+        }
+        Ok(())
+    }
+
+    /// Check contradictions expressible in retained immutable facts. This is
+    /// not a reconstruction of historical worker eligibility: current capacity,
+    /// availability and worker sessions may have changed after a valid report.
+    fn check_report_history(&self, view: &View) -> Result<(), Refusal> {
+        let mut reports: Vec<_> = self.reports.values().collect();
+        reports.sort_by_key(|record| record.position);
+        if reports.iter().any(|record| {
+            record.position == 0
+                || record.position > self.position
+                || record.now > view.scheduler.now
+        }) || reports
+            .windows(2)
+            .any(|pair| pair[0].position >= pair[1].position || pair[0].now > pair[1].now)
+        {
+            return Err(Refusal::Invalid);
+        }
+
+        for execution in &view.scheduler.executions {
+            let mut trials: Vec<_> = view
+                .scheduler
+                .attempts
+                .iter()
+                .filter(|trial| trial.execution == execution.id)
+                .collect();
+            trials.sort_by_key(|trial| trial.id);
+            if usize::try_from(execution.attempts_started).ok() != Some(trials.len())
+                || trials.len() > MAX_REPORTS
+            {
+                return Err(Refusal::Invalid);
+            }
+            let mut target = execution.request.resources;
+            let mut preceding_report: Option<&ReportRecord> = None;
+            for (index, trial) in trials.iter().enumerate() {
+                let reservation = view
+                    .scheduler
+                    .reservations
+                    .iter()
+                    .find(|row| row.id == trial.reservation)
+                    .ok_or(Refusal::Invalid)?;
+                if reservation.charged != target {
+                    // A successor grant cannot manufacture memory growth after
+                    // the retained retry record has disappeared.
+                    return Err(Refusal::Invalid);
+                }
+                let Some(record) = self
+                    .reports
+                    .values()
+                    .find(|record| record.report.identity.attempt == trial.id)
+                else {
+                    continue;
+                };
+                if record.now < execution.enqueue_at
+                    || preceding_report.is_some_and(|previous| {
+                        previous.position >= record.position || previous.now > record.now
+                    })
+                {
+                    return Err(Refusal::Invalid);
+                }
+                preceding_report = Some(record);
+                if let Disposition::TerminalAccepted(accepted) = &record.disposition
+                    && (index + 1 != trials.len()
+                        || accepted.origin.position != record.position
+                        || accepted.origin.now != record.now
+                        || execution.terminal_at != Some(record.now))
+                {
+                    return Err(Refusal::Invalid);
+                }
+
+                let Classification::MemoryFailure {
+                    original_charged,
+                    peak_memory_bytes,
+                    ..
+                } = record.report.classification
+                else {
+                    continue;
+                };
+                let ordinal = index + 1;
+                let base = if original_charged.memory_bytes == 0 {
+                    peak_memory_bytes.unwrap_or(0)
+                } else {
+                    original_charged.memory_bytes
+                };
+                match &record.disposition {
+                    Disposition::RetryScheduled => {
+                        if ordinal >= MAX_REPORTS || base == 0 {
+                            return Err(Refusal::Invalid);
+                        }
+                        // The next actual immutable grant (or the retained
+                        // target before it exists) records the growth result.
+                        let successor = if let Some(next) = trials.get(index + 1) {
+                            view.scheduler
+                                .reservations
+                                .iter()
+                                .find(|row| row.id == next.reservation)
+                                .ok_or(Refusal::Invalid)?
+                                .charged
+                        } else {
+                            execution.reservation_target
+                        };
+                        if successor.cpu_millis != target.cpu_millis
+                            || successor.slots != target.slots
+                            || successor.memory_bytes <= original_charged.memory_bytes
+                            || successor.memory_bytes < execution.request.resources.memory_bytes
+                            || successor.memory_bytes > base.saturating_mul(2)
+                        {
+                            return Err(Refusal::Invalid);
+                        }
+                        target = successor;
+                    }
+                    Disposition::TerminalAccepted(accepted) => {
+                        let a::TerminalResult::ResourceFailed { reason, .. } = accepted.terminal
+                        else {
+                            return Err(Refusal::Invalid);
+                        };
+                        let locally_possible = match reason {
+                            a::ResourceFailureReason::AttemptBudgetExhausted => {
+                                ordinal == MAX_REPORTS
+                            }
+                            a::ResourceFailureReason::MissingGrowthEvidence => {
+                                ordinal < MAX_REPORTS && base == 0
+                            }
+                            a::ResourceFailureReason::NoLargerEligibleWorker => {
+                                ordinal < MAX_REPORTS && base > 0
+                            }
+                        };
+                        if !locally_possible {
+                            return Err(Refusal::Invalid);
+                        }
+                    }
+                }
+            }
+            if target != execution.reservation_target {
                 return Err(Refusal::Invalid);
             }
         }

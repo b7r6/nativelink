@@ -1,0 +1,222 @@
+[
+  {
+    "name": "01-classification-coerced-complete",
+    "case": "cases::memory_classification_preserves_all_three_actual_final_reasons",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "1d9b3b3413ec5da8752379ef6211cea07481e68a52b8b2a4b07f7a31ad8e32d7",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "02-forced-final-through-invented-ceiling",
+    "case": "cases::retry_growth_is_decided_by_m1_and_preserves_original_requests_and_stages",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "885512e3a6ad8981fe3b9f84678d22cb11d6f6cdb507654545d1a9c889260d37",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "03-missing-no-graph-gate",
+    "case": "cases::graph_bearing_complete_and_memory_reports_are_refused_without_empty_graph_fallback",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "3b57bd3f8809f448917e68a4ec141b5365138fc9731b2459cd9ebaab0da70fb2",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "04-overwrite-cancelled-operation-link",
+    "case": "cases::each_joined_handle_keeps_its_terminal_in_both_cancel_report_orders",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "c2a9ac58436ab2d3923ac20401bcc30bc6a0fe733264d094b0076b688e805e19",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "05-refund-on-cancel-without-quiescence",
+    "case": "cases::last_cancel_closes_logical_credit_but_retains_physical_charge_until_cleanup",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "d334b9b90314de64c1f8849e0eb92321b60d7fd56cda1f4f71c81235509c9e6d",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "06-forget-old-write-intents-on-report",
+    "case": "cases::unknown_stage_writes_survive_cancel_retry_final_and_expiry_then_late_success",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "86b1d7d85114dbb5ac9abdc26b1f3dc80fc445eb35059d3d7b9ec382c866d440",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "07-ignore-interest-generation-fence",
+    "case": "cases::interest_expiry_requires_current_generation_and_advance_only_moves_clocks",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "a314282fa10df21d3d3ddf457a2274f2383e860fd7cb206b7349df875bc5782c",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "08-reauthorize-recorded-origin",
+    "case": "cases::recorded_origin_survives_later_worker_replacement_and_duplicate_report_is_stable",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "22b94675b305da0e1cfb69245655216c3d69a3ad7d5b4d6485d9594d00e1a035",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "09-omit-original-operation-binding",
+    "case": "cases::per_operation_principal_binding_is_checked_on_admission_and_snapshot_restore",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "31f2602e7d83fb4fb24184fbb8fbc4f7126a6862bc2153c7ad37ea7a862af69f",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "10-omit-outer-byte-admission",
+    "case": "cases::complete_outer_snapshot_byte_gate_refuses_a_valid_terminal_atomically",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "e7fbddd0eb50984e316ff8aeb7ad00d52b88bc09c691217fdb0aff3f23f1b9e0",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "11-borrow-other-executions-credits",
+    "case": "cases::finite_stage_and_execution_credits_refuse_without_dispatch_or_borrowing",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "839e78375730abb93370ddb3fc12dfadff054717fb9f0454516922994547c3cc",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "12-ignore-conflicting-report-reuse",
+    "case": "cases::recorded_origin_survives_later_worker_replacement_and_duplicate_report_is_stable",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "4e0504e6cc91a091632569f754068acbdccd08a1d6e05aea477071eda553ed6b",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "13-omit-local-history-checks",
+    "case": "cases::audit::grown_target_cannot_survive_removal_of_its_retry_record",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "54264d1d5b8d4ff75f2961cd2171368d51c24a8a5ce0eb235a26a12d2ab0ac0d",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "14-permit-evidenceless-zero-grant-retry",
+    "case": "cases::audit::retry_with_zero_original_grant_cannot_lose_its_only_growth_evidence",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "3437008089141ac4009fa356d36ac3e27fc8f39b8f8020f4b27772eadd73d3bd",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "15-early-budget-exhaustion",
+    "case": "cases::audit::coherent_attempt_budget_reason_still_requires_three_actual_attempts",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "239aa2a69f476aad7041805086d2b3d301cf6598641c53c38a61390eab2b8428",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "16-invent-missing-evidence-reason",
+    "case": "cases::audit::missing_growth_final_cannot_acquire_positive_peak_evidence",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "be265fa0960444a23a4bdac364e30f199ae288e1403eea7fa9f8f7edeb23d23f",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "17-omit-immutable-grant-chain",
+    "case": "cases::audit::successor_reservation_cannot_survive_removal_of_its_retry_record",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "d0795fb641537506e2cacc4edec465e566dbdf5fbf53de4caf07aaf593894083",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "18-omit-growth-upper-bound",
+    "case": "cases::audit::retained_growth_cannot_exceed_the_original_evidence_bound",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "34b87d95d6e2992a29bd7d6163f5be7919f478dc7a6eaff9114127054f5b1f8d",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "19-omit-per-attempt-report-order",
+    "case": "cases::audit::retry_positions_must_follow_actual_attempt_order_even_at_one_clock_tick",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "07af6686d970d5dd0bd15be0a01ce689a1407b03126ce6053a868a831454a159",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "20-omit-global-position-clock-check",
+    "case": "cases::audit::report_order_rejects_zero_future_and_reversed_clock_witnesses",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "7cc0da58203aa9d4b9aa2100222f312fea326af4df59d97d57c508e98892cd95",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "21-disconnect-terminal-clock",
+    "case": "cases::audit::coherent_terminal_time_witness_cannot_rewrite_retained_scheduler_time",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "dc4ba898a084b2218bb69970fdc7b55292c118c5249890a95bdf5aeb00624aa2",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  },
+  {
+    "name": "22-reauthorize-historical-worker-ceiling",
+    "case": "cases::audit::historical_no_larger_reason_survives_later_capacity_growth",
+    "compiled": true,
+    "killed": true,
+    "exit": 101,
+    "source_sha256": "59484a6a291e9e76c1ce569963b6c93b3ec31161f8eae3254cf096aab2b39f30",
+    "test_sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "audit_sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60"
+  }
+]

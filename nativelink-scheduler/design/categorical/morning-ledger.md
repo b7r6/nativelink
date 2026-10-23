@@ -479,6 +479,18 @@ No comparison against the successor candidate is claimed yet. Graph-bearing
 resource failures, active history, physical collection, durable publication
 formats and production cutover remain outside this checkpoint.
 
+The separate [terminal restore audit](terminal-outcome-restore-audit.md) found
+eight compiled counterexamples against the original frozen oracle. The corrected
+private v2 reader checks local memory evidence, actual attempt count, immutable
+grant growth and report ordering; v1 snapshots are refused without invented
+history. Cargo and root Bazel pass the 29-case original target and 44-case audit
+target, comprising 44 unique cases because the audit embeds all original cases.
+All 22 compiled faulty variants are detected. The
+[corrective receipt](evidence/terminal-outcome-restore-audit/manifest.json)
+preserves the original eight failures and original 29/12 qualification separately.
+Both sides froze before the new comparison; full historical worker eligibility
+and production activation remain outside this correction.
+
 The [private-v4 terminal candidate](publication-terminal.md) now accepts exact
 no-graph Complete and MemoryFailure reports while leaving retry classification
 and physical refunds to actual State. Cancellation, fenced expiry and exhaustion
