@@ -2315,3 +2315,7 @@ mod deadline_tests;
 #[cfg(test)]
 #[path = "authority_running_clock_tests.rs"]
 mod running_clock_tests;
+
+#[cfg(test)]
+#[path = "authority_storage_read_tests.rs"]
+mod storage_read_tests;
