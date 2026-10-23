@@ -316,3 +316,50 @@ fn every_backend_lock_operation_and_close_is_delegated() {
     right.close().unwrap();
     assert!(!left.query_lock_range(range.0, range.1).unwrap());
 }
+
+#[test]
+fn synced_origin_derives_binding_and_keeps_current_parent_separate_from_creation() {
+    let fixture = Fixture::new();
+    let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
+    let synced = owner.resynchronize().unwrap();
+    assert_eq!(synced.journal_binding(), binding(&fixture));
+    let opened = synced.create_journal().unwrap();
+    let current = opened.current_parent();
+    let (database, created_parent) = opened.into_parts();
+    write_value(&database);
+    created_parent.unwrap().sync_all().unwrap();
+    current.sync_current().unwrap();
+    assert_all_roots_locked(&fixture);
+    drop(database);
+    let synced = Arc::new(Ownership::reopen(&fixture.manifest).unwrap())
+        .resynchronize()
+        .unwrap();
+    let opened = synced.reopen_journal().unwrap();
+    let current = opened.current_parent();
+    let (database, created_parent) = opened.into_parts();
+    assert!(
+        created_parent.is_none(),
+        "current parent must not imply creation"
+    );
+    assert_value(&database);
+    drop(database);
+    assert_all_roots_locked(&fixture);
+    current.sync_current().unwrap();
+    assert!(Ownership::reopen(&fixture.manifest).is_ok());
+}
+
+#[test]
+fn current_parent_refuses_changed_record_after_open() {
+    let fixture = Fixture::new();
+    let synced = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap())
+        .resynchronize()
+        .unwrap();
+    let opened = synced.create_journal().unwrap();
+    let current = opened.current_parent();
+    fs::write(
+        Path::new(&fixture.manifest.worker.root).join(OWNERSHIP_RECORD),
+        b"{}",
+    )
+    .unwrap();
+    assert!(current.sync_current().is_err());
+}
