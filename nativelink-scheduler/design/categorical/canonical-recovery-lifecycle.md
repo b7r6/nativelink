@@ -27,8 +27,13 @@ executables match the qualified positive binaries. Independent review checks the
 source, actual executable bytes, reached assertions, and restoration. Root copied
 and verified all four archives, 1,034 members, nine distinct executables, and
 fourteen attempt bindings. All 21 selected integrated sources match the author
-at root commit `c3beca65f8462ada711b73fbb7fa3234ca4b269a`. A combined root execution
-with the clock remains a separate pending check.
+at root commit `c3beca65f8462ada711b73fbb7fa3234ca4b269a`. The later
+[combined root execution](evidence/canonical-recovery-components-root/manifest.json)
+at `61a12ad332` passes all five selected targets without cached test results:
+295 passes and one existing ignore. The server builds, and all six executables
+are retained and matched to their build-event digests. All 1,365 tracked inputs
+remain unchanged. This combines the private components; the closed public owner
+has its own subsequent qualification boundary.
 
 This component exposes no public recovered owner or serving capability. It does
 not yet capture the recovered clock or establish its application read barrier.

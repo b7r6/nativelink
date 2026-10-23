@@ -42,5 +42,9 @@ This private component does not expose sampling, serving, or a periodic time
 driver. Matching Raft and journal ownership belongs to the recovery supervisor;
 numeric positions alone do not authenticate arbitrary pairs. The audit retains
 its potentially unbounded history work, and recovery has no completion-time
-guarantee. Combining this clock with permanent supervision and a closed public
-owner remains a separate qualification step. Production construction is unchanged.
+guarantee. The [combined root check](evidence/canonical-recovery-components-root/manifest.json)
+at `61a12ad332` passes five uncached targets and builds the server, with 295 test
+passes and one existing ignore. It preserves all 1,365 source inputs and all six
+executables. This confirms the private components compile and pass together;
+composition into the closed public owner remains a separate qualification step.
+Production construction is unchanged.

@@ -1,0 +1,42 @@
+{
+  "executable-nativelink-scheduler-canonical_owner_api_test.tar.gz": {
+    "bytes": 8721200,
+    "sha256": "3b136209a6edd77f03cc7103527482fef0121fdb8f81c4897988767c377796ea"
+  },
+  "executable-nativelink-scheduler-unit_test.tar.gz": {
+    "bytes": 13711584,
+    "sha256": "b9b2e9cd2402801c987b0a3e31c54dd2528f755f3ae3ea8271df3b02c318b023"
+  },
+  "executable-nativelink.tar.gz": {
+    "bytes": 43291224,
+    "sha256": "f4fae206881ca65cb77015099c823499461e632f6c9c220b773fa1f2c73b298f"
+  },
+  "executable-tools-canonical-filesystem-journal_bridge_test.tar.gz": {
+    "bytes": 11803481,
+    "sha256": "f48c6246f97532b8f13a5ad4d6dae759edf0762629b75b4fe52c3055677794f9"
+  },
+  "executable-tools-canonical-filesystem-journal_test.tar.gz": {
+    "bytes": 3915367,
+    "sha256": "0965d3dc322d0d99a7b9dc70c2ff52fab8539185783d052fd65d9069e23f67e5"
+  },
+  "executable-tools-canonical-filesystem-ownership_test.tar.gz": {
+    "bytes": 2887227,
+    "sha256": "a54652ce1d585cf2b544e6cf0175fc547ba9464c83bc5cf4cf6cc05f4e53d33c"
+  },
+  "manifest.json": {
+    "bytes": 296815,
+    "sha256": "ae2752eb81aeaed915202a887bd3443badee365cdedf329f8aafb5c923012a0f"
+  },
+  "packaging-history.json": {
+    "bytes": 942,
+    "sha256": "3d9e18081616429dec82cb2f945adf9b1a234c337d490d5e14ed7d45ff31dd0e"
+  },
+  "sources-and-runs.tar.gz": {
+    "bytes": 6919421,
+    "sha256": "dd6fa797f3c5a8ce9f39cd2b7546b8021b1d97b9e3c361831a03068ad0aceb2f"
+  },
+  "verify.py": {
+    "bytes": 1975,
+    "sha256": "201cd1597262767bf376977accb92f15c1595fa85bf6bd47fceedc43a5447310"
+  }
+}

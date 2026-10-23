@@ -18,6 +18,13 @@ Their receipts separate independent source review, original failures, author
 fault controls and root integration. Production construction, combined admission
 and the complete canonical clock contract remain open.
 
+The private lifecycle and clock components pass their combined root checkpoint
+at `61a12ad332`: five uncached targets, 295 passes, one existing ignore, and a
+successful server build. The [sealed integration packet](evidence/canonical-recovery-components-root/manifest.json)
+preserves all 1,365 unchanged source inputs, raw logs, build events, independent
+review, and six executables including the server. The public recovered owner and
+worker materialization are separate changes still undergoing qualification.
+
 Earlier full Bazel checkpoint at `ef57a7deae`: all 172 targets passed in the
 reduced-concurrency run, including six explicitly selected manual canonical
 targets. 172 executed and 0 were cached; the run took 1324.52
