@@ -21,6 +21,20 @@ exports_files(
 )
 
 rust_binary(
+    name = "history_budget",
+    srcs = ["examples/history_budget.rs"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+    ],
+)
+
+rust_binary(
     name = "authority_budget",
     srcs = ["examples/authority_budget.rs"],
     deps = [
@@ -176,6 +190,21 @@ rust_test(
     compile_data = [
         "tests/publication_activation/reference.rs",
         "tests/publication_activation/types.rs",
+    ],
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "publication_head_reference_test",
+    srcs = ["tests/publication_head_reference_test.rs"],
+    compile_data = [
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
     ],
     deps = [
         "@crates//:blake3",

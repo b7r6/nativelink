@@ -365,6 +365,24 @@ have a moderate allowance; their assertions and internal deadlines are unchanged
 source boundary and keep all attempts. Provider tests remain separate explicit
 runs; an ignored provider case is never counted as provider qualification.
 
+The [durable history budget](history-budget.md) now has 24 passing fixed cases
+with both algorithms, widths 4/16, and valid response payloads up to 32 KiB stdout.
+Default admission falls from 64 to 56 executions after feature 3. A full base
+authority refuses activation after a committed Abort without changing scheduler
+state. All cases preserve exact terminals through snapshots and reopen, retain
+pending-history pins, and drain after exact synthetic acknowledgements. These
+are measured encodings and shared-host timings, without provider or workload
+capacity claims.
+
+The independent [publication/head reference](../../tests/publication_head/README.md)
+is frozen with 18 passing cases and 16 detected compiled faults. It covers
+atomic acceptance obligations, original terminals, current-worker authorization,
+ordered heads, request-policy distinctions, and retained serving coverage. The
+[response audit](publication-head-response-scope.md) limits its opaque response
+model: concrete cached ExecuteResponse projection needs separate expected bytes.
+The actual-State/Coarse candidate and differential comparison remain separate
+work; this reference does not activate M6.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25
