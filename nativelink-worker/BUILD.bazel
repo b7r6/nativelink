@@ -97,6 +97,9 @@ rust_test_suite(
         "tests/authority_grant/breach.rs",
         "tests/authority_grant/cases.rs",
         "tests/authority_history_rpc/cases.rs",
+        "tests/authority_memory_rpc/cases.rs",
+        "tests/authority_memory_rpc/roundtrip.rs",
+        "tests/authority_memory_rpc/validation.rs",
         "tests/authority_operations_rpc/cases.rs",
         "tests/authority_publication/cases.rs",
         "tests/authority_publication/late.rs",
@@ -160,6 +163,9 @@ rust_test(
     compile_data = [
         "tests/authority_deadline_rpc/cases.rs",
         "tests/authority_history_rpc/cases.rs",
+        "tests/authority_memory_rpc/cases.rs",
+        "tests/authority_memory_rpc/roundtrip.rs",
+        "tests/authority_memory_rpc/validation.rs",
         "tests/authority_operations_rpc/cases.rs",
     ],
     proc_macro_deps = [
@@ -212,6 +218,9 @@ rust_test(
     compile_data = [
         "tests/authority_deadline_rpc/cases.rs",
         "tests/authority_history_rpc/cases.rs",
+        "tests/authority_memory_rpc/cases.rs",
+        "tests/authority_memory_rpc/roundtrip.rs",
+        "tests/authority_memory_rpc/validation.rs",
         "tests/authority_operations_rpc/cases.rs",
     ],
     proc_macro_deps = [

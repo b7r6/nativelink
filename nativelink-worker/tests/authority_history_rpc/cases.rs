@@ -33,7 +33,7 @@ const DOMAIN: AuthorityDomain = AuthorityDomain {
 };
 
 impl Runtime {
-    async fn start_history(
+    pub(super) async fn start_history(
         context: &Context,
         clock: Arc<AtomicU64>,
         faults: Arc<QualificationFaults>,
@@ -91,7 +91,7 @@ impl Runtime {
         .await
     }
 
-    async fn history_association(
+    pub(super) async fn history_association(
         &self,
         execution: ExecutionId,
         status: HistoryStatus,
@@ -114,7 +114,7 @@ impl Runtime {
         .unwrap_or_else(|error| panic!("History wait failed: {error}; {:?}", history.borrow()))
     }
 
-    async fn assert_history_terminal(&mut self, expected: &Operation) {
+    pub(super) async fn assert_history_terminal(&mut self, expected: &Operation) {
         let mut stream = self
             .client
             .wait_execution(WaitExecutionRequest {
@@ -130,7 +130,7 @@ impl Runtime {
 // Wire recipe comes from the public HistoricalExecuteResponse protocol: Action
 // Digest is field 1; the original ExecuteResponse bytes are field 3. Do not use
 // the candidate history encoder or decode/re-encode the captured response.
-fn history_bytes(action: DigestInfo, response: &[u8]) -> Vec<u8> {
+pub(super) fn history_bytes(action: DigestInfo, response: &[u8]) -> Vec<u8> {
     let mut bytes = HistoricalExecuteResponse {
         action_digest: Some(action.into()),
         execute_response: None,
@@ -454,7 +454,9 @@ async fn process_history_with_manager(
     runtime.shutdown().await;
     let construction = match construction {
         ManagerConstruction::LegacyPublication => "legacy-enabled",
-        ManagerConstruction::AuthorityOnly => "authority-only",
+        ManagerConstruction::AuthorityOnly | ManagerConstruction::AuthorityOnlyBounded { .. } => {
+            "authority-only"
+        }
     };
     eprintln!(
         "AUTHORITY_REAL_PROCESS_HISTORY: namespaces executed; algorithm={algorithm}; do_not_cache={do_not_cache}; exit_code={exit_code}; construction={construction}; inputs/output/stdout/stderr verified in CAS; worker did not publish; feature2+3 accepted candidate preserved; pending history survived restart; exact captured response history verified in CAS; terminal unchanged"

@@ -1483,7 +1483,7 @@ async fn session_error(task: JoinHandleDropGuard<Result<(), Error>>) -> Error {
 #[nativelink_test]
 async fn wire_rejects_missing_handshake_and_wrong_capabilities_before_launch() {
     let mut server = WireServer::new().await;
-    for invalid_handshake in 0..3 {
+    for invalid_handshake in 0..4 {
         let context = setup(false, 1, 4, false).await;
         let (witness, command) = ProcessWitness::new(&context, 1).await;
         let (mut connection, task) = server.connect(context.worker.clone(), 1).await;
@@ -1493,8 +1493,10 @@ async fn wire_rejects_missing_handshake_and_wrong_capabilities_before_launch() {
             let mut unsupported = negotiation(1);
             if invalid_handshake == 1 {
                 unsupported.required_capabilities.pop();
-            } else {
+            } else if invalid_handshake == 2 {
                 unsupported.session.as_mut().unwrap().session_id = 2;
+            } else {
+                unsupported.protocol_version = 1;
             }
             connection
                 .send(authority_coordinator_update::Update::Registration(

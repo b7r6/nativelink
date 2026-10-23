@@ -267,6 +267,10 @@ async fn same_request_larger_typed_grant_changes_actual_memory_enforcement() {
             if attempt == 1 {
                 assert_eq!(usage.outcome, ResourceOutcome::KilledMemory as i32);
                 assert!(usage.enforced);
+                let evidence = report.memory_breach.unwrap();
+                assert_eq!(evidence.reservation_id, attempt);
+                assert_eq!(evidence.charged, Some(grant));
+                assert!(evidence.observed_kb > evidence.limit_kb);
                 assert_ne!(response.status.as_ref().map_or(0, |s| s.code), 0);
             } else {
                 assert_eq!(
@@ -275,6 +279,7 @@ async fn same_request_larger_typed_grant_changes_actual_memory_enforcement() {
                     "A doubled immutable grant must not enforce the original Action string; {usage:?}"
                 );
                 assert!(!usage.enforced);
+                assert!(report.memory_breach.is_none());
                 assert_eq!(response.result.as_ref().unwrap().exit_code, 0);
                 let digest: nativelink_util::common::DigestInfo = response
                     .result

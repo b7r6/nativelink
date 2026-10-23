@@ -85,6 +85,8 @@ enum AuthorityCapability {
     AUTHORITY_CAPABILITY_CANDIDATE_RESULTS = 4;
     AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS = 5;
     AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT = 6;
+    /// Protocol version 2 requires explicit observed memory-policy evidence.
+    AUTHORITY_CAPABILITY_OBSERVED_MEMORY_BREACH = 7;
 }
 
 message AuthorityRegistration {
@@ -157,6 +159,17 @@ message AuthorityDecline {
     string detail = 2;
 }
 
+/// A first selected memory-policy stop, sampled while the child was live and
+/// followed by a completed kill procedure. This is not heuristic OOM telemetry,
+/// an exact memory peak, proof of exclusive exit cause, or proof of quiescence.
+/// The enclosing report supplies attempt identity and separate quiescence.
+message AuthorityMemoryBreach {
+    uint64 reservation_id = 1;
+    AuthorityResources charged = 2;
+    uint64 limit_kb = 3;
+    uint64 observed_kb = 4;
+}
+
 /// Candidate output; only the authority may accept or publish it. The worker
 /// retains this report for replay, including after an acknowledgment is lost.
 message AuthorityAttemptReport {
@@ -177,6 +190,10 @@ message AuthorityAttemptReport {
     /// Reconnect, retries, and transport traffic do not advance it. Running
     /// liveness never extends the original execution deadline.
     uint64 phase_progress = 10;
+    /// Protocol 2 only: eligible beside the exact uploaded failing response,
+    /// after process-domain quiescence and cleanup. Invalid explicit evidence
+    /// must be refused, never downgraded to an ordinary completion.
+    AuthorityMemoryBreach memory_breach = 11;
 }
 
 /// Complete process-incarnation inventory, including uncertain launches,

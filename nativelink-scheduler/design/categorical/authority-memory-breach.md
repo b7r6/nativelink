@@ -35,13 +35,12 @@ across a filesystem upload failure. A test supervisor that sends
 SIGKILL to the observed outer action process while its allocation is near the
 limit exercises the existing heuristic telemetry while producing no receipt.
 
-The RPC protocol and coordinator classification remain unchanged. No receipt is
-sent on the wire, and reports still enter the existing Complete path. A later
-classification change requires protocol version 2 before reconnect inventory,
-explicit evidence validation and preservation of the full captured response,
-including its output graph. This change makes no hard memory isolation or M6
-retention claim.
+The qualified receipt is carried by the experimental protocol 2 adapter only
+after successful output upload, process-domain quiescence and directory cleanup.
+The independent validation and retry contract is specified in
+[the memory wire bridge](authority-memory-wire.md). The local receipt alone
+makes no hard memory isolation or M6 retention claim.
 
-The [qualification receipt](evidence/authority-memory-breach/manifest.json)
+The [local receipt qualification](evidence/authority-memory-breach/manifest.json)
 separates standalone Cargo evidence, five compiled negative controls, independent
-reviews and the subsequent root Bazel integration.
+reviews and the root Bazel integration that preceded the wire bridge.

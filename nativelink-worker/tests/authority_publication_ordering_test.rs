@@ -451,8 +451,8 @@ impl Worker {
                 update: Some(authority_worker_update::Update::Registration(
                     AuthorityRegistration {
                         session: Some(session),
-                        protocol_version: 1,
-                        capabilities: vec![1, 2, 3, 4, 5, 6],
+                        protocol_version: 2,
+                        capabilities: vec![1, 2, 3, 4, 5, 6, 7],
                         capacity: Some(CAPACITY),
                         admission_ceiling: Some(CAPACITY),
                         reconciliation: Some(AuthorityReconciliation {

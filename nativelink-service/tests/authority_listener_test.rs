@@ -497,7 +497,7 @@ async fn accepted_publication(runtime: &Runtime, algorithm: DigestHasherFunc) {
             update: Some(authority_worker_update::Update::Registration(
                 AuthorityRegistration {
                     session: Some(session),
-                    protocol_version: 1,
+                    protocol_version: 2,
                     capabilities: [
                         AuthorityCapability::AttemptEffectIdentities,
                         AuthorityCapability::ReconnectReconciliation,
@@ -505,6 +505,7 @@ async fn accepted_publication(runtime: &Runtime, algorithm: DigestHasherFunc) {
                         AuthorityCapability::CandidateResults,
                         AuthorityCapability::MeaningfulProgress,
                         AuthorityCapability::ReceiptRetirement,
+                        AuthorityCapability::ObservedMemoryBreach,
                     ]
                     .map(|capability| capability as i32)
                     .to_vec(),

@@ -97,6 +97,7 @@ struct Context {
 enum ManagerConstruction {
     LegacyPublication,
     AuthorityOnly,
+    AuthorityOnlyBounded { payload_bytes: usize },
 }
 
 impl Context {
@@ -146,6 +147,33 @@ impl Context {
         action_timeout: Duration,
         construction: ManagerConstruction,
     ) -> Self {
+        Self::with_manager_configuration(
+            single_use,
+            slow,
+            download_timeout,
+            receipts,
+            action_timeout,
+            construction,
+            ExecutionConfiguration {
+                persistent_workers: PersistentWorkersSettings {
+                    enabled: false,
+                    ..PersistentWorkersSettings::default()
+                },
+                ..ExecutionConfiguration::default()
+            },
+        )
+        .await
+    }
+
+    async fn with_manager_configuration(
+        single_use: bool,
+        slow: Store,
+        download_timeout: Duration,
+        receipts: usize,
+        action_timeout: Duration,
+        construction: ManagerConstruction,
+        execution_configuration: ExecutionConfiguration,
+    ) -> Self {
         let directory = TempDir::new().unwrap();
         let filesystem = FilesystemSpec {
             content_path: directory
@@ -174,13 +202,7 @@ impl Context {
         std::fs::create_dir(&actions).unwrap();
         let execution = AuthorityRunningActionsManagerArgs {
             root_action_directory: actions.to_string_lossy().into_owned(),
-            execution_configuration: ExecutionConfiguration {
-                persistent_workers: PersistentWorkersSettings {
-                    enabled: false,
-                    ..PersistentWorkersSettings::default()
-                },
-                ..ExecutionConfiguration::default()
-            },
+            execution_configuration,
             cas_store: cas.clone(),
             max_action_timeout: action_timeout,
             max_upload_timeout: Duration::from_secs(10),
@@ -195,7 +217,8 @@ impl Context {
         };
         let manager = Arc::new(
             match construction {
-                ManagerConstruction::AuthorityOnly => {
+                ManagerConstruction::AuthorityOnly
+                | ManagerConstruction::AuthorityOnlyBounded { .. } => {
                     RunningActionsManagerImpl::new_authority(execution)
                 }
                 // Preserve the original bypass regressions with deliberately enabled
@@ -236,7 +259,10 @@ impl Context {
             single_use,
             resources(CAPACITY),
             receipts,
-            64 * 1024,
+            match construction {
+                ManagerConstruction::AuthorityOnlyBounded { payload_bytes } => payload_bytes,
+                _ => 64 * 1024,
+            },
             manager,
         )
         .unwrap();
@@ -1903,3 +1929,6 @@ async fn restart_replays_due_interest_after_committed_clock_before_expiry() {
 
 #[path = "authority_history_rpc/cases.rs"]
 mod history;
+
+#[path = "authority_memory_rpc/cases.rs"]
+mod memory;

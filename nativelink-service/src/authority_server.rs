@@ -50,7 +50,7 @@ use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, make_ctx_fo
 use opentelemetry::context::FutureExt;
 use nativelink_scheduler::authority::request::RequestPayload;
 use nativelink_scheduler::authority::{
-    ActionKey, AttemptId, Effect, EffectId, EffectKind, Event, ExecutionId, IncarnationId, ObservableState,
+    ActionKey, AttemptId, AttemptView, Effect, EffectId, EffectKind, Event, ExecutionId, IncarnationId, ObservableState,
     OperationId, Phase, RecordedEvent, Reply, Request as AuthorityRequest, Resources,
     ResultPayload, SessionId, INTEREST_TIMEOUT, TERMINAL_RETENTION, TerminalResult, WorkerId,
     ReceiptBinding, ReceiptCertificate, ReceiptRetirement, ReservationId, MAX_RECEIPT_BINDINGS,
@@ -72,14 +72,15 @@ const FRAME_BYTES: usize = 64 * 1024;
 const OPERATION_BYTES: usize = 2 * FRAME_BYTES;
 const INTEREST_RENEWAL_TICKS: u64 = INTEREST_TIMEOUT / 3;
 const QUEUE: usize = 64;
-const VERSION: u32 = 1;
-const CAPABILITIES: [i32; 6] = [
+const VERSION: u32 = 2;
+const CAPABILITIES: [i32; 7] = [
     AuthorityCapability::AttemptEffectIdentities as i32,
     AuthorityCapability::ReconnectReconciliation as i32,
     AuthorityCapability::CleanupTombstones as i32,
     AuthorityCapability::CandidateResults as i32,
     AuthorityCapability::MeaningfulProgress as i32,
     AuthorityCapability::ReceiptRetirement as i32,
+    AuthorityCapability::ObservedMemoryBreach as i32,
 ];
 const REQUEST_METADATA: &str = "build.bazel.remote.execution.v2.requestmetadata-bin";
 
@@ -1117,6 +1118,17 @@ impl Driver {
             }
             return Ok(());
         }
+        // Explicit memory evidence is a protocol assertion. Validate it before
+        // any acknowledgment, phase change or decline can mutate authority.
+        // Stale reports above retain only their idempotent cleanup effect.
+        let memory_failure = if report.memory_breach.is_some() {
+            let Some(candidate) = memory_failure_payload(&self.state, &attempt, &report) else {
+                return Ok(());
+            };
+            Some(candidate)
+        } else {
+            None
+        };
         if matches!(
             report.result,
             Some(authority_attempt_report::Result::Decline(_))
@@ -1181,6 +1193,27 @@ impl Driver {
                 progress: report.phase_progress,
             })
             .await?;
+        }
+        if let Some((charged, result)) = memory_failure {
+            self.config
+                .faults
+                .candidate_reports
+                .fetch_add(1, Ordering::Relaxed);
+            if !self.config.faults.hold_completions.load(Ordering::Relaxed) {
+                self.commit(Event::MemoryFailure {
+                    attempt: attempt.id,
+                    worker,
+                    incarnation,
+                    charged,
+                    // Process-group RSS is a policy sample, not an exact peak.
+                    // The positive original charge drives the existing growth policy.
+                    peak_memory_bytes: None,
+                    quiescent: true,
+                    result,
+                })
+                .await?;
+            }
+            return Ok(());
         }
         let candidate = match report.result {
             Some(authority_attempt_report::Result::ExecuteResponse(response)) => Some(response),
@@ -1932,6 +1965,52 @@ async fn bounded_blob(store: &Store, digest: DigestInfo) -> Result<Bytes, Error>
     };
     let ((), bytes) = futures::try_join!(download, collect)?;
     Ok(bytes)
+}
+
+// Called only after current-session, exact-attempt/effect and authorization
+// gates. It does not borrow the mutable execution target or telemetry grants.
+fn memory_failure_payload(
+    state: &ObservableState,
+    attempt: &AttemptView,
+    report: &AuthorityAttemptReport,
+) -> Option<(Resources, ResultPayload)> {
+    if report.phase != AuthorityAttemptPhase::Quiescent as i32 {
+        return None;
+    }
+    let evidence = report.memory_breach.as_ref()?;
+    let charged = resources(evidence.charged?);
+    let reservation = state.reservations.iter().find(|reservation| {
+        reservation.id == attempt.reservation
+            && reservation.attempt == attempt.id
+            && reservation.worker == attempt.worker
+            && reservation.incarnation == attempt.incarnation
+            && !reservation.released
+    })?;
+    if evidence.reservation_id != reservation.id.0
+        || charged != reservation.charged
+        || charged.memory_bytes == 0
+        || evidence.limit_kb == 0
+        || evidence.limit_kb < charged.memory_bytes.div_ceil(1024)
+        || evidence.observed_kb <= evidence.limit_kb
+    {
+        return None;
+    }
+    let authority_attempt_report::Result::ExecuteResponse(response) = report.result.as_ref()?
+    else {
+        return None;
+    };
+    // Our eligible lane uploaded an actual action result. A status-only error
+    // cannot stand in for missing output capture, even with a plausible marker.
+    response.result.as_ref()?;
+    let captured = ResultPayload::from_response(response, FRAME_BYTES).ok()?;
+    if (captured.exit_code == 0 && captured.error.is_none())
+        || serde_json::to_vec(&captured).ok()?.len() > FRAME_BYTES
+    {
+        return None;
+    }
+    // Never replace a graph-bearing memory candidate with the ordinary
+    // completion overflow fallback. The exact response is captured once here.
+    Some((charged, captured))
 }
 
 // The worker bounds protobuf bytes; the committed representation also includes

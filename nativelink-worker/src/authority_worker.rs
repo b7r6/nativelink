@@ -36,10 +36,10 @@ use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     AuthorityAttemptIdentity, AuthorityAttemptPhase, AuthorityAttemptReport, AuthorityCapability,
     AuthorityCapacityObservation, AuthorityCommand, AuthorityDecline, AuthorityDispatch,
-    AuthorityReceiptCertificate, AuthorityReceiptRetirement, AuthorityReconciliation,
-    AuthorityRegistration, AuthorityRegistrationResult, AuthorityResources, AuthoritySession,
-    AuthorityWorkerIdentity, StartExecute, authority_attempt_report, authority_command,
-    authority_decline,
+    AuthorityMemoryBreach, AuthorityReceiptCertificate, AuthorityReceiptRetirement,
+    AuthorityReconciliation, AuthorityRegistration, AuthorityRegistrationResult,
+    AuthorityResources, AuthoritySession, AuthorityWorkerIdentity, StartExecute,
+    authority_attempt_report, authority_command, authority_decline,
 };
 use nativelink_util::action_messages::{ActionResult, ActionStage, OperationId};
 use nativelink_util::background_spawn;
@@ -50,20 +50,23 @@ use parking_lot::Mutex;
 use prost::Message;
 use tokio::sync::{oneshot, watch};
 
-use crate::running_actions_manager::{RunningAction, RunningActionsManager};
+use crate::running_actions_manager::{
+    AuthorityMemoryBreach as LocalMemoryBreach, RunningAction, RunningActionsManager,
+};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 /// Includes inventory envelope headroom, below tonic's default 4 MiB limit.
 pub const MAX_RECONCILIATION_BYTES: usize = 3 * 1024 * 1024;
 pub const MAX_RECEIPT_CERTIFICATE_BYTES: usize = 64 * 1024;
 pub const MAX_RECEIPT_EXCEPTIONS: usize = 1024;
-pub const REQUIRED_CAPABILITIES: [i32; 6] = [
+pub const REQUIRED_CAPABILITIES: [i32; 7] = [
     AuthorityCapability::AttemptEffectIdentities as i32,
     AuthorityCapability::ReconnectReconciliation as i32,
     AuthorityCapability::CleanupTombstones as i32,
     AuthorityCapability::CandidateResults as i32,
     AuthorityCapability::MeaningfulProgress as i32,
     AuthorityCapability::ReceiptRetirement as i32,
+    AuthorityCapability::ObservedMemoryBreach as i32,
 ];
 
 struct Receipt {
@@ -813,8 +816,8 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
     async fn run_action(
         &self, target: AuthorityAttemptIdentity, dispatch: AuthorityDispatch,
         cancelled: watch::Receiver<bool>, observer: oneshot::Sender<u32>, progress: ProgressObserver,
-    ) -> (Result<ActionResult, Error>, bool, Option<nativelink_proto::com::github::trace_machina::nativelink::remote_execution::ActionResourceUsage>){
-        // Authority v1 fixes an omitted digest function to SHA256. Scope the
+    ) -> (Result<ActionResult, Error>, bool, Option<nativelink_proto::com::github::trace_machina::nativelink::remote_execution::ActionResourceUsage>, Option<LocalMemoryBreach>){
+        // The authority protocol fixes an omitted digest function to SHA256. Scope the
         // whole action future so uploads and inherited task contexts use its
         // algorithm, independently of the legacy process default.
         let algorithm = match dispatch
@@ -827,7 +830,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         };
         let context = match algorithm.and_then(make_ctx_for_hash_func) {
             Ok(context) => context,
-            Err(error) => return (Err(error), true, None),
+            Err(error) => return (Err(error), true, None, None),
         };
         async {
             let reserved_resources = dispatch
@@ -855,7 +858,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                 .await
             {
                 Ok(action) => action,
-                Err(error) => return (Err(error), true, None),
+                Err(error) => return (Err(error), true, None, None),
             };
             let result = async {
                 action.observe_launch(observer)?;
@@ -881,9 +884,12 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
             .await;
             let usage = action.resource_usage();
             let quiescent = action.process_domain_quiescent();
+            let memory_breach = action
+                .authority_memory_breach()
+                .filter(|_| quiescent && result.is_ok());
             match action.cleanup().await {
-                Ok(_) => (result, quiescent, usage),
-                Err(error) => (Err(error), false, usage),
+                Ok(_) => (result, quiescent, usage, memory_breach),
+                Err(error) => (Err(error), false, usage, None),
             }
         }
         .with_context(context)
@@ -920,7 +926,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         tokio::pin!(run);
         let mut receipt_done = lose_receipt;
         let mut signalled = false;
-        let (result, quiescent, usage) = loop {
+        let (result, quiescent, usage, memory_breach) = loop {
             tokio::select! {
                 result = &mut run => break result,
                 () = &mut report_progress => unreachable!(),
@@ -947,10 +953,31 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
         } else {
             AuthorityAttemptPhase::TerminationUncertain
         } as i32;
+        entry.report.memory_breach = None;
         entry.report.result = Some(match result {
-            Ok(result) => authority_attempt_report::Result::ExecuteResponse(
-                ActionStage::Completed(result).into(),
-            ),
+            Ok(result) => {
+                let response: nativelink_proto::build::bazel::remote::execution::v2::ExecuteResponse =
+                    ActionStage::Completed(result).into();
+                let failing = response.result.as_ref().is_some_and(|result| {
+                    result.exit_code != 0
+                        || response
+                            .status
+                            .as_ref()
+                            .is_some_and(|status| status.code != 0)
+                });
+                if quiescent
+                    && failing
+                    && let Some(breach) = memory_breach
+                {
+                    entry.report.memory_breach = Some(AuthorityMemoryBreach {
+                        reservation_id: entry.reservation_id,
+                        charged: Some(breach.charged()),
+                        limit_kb: breach.limit_kb(),
+                        observed_kb: breach.observed_kb(),
+                    });
+                }
+                authority_attempt_report::Result::ExecuteResponse(response)
+            }
             Err(error) => authority_attempt_report::Result::InternalError(error.into()),
         });
         entry.report.resource_usage = usage;
@@ -964,6 +991,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                 .into(),
             ));
             entry.report.resource_usage = None;
+            entry.report.memory_breach = None;
         }
         drop(ledger);
         self.changed.send_replace(());

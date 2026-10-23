@@ -22,12 +22,26 @@ use opentelemetry::trace::FutureExt;
 use super::*;
 
 async fn fixture(algorithm: DigestHasherFunc, external_signal: bool) -> (Context, StartExecute) {
-    assert!(namespace_utils::namespaces_supported(false, false));
+    fixture_with_namespace(algorithm, external_signal, true).await
+}
+
+async fn fixture_with_namespace(
+    algorithm: DigestHasherFunc,
+    external_signal: bool,
+    namespaced: bool,
+) -> (Context, StartExecute) {
+    if namespaced {
+        assert!(namespace_utils::namespaces_supported(false, false));
+    }
     let context = setup_configured(
         false,
         4,
-        true,
-        RESOURCES,
+        namespaced,
+        AuthorityResources {
+            cpu_millis: 8000,
+            memory_bytes: 512 * MIB,
+            slots: 2,
+        },
         ExecutionConfiguration {
             persistent_workers: PersistentWorkersSettings {
                 enabled: false,
@@ -289,4 +303,42 @@ async fn authority_memory_heuristic_sigkill_does_not_mint_a_receipt() {
         0
     );
     action.cleanup().await.unwrap();
+}
+
+#[nativelink_test]
+async fn authority_memory_wire_requires_independent_domain_quiescence() {
+    let (context, start) = fixture_with_namespace(DigestHasherFunc::Sha256, false, false).await;
+    let command = AuthorityCommand {
+        attempt: Some(target(1)),
+        effect_id: 2,
+        command: Some(authority_command::Command::Dispatch(AuthorityDispatch {
+            reservation_id: 1,
+            execute_request: start.execute_request,
+            platform: start.platform,
+            queued_timestamp: start.queued_timestamp,
+            reserved_resources: Some(AuthorityResources {
+                cpu_millis: 1000,
+                memory_bytes: ORIGINAL,
+                slots: 1,
+            }),
+            ..AuthorityDispatch::default()
+        })),
+    };
+    context.worker.negotiate(&negotiation(1)).unwrap();
+    assert!(context.worker.command(1, command).unwrap().result.is_none());
+    let report = wait_result(&context.worker, 1).await;
+    assert_eq!(
+        report.phase,
+        AuthorityAttemptPhase::TerminationUncertain as i32
+    );
+    let usage = report.resource_usage.as_ref().unwrap();
+    assert_eq!(usage.outcome, ResourceOutcome::KilledMemory as i32);
+    assert!(usage.enforced);
+    assert!(report.memory_breach.is_none());
+    let Some(authority_attempt_report::Result::ExecuteResponse(response)) = report.result else {
+        panic!("Actual uploaded result remains captured independently of domain closure");
+    };
+    assert_ne!(response.result.as_ref().unwrap().exit_code, 0);
+    assert_eq!(response.result.as_ref().unwrap().output_files.len(), 1);
+    assert_eq!(context.worker.reconcile().attempts.len(), 1);
 }

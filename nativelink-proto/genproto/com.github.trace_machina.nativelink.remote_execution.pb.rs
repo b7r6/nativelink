@@ -189,6 +189,21 @@ pub mod authority_decline {
         }
     }
 }
+/// / A first selected memory-policy stop, sampled while the child was live and
+/// / followed by a completed kill procedure. This is not heuristic OOM telemetry,
+/// / an exact memory peak, proof of exclusive exit cause, or proof of quiescence.
+/// / The enclosing report supplies attempt identity and separate quiescence.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorityMemoryBreach {
+    #[prost(uint64, tag = "1")]
+    pub reservation_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub charged: ::core::option::Option<AuthorityResources>,
+    #[prost(uint64, tag = "3")]
+    pub limit_kb: u64,
+    #[prost(uint64, tag = "4")]
+    pub observed_kb: u64,
+}
 /// / Candidate output; only the authority may accept or publish it. The worker
 /// / retains this report for replay, including after an acknowledgment is lost.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -210,6 +225,11 @@ pub struct AuthorityAttemptReport {
     /// / liveness never extends the original execution deadline.
     #[prost(uint64, tag = "10")]
     pub phase_progress: u64,
+    /// / Protocol 2 only: eligible beside the exact uploaded failing response,
+    /// / after process-domain quiescence and cleanup. Invalid explicit evidence
+    /// / must be refused, never downgraded to an ordinary completion.
+    #[prost(message, optional, tag = "11")]
+    pub memory_breach: ::core::option::Option<AuthorityMemoryBreach>,
     #[prost(oneof = "authority_attempt_report::Result", tags = "6, 7, 9")]
     pub result: ::core::option::Option<authority_attempt_report::Result>,
 }
@@ -728,6 +748,8 @@ pub enum AuthorityCapability {
     CandidateResults = 4,
     MeaningfulProgress = 5,
     ReceiptRetirement = 6,
+    /// / Protocol version 2 requires explicit observed memory-policy evidence.
+    ObservedMemoryBreach = 7,
 }
 impl AuthorityCapability {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -747,6 +769,7 @@ impl AuthorityCapability {
             Self::CandidateResults => "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS",
             Self::MeaningfulProgress => "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS",
             Self::ReceiptRetirement => "AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT",
+            Self::ObservedMemoryBreach => "AUTHORITY_CAPABILITY_OBSERVED_MEMORY_BREACH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -763,6 +786,9 @@ impl AuthorityCapability {
             "AUTHORITY_CAPABILITY_CANDIDATE_RESULTS" => Some(Self::CandidateResults),
             "AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS" => Some(Self::MeaningfulProgress),
             "AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT" => Some(Self::ReceiptRetirement),
+            "AUTHORITY_CAPABILITY_OBSERVED_MEMORY_BREACH" => {
+                Some(Self::ObservedMemoryBreach)
+            }
             _ => None,
         }
     }
