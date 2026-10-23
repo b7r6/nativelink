@@ -118,6 +118,13 @@ cancellation cases require prompt caller cancellation, retained locks, eventual
 lock release, and successful initialized singleton reopen. Another case refuses
 an existing metadata-only journal without adopting its membership.
 
+The [singleton bridge receipt](evidence/descriptor-singleton/manifest.json)
+records 84 portable unit tests, strict scheduler Clippy, root Bazel execution of
+the same 84 units and all 11 manual integration tests, an independent source
+review, and two detected compiled faults: omitting the handoff acknowledgment
+wait and omitting explicit Raft shutdown. The exact source was restored and all
+84 portable tests passed again. These selected faults are not a mutation score.
+
 ## Executable checks
 
 Standalone Cargo with `--features redb` executes the filesystem tests. They cover
