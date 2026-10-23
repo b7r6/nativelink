@@ -63,3 +63,11 @@ source remains unchanged across that run, with all 1,349 tracked inputs verified
 against its commit. Identity runtime and fixtures match the author source exactly;
 four prerequisite inputs retain earlier root dependency and diagnostic changes.
 The packet includes all seven executed binaries and independent source reviews.
+
+The sealed [author packet](evidence/authority-bytestream-identity/author/README.md)
+retains the original 24-test baseline (three passes and 21 failures), all thirteen
+compiled fault detections, and the restored 144-test service regression with one
+ignored fixture. Strict service checks and the separate fixed-digest test pass.
+Its verifier checks complete logs, exact source copies, binaries and independent
+reviews through content-addressed chunks. Root independently verified the copied
+packet. Backend-future completion is qualified separately from upload identity.

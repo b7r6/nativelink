@@ -510,3 +510,6 @@ cutpoints?
 revalidates
 subprocesses
 serializer
+predeclared
+ELFs
+terminality

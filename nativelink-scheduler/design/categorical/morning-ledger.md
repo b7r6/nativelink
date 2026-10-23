@@ -1147,6 +1147,12 @@ within a Write RPC. Existing parser admission and legacy construction remain.
 The registry still has no aggregate quota; this closes the identity slice without
 establishing a total transfer-memory bound.
 
+The sealed upload-identity author packet preserves all 24 original HTTP/2 cases,
+thirteen compiled fault detections and the restored 144-test service regression.
+Root verified every archived chunk and reconstructed file; its separate seven
+executed Bazel targets pass 169 Rust tests and build the server. These two source
+boundaries and their prerequisite differences remain explicit in the receipts.
+
 ## Next work and facts for the morning
 
 1. Maintain the finite snapshot bound when fields, caps, or exposed transitions

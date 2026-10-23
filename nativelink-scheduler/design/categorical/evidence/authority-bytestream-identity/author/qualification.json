@@ -1,0 +1,94 @@
+{
+  "slice": "Fixed-authority ByteStream exact upload identity",
+  "source_commit": "7b1feba8deb858bd8aafd80ec7d2fa7c2e0e9272",
+  "tests_only_commits": [
+    "9fca886597",
+    "98b654dc24",
+    "dfb71483a5"
+  ],
+  "qualification_scope": "Author Cargo qualification of 17 selected final source inputs. Executables, command receipts, copied selected inputs, raw logs, fault source and independent artifact reviews are retained. This is not a claim of a hermetic full source/dependency manifest.",
+  "qualified_source_sha256": "c51ca3b0ae213d7924769d6d8d5ba856667870e7cd72e06a2161d160af93ceba",
+  "runtime_sha256": "0e201d4b5c35dae6d70acc82107785823304a562ac3a2248dad5834ab9bd4fa8",
+  "behavior": [
+    "Fixed-role upload state keys preserve the exact raw UUID together with resolved digest algorithm, digest hash and digest size within each existing instance map.",
+    "Active exact-identity collisions return retryable Unavailable; nonzero offsets cannot create an absent entry or shadow a completed CAS blob.",
+    "Single-message uploads remain tracked until backend completion; query validation and fixed-role GrpcStore routing preserve local identity checks.",
+    "Every later nonempty resource_name in one Write RPC must exactly match the first raw name before its data or finish_write is accepted. Empty names remain allowed.",
+    "Across separate RPCs, permitted algorithm spelling, identity compressor spelling and optional metadata resolve to the same semantic identity. Existing resource parser admission, including empty UUID, is preserved.",
+    "Legacy upload key, compressed-upload handling, and legacy fast paths remain unchanged; fixed-role Read implementation is byte-identical to the prerequisite."
+  ],
+  "baseline": {
+    "receipt": "original-baseline.json",
+    "receipt_sha256": "5a2c5d360a07c794a3e68079d67c93f0cfffcfd76b112d4cbce0fa8cab490fc5",
+    "passed": 3,
+    "failed": 21,
+    "interpretation": "All 24 tests compiled. Nineteen failures were direct assertion/output/undesired-acceptance failures; two were bounded post-operation progress failures after wrong-size resume or aliased upload. Those two are recorded as such, not as direct assertion kills. No compile or initial listener-setup failure is counted.",
+    "observations": "original-baseline-observations.json",
+    "earlier_fixture_revisions": "Initial 20-test and corrected 23-test fixtures were reviewed and frozen but were not executed. The first executed original-runtime baseline used the final 24-test admission revision."
+  },
+  "final_tests": {
+    "restored_regression": {
+      "passed": 144,
+      "ignored": 1,
+      "targets": {
+        "service_unit": 48,
+        "authority_listener": 39,
+        "bytestream_server": 36,
+        "grpc_wire_compression": 12,
+        "wire_compression": 9
+      },
+      "receipt": "restored-regression.json"
+    },
+    "fixed_digest_default": {
+      "passed": 1,
+      "ignored": 0,
+      "receipt": "fixed-digest-regression.json",
+      "note": "One standalone integration test exercises fixed-role digest defaults under a Blake3 process default plus legacy behavior; not 24 separate tests."
+    },
+    "strict_service_all_targets": {
+      "receipt": "restored-strict.json",
+      "result": "pass"
+    },
+    "final_full_hooks": {
+      "receipt": "hooks-qualified-source.json",
+      "result": "pass"
+    },
+    "source_restoration": "post-mutant-source-restoration.json",
+    "binary_restoration": "The final listener ELF equals the pre-mutation focused ELF; the other four final regression ELFs equal the first broad regression ELFs."
+  },
+  "compiled_faults": {
+    "count": 13,
+    "plan": "mutant-plan-qualified.json",
+    "plan_sha256": "01e5e01ba2c3c29538b2aa739314d659a1d7b0fcbee0239fae0e0cc96a78fa29",
+    "interpretation": "Every source mutation compiled successfully and its copied ELF failed exactly one selected test at the predeclared semantic assertion. Compiler failures, setup failures, and timeouts were not counted. The driver restored the exact runtime source in finally.",
+    "early_failure_limits": [
+      "raw-grpc-query fails the first positive local-query assertion that upstream raw query count stays zero; later wrong-hash and invalid-algorithm checks are not claimed reached by that mutant.",
+      "raw-grpc-write fails the duplicate-zero-offset acceptance assertion; later idle wrong-resume checks are not claimed reached by that mutant."
+    ]
+  },
+  "historical_failures_preserved": [
+    "Initial runtime hook failure and corrected hook pass are retained.",
+    "An early proposed runtime candidate rejected empty UUID; review removed that additional policy before the first corrected runtime compilation. runtime-candidate.json is historical, not the qualified source.",
+    "Initial strict Clippy failed only six test constant usize-to-i64 casts. Checked conversions repaired those fixtures; runtime remained identical. Both strict logs and post-clippy source/review addenda are retained."
+  ],
+  "independent_reviews": {
+    "authority_full_directory": "independent-review/authority",
+    "root_full_directory": "independent-review/root",
+    "authority_final_restoration_sha256": "c4f9505f1448801c711521e4a849430eeec304d8ba42f549cc4fa3245ffa9325",
+    "authority_all_controls_sha256": "82ed6299b629776c8c47085a817d01e63f074b37afa5263cafb0836da472e959",
+    "authority_scope": "Independent source and artifact review, including 13 compiled controls and final restoration; reviewer did not independently rerun Rust commands.",
+    "root_scope": "Independent fixture and runtime source review. Root integration execution is recorded separately."
+  },
+  "separate_root_integration": {
+    "runtime_cherry_pick": "a6bcfb158a",
+    "root_packet_commit": "ff89311887",
+    "reported_results": "Seven Bazel test targets actually executed: 169 Rust passes, one existing ignored TLS fixture; server build passed. This author packet does not claim those commands as author execution.",
+    "source_boundary": "13 of 17 selected author inputs exactly matched the integrated root. Existing owner edges in root Cargo.toml/Cargo.lock, canonical-store Cargo.lock dependency edges, and an existing fixed-digest fixture stderr marker account for the four differences. Root separately froze 1349 inputs."
+  },
+  "limits": [
+    "Exact retained raw UUID adds per-entry bytes and hashing cost. The 1 MiB message limit does not bound aggregate registry entries, total retained upload memory, or fleet-wide resources; this is not an M0 or aggregate-memory proof.",
+    "Client and worker roles share the configured instance CAS/registry; this slice adds no credential or tenant partition.",
+    "Partial uploads remain governed by the existing timeout/sweep behavior; backend future terminality after cancellation is outside this identity slice.",
+    "No Raft authority, production activation, end-to-end M4 durability qualification, or complete categorical-elimination claim follows from these identity tests."
+  ]
+}

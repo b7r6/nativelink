@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-authority-bytestream-identity-package/packet.py",
+    "--allow-unsealed",
+    "--output",
+    "/tmp/nativelink-authority-bytestream-identity-package-restored"
+  ],
+  "returncode": 0,
+  "elapsed_s": 10.236322164535522,
+  "log_sha256": "9398f71d5efe3f1d1e388532ec916157237a5f005e51135240f1d9a25167748d"
+}

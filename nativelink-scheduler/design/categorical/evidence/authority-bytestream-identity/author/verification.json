@@ -1,0 +1,337 @@
+{
+  "scope": "Artifact verification only; this script does not execute compiler, tests, hooks, or network calls.",
+  "source_commit": "7b1feba8deb858bd8aafd80ec7d2fa7c2e0e9272",
+  "qualified_source_sha256": "c51ca3b0ae213d7924769d6d8d5ba856667870e7cd72e06a2161d160af93ceba",
+  "selected_source_files": 17,
+  "runs": [
+    {
+      "name": "original-baseline",
+      "receipt_sha256": "5a2c5d360a07c794a3e68079d67c93f0cfffcfd76b112d4cbce0fa8cab490fc5",
+      "returncode": 101,
+      "test_results": [
+        [
+          3,
+          21,
+          0
+        ]
+      ],
+      "selected_source_files": 11,
+      "artifacts": [
+        {
+          "target": "authority_listener_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/authority_listener_test-9cab74c1076d4950",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/original-baseline-authority_listener_test",
+          "sha256": "3d890cc19727d8b73327dab72781564f0de6ac8affc21347ec4086cda131c772"
+        }
+      ]
+    },
+    {
+      "name": "fixed-focused-initial",
+      "receipt_sha256": "d0c1b510c2d274a3789aad4bad7edcfbfc509a5284bc1664284eb680054d7bcb",
+      "returncode": 0,
+      "test_results": [
+        [
+          24,
+          0,
+          0
+        ]
+      ],
+      "selected_source_files": 12,
+      "artifacts": [
+        {
+          "target": "authority_listener_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/authority_listener_test-9cab74c1076d4950",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-focused-initial-authority_listener_test",
+          "sha256": "aed68de51bcf7b3376872217fc52a723eaf1cf22d92cbf962e03ddb5f31ddbf9"
+        }
+      ]
+    },
+    {
+      "name": "fixed-regression",
+      "receipt_sha256": "b655f021b23d26e886af443bf64646ab2a4bd8998c5f6951ab0ad2753493e196",
+      "returncode": 0,
+      "test_results": [
+        [
+          48,
+          0,
+          0
+        ],
+        [
+          39,
+          0,
+          1
+        ],
+        [
+          36,
+          0,
+          0
+        ],
+        [
+          12,
+          0,
+          0
+        ],
+        [
+          9,
+          0,
+          0
+        ]
+      ],
+      "selected_source_files": 12,
+      "artifacts": [
+        {
+          "target": "authority_listener_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/authority_listener_test-9cab74c1076d4950",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-regression-authority_listener_test",
+          "sha256": "aed68de51bcf7b3376872217fc52a723eaf1cf22d92cbf962e03ddb5f31ddbf9"
+        },
+        {
+          "target": "wire_compression_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/wire_compression_test-8d1c97f0df62c789",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-regression-wire_compression_test",
+          "sha256": "172dde12c141da80d5a42bb43d9b4855272be4593e328f732275853b998411cc"
+        },
+        {
+          "target": "grpc_wire_compression_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/grpc_wire_compression_test-ed175094c73a2208",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-regression-grpc_wire_compression_test",
+          "sha256": "4a7d693a5ef678a41a1b505efaf4e153dbe7ee7c7031fabd444b6295da2f8b17"
+        },
+        {
+          "target": "bytestream_server_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/bytestream_server_test-a8777c9714b9b341",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-regression-bytestream_server_test",
+          "sha256": "c8da6406137a7426cada303ebee4e49db218ed71782676a640fc43a10a51e633"
+        },
+        {
+          "target": "nativelink_service",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/nativelink_service-9e81d23c43a3497d",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-regression-nativelink_service",
+          "sha256": "3cc935797a224729324dd16437a0a71b972a12fa21b83e9319c010cb89a91985"
+        }
+      ]
+    },
+    {
+      "name": "strict-initial",
+      "receipt_sha256": "057e51811d325cda55c50d7b0d2f85ac630112150807db10f7b91a9e40218151",
+      "returncode": 101,
+      "test_results": [],
+      "selected_source_files": 12,
+      "artifacts": []
+    },
+    {
+      "name": "strict-corrected",
+      "receipt_sha256": "4c237b57ab64de3cc7e662ef472d19be80e201f4e10ed76c2c7a06e3708094f1",
+      "returncode": 0,
+      "test_results": [],
+      "selected_source_files": 12,
+      "artifacts": []
+    },
+    {
+      "name": "fixed-digest-regression",
+      "receipt_sha256": "e1905c48fb968d3f4d7c2e1296b3680e61af2fbfe0636f9d683fef038587568d",
+      "returncode": 0,
+      "test_results": [
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "selected_source_files": 17,
+      "artifacts": [
+        {
+          "target": "fixed_digest_default",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/fixed_digest_default-cf4dc771adcdce54",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/fixed-digest-regression-fixed_digest_default",
+          "sha256": "95073fdfd9df102a805a3cd7a2a2ec42ce45073df15b0865c7d43e0372a64f23"
+        }
+      ]
+    },
+    {
+      "name": "pre-mutant-focused",
+      "receipt_sha256": "7964cb1d06ff53dba373840e73c76eefd3cd42d3bbaf805d3ad22606f9fe4312",
+      "returncode": 0,
+      "test_results": [
+        [
+          24,
+          0,
+          0
+        ]
+      ],
+      "selected_source_files": 12,
+      "artifacts": [
+        {
+          "target": "authority_listener_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/authority_listener_test-9cab74c1076d4950",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/pre-mutant-focused-authority_listener_test",
+          "sha256": "e4b5b040014aadb3efb0699a2269b1fb4c220994950132c471347ed78c788a2a"
+        }
+      ]
+    },
+    {
+      "name": "compiled-mutants",
+      "receipt_sha256": "8520f95f7b6cbd6ae57e8b79ada698a21c6ae7b47868fc47ed17ace1f6de2be0",
+      "returncode": 0,
+      "test_results": [],
+      "selected_source_files": 12,
+      "artifacts": []
+    },
+    {
+      "name": "restored-regression",
+      "receipt_sha256": "ec1105439e6ec57eed499647c2015aac1bdfaec9bf621ea687b284288afb03e0",
+      "returncode": 0,
+      "test_results": [
+        [
+          48,
+          0,
+          0
+        ],
+        [
+          39,
+          0,
+          1
+        ],
+        [
+          36,
+          0,
+          0
+        ],
+        [
+          12,
+          0,
+          0
+        ],
+        [
+          9,
+          0,
+          0
+        ]
+      ],
+      "selected_source_files": 12,
+      "artifacts": [
+        {
+          "target": "wire_compression_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/wire_compression_test-8d1c97f0df62c789",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/restored-regression-wire_compression_test",
+          "sha256": "172dde12c141da80d5a42bb43d9b4855272be4593e328f732275853b998411cc"
+        },
+        {
+          "target": "nativelink_service",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/nativelink_service-9e81d23c43a3497d",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/restored-regression-nativelink_service",
+          "sha256": "3cc935797a224729324dd16437a0a71b972a12fa21b83e9319c010cb89a91985"
+        },
+        {
+          "target": "grpc_wire_compression_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/grpc_wire_compression_test-ed175094c73a2208",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/restored-regression-grpc_wire_compression_test",
+          "sha256": "4a7d693a5ef678a41a1b505efaf4e153dbe7ee7c7031fabd444b6295da2f8b17"
+        },
+        {
+          "target": "bytestream_server_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/bytestream_server_test-a8777c9714b9b341",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/restored-regression-bytestream_server_test",
+          "sha256": "c8da6406137a7426cada303ebee4e49db218ed71782676a640fc43a10a51e633"
+        },
+        {
+          "target": "authority_listener_test",
+          "origin": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target/smol/deps/authority_listener_test-9cab74c1076d4950",
+          "copy": "/tmp/nativelink-authority-bytestream-identity-evidence/binaries/restored-regression-authority_listener_test",
+          "sha256": "e4b5b040014aadb3efb0699a2269b1fb4c220994950132c471347ed78c788a2a"
+        }
+      ]
+    },
+    {
+      "name": "restored-strict",
+      "receipt_sha256": "ed642c242f26389b7af161d51ed582e33de33f1175b9bf9828111502eca191bc",
+      "returncode": 0,
+      "test_results": [],
+      "selected_source_files": 12,
+      "artifacts": []
+    }
+  ],
+  "compiled_controls": [
+    {
+      "name": "lossy-uuid",
+      "verification_sha256": "ca5171fd263653edbbff8b13c50241e42e875b64e98fc322eaa5f768fa941e1f",
+      "binary_sha256": "9d792ec0b6ba6075f78318aa5957e581e56be0eca7586cee0413e0601189e2bc",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:330:"
+    },
+    {
+      "name": "erase-algorithm",
+      "verification_sha256": "b34936c67c5158c8c31e9e30dc30364a33d73e9c8f1639cff35dd8ce6640af2b",
+      "binary_sha256": "4d1b4156c78a72e57e8fe43b082611179261e2ecc67cd592017fd7b344d0397f",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:330:"
+    },
+    {
+      "name": "erase-hash",
+      "verification_sha256": "138ee81f3a426eb9ec5d0f57a81b637030704782ace659b027de5ac2d50e5eca",
+      "binary_sha256": "adce12e189972a7c5e1f655f68a7759d300af45115bb430b03479b249d2374e5",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:330:"
+    },
+    {
+      "name": "erase-size",
+      "verification_sha256": "6d8de2f741564852b610324efef284b6c6599bda9a5f3575f7d6db92c6d66b95",
+      "binary_sha256": "51ae93460f40b093c48df97aca78981779836f683655833c67f5d65b650c908e",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:330:"
+    },
+    {
+      "name": "accept-invalid-query-algorithm",
+      "verification_sha256": "403114cd409abb8929bfa3821be270aad5b999ba7b8d8cd512c67271eafefaa2",
+      "binary_sha256": "7842d5ef94f9db6d80d313d5c4ff6700824c0a0eb78826e3087638e81d265454",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:385:"
+    },
+    {
+      "name": "skip-query-compressor-validation",
+      "verification_sha256": "2e7a8800d907047c6e664c6d7a2408ba10a66040f0d17f93d61cf67cc6266426",
+      "binary_sha256": "25782d215c74e4b3718a4cdce31732bd27ae297fbffbb96a44743d788313e694",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:385:"
+    },
+    {
+      "name": "bypass-active-refusal",
+      "verification_sha256": "5e728e7fe6f8356ff36b53fea2ad38de15c4fe409b049d1cc6ba30aa98abc498",
+      "binary_sha256": "3560e7e2a36e84103f4b2db88b8ca64dd895f8c6ea836d43f4a05a4d185e28ee",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:472:"
+    },
+    {
+      "name": "admit-absent-nonzero",
+      "verification_sha256": "ee64680e4505bdfeccc4c6381284ea525859daf3e641dcbd8dc085f560e48873",
+      "binary_sha256": "e5fe29a016d7812b7dea1f30b7ac7e3571b5ddeee25cfd3159b67fef59913410",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:576:"
+    },
+    {
+      "name": "untracked-oneshot",
+      "verification_sha256": "caa87250de89a4824e76c3a1f6e91ad68d8fe3f9cc443cc155e1ce65bcc658b3",
+      "binary_sha256": "c4814685f03548360db4b26ebf8e9368f5a04e7a6b3298e64d8ad672d0e15b87",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:602:"
+    },
+    {
+      "name": "raw-grpc-query",
+      "verification_sha256": "1ee7f0276020b41a3b77a6796729813ca80b71894ca4dc0f94f101591400b0a2",
+      "binary_sha256": "da69b73268717feb4e6b20fa353658f700a1462812ca813c56969a3d14773a32",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs:206:"
+    },
+    {
+      "name": "raw-grpc-write",
+      "verification_sha256": "3a2c93db94c3e7b0cf3edd0818db7a54cdd6d1820449a41da3fdb51ddac17d09",
+      "binary_sha256": "d6cc5df109214edf63b0e7b814c615a5e4c77d303d74c003d5a9f70d75b99a0c",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity/upstream.rs:256:"
+    },
+    {
+      "name": "skip-later-resource-name",
+      "verification_sha256": "cb79543d3d6995cf19bb6c8ed2cfb8fef060d6f4c55d3689454b8ba1719007e7",
+      "binary_sha256": "c8dd8315bab1eca2f173861507c09eaa708cada355911209fa94e464db51d1ad",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:649:"
+    },
+    {
+      "name": "normalize-later-resource-name",
+      "verification_sha256": "2c202b27339de325e806687bfea01d50a9e321a87fa7dd1002fc724fc6665779",
+      "binary_sha256": "3fdfb7d1d21887f86c4dc08aa636e1ab4197872afb26e3ea2ee20a80cc0ac728",
+      "actual_assertion_site": "nativelink-service/tests/authority_listener/bytestream_identity.rs:649:"
+    }
+  ],
+  "restored_listener_equals_premutant": true,
+  "remaining_restored_executables_equal_first_regression": true,
+  "result": "All declared qualification checks passed."
+}

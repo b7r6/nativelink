@@ -1,0 +1,195 @@
+{
+  "source_commit": "7b1feba8deb858bd8aafd80ec7d2fa7c2e0e9272",
+  "format": "sha256-chunked-evidence-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2800,
+      "sha256": "ad84c277a0ef10382aa829e6109309862eb73690c95a5e11301f801367c582ca"
+    },
+    {
+      "path": "author-01.tar.gz",
+      "bytes": 7406717,
+      "sha256": "276f5199eb2093157847c2ddd3211d13891de63b588528dc50d1d69350697cfc"
+    },
+    {
+      "path": "author-02.tar.gz",
+      "bytes": 9217706,
+      "sha256": "5499df2e8212b42a4ab68ab6036c4719989987fb6757aa5ae47ba22774ac5cfd"
+    },
+    {
+      "path": "author-03.tar.gz",
+      "bytes": 7403230,
+      "sha256": "b47ac5ce16fa918548d8d627136d3060c6000816cc122ec64a91331555046c89"
+    },
+    {
+      "path": "author-04.tar.gz",
+      "bytes": 9880915,
+      "sha256": "23f63c547430cbda516dc16022221eda675e4d3e53283b1ae7fa2c9d0b96b810"
+    },
+    {
+      "path": "author-05.tar.gz",
+      "bytes": 9756630,
+      "sha256": "536ab9c12497bc8e71547bbfd34965a37b5468fdd445928e2d8899c15065bd56"
+    },
+    {
+      "path": "author-06.tar.gz",
+      "bytes": 12564438,
+      "sha256": "54cefb440912b027936a5863700e7b4635cf762171f9225dd360df3ee963a37b"
+    },
+    {
+      "path": "author-07.tar.gz",
+      "bytes": 7565430,
+      "sha256": "e65ea7a7e0e7548e5504396072d0cd3f309a8a23f5fcb362b725feb5cd8696c0"
+    },
+    {
+      "path": "author-08.tar.gz",
+      "bytes": 5917096,
+      "sha256": "34ecd574e33d140bc2f59b27b6bde6fe6c3d7b2dfedaa6a6e3fa2ac210b22aa1"
+    },
+    {
+      "path": "author-09.tar.gz",
+      "bytes": 15323517,
+      "sha256": "9d7ad74c04a5d7c4d693cefdae5c48a0f820aa1dc7b89532bf293b41a6607010"
+    },
+    {
+      "path": "author-10.tar.gz",
+      "bytes": 4110873,
+      "sha256": "2ce2d45f4cd45861013ad4aba5343a9b50a351c96a0fe97d548b2a7fa03b2081"
+    },
+    {
+      "path": "author-11.tar.gz",
+      "bytes": 7388461,
+      "sha256": "daaacb14925827bfc5b2bd611dc7ab9dba546a116d5290f58ab5c4295853050b"
+    },
+    {
+      "path": "author-12.tar.gz",
+      "bytes": 9145368,
+      "sha256": "09a4c976b112b0b527255e841df410005b12598f7830c208c87ad6f75203355a"
+    },
+    {
+      "path": "author-13.tar.gz",
+      "bytes": 2264304,
+      "sha256": "c8be3f64074d71a2f479f9a595efaf5b7b826b4b1686b57d8fab48c861c76043"
+    },
+    {
+      "path": "author-14.tar.gz",
+      "bytes": 3611816,
+      "sha256": "dca45891601f94b22773b71248b0b7a8cfb0bfe45285cd12f5f2b9cc9e049eec"
+    },
+    {
+      "path": "author-15.tar.gz",
+      "bytes": 7404930,
+      "sha256": "e229715740d2541e7f0cd4d732e3d731dffc590d9b016d37615355c56f1c9f05"
+    },
+    {
+      "path": "author-16.tar.gz",
+      "bytes": 9155947,
+      "sha256": "bb943d84db1ab1b5c236332f8474cf7486c22410ca8e95c093c74ceb85cb99af"
+    },
+    {
+      "path": "author-17.tar.gz",
+      "bytes": 13991813,
+      "sha256": "418ef75d8bf5cc75068d37fa5c856f6afd649f48c6c292695e527ec25a91156e"
+    },
+    {
+      "path": "author-18.tar.gz",
+      "bytes": 12123384,
+      "sha256": "904092bfc8d346556f3d5545d579559201722d75fddc7e75e8c71f08af3ce553"
+    },
+    {
+      "path": "author-19.tar.gz",
+      "bytes": 4440928,
+      "sha256": "bbed891430d677b1cbb05e25b8deb2de15d1225588921d574f3aa1f4b1fe6500"
+    },
+    {
+      "path": "author-20.tar.gz",
+      "bytes": 2248668,
+      "sha256": "1dd6d70b68aa7753b8bc066b929168ef53d175537e20fafc846bb7752617ef01"
+    },
+    {
+      "path": "author-21.tar.gz",
+      "bytes": 9067037,
+      "sha256": "2c7ed381a2e037b5c29b6d7a089ca5e099891c166d940339c9546422626478e6"
+    },
+    {
+      "path": "author-22.tar.gz",
+      "bytes": 2251904,
+      "sha256": "b8531b7412cec4a396dd910772a907f6255ec7158eea0dc0820e962a9a408f9b"
+    },
+    {
+      "path": "author-23.tar.gz",
+      "bytes": 7722387,
+      "sha256": "2701c5c32472611099464487c867f14d02d8493430a7a5f5e5d5a1eb0e71d7e7"
+    },
+    {
+      "path": "author-24.tar.gz",
+      "bytes": 2302753,
+      "sha256": "7055f432b1001c6e296177dc1a10accd07e6702b96c3f5f8d1df214d9182b38a"
+    },
+    {
+      "path": "author-25.tar.gz",
+      "bytes": 2307701,
+      "sha256": "58961644578c5c52068481d358ae19c880eda5c5f5daa940b6ca157bf9d3c8ef"
+    },
+    {
+      "path": "author-26.tar.gz",
+      "bytes": 4465251,
+      "sha256": "8b9c3ea98b79dba023eac7ae102f87260a05d51fc2c856fd577fdcf3ea8757d7"
+    },
+    {
+      "path": "build-package.py",
+      "bytes": 3900,
+      "sha256": "edc8efdd8cc9387aa8a7586613a7da9d55d252a10ce0c794acc19d168dfa46d1"
+    },
+    {
+      "path": "package-verification.json",
+      "bytes": 356,
+      "sha256": "9766672ba77aa28d608f3a1b7d78c23f888eba700bff1d12767c04c8a549118f"
+    },
+    {
+      "path": "package-verification.log",
+      "bytes": 396,
+      "sha256": "9398f71d5efe3f1d1e388532ec916157237a5f005e51135240f1d9a25167748d"
+    },
+    {
+      "path": "package.json",
+      "bytes": 250673,
+      "sha256": "46ea9da3b061025f4291b2c1b8eb35252bd930e1edefc4f941581615fc475a15"
+    },
+    {
+      "path": "packet.py",
+      "bytes": 5578,
+      "sha256": "4152708625061a943728031baf1331c89ee79a22cca3441936be55663d17199a"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 6981,
+      "sha256": "9ad7bde69d6a6e8e18baaaf60e9e8911db0babf6bf542835101458c9b9b939d2"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 125536,
+      "sha256": "a37c98c42b446a4c268f003857ceae17dba07b7fb37597fa7f8d40d7fcad75bd"
+    },
+    {
+      "path": "restored-evidence-verification.json",
+      "bytes": 310,
+      "sha256": "ee437f25efd2e5588c812b3606c6136e84358bd50ffb9147a2783dad8bd15beb"
+    },
+    {
+      "path": "restored-evidence-verification.log",
+      "bytes": 14273,
+      "sha256": "bd0ea5fa4954ba46aeeb82a0539d3fea3ed11b83aecc7a89932a75c300a13d58"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 14273,
+      "sha256": "bd0ea5fa4954ba46aeeb82a0539d3fea3ed11b83aecc7a89932a75c300a13d58"
+    }
+  ],
+  "artifact_count": 37,
+  "artifact_bytes": 189464280,
+  "package_verification": "package-verification.json",
+  "restored_evidence_verification": "restored-evidence-verification.json"
+}
