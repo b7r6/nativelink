@@ -429,3 +429,83 @@ rust_doc_test(
     timeout = "short",
     crate = ":nativelink-scheduler",
 )
+
+# Actual scheduler and retention composition, separately frozen before comparison.
+rust_test(
+    name = "publication_candidate_test",
+    srcs = ["tests/publication_candidate_test.rs"],
+    compile_data = [
+        "tests/publication_candidate/cases.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "publication_differential_test",
+    srcs = ["tests/publication_differential_test.rs"],
+    compile_data = [
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "publication_activation_bounded_test",
+    srcs = [
+        "tests/publication_activation_bounded_test.rs",
+        "tests/publication_activation_v2/bounded.rs",
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+    ],
+    crate_root = "tests/publication_activation_bounded_test.rs",
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+# Independent activation v2 oracle; deliberately no scheduler implementation dependency.
+rust_test(
+    name = "publication_activation_v2_reference_test",
+    srcs = [
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+        "tests/publication_activation_v2_reference_test.rs",
+    ],
+    crate_root = "tests/publication_activation_v2_reference_test.rs",
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
