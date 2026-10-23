@@ -94,9 +94,11 @@ within the cadence or add interests. Restart preserves the deadline and its
 generation. Dropping a stream leaves the retained window; it does not cancel the
 operation synchronously. One renewal already handed to the coordinator can
 finish as the stream closes, but no detached task continues renewing it.
-Startup rechecks due deadlines once even at an unchanged persisted clock. This
-recovers a journal that committed AdvanceTime just before expiry proposals were
-interrupted; it does not repeatedly propose rejected retirement at a fixed time.
+Startup rechecks due deadlines before the first input, even at an unchanged
+persisted clock. This recovers a journal that committed AdvanceTime just before
+expiry proposals were interrupted; it does not repeatedly propose rejected
+retirement at a fixed time. The [deadline qualification](authority-deadline-driver.md)
+also covers upload progress expiry after the running deadline has passed.
 
 Each stream retains one previous Operation and one pending body item. The whole
 encoded Operation, including its name, metadata and terminal response, is limited

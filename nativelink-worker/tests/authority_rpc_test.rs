@@ -62,6 +62,9 @@ use tonic::{Request, Streaming};
 #[path = "authority_operations_rpc/cases.rs"]
 mod operations;
 
+#[path = "authority_deadline_rpc/cases.rs"]
+mod deadlines;
+
 const EPOCH: ClusterEpoch = ClusterEpoch(1);
 const IDENTITY: AuthorityWorkerIdentity = AuthorityWorkerIdentity {
     cluster_epoch: 1,

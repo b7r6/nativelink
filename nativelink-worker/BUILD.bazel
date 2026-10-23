@@ -93,6 +93,7 @@ rust_test_suite(
         "history::",
     ],
     compile_data = [
+        "tests/authority_deadline_rpc/cases.rs",
         "tests/authority_history_rpc/cases.rs",
         "tests/authority_operations_rpc/cases.rs",
         "tests/authority_publication/cases.rs",
@@ -155,6 +156,7 @@ rust_test(
         "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
     ],
     compile_data = [
+        "tests/authority_deadline_rpc/cases.rs",
         "tests/authority_history_rpc/cases.rs",
         "tests/authority_operations_rpc/cases.rs",
     ],
@@ -206,6 +208,7 @@ rust_test(
     srcs = ["tests/authority_rpc_test.rs"],
     args = ["history::"],
     compile_data = [
+        "tests/authority_deadline_rpc/cases.rs",
         "tests/authority_history_rpc/cases.rs",
         "tests/authority_operations_rpc/cases.rs",
     ],

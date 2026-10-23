@@ -662,7 +662,9 @@ impl Driver {
         inputs: mpsc::Receiver<Input>,
         stop: oneshot::Receiver<()>,
     ) -> Result<(), String> {
-        let result = self.run_loop(inputs, stop).await;
+        let result = self
+            .run_loop(inputs, stop, interval(Duration::from_millis(20)))
+            .await;
         self.effects.abort_all();
         while self.effects.join_next().await.is_some() {}
         self.workers.clear();
@@ -678,8 +680,11 @@ impl Driver {
         &mut self,
         mut inputs: mpsc::Receiver<Input>,
         mut stop: oneshot::Receiver<()>,
+        mut ticker: tokio::time::Interval,
     ) -> Result<(), String> {
-        let mut ticker = interval(Duration::from_millis(20));
+        // A restored clock may already make retained deadlines due. Finish
+        // that sweep before a queued observation or worker report can run.
+        self.time().await?;
         loop {
             let changed = tokio::select! {
                 _ = &mut stop => break,
@@ -728,7 +733,9 @@ impl Driver {
             if !attempt.authorized {
                 continue;
             }
-            if attempt.running_deadline.is_some_and(|at| at <= now) {
+            if attempt.phase == Phase::Running
+                && attempt.running_deadline.is_some_and(|at| at <= now)
+            {
                 due.push(Event::ExpireExecution {
                     attempt: attempt.id,
                 });
@@ -2132,3 +2139,7 @@ mod tests {
 #[cfg(test)]
 #[path = "history_delivery_tests.rs"]
 mod history_delivery_tests;
+
+#[cfg(test)]
+#[path = "authority_deadline_tests.rs"]
+mod deadline_tests;
