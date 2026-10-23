@@ -40,3 +40,8 @@ Qualification receipts distinguish the initial successful five-case repair,
 four test-only redundant-qualification corrections, independently compiled fault
 controls, restored regression runs and source review. Production role selection,
 aggregate transfer admission and active upload identity remain separate work.
+The [receipt](evidence/bytestream-read-completion/manifest.json) retains the
+original failures, all three compiled fault detections, five distinct executables,
+and both broader regression runs. The initial run had four fixture leader-startup
+timeouts; the unchanged source passed all six targets when serialized. No timeout
+was extended, and the passing rerun does not establish load independence.

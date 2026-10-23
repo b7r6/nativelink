@@ -7,8 +7,9 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add synchronized namespace commitments, bounded-read
-producer completion, bounded fixed CAS and AC admission, digest context for
+Latest focused checkpoints add fixed listener digest defaults, ByteStream read
+producer completion, synchronized namespace commitments, bounded fixed CAS and AC
+admission, digest context for
 captured requests and replayed effects, private canonical journal binding,
 membership and persisted-limit preflight, and memory-breach reporting.
 Their receipts separate independent source review, original failures, author
@@ -38,6 +39,18 @@ both the existing timeout fixture and the new read-lifetime fixture. The
 [combined receipt](evidence/authority-bounded-read-lifetime/manifest.json)
 preserves the root original-source failure and exact integration logs. These
 counts overlap earlier checks; no fresh explicit TLS run is claimed here.
+
+The later digest/ByteStream checkpoint at `f5e589bb37` passes nine selected
+targets and the server build. Its first run at `091bef4395` executed all nine
+targets successfully (176 Rust passes and one normally ignored TLS case), but
+the independent Bazel Clippy aspect rejected a test diagnostic on stdout.
+Changing that marker to stderr completed the gate: one test target executed,
+eight results were cached, and all nine passed. Both runs had 1,340 unchanged
+tracked inputs, with only that diagnostic line differing between runs. Strict
+Cargo Clippy for the service library and tests also passed at `f5e589bb37`.
+The [integration receipt](evidence/fixed-listener-digest-default/root-integration.json)
+separates those checks from the author's original failures and twelve compiled
+fault controls. These are focused counts, not a new full-workspace checkpoint.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
@@ -1053,6 +1066,45 @@ three compiled behavioral faults were detected. The
 [receipt](evidence/authority-bounded-read-lifetime/manifest.json) preserves exact
 sources, binaries, review and root integration. Arbitrary blocking backends,
 false EOF, whole-value completeness and physical IO remain separate premises.
+
+## ByteStream final status and fixed digest defaults
+
+The common uncompressed ByteStream facade now waits for both channel EOF and
+successful store-producer completion before reporting successful trailers. The
+five tests were written first: original source passed two controls and failed
+three regressions, including a real HTTP/2 late error after delivered data.
+Repaired source passes all five; three independently compiled faults are
+detected at the intended error, pending-producer and HTTP/2 oracles. The first
+broader six-target run passed 140 Rust tests and failed four during the fixture's
+five-second singleton leader wait, before requests began. The unchanged-source
+serialized rerun executed all six targets successfully: 144 passes, one ignored
+TLS case, and the server build. All 1,339 tracked inputs match the same commit
+within and between runs. The
+[receipt](evidence/bytestream-read-completion/manifest.json) preserves both runs,
+the compile-rejected first spelling of one mutant, independent source review and
+five distinct executables. Waiting cannot retract bytes already delivered,
+preempt a blocking backend or independently prove whole-value completeness.
+
+Fixed listeners now resolve omitted digest functions to SHA256 independently of
+the process-wide legacy default. AC and CAS bind that selection before their
+operation contexts; ByteStream also retains its local transfer facade for
+GrpcStore backends. An isolated process first sets the legacy default to BLAKE3,
+then exercises fifteen selected HTTP/2 phases. Original source fails thirteen
+affected phases and passes the legacy and Execute controls. Corrected source
+passes all fifteen in one test plus the 24 existing canonical-store tests.
+Twelve compiled faults are detected, each with passing legacy and Execute
+controls; the restored suite passes. The
+[author receipt](evidence/fixed-listener-digest-default/manifest.json) retains
+the initial test oracle that exceeded fixed CAS admission and its correction,
+strict Cargo checks and independent review. Its stdout-marker source boundary
+is separate from the root stderr-marker integration. Nineteen distinct author
+and root executables are retained by the
+[root supplement](evidence/fixed-listener-digest-default/root-integration.json).
+
+Neither repair changes production role construction. Active upload identity,
+aggregate transfer admission and the complete canonical clock remain open.
+Legacy-name GrpcStore upstream servers still require refusal or adaptation before
+canonical construction; the qualified upstream uses modern resource names.
 
 ## Next work and facts for the morning
 

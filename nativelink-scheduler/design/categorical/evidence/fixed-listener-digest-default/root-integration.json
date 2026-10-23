@@ -1,0 +1,488 @@
+{
+  "scope": "Root fixed-listener digest defaults integrated with ByteStream EOF completion and namespace commitment; separate from frozen author behavioral mutation qualification.",
+  "author_manifest_sha256": "8ff59deb25ae9712fadae04f43a5cab9eb250fa9502bcf6698565287a9ad2c1c",
+  "root_runs": [
+    {
+      "source_commit": "091bef43958e5bdef0aeb02d8bf521a9000f3fbd",
+      "command_exit": 1,
+      "targets_passed": 9,
+      "executed": 9,
+      "cached": 0,
+      "rust_counts_in_logs": {
+        "passed": 176,
+        "failed": 0,
+        "ignored": 1
+      },
+      "source_inputs": 1340,
+      "inputs_unchanged_and_git_verified": true,
+      "server_build_gate": false,
+      "scope": "Initial all nine test actions pass but independent Bazel Clippy aspect fails print_stdout."
+    },
+    {
+      "source_commit": "f5e589bb376da2175fb2a0a250df2200913f8948",
+      "command_exit": 0,
+      "targets_passed": 9,
+      "executed": 1,
+      "cached": 8,
+      "rust_counts_in_logs": {
+        "passed": 176,
+        "failed": 0,
+        "ignored": 1
+      },
+      "source_inputs": 1340,
+      "inputs_unchanged_and_git_verified": true,
+      "server_build_gate": true,
+      "scope": "One diagnostic println changed to eprintln; manual digest test reruns all15phases, eight unchanged target results cached. Complete build/test gate passes.",
+      "source_delta": {
+        "tools/canonical-store/tests/fixed_digest_default.rs": {
+          "before": "b847920a860d1fa6febc53daed90da7f9ded59dce96c006b0af6b376202c4266",
+          "after": "06f3a39bb7034b2e891f22ea208e8f7d2eec84f9ce76df2218ef472eaa75b5d7"
+        }
+      }
+    }
+  ],
+  "strict_cargo_clippy": {
+    "exit": 0,
+    "elapsed_seconds": 47.28783283394296,
+    "source_count": 1340,
+    "sources_unchanged": true
+  },
+  "source_comparison": {
+    "nativelink-service/src/ac_server.rs": {
+      "author_final_sha256": "640ae2c1716d032f6438562b438c0742abd616ebddee66657eee176664aa18fc",
+      "root_sha256": "640ae2c1716d032f6438562b438c0742abd616ebddee66657eee176664aa18fc",
+      "identical": true
+    },
+    "nativelink-service/src/authority_listener.rs": {
+      "author_final_sha256": "3db24fad0e299ad06d0de39e8d54dc5b23fc55756a0a41767b0739f8fcb378a2",
+      "root_sha256": "3db24fad0e299ad06d0de39e8d54dc5b23fc55756a0a41767b0739f8fcb378a2",
+      "identical": true
+    },
+    "nativelink-service/src/bytestream_server.rs": {
+      "author_final_sha256": "83380e3c24640cad4e89f6b2b7444a18ce9fefba70c13cec017da4d8e48b5b8e",
+      "root_sha256": "a2f5dbf3cd456d6de305b3921d13a1ff660c9408a3d625e5527e259ac0768734",
+      "identical": false
+    },
+    "nativelink-service/src/cas_server.rs": {
+      "author_final_sha256": "44526210cc806ea5b137ed763eccbaa0b034958ef12cf62eaeef7787549c7ee5",
+      "root_sha256": "44526210cc806ea5b137ed763eccbaa0b034958ef12cf62eaeef7787549c7ee5",
+      "identical": true
+    },
+    "tools/canonical-store/BUILD.bazel": {
+      "author_final_sha256": "e2ea491160da7fdc98e8fe4e765aaed9b6c14b0f71eaf4f0fe699587a8f9e466",
+      "root_sha256": "e2ea491160da7fdc98e8fe4e765aaed9b6c14b0f71eaf4f0fe699587a8f9e466",
+      "identical": true
+    },
+    "tools/canonical-store/README.md": {
+      "author_final_sha256": "56dd20d5fc290940ec08b90d34c1f2026146b7fd6feda9e14999761f6d5a75f8",
+      "root_sha256": "56dd20d5fc290940ec08b90d34c1f2026146b7fd6feda9e14999761f6d5a75f8",
+      "identical": true
+    },
+    "tools/canonical-store/tests/fixed_digest_default.rs": {
+      "author_final_sha256": "06f3a39bb7034b2e891f22ea208e8f7d2eec84f9ce76df2218ef472eaa75b5d7",
+      "root_sha256": "06f3a39bb7034b2e891f22ea208e8f7d2eec84f9ce76df2218ef472eaa75b5d7",
+      "identical": true
+    },
+    "tools/canonical-store/Cargo.toml": {
+      "author_final_sha256": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+      "root_sha256": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+      "identical": true
+    },
+    "tools/canonical-store/Cargo.lock": {
+      "author_final_sha256": "9eb225ceeed121036f7cb282451eeaf6c03fa4eebea68165ea7a51704c81293c",
+      "root_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+      "identical": false
+    },
+    "Cargo.lock": {
+      "author_final_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "root_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "identical": true
+    }
+  },
+  "marker_delta_sha256": "29751b787fa0e6e2839eb1fb907f0b06d36538c9fb99454612a70e1f75925462",
+  "archive": {
+    "path": "root-integration.tar.gz",
+    "sha256": "48b390493bdff94892c18471a96f45347746623535c3ffae4b10f697d6dc73b5",
+    "bytes": 419539,
+    "files": {
+      "author-root-comparison.json": "e3f6b9d59d368976ec0928c4814794593e53cd23754429e89782715b6b1f58c4",
+      "author-stderr-marker-delta.json": "29751b787fa0e6e2839eb1fb907f0b06d36538c9fb99454612a70e1f75925462",
+      "hooks-marker.log": "a1d735449bdcfd650469de64da31d637636f45abd1d84b091f3037180cf84cc5",
+      "initial-result.json": "4ae7855f1991bd7fde4a5bfd400824049b8f4ff89ee0d07f9edad4e3b46fbf7a",
+      "marker-corrected/qualification-result.json": "de0f775a8499c5efd091b6f6b3f5d94290b02f0acb9e74c90967136c747ea98c",
+      "marker-corrected/regression-command.json": "d0e83ea188f5021611c905000115c8b9be63dcceb26d0f55ccce4e3b65d6f066",
+      "marker-corrected/regression-head.txt": "6b60c337f79d16cda6d87c9fced06a39460a28acf4e30ad6a23eb58974e70131",
+      "marker-corrected/regression-sources-after.json": "5b346c7fcd9d848e41b02bfde894b83b64504663a1e23e2356c4ad3dbd9fbf2d",
+      "marker-corrected/regression-sources-before.json": "5b346c7fcd9d848e41b02bfde894b83b64504663a1e23e2356c4ad3dbd9fbf2d",
+      "marker-corrected/regression-status.txt": "c28918653c8396ff191367fad5b93f0b7cc4603c072135888c0eacf760c37e8d",
+      "marker-corrected/regression-summaries.json": "fa3378cb46758876694881fb4e6d19e5d678f4b914ae5e5acb3b07fe488366ea",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/ac_server_test_test/test.log": "007cd48fc0af9f05ff3620e08d55a30cd5b6373c6d3c8345bc3dc4f64a96ea96",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "4e018179e834934412b27e13bac9175cdb03dc56bb81a105bd6808b2942f5866",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "d637d809f1ac85f8da0891284f6fc753430b1137d283d6b75c47c79f9b659622",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/cas_server_test_test/test.log": "348f5d0fbb89ee28e11952e99f033b5481a357d6cf6f619e96ef6b769dac87aa",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "580b495464ff601f7b2de10e06674381f0c1d2a4cd5bbcd60d54698ba1e48a10",
+      "marker-corrected/regression-testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "54779d6a46e743d701c06d2b76a826d2af2c48b6e63ac1b9527d7cc9bd5e8245",
+      "marker-corrected/regression-testlogs/nativelink-service/unit_test/test.log": "b944c016838caa0cd9a05fa15c40fe8dd0ec6bb028cdc18f270c84432d327d41",
+      "marker-corrected/regression-testlogs/tools/canonical-store/canonical_store_test/test.log": "9e063f5497251b90e0fded293a10c40b5424ea53373ed86335449d286f4952c4",
+      "marker-corrected/regression-testlogs/tools/canonical-store/fixed_digest_default_test/test.log": "5cc40c783c03610a6a09077b0029824f94cd0cd589139043ff36a894ccfe16c6",
+      "marker-corrected/regression.log": "4d521604125b80b9631482d1f20d03705c8ec1b25b2dcd5761a223f151f1f50a",
+      "marker-corrected/run-regression.py": "0a5d7fd9bd29d4077160aba517ca0f54a803f8a8d751570033c9198d0a9a2933",
+      "nativelink-service__src__bytestream_server.rs.diff": "f2ba8806cabd1046efb70ac8fb3590831ddea62dd247fefb51627111f591e0e4",
+      "qualification-result.json": "b0f15d02b511455848cc3aa03c2e2058f45c0059d947220789b786bdb2a554a8",
+      "regression-command.json": "739a6d2b1d0cdd218b1ecfc7a3eece1be6c93981f4cd06ed529a978061a7e201",
+      "regression-head.txt": "1a869994ae1e74877b0627966ab8b6d9e1637758ea4832b8e150a53a7d211d7e",
+      "regression-sources-after.json": "1f15156f1804f3ffb5e6f71f886487236d1516da95d2adc1882fac7929e633da",
+      "regression-sources-before.json": "1f15156f1804f3ffb5e6f71f886487236d1516da95d2adc1882fac7929e633da",
+      "regression-status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "regression-summaries.json": "d1953716f0087d2a023f9b247011a2216ab491e69ff4989af7631626b0dc9996",
+      "regression-testlogs/nativelink-service/integration_tests/ac_server_test_test/test.log": "007cd48fc0af9f05ff3620e08d55a30cd5b6373c6d3c8345bc3dc4f64a96ea96",
+      "regression-testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "4e018179e834934412b27e13bac9175cdb03dc56bb81a105bd6808b2942f5866",
+      "regression-testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "d637d809f1ac85f8da0891284f6fc753430b1137d283d6b75c47c79f9b659622",
+      "regression-testlogs/nativelink-service/integration_tests/cas_server_test_test/test.log": "348f5d0fbb89ee28e11952e99f033b5481a357d6cf6f619e96ef6b769dac87aa",
+      "regression-testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "580b495464ff601f7b2de10e06674381f0c1d2a4cd5bbcd60d54698ba1e48a10",
+      "regression-testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "54779d6a46e743d701c06d2b76a826d2af2c48b6e63ac1b9527d7cc9bd5e8245",
+      "regression-testlogs/nativelink-service/unit_test/test.log": "b944c016838caa0cd9a05fa15c40fe8dd0ec6bb028cdc18f270c84432d327d41",
+      "regression-testlogs/tools/canonical-store/canonical_store_test/test.log": "9e063f5497251b90e0fded293a10c40b5424ea53373ed86335449d286f4952c4",
+      "regression-testlogs/tools/canonical-store/fixed_digest_default_test/test.log": "eaaebea154a04a41e7f6e981305549f1a40cdee569f4a7b6589ea08592268499",
+      "regression.log": "b9138f8aa1755eca55c6395aa8906be52c5c13a4ab9fcdd6f3dfb60ecabc95fe",
+      "run-regression.py": "0a5d7fd9bd29d4077160aba517ca0f54a803f8a8d751570033c9198d0a9a2933",
+      "service-clippy/clippy.log": "acdae2d88cc5f2fba8f644be494633c8931b1ea86f89db1e382638203c0a1344",
+      "service-clippy/command.json": "acce3d17e42efd5853127ba6ad2316865b6a74ea4599ab652252403769832266",
+      "service-clippy/head.txt": "6b60c337f79d16cda6d87c9fced06a39460a28acf4e30ad6a23eb58974e70131",
+      "service-clippy/result.json": "23266ca41109872f72c3aef11e8637245e8ffbdcc4c608aec09752b59b269d5f",
+      "service-clippy/run.py": "471a22a8fafc52438ddb46b9b37b43132cd9e03e8927371a1a2ff18ffbdf28d0",
+      "service-clippy/sources-after.json": "5b346c7fcd9d848e41b02bfde894b83b64504663a1e23e2356c4ad3dbd9fbf2d",
+      "service-clippy/sources-before.json": "5b346c7fcd9d848e41b02bfde894b83b64504663a1e23e2356c4ad3dbd9fbf2d",
+      "tools__canonical-store__Cargo.lock.diff": "c3c173f3d224cb978077b84adf691a8c214770754ab7359874f7f7a1d88b1cf8"
+    }
+  },
+  "executable_archives": [
+    {
+      "path": "executable-01.tar.gz",
+      "sha256": "2f891120aa9715fdce60b59995b72f8399b3dbeffda5ca87b9e3ca28b2fa43d2",
+      "bytes": 6740494,
+      "member": {
+        "path": "author/baseline-corrected-test-binary",
+        "sha256": "de5d642825b722daa65d6ee8a111f1912880cac5998cd4650c83a3b66073ed6d",
+        "bytes": 17749968
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "baseline-corrected-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-02.tar.gz",
+      "sha256": "eae540519d981dea91c6f0754f917ae21d7e12c336d19592c44f5c5a9bd90a1d",
+      "bytes": 6743764,
+      "member": {
+        "path": "author/baseline-initial-test-binary",
+        "sha256": "a2873e6694fc2f97c3630b5b74209b8635d4caa72661cb44e5039060fa77e1e8",
+        "bytes": 17754384
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "baseline-initial-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-03.tar.gz",
+      "sha256": "a2afe238af08629478b3c9299b5ca8ecfd3cd92d1a340056eb7c3acb34990216",
+      "bytes": 6740986,
+      "member": {
+        "path": "author/fixed-corrected-test-binary",
+        "sha256": "884b9245a568166b2aef898d7e2ddda03c3ab1251ab62a07c5539e26fef7cad2",
+        "bytes": 17752784
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "fixed-corrected-test-binary"
+        },
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "full-canonical-test-binary"
+        },
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "restored-canonical-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-04.tar.gz",
+      "sha256": "34744d3f438f050fe344feaf882bc9cdfe8d6b335cf501909744a9b6f57b72d5",
+      "bytes": 6744581,
+      "member": {
+        "path": "author/fixed-initial-test-binary",
+        "sha256": "444c1aa4771e6a5f52c86a8aa1ebd134d68d3b6d813a5eb7622761e3145ff41b",
+        "bytes": 17757216
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "fixed-initial-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-05.tar.gz",
+      "sha256": "5864f189653e7134f62aa47c127b36f8b35c55d8baabc535b0ca3b5cd7c0093c",
+      "bytes": 6890258,
+      "member": {
+        "path": "author/full-canonical-library-test-binary",
+        "sha256": "06a45bc224ec7f5117c5b97b1ddab1b323314222d1ffdc16c8e558c580e975c7",
+        "bytes": 18807360
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "full-canonical-library-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-06.tar.gz",
+      "sha256": "b919c9e92f134fe3bf5b76ea566c646963ac9d84bb034964137cbc7ed0101362",
+      "bytes": 6741180,
+      "member": {
+        "path": "author/mutants/ac-get-inherits-global/test-binary",
+        "sha256": "5d55df99231d1cdb09af1642f495fdce5b8ebfa892a524242c8fe8b842541e37",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/ac-get-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-07.tar.gz",
+      "sha256": "179c8267a87f952b4bdfbc0c2f3b76688ef802e4a53c1d40cc5b78b5bf5073ee",
+      "bytes": 6741161,
+      "member": {
+        "path": "author/mutants/ac-update-inherits-global/test-binary",
+        "sha256": "7910f08ec7279088e4670f85aadec028f32d76ebfe903f055daa7119ac498c8e",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/ac-update-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-08.tar.gz",
+      "sha256": "9389bef773fbb6e84d270d5ea97d9b256a22824e80e18c597d34d56b92eeb3f4",
+      "bytes": 6740989,
+      "member": {
+        "path": "author/mutants/bs-query-inherits-global/test-binary",
+        "sha256": "1d5f3e32f4142bc355118d66ccaa045bcb21aaaf9088cb7f076026bc4aefbe78",
+        "bytes": 17752840
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/bs-query-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-09.tar.gz",
+      "sha256": "8349974843b26acca46a012452f25fcea87026601d6af0acf49c2342a2af537c",
+      "bytes": 6741113,
+      "member": {
+        "path": "author/mutants/bs-read-inherits-global/test-binary",
+        "sha256": "22c6f6db7556a795749a53c989aee7e0571e2d232b4c3f1ff14756cff8378a5f",
+        "bytes": 17752784
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/bs-read-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-10.tar.gz",
+      "sha256": "b9b086084dd908ff6b68e7b7e571374685c49766b01fab0c664bdf27876c8b96",
+      "bytes": 6740972,
+      "member": {
+        "path": "author/mutants/bs-write-inherits-global/test-binary",
+        "sha256": "4c70bbd50fb31dd7e1e3f1eeff9bff3827ea20f0e276f913ee392fb6c7d86f62",
+        "bytes": 17752656
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/bs-write-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-11.tar.gz",
+      "sha256": "61ebb9fe5ce889f0710e6aac5f83bf9a723376ff33b7063e2ef441c1e7c0adea",
+      "bytes": 6741093,
+      "member": {
+        "path": "author/mutants/cas-find-inherits-global/test-binary",
+        "sha256": "f9328819181cef3567d6d4fd00fc4a73ac73904ee9d2dc9f1397ae482138c13c",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/cas-find-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-12.tar.gz",
+      "sha256": "bdcb90fd514928e091ffe8f09871c8d413a199a2a3d93851b5ebc0a4be052887",
+      "bytes": 6740959,
+      "member": {
+        "path": "author/mutants/cas-read-inherits-global/test-binary",
+        "sha256": "f9217d9207ba204c2556a94312eef9c2e2b663f8afffcd209575045ddba02c94",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/cas-read-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-13.tar.gz",
+      "sha256": "a2096bc921fd4fb36cc7e0cec6925418f115ebdfb35748267aae320365a42202",
+      "bytes": 6740977,
+      "member": {
+        "path": "author/mutants/cas-tree-inherits-global/test-binary",
+        "sha256": "e8ec5e5ff1ef0699c2e7aa82d4c720ad98b3d8b69951078fa49d0da12b0f5f5f",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/cas-tree-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-14.tar.gz",
+      "sha256": "245f56388047ef22a31eed2e6d0e423aa7de38fb35a74e275113ed3808bc30ce",
+      "bytes": 6740997,
+      "member": {
+        "path": "author/mutants/cas-update-inherits-global/test-binary",
+        "sha256": "e277a4753bba151318d0b54ade8ba9a9a2335ce0265c58c7dc4673729680a98c",
+        "bytes": 17752400
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/cas-update-inherits-global/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-15.tar.gz",
+      "sha256": "3efef356347f0a5994b9d457e5f8e24d145dd74e92f031c7356f3d6a9dca9225",
+      "bytes": 6741063,
+      "member": {
+        "path": "author/mutants/restore-grpc-inner_query_write_status-shortcut/test-binary",
+        "sha256": "6f3d431207444ee46fdcee1e7b0836b0a0df227fac9904dd254a5bd01280ec9d",
+        "bytes": 17752656
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/restore-grpc-inner_query_write_status-shortcut/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-16.tar.gz",
+      "sha256": "2937eb21c6d65d18f97ab14a2403b55c608a2a8084d487745eabd2ffb677315d",
+      "bytes": 6741066,
+      "member": {
+        "path": "author/mutants/restore-grpc-read-shortcut/test-binary",
+        "sha256": "07f81f755500d97c8b3d23ff7f109c83fa1828c5c53993f29ac65f147839b6ab",
+        "bytes": 17752720
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/restore-grpc-read-shortcut/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-17.tar.gz",
+      "sha256": "82d4fd89f095b374d12ee30eb1a3c0528bb2dc2b156d10d03634257a416e8ee5",
+      "bytes": 6741010,
+      "member": {
+        "path": "author/mutants/restore-grpc-write-shortcut/test-binary",
+        "sha256": "33073245f447030fff418eff5e81eac10be0154fc41ff44fb5997599e45021b9",
+        "bytes": 17752656
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-evidence",
+          "path": "mutants/restore-grpc-write-shortcut/test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-18.tar.gz",
+      "sha256": "571b443a47afba65e14ab3eea24aae3a084a91fd017d50c00b41c86660665fa7",
+      "bytes": 18198521,
+      "member": {
+        "path": "root/initial-test-binary",
+        "sha256": "da95b1b2de41863fb13a74fa6c0dcd266576ca7f3eb666c77eea142de4d4dca4",
+        "bytes": 98826224
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-integration",
+          "path": "initial-test-binary"
+        }
+      ]
+    },
+    {
+      "path": "executable-19.tar.gz",
+      "sha256": "2b81b4e37fc6f70ea148234d20f39a4573508856e90568603a67d6042230cd84",
+      "bytes": 18198545,
+      "member": {
+        "path": "root/marker-corrected/final-test-binary",
+        "sha256": "45200c14f5eab4aab28ea9e7ec328aaac261e43392785392bad6dcf1a07b463d",
+        "bytes": 98826224
+      },
+      "identical_external_paths": [
+        {
+          "root": "/tmp/nativelink-fixed-digest-default-integration",
+          "path": "marker-corrected/final-test-binary"
+        }
+      ]
+    }
+  ],
+  "external_build_events": {
+    "marker-corrected/regression-events.jsonl": {
+      "sha256": "8326242501f51921407408559d55b472a788c5e34a8357e4fc731d1a2fa1447a",
+      "bytes": 580547
+    },
+    "regression-events.jsonl": {
+      "sha256": "096d4dad59519d77e06e0e42db080cd0c99742e18eb8930d52e0630466860c91",
+      "bytes": 654478
+    }
+  },
+  "limits": [
+    "Counts overlap prior runs and author suites; cached checks are identified.",
+    "No fresh explicit TLS execution, production constructor, aggregate admission, upload identity or deployment claim.",
+    "Modern GrpcStore upstream resource names qualified; legacy-name upstream needs refusal or adaptation before canonical construction."
+  ]
+}
