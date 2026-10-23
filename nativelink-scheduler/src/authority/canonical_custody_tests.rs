@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use nativelink_macro::nativelink_test;
 use nativelink_util::{background_spawn, spawn_blocking};
-use redb::{Database, ReadableDatabase, ReadableTable};
+use redb::{Database, ReadableDatabase};
 use tokio::sync::oneshot;
 
 use super::super::{LIMITS, PreparedCanonicalOwner};
