@@ -495,7 +495,7 @@ impl Runtime {
                 cas: Store::new(context.cas.clone()),
                 cas_namespace: [0; 32],
                 publication_sink: Store::new(context.ac.clone()),
-                now: Arc::new(|| 0),
+                now: Arc::new(|| Ok(0)),
                 faults,
             },
         )

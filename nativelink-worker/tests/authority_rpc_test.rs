@@ -493,7 +493,7 @@ impl Runtime {
                 cas: Store::new(context.cas.clone()),
                 cas_namespace,
                 publication_sink: Store::new(context.ac.clone()),
-                now: Arc::new(move || clock.load(Ordering::Relaxed)),
+                now: Arc::new(move || Ok(clock.load(Ordering::Relaxed))),
                 faults,
             },
         )
@@ -1575,7 +1575,7 @@ async fn undersized_core_payload_refuses_rpc_constructor_and_closes_journal() {
             cas: Store::new(context.cas.clone()),
             cas_namespace: [0; 32],
             publication_sink: Store::new(context.ac.clone()),
-            now: Arc::new(|| 0),
+            now: Arc::new(|| Ok(0)),
             faults: Arc::new(QualificationFaults::default()),
         },
     )

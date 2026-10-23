@@ -194,7 +194,7 @@ async fn due_history_retries_share_four_slots_and_cannot_starve_fresh_ac() {
             cas: Store::new(cas.clone()),
             cas_namespace: NAMESPACE,
             publication_sink: Store::new(ac.clone()),
-            now: Arc::new(|| 0),
+            now: Arc::new(|| Ok(0)),
             faults: Arc::new(QualificationFaults::default()),
         },
         workers: BTreeMap::new(),

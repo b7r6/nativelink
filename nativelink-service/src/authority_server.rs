@@ -111,8 +111,10 @@ pub struct QualificationConfig {
     /// This fixture fact does not certify provider placement or protection.
     pub cas_namespace: [u8; 32],
     pub publication_sink: Store,
-    /// Monotonic experimental ticks. This is not a calibrated deployment clock.
-    pub now: Arc<dyn Fn() -> u64 + Send + Sync>,
+    /// Fallible experimental ticks. An observation error stops the coordinator;
+    /// it never fabricates a time advance, expiry or reservation release.
+    /// The caller still owns the clock-unit and recovery binding.
+    pub now: Arc<dyn Fn() -> Result<u64, String> + Send + Sync>,
     pub faults: Arc<QualificationFaults>,
 }
 
@@ -246,6 +248,25 @@ impl AuthorityService {
         authority: Singleton,
         config: QualificationConfig,
     ) -> Result<(Self, CoordinatorTask), String> {
+        // Once polled, preparation owns authority independently of the caller's
+        // future. A cancelled startup cannot drop its last shutdown handle while
+        // a recovery read or durable proposal is still in flight.
+        let (prepared, receiver) = oneshot::channel();
+        let _prepare = background_spawn!("experimental_authority_prepare", async move {
+            let result = Self::start_owned(authority, config).await;
+            if let Err(Ok((_service, coordinator))) = prepared.send(result) {
+                let _shutdown = coordinator.shutdown().await;
+            }
+        });
+        receiver
+            .await
+            .map_err(|error| format!("Authority preparation task failed: {error}"))?
+    }
+
+    async fn start_owned(
+        authority: Singleton,
+        config: QualificationConfig,
+    ) -> Result<(Self, CoordinatorTask), String> {
         let initial = match authority.read().await {
             Ok(initial) => initial,
             Err(error) => {
@@ -288,7 +309,7 @@ impl AuthorityService {
             cas: config.cas.clone(),
             permits: Arc::new(Semaphore::new(QUEUE)),
         };
-        let driver = Driver {
+        let mut driver = Driver {
             authority,
             state,
             watermark,
@@ -309,6 +330,13 @@ impl AuthorityService {
             history,
             committed_history,
         };
+        // A failed initial clock or recovery sweep must refuse construction
+        // before a listener can expose this service. run_loop samples again
+        // before queued inputs, including after a delayed task start.
+        if let Err(error) = driver.time().await {
+            let shutdown = driver.authority.shutdown().await;
+            return Err(format!("{error}; authority shutdown: {shutdown:?}"));
+        }
         let task = background_spawn!(
             "experimental_authority_coordinator",
             driver.run(inputs, stopped)
@@ -720,7 +748,9 @@ impl Driver {
     }
 
     async fn time(&mut self) -> Result<bool, String> {
-        let now = (self.config.now)().max(self.state.now);
+        let now = (self.config.now)()
+            .map_err(|error| format!("Authority clock observation failed: {error}"))?
+            .max(self.state.now);
         let advanced = now > self.state.now;
         if !advanced && !self.restore_deadlines {
             return Ok(false);

@@ -90,7 +90,7 @@ fn config(cas: Store, publication_sink: Store) -> QualificationConfig {
         cas,
         cas_namespace: [1; 32],
         publication_sink,
-        now: Arc::new(|| 1),
+        now: Arc::new(|| Ok(1)),
         faults: Arc::new(QualificationFaults::default()),
     }
 }

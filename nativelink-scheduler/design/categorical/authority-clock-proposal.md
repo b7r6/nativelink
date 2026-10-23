@@ -7,7 +7,8 @@ and fixes upload expiry; its comparisons remain `deadline <= now`. No timeout
 projection, reducer event or snapshot changes accompany this proposal. The
 separate [first Running sampling repair](authority-running-clock-sampling.md)
 orders observations from the existing injected clock; a fixed canonical clock
-source remains unimplemented.
+source is now available as a [checked prerequisite](authority-fallible-clock.md),
+without a persistent bootstrap binding or a changed expiry comparison.
 
 ## One clock and an explicit recovery policy
 
@@ -53,8 +54,10 @@ processing through an explicit failure path, rather than wrap or manufacture an
 observation of `u64::MAX`. Finite deadline additions also need enough headroom
 for the maximum admitted duration, policy intervals, and any rounding allowance.
 An omitted timeout intentionally uses the existing infinite sentinel; that case
-must remain distinct from overflow. The current `Fn() -> u64` interface has no
-fallible clock outcome, so a canonical failure path is still a design obligation.
+must remain distinct from overflow. The experimental interface now propagates
+fallible clock observations through coordinator shutdown and refuses startup on
+an initial failure. Deadline headroom and a canonical bootstrap binding remain
+design obligations.
 
 ## The duration invariant and its anchor
 
@@ -88,8 +91,8 @@ stale-anchor case without selecting units or changing quantization policy.
 
 A canonical duration guarantee requires a fresh monotonic observation committed
 before the first Running grant is timestamped. The experimental repair supplies
-the ordering for its injected clock; the fixed monotonic source and recovery
-binding remain pending. Sampling before waiting for an input is not sufficient.
+the ordering for its injected clock. A checked monotonic source is now available;
+its recovery binding remains pending. Sampling before waiting for an input is not sufficient.
 The first Running deadline remains fixed through later progress and
 reconciliation; reconnect cannot refresh the original execution duration.
 

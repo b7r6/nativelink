@@ -318,7 +318,7 @@ impl Runtime {
                 cas: context.cas.clone(),
                 cas_namespace: [0; 32],
                 publication_sink: context.sink.clone(),
-                now: Arc::new(move || clock.load(Ordering::Relaxed)),
+                now: Arc::new(move || Ok(clock.load(Ordering::Relaxed))),
                 faults,
             },
         )

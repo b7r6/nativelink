@@ -189,7 +189,7 @@ impl Fixture {
                 publication_sink: Store::new(MemoryStore::new(&MemorySpec::default())),
                 now: Arc::new(move || {
                     counted_samples.fetch_add(1, Ordering::SeqCst);
-                    observed_clock.load(Ordering::SeqCst)
+                    Ok(observed_clock.load(Ordering::SeqCst))
                 }),
                 faults,
             },
@@ -341,6 +341,176 @@ async fn first_running_clock_proposals_follow_actual_clock_advance() {
         driver.authority.shutdown().await.unwrap();
         fs::remove_dir_all(directory).await.unwrap();
     }
+}
+
+#[nativelink_test]
+async fn clock_failure_refuses_start_before_due_recovery_mutations() {
+    let (mut driver, directory) = Fixture::new(Phase::Running, 0).await.stop().await;
+    driver
+        .authority
+        .write(RecordedEvent {
+            epoch: EPOCH,
+            event: Event::AdvanceTime { now: 50 },
+        })
+        .await
+        .unwrap();
+    let before = driver.authority.read().await.unwrap();
+    assert!(before.view().attempts[0].authorized);
+    assert!(!before.view().reservations[0].released);
+    driver.config.now = Arc::new(|| Err("exhausted source".to_owned()));
+    let error = AuthorityService::start(driver.authority, driver.config)
+        .await
+        .unwrap_err();
+    assert!(error.contains("Authority clock observation failed: exhausted source"));
+    let reopened = Singleton::open(
+        directory.join("authority.redb"),
+        1,
+        EPOCH,
+        Limits::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened.read().await.unwrap().snapshot().unwrap(),
+        before.snapshot().unwrap()
+    );
+    reopened.shutdown().await.unwrap();
+    fs::remove_dir_all(directory).await.unwrap();
+}
+
+#[nativelink_test]
+async fn clock_failure_after_start_stops_input_without_releasing_charge() {
+    let (mut driver, directory) = Fixture::new(Phase::Running, 0).await.stop().await;
+    let before = driver.authority.read().await.unwrap().snapshot().unwrap();
+    let samples = Arc::new(AtomicU64::new(0));
+    let observed_samples = samples.clone();
+    driver.config.now = Arc::new(move || {
+        if observed_samples.fetch_add(1, Ordering::SeqCst) == 0 {
+            Ok(0)
+        } else {
+            Err("exhausted source".to_owned())
+        }
+    });
+    let (commands, inputs) = mpsc::channel(1);
+    let (reply, response) = oneshot::channel();
+    commands
+        .send(Input::RenewInterest(OperationId(1), reply))
+        .await
+        .unwrap();
+    let (_stop, stopped) = oneshot::channel();
+    let error = tokio::time::timeout(Duration::from_secs(10), driver.run(inputs, stopped))
+        .await
+        .unwrap()
+        .unwrap_err();
+    assert!(error.contains("Authority clock observation failed: exhausted source"));
+    assert_eq!(samples.load(Ordering::SeqCst), 2);
+    assert!(response.await.is_err());
+    assert!(commands.is_closed());
+    let reopened = Singleton::open(
+        directory.join("authority.redb"),
+        1,
+        EPOCH,
+        Limits::default(),
+    )
+    .await
+    .unwrap();
+    let after = reopened.read().await.unwrap();
+    assert_eq!(after.snapshot().unwrap(), before);
+    assert!(after.view().attempts[0].authorized);
+    assert!(!after.view().reservations[0].released);
+    reopened.shutdown().await.unwrap();
+    fs::remove_dir_all(directory).await.unwrap();
+}
+
+#[nativelink_test]
+async fn clock_failure_prevents_first_running_and_acknowledgment() {
+    let (mut driver, directory) = Fixture::new(Phase::Dispatching, 0).await.stop().await;
+    let before = driver.authority.journal.read_applied().await.unwrap();
+    driver.config.now = Arc::new(|| Err("exhausted source".to_owned()));
+    let error = driver
+        .input(Input::Worker(
+            session(),
+            Box::new(AuthorityWorkerUpdate {
+                update: Some(authority_worker_update::Update::Report(report(
+                    driver.state.attempts[0],
+                    AuthorityAttemptPhase::Running,
+                ))),
+            }),
+        ))
+        .await
+        .unwrap_err();
+    assert!(error.contains("Authority clock observation failed: exhausted source"));
+    let after = driver.authority.journal.read_applied().await.unwrap();
+    assert_eq!(after.0, before.0);
+    assert_eq!(after.1.snapshot().unwrap(), before.1.snapshot().unwrap());
+    driver.workers.clear();
+    driver.authority.shutdown().await.unwrap();
+    fs::remove_dir_all(directory).await.unwrap();
+}
+
+#[nativelink_test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelled_clock_preparation_retains_custody_until_shutdown() {
+    struct Release(Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            *self.0.0.lock().unwrap() = true;
+            self.0.1.notify_all();
+        }
+    }
+
+    let (mut driver, directory) = Fixture::new(Phase::Running, 0).await.stop().await;
+    let before = driver.authority.read().await.unwrap().snapshot().unwrap();
+    let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let release = Release(gate.clone());
+    let (entered, received) = oneshot::channel();
+    let entered = std::sync::Mutex::new(Some(entered));
+    driver.config.now = Arc::new(move || {
+        let sender = entered.lock().unwrap().take();
+        if let Some(sender) = sender {
+            let _sent = sender.send(());
+        }
+        let mut released = gate.0.lock().unwrap();
+        while !*released {
+            released = gate.1.wait(released).unwrap();
+        }
+        Ok(0)
+    });
+    let starting = background_spawn!(
+        "cancelled_clock_preparation",
+        AuthorityService::start(driver.authority, driver.config)
+    );
+    tokio::time::timeout(Duration::from_secs(10), received)
+        .await
+        .unwrap()
+        .unwrap();
+    starting.abort();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), starting)
+            .await
+            .unwrap()
+            .unwrap_err()
+            .is_cancelled()
+    );
+    let path = directory.join("authority.redb");
+    assert!(
+        Singleton::open(&path, 1, EPOCH, Limits::default())
+            .await
+            .is_err()
+    );
+    drop(release);
+    let reopened = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Ok(authority) = Singleton::open(&path, 1, EPOCH, Limits::default()).await {
+                break authority;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(reopened.read().await.unwrap().snapshot().unwrap(), before);
+    reopened.shutdown().await.unwrap();
+    fs::remove_dir_all(directory).await.unwrap();
 }
 
 #[nativelink_test]

@@ -173,7 +173,7 @@ impl Runtime {
                 cas: context.cas.clone(),
                 cas_namespace: accepted_history_namespace(DOMAIN),
                 publication_sink: context.sink.clone(),
-                now: Arc::new(move || clock.load(Ordering::Relaxed)),
+                now: Arc::new(move || Ok(clock.load(Ordering::Relaxed))),
                 faults,
             },
         )
@@ -441,7 +441,7 @@ async fn history_service_refuses_a_different_logical_cas_namespace_before_delive
             cas: context.cas.clone(),
             cas_namespace: [0; 32],
             publication_sink: context.sink.clone(),
-            now: Arc::new(|| 0),
+            now: Arc::new(|| Ok(0)),
             faults: Arc::new(QualificationFaults::default()),
         },
     )

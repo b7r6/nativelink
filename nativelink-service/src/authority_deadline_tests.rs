@@ -115,7 +115,7 @@ async fn restored_due_interest_expires_before_first_queued_observation() {
             cas_namespace: [0; 32],
             publication_sink: Store::new(MemoryStore::new(&MemorySpec::default())),
             // Recovery cannot require another clock advance to sweep due work.
-            now: Arc::new(|| 0),
+            now: Arc::new(|| Ok(0)),
             faults: Arc::new(QualificationFaults::default()),
         },
         workers: BTreeMap::new(),
