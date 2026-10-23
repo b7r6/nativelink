@@ -201,10 +201,15 @@ type SpawnedChild = crate::namespace_utils::MaybeNamespacedChild;
 type SpawnedChild = process::Child;
 
 /// SIGKILL through the child wrapper, which takes the whole process group
-/// with it, logged if it fails.
-async fn hard_kill(child: &mut SpawnedChild, why: &str) {
-    if let Err(err) = child.kill().await {
-        error!(?err, why, "Could not kill process in RunningActionsManager");
+/// with it, logged if it fails. True records procedure completion, not exclusive
+/// physical cause of exit or confirmed process-domain closure.
+async fn hard_kill(child: &mut SpawnedChild, why: &str) -> bool {
+    match child.kill().await {
+        Ok(()) => true,
+        Err(err) => {
+            error!(?err, why, "Could not kill process in RunningActionsManager");
+            false
+        }
     }
 }
 
@@ -2329,6 +2334,90 @@ impl AuthorityResourceLimits {
     }
 }
 
+/// An observed authority memory-policy breach followed by a completed kill
+/// procedure. This does not establish the exclusive cause of exit, namespace
+/// quiescence, cleanup, successful output upload or authority acceptance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityMemoryBreach {
+    charged: AuthorityResources,
+    limit_kb: u64,
+    observed_kb: u64,
+}
+
+impl AuthorityMemoryBreach {
+    pub const fn charged(self) -> AuthorityResources {
+        self.charged
+    }
+
+    pub const fn limit_kb(self) -> u64 {
+        self.limit_kb
+    }
+
+    pub const fn observed_kb(self) -> u64 {
+        self.observed_kb
+    }
+}
+
+/// First-stop selection is separate from legacy telemetry. A rejected live
+/// probe closes memory qualification without preventing a later cancellation.
+#[derive(Default)]
+struct AuthorityStopDecision {
+    selected: Option<KillReason>,
+    memory_blocked: bool,
+}
+
+struct PendingAuthorityMemoryBreach {
+    resources: AuthorityResourceLimits,
+    observed_kb: u64,
+}
+
+impl PendingAuthorityMemoryBreach {
+    fn finish(self, kill_completed: bool) -> Option<AuthorityMemoryBreach> {
+        kill_completed.then_some(AuthorityMemoryBreach {
+            charged: self.resources.charged,
+            limit_kb: self.resources.memory_limit_kb.expect("validated ceiling"),
+            observed_kb: self.observed_kb,
+        })
+    }
+}
+
+impl AuthorityStopDecision {
+    const fn select(&mut self, reason: KillReason) -> bool {
+        if self.selected.is_some() {
+            return false;
+        }
+        self.selected = Some(reason);
+        true
+    }
+
+    fn memory(
+        &mut self,
+        resources: AuthorityResourceLimits,
+        observed_kb: u64,
+        live_probe: &Result<Option<std::process::ExitStatus>, std::io::Error>,
+        cancelled: bool,
+    ) -> Option<PendingAuthorityMemoryBreach> {
+        if self.selected.is_some() || self.memory_blocked {
+            return None;
+        }
+        if cancelled
+            || resources.charged.memory_bytes == 0
+            || !resources
+                .memory_limit_kb
+                .is_some_and(|limit| limit > 0 && observed_kb > limit)
+            || !matches!(live_probe, Ok(None))
+        {
+            self.memory_blocked = true;
+            return None;
+        }
+        self.select(KillReason::Memory);
+        Some(PendingAuthorityMemoryBreach {
+            resources,
+            observed_kb,
+        })
+    }
+}
+
 pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     /// Returns the action id of the action.
     fn get_operation_id(&self) -> &OperationId;
@@ -2370,6 +2459,11 @@ pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
 
     /// Exact authority grant and its configured sampled ceiling, when present.
     fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
+        None
+    }
+
+    /// Immutable observed memory policy receipt; closure and cleanup are separate.
+    fn authority_memory_breach(&self) -> Option<AuthorityMemoryBreach> {
         None
     }
 
@@ -2576,6 +2670,7 @@ struct RunningActionImplState {
     execution_result: Option<RunningActionImplExecutionResult>,
     action_result: Option<ActionResult>,
     resource_usage: Option<ActionResourceUsage>,
+    authority_memory_breach: Option<AuthorityMemoryBreach>,
     execution_metadata: ExecutionMetadata,
     // If there was an internal error, this will be set.
     // This should NOT be set if everything was fine, but the process had a
@@ -2648,6 +2743,7 @@ impl RunningActionImpl {
                 execution_result: None,
                 action_result: None,
                 resource_usage: None,
+                authority_memory_breach: None,
                 execution_metadata,
                 error: None,
                 input_mounts: None,
@@ -3699,6 +3795,7 @@ impl RunningActionImpl {
             .await
         });
         let mut kill_reason: Option<KillReason> = None;
+        let mut authority_stop = AuthorityStopDecision::default();
         let kill_grace = self
             .running_actions_manager
             .execution_configuration
@@ -3731,14 +3828,22 @@ impl RunningActionImpl {
                                 warn!("Owned-child progress counter exhausted; renewal disabled");
                             }
                         }
-                        Ok(Some(_)) => progress_enabled = false,
+                        Ok(Some(_)) => {
+                            progress_enabled = false;
+                            authority_stop.memory_blocked = true;
+                        },
                         Err(error) => {
                             progress_enabled = false;
+                            authority_stop.memory_blocked = true;
                             warn!(?error, "Owned-child progress probe failed; renewal disabled");
                         }
                     }
                 }
                 () = &mut sleep_fut => {
+                    if self.authority_request && !authority_stop.select(KillReason::Timeout) {
+                        grace_fut = stop_action(&mut child_process_guard, kill_grace, "timeout after earlier stop").await;
+                        continue;
+                    }
                     self.running_actions_manager.metrics.task_timeouts.inc();
                     kill_reason = Some(KillReason::Timeout);
                     grace_fut = stop_action(&mut child_process_guard, kill_grace, "action timeout").await;
@@ -3772,6 +3877,10 @@ impl RunningActionImpl {
                 },
                 Ok(over_limit) = &mut over_limit_fut => match over_limit {
                     OverLimit::Disk(observed_kb) => {
+                        if self.authority_request && !authority_stop.select(KillReason::Disk) {
+                            hard_kill(&mut child_process_guard, "disk breach after earlier stop").await;
+                            continue;
+                        }
                         self.running_actions_manager.metrics.disk_reservation_kills.inc();
                         kill_reason = Some(KillReason::Disk);
                         // The files are still being written; no grace here.
@@ -3805,10 +3914,32 @@ impl RunningActionImpl {
 
                     }
                     OverLimit::Memory(observed_kb) => {
+                        let pending_breach = if let Some(resources) = self.authority_resources {
+                            if authority_stop.selected.is_some() {
+                                // Keep termination responsive without replacing the first
+                                // result cause or minting a receipt from a later sample.
+                                hard_kill(&mut child_process_guard, "memory breach after earlier stop").await;
+                                continue;
+                            }
+                            let Some(pending) = authority_stop.memory(
+                                resources, observed_kb, &child_process_guard.try_wait(),
+                                *self.kill_token.borrow(),
+                            ) else {
+                                continue;
+                            };
+                            Some(pending)
+                        } else {
+                            None
+                        };
                         self.running_actions_manager.metrics.memory_reservation_kills.inc();
                         kill_reason = Some(KillReason::Memory);
                         // Memory is still growing; no grace here.
-                        hard_kill(&mut child_process_guard, "memory reservation").await;
+                        let kill_completed = hard_kill(&mut child_process_guard, "memory reservation").await;
+                        if let Some(pending) = pending_breach {
+                            // Persist before namespace wait, output drain and upload. Presence
+                            // records policy/kill-procedure facts, never those later obligations.
+                            self.state.lock().authority_memory_breach = pending.finish(kill_completed);
+                        }
                         let (reserved_kb, limit_kb) = memory_reservation.unwrap_or((0, 0));
                         let (property, headroom) = self
                             .running_actions_manager
@@ -4033,6 +4164,10 @@ impl RunningActionImpl {
                     return Ok(self);
                 },
                 _ = &mut kill_channel_rx => {
+                    if self.authority_request && !authority_stop.select(KillReason::External) {
+                        grace_fut = stop_action(&mut child_process_guard, kill_grace, "cancel after earlier stop").await;
+                        continue;
+                    }
                     kill_reason = Some(KillReason::External);
                     grace_fut = stop_action(&mut child_process_guard, kill_grace, "scheduler kill").await;
                     {
@@ -4739,6 +4874,10 @@ impl RunningAction for RunningActionImpl {
 
     fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
         self.authority_resources
+    }
+
+    fn authority_memory_breach(&self) -> Option<AuthorityMemoryBreach> {
+        self.state.lock().authority_memory_breach
     }
 
     fn resource_usage(&self) -> Option<ActionResourceUsage> {
@@ -6210,6 +6349,102 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    fn authority_test_limits() -> AuthorityResourceLimits {
+        AuthorityResourceLimits {
+            charged: AuthorityResources {
+                cpu_millis: 1234,
+                memory_bytes: 102_400,
+                slots: 1,
+            },
+            memory_limit_kb: Some(100),
+        }
+    }
+
+    #[test]
+    fn authority_memory_first_stop_wins_without_relabeling() {
+        for reason in [KillReason::Timeout, KillReason::External, KillReason::Disk] {
+            let mut stop = AuthorityStopDecision::default();
+            assert!(stop.select(reason));
+            assert!(
+                stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                    .is_none()
+            );
+            assert!(!stop.select(KillReason::Memory));
+        }
+        let mut stop = AuthorityStopDecision::default();
+        let pending = stop
+            .memory(authority_test_limits(), 110, &Ok(None), false)
+            .unwrap();
+        for reason in [KillReason::Timeout, KillReason::External, KillReason::Disk] {
+            assert!(!stop.select(reason));
+        }
+        assert!(
+            stop.memory(authority_test_limits(), 120, &Ok(None), false)
+                .is_none()
+        );
+        let receipt = pending.finish(true).unwrap();
+        assert_eq!(receipt.charged(), authority_test_limits().charged);
+        assert_eq!(receipt.limit_kb(), 100);
+        assert_eq!(receipt.observed_kb(), 110);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn authority_memory_requires_a_live_probe_and_preserves_later_cancel() {
+        use std::os::unix::process::ExitStatusExt;
+        for probe in [
+            Ok(Some(std::process::ExitStatus::from_raw(0))),
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+        ] {
+            let mut stop = AuthorityStopDecision::default();
+            assert!(
+                stop.memory(authority_test_limits(), 110, &probe, false)
+                    .is_none()
+            );
+            assert!(
+                stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                    .is_none()
+            );
+            assert!(
+                stop.select(KillReason::External),
+                "a rejected memory observation must not swallow cancellation"
+            );
+        }
+    }
+
+    #[test]
+    fn authority_memory_requires_grant_breach_no_cancel_and_completed_kill() {
+        for (memory, ceiling, observed, cancelled) in [
+            (102_400, Some(100), 100, false),
+            (102_400, Some(100), 99, false),
+            (102_400, Some(100), 110, true),
+            (0, Some(100), 110, false),
+            (102_400, None, 110, false),
+            (102_400, Some(0), 110, false),
+        ] {
+            let mut limits = authority_test_limits();
+            limits.charged.memory_bytes = memory;
+            limits.memory_limit_kb = ceiling;
+            assert!(
+                AuthorityStopDecision::default()
+                    .memory(limits, observed, &Ok(None), cancelled)
+                    .is_none()
+            );
+        }
+        let mut stop = AuthorityStopDecision::default();
+        let pending = stop
+            .memory(authority_test_limits(), 110, &Ok(None), false)
+            .unwrap();
+        assert!(
+            pending.finish(false).is_none(),
+            "a failed kill procedure cannot mint a receipt"
+        );
+        assert!(
+            stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                .is_none()
+        );
+    }
 
     fn test_digest(first_byte: u8) -> DigestInfo {
         let mut hash = [0u8; 32];

@@ -81,12 +81,26 @@ fn allocator_child() {
     if std::env::var_os(CHILD_ENV).is_none() {
         return;
     }
+    println!("BEFORE_ALLOCATION");
+    eprintln!("STDERR_BEFORE_ALLOCATION");
+    if std::env::var_os("NATIVELINK_BREACH_OUTPUT").is_some() {
+        std::fs::write("artifact", b"output-before-breach").unwrap();
+    }
     let mut bytes = vec![0_u8; 192 * 1024 * 1024];
     for byte in bytes.iter_mut().step_by(4096) {
         *byte = 17;
     }
     std::hint::black_box(&bytes);
     std::thread::sleep(Duration::from_secs(2));
+    if std::env::var(CHILD_ENV).as_deref() == Ok("external-signal") {
+        std::fs::write("ready-to-signal", b"allocated").unwrap();
+        // Namespace PID 1 cannot kill itself with SIGKILL. The test supervisor
+        // signals the observed outer process after the sampler sees this RSS.
+        loop {
+            std::thread::park();
+            std::hint::black_box(&bytes);
+        }
+    }
     println!(
         "GRANT_CHILD_COMPLETED;platform={}",
         std::env::var("ORIGINAL_MEMORY").unwrap()
@@ -398,3 +412,6 @@ async fn exact_grant_and_conservative_kib_ceiling_validate_before_launch() {
         }
     }
 }
+
+#[path = "breach.rs"]
+mod breach;
