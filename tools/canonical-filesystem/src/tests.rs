@@ -36,6 +36,10 @@ static FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 #[path = "capability_tests.rs"]
 mod capabilities;
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "Shared fixture is visible only to sibling crate tests."
+)]
 pub(super) struct Fixture {
     pub(super) directory: PathBuf,
     pub(super) manifest: Manifest,
