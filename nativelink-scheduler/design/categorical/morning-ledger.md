@@ -7,20 +7,26 @@ for approval of routine engineering choices. User authorization superseded the
 draft's M1 stop; qualification, production-format, deployment, and merge boundaries
 remain distinct.
 
-Latest focused checkpoints add the capability-backed CAS/sink, descriptor-backed
-Singleton construction, checked clock failure path, strict execution expiry
-boundary and local authority memory-breach receipts. Their receipts below
-separate standalone, syscall and integrated tests. Fixed listener message limits
-are integrated; their combined qualification is recorded separately. Production
-construction, wire classification and the complete canonical clock contract remain open.
+Latest focused checkpoints add bounded fixed CAS and AC admission, digest
+context for captured requests and replayed effects, private canonical journal
+binding, membership and persisted-limit preflight, and memory-breach reporting.
+Their receipts separate independent source review, original failures, author
+fault controls and root integration. Production construction, combined admission
+and the complete canonical clock contract remain open.
 
-Latest full Bazel checkpoint at `e6978139cf`: all 172 targets passed, including
-six explicitly selected manual canonical targets. Sixty-five executed and 107
-were cached; the run took 345.873 seconds with 1,313 unchanged tracked inputs.
-The [receipt](evidence/canonical-construction-checkpoint/manifest.json) records
-commands, per-target cache status and logs. It qualifies the integrated storage,
-descriptor Singleton, local memory receipt, clock and listener changes at that
-commit. Later persisted-limit and memory-wire work does not inherit these totals.
+Latest full Bazel checkpoint at `ef57a7deae`: all 172 targets passed in the
+reduced-concurrency run, including six explicitly selected manual canonical
+targets. 172 executed and 0 were cached; the run took 1324.52
+seconds with 1,332 unchanged tracked inputs. The first run passed 171 targets
+and failed one worker fixture before action startup: the singleton's five-second
+leader wait expired. The unchanged-source rerun used one test process and one
+Rust test thread at a time. No timeout was extended. Both runs and the startup
+availability residual are retained in the
+[receipt](evidence/canonical-admission-checkpoint/manifest.json); passing under
+reduced concurrency does not prove load independence. The
+[previous checkpoint](evidence/canonical-construction-checkpoint/manifest.json)
+at `e6978139cf` remains a separate source boundary. Later changes do not inherit
+these full-run totals.
 
 The latest full Cargo workspace run remains `4876ddd48c`: 2,007 tests passed with
 zero failures and eleven ignored cases. That checkpoint's 166 Bazel targets also
@@ -957,9 +963,41 @@ Neither pair can be substituted. Reopen must validate persisted limits,
 membership, supported format/admission history and the canonical clock contract;
 readable ownership records do not supply those facts. Descriptor-to-Singleton
 construction and explicit listener wire ceilings now have separate implementations.
-Fixed CAS batch/traversal limits now have a separate implementation. AC value
-decoding and combined service admission still need their own bounds before a
-service memory claim is justified.
+Fixed CAS batch/traversal limits and fixed AC raw/encoded value bounds now
+have separate implementations. Combined service admission still needs its own
+bounds before a service memory claim is justified.
+
+Captured Action/Command reads and committed cache lookup/publication effects now
+select digest context explicitly. Three actual HTTP/2 fixtures cover SHA256 and
+BLAKE3, including publication replay after a singleton restart; a fourth direct
+Execution call proves that omitted digest selection ignores an ambient BLAKE3
+context. The author retained two compiled original-runtime runs failing all four
+fixtures, five detected compiled context-removal faults, and restored regression
+results. Root independently reproduced three original failures and passed the
+four final fixtures plus server build with 565 unchanged inputs. Its later AC
+integration also passed all 24 canonical-store cases. The
+[receipt](evidence/authority-storage-hash-context/manifest.json) retains all author
+binaries, source reviews and root evidence. Replay retained live filesystem
+capabilities; it does not prove cold reconstruction, process quiescence or power-loss
+recovery. The separate cache-endpoint process-default audit remains open: legacy
+global defaults and ByteStream forwarding still need consistent fixed-role handling.
+
+Fixed client AC now admits at most 1 MiB of raw stored value and encoded
+ActionResult, rejects oversized updates before storage, requires channel EOF and
+producer success, and applies a cooperative 30-second deadline. It keeps opaque
+Action keys and mutable M4 publication semantics. Fixed handlers bypass direct
+GrpcStore forwarding and disable inline output requests; the legacy constructor
+is unchanged. Twelve compiled root fixtures failed against the original behavior,
+and the canonical response fixture separately exposed late encoder rejection.
+Two earlier fixture compile failures and one mistaken target label remain labeled
+as non-executions. The author detected eight compiled faults, passed strict lint
+and regression checks, and exercised four explicit mTLS cases. Root passed all
+ten selected targets with 175 test passes, one normally ignored TLS fixture,
+server build and 566 unchanged inputs; a fresh explicit TLS run passed its four
+cases. The [receipt](evidence/authority-ac-admission/manifest.json) keeps these
+source boundaries distinct. Complete range delivery remains a backend premise;
+upstream decoding, spare allocation, global concurrency and physical IO are not
+bounded by this handler. Cancellation cannot undo an uncertain remote write.
 
 ## Next work and facts for the morning
 

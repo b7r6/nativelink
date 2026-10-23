@@ -1,0 +1,253 @@
+{
+  "scope": "Fixed authority Action/Command capture and committed effect digest namespaces; experimental runtime only",
+  "source_commit": "a0a6cbfc1e722066d280c2e645cdde1e6069a16b",
+  "author_runtime_commit": "5a489bfa1bfc155846bd7a2ea7877251ce7c5107",
+  "author_qualification_sha256": "c294fd83d463e62cd555fbb035f27f29d5be4f6fa6cd877e8c905219d817f98e",
+  "author_artifact_manifest_sha256": "2c113ba8d4e498f95018dbe4ca9b356a881b6e41e43240f115bb330eb4822a0f",
+  "author_archives": [
+    {
+      "path": "author-01.tar.gz",
+      "sha256": "f64e3e917ec9eac281724714f9beec51ccf4bda878b6db81c81ee64d8450a19d",
+      "bytes": 5979715,
+      "files": {
+        "service-clippy.log": "9b365c5cd076afe666f016213a8a545dcfede6a95dd7e7c84a2412ab5ace42de",
+        "prefix-four-initial-manifest.json": "1699df75cb337c57d6498c0407ed4cfc595c57c6b7630d1dccc2274649a8f79c",
+        "preparation.json": "0834fa0fef614873be87c88ecd553b21f1293badf1719509f312779a8bb0ad68",
+        "independent-review/correction-addendum.json": "76966f959b128c7356cb7c4568e038fb79938a7942123c962d9d00440dd37533",
+        "prefix-source-manifest.json": "e45bad32e03e3793809650deef90f02f9e9ce5a3079e91d9c777ed045b982d1e",
+        "prefix-four-final-manifest.json": "4d986c0b2290dc71c2f9c845286d9e2b2e61c7c80c91f19924951e628bc14a34",
+        "final-verification-runner.log": "812c429052490db55d2acaa5b95204cb225d67694389ca6b2259a00ec8c33707",
+        "final-verification.json": "3831561686a71c3e4770897118fced0cdee7a5b696c73cc23fdf496ea918b664",
+        "fixed-four-initial.log": "9269153bc2d9ecd7fb188662cd2c36f12a04b57b362ba66e377e66b0e61aaff7",
+        "final-source-manifest.json": "51c803be60123a6a8ba53ff693977c91f729cb7454c2b10b259e079ef60907e0",
+        "canonical-clippy.log": "ac138df8f07b1fc81576192080f5275c20a8326f40fa1f3a6d32f0fadcab90bd",
+        "independent-review/ambient-default-addendum.json": "e043a822624a9eb627e95699a834a324b353eb65ae5bdc81ec1827f4d11b6f10",
+        "final-source/tools/canonical-store/BUILD.bazel": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+        "independent-review/source/tools/canonical-store/BUILD.bazel": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+        "prefix-four-final-source/tools/canonical-store/BUILD.bazel": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+        "prefix-source/tools/canonical-store/BUILD.bazel": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+        "run-final-verification.py": "80035bb45503275ab344b8d2e063e72f78197e5899df42bbfc4829bef9deeebc",
+        "independent-review/root-runtime-review.json": "2c0c2dba0913ae7338c0559aa169797456fae3f45ba6a67defde975b5abddcc9",
+        "hooks-four-tests-final.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+        "hooks-runtime.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+        "hooks-tests.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+        "hooks-four-tests.log": "0f020ab4ef34c41642788d0f44cb2de636bd9108d6ae657bbbc0881365baf8d8",
+        "independent-review/source/tools/canonical-store/Cargo.toml": "004a466abd5e4a8bdd777e0877ae8730536521de320012a27a644446602e71b4",
+        "independent-review/runtime-addendum.json": "e798855118c541c38cb49f5cf27727a833032ac98d86b5da02ae33a792141320",
+        "independent-review/source-manifest.json": "3a8fe1121f904939d0deed90fdb8eb59678b9fb389c8d9cb9c07542ef09b19c9",
+        "restored-canonical.log": "068be74abacd7aa2c38a482cd3e8cb29a3d1e68d6e54d448c2697a78e3506997",
+        "mutation-runner.log": "d2cef1b143f5d32e13028d62153d34339ab97ae4116a2e04dbd9a9e26cee4578",
+        "independent-review/ambient-default.patch": "69964be72eeda5192e24c219aaac2e18c54b18dab9bfd80cb619ecc9ab5d15e3",
+        "final-source/nativelink-scheduler/design/categorical/authority-storage-hash-context.md": "c94d91c923efa5aee7592a212badf628c0f3b791892964abcf706d4bf8fef21f",
+        "independent-review/runtime-source/nativelink-scheduler/design/categorical/authority-storage-hash-context.md": "c94d91c923efa5aee7592a212badf628c0f3b791892964abcf706d4bf8fef21f",
+        "mutants/results.json": "da4c400abf69512e6302c0d530d5ddd39812f2f9160f899971416164ee778c89",
+        "run-mutants.py": "faf3a5843e0a9108a7e122029476e28ed7be2ebcbb3df3df138913a4a4b59243",
+        "runtime-initial.patch": "5d4d11a969b27c382f515a6e59e1d8e95e3086d8cbd0bce1ac36ebe152a2bfe3",
+        "independent-review/source/nativelink-macro/src/lib.rs": "21e557cc3cd4a85718a71aa5d289cf88310ea8f4b20913e0157694b81b347bc4",
+        "independent-review/source/nativelink-util/src/task.rs": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+        "independent-review/review.json": "f85789bef57f19305da8604d5eb1be0e1c55dbf24c15704a9112ef7b146f2775",
+        "restored-service.log": "587746dc4e6905b7008aee48f6b6ddaa085f09d8595e95eb2fa7d1b2ed831f41",
+        "qualification.json": "c294fd83d463e62cd555fbb035f27f29d5be4f6fa6cd877e8c905219d817f98e",
+        "independent-review/source/nativelink-service/src/ac_server.rs": "c531b0f48260d446784e0bb2ec072fcf1b4f43853d80f9dc8454142844beac58",
+        "independent-review/runtime.patch": "4aa037b8e66840d528862bd9466b05b71fa14b3c41bf38ab9d0cb87d194b4dca",
+        "independent-review/source/nativelink-service/src/authority_listener.rs": "237c78482ca8136fcb443b6fb314f59cca4c0a457b97490c885ca90c5806d7c2",
+        "final-source/nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+        "independent-review/root-reviewed-source/nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+        "independent-review/source/nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+        "independent-review/source/tools/canonical-store/src/tests/listener/hash_context.rs": "1b09a568145500317a30d1edf249a785c9dcf95dc66b4b61336e998a8cf8e62d",
+        "independent-review/pending-correction/tools/canonical-store/src/tests/listener/hash_context.rs": "af6638359e52b49f2a817f6e108286c698ee55d873d7b917a72d869146790255",
+        "independent-review/corrected-source/tools/canonical-store/src/tests/listener/hash_context.rs": "84f20971d85397d40a27c3245fb8b4dfc99d0cb71b0b751168d6f5dbed3c80de",
+        "prefix-source/tools/canonical-store/src/tests/listener/hash_context.rs": "84f20971d85397d40a27c3245fb8b4dfc99d0cb71b0b751168d6f5dbed3c80de",
+        "prefix-four-initial-source/tools/canonical-store/src/tests/listener/hash_context.rs": "fd951e85060e49ff96f6a512a820ec6144dcd4d9aff35ab4715f85286ba1ec45",
+        "final-source/tools/canonical-store/src/tests/listener/hash_context.rs": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+        "independent-review/ambient-default-source/tools/canonical-store/src/tests/listener/hash_context.rs": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+        "independent-review/root-reviewed-source/tools/canonical-store/src/tests/listener/hash_context.rs": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+        "prefix-four-final-source/tools/canonical-store/src/tests/listener/hash_context.rs": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+        "independent-review/source/tools/canonical-filesystem/src/capability.rs": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+        "independent-review/test-commit.patch": "f908143c3877f4409bf6cb0e079a3c41e5cbad96c4f4f5e4c945fe4deae5b5cf",
+        "final-source/tools/canonical-store/src/tests/listener.rs": "cccde05a2e3c5554eac11dfcf862ec60644b65f428ab6375e4a30bc0c5926b03",
+        "independent-review/source/tools/canonical-store/src/tests/listener.rs": "cccde05a2e3c5554eac11dfcf862ec60644b65f428ab6375e4a30bc0c5926b03",
+        "prefix-four-final-source/tools/canonical-store/src/tests/listener.rs": "cccde05a2e3c5554eac11dfcf862ec60644b65f428ab6375e4a30bc0c5926b03",
+        "prefix-source/tools/canonical-store/src/tests/listener.rs": "cccde05a2e3c5554eac11dfcf862ec60644b65f428ab6375e4a30bc0c5926b03",
+        "final-source/nativelink-scheduler/src/authority/request.rs": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+        "independent-review/root-reviewed-source/nativelink-scheduler/src/authority/request.rs": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+        "independent-review/source/nativelink-scheduler/src/authority/request.rs": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+        "final-source/tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+        "independent-review/root-reviewed-source/tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+        "independent-review/source/tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+        "prefix-four-final-source/tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+        "prefix-source/tools/canonical-store/src/lib.rs": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+        "independent-review/source/tools/canonical-store/src/tests.rs": "f8fd728232203e1aa9e631ff3dad9eb119abbd9048de9b7e53b57d2339cd49cc",
+        "independent-review/source/nativelink-service/src/bytestream_server.rs": "1e0a2643859528b3d624bc0dc320d5eea292b50b3e5a954b7009db08dcfae495",
+        "independent-review/source/nativelink-scheduler/src/authority/mod.rs": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+        "independent-review/source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+        "prefix-four-final-source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+        "prefix-four-initial-source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+        "prefix-source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+        "mutants/lookup/authority_server.rs": "42ca55b4bda52dabca0055496739ec927eedb89ce3dd0c4b7db00720a73864a8",
+        "mutants/publication/authority_server.rs": "28e564f8c7442580fc8a6efa0ec100a662929a363d692bab84ce4c2097ef5c29",
+        "mutants/capture_action/authority_server.rs": "63b85d4bfcb5ebb6d68dc004b320d3de2e43a15817a844035da171d9dcd46c59",
+        "mutants/capture_command/authority_server.rs": "43cc52a7188c421e763fc1cfdf7d056bb9bb8e261921861dd3df4f6a77684d35",
+        "final-source/nativelink-service/src/authority_server.rs": "c873d2662e82e46aadc4e7dd65f43b2e9062439e176adbc9c305b0a8670fe688",
+        "independent-review/root-reviewed-source/nativelink-service/src/authority_server.rs": "c873d2662e82e46aadc4e7dd65f43b2e9062439e176adbc9c305b0a8670fe688",
+        "independent-review/runtime-source/nativelink-service/src/authority_server.rs": "c873d2662e82e46aadc4e7dd65f43b2e9062439e176adbc9c305b0a8670fe688",
+        "mutants/unknown_ambient/authority_server.rs": "1ee0449fba8eb1824850536bccc0f79f6c5268a849f0bc71681597025768a0cc",
+        "mutants/unknown_ambient/run.log": "660c4772c86bb85346161e91a8764f89e5d819d7451394e0d0dd919362bb391e",
+        "mutants/capture_action/run.log": "ee271a8b4457fda549d2c269ef2ccc8407def8be489e9d2ae1b15ce5234d734a",
+        "mutants/capture_command/run.log": "4e02c28f499358759f84d8e1ed9f31887986dd34f2b1ecb53bc357fe8231864b",
+        "mutants/lookup/run.log": "6bacc31e0db107578b01b37bc6fd8df5aa6817023079b9d336e040f0d953ee58",
+        "mutants/publication/run.log": "fc5924ab0aa28630e235fef2390f3ff3c989c95a2418a0c2c2d611097679601e",
+        "prefix-four.log": "db8152e0597e685f418444ebf6d9cf61992f0431ffd50514a4a15c448762e60f",
+        "prefix-four-final.log": "92c0b21d9a6762e5e431b5f64445091450878d9fd5bf3ec1b421a219d503c282",
+        "restored-binaries/nativelink_service-9e81d23c43a3497d": "ab5debb80cabd35c5ed990614ac07923413c0e719a0921569d74eff6904055af"
+      }
+    },
+    {
+      "path": "author-02.tar.gz",
+      "sha256": "647b4c871682aef3131e0d97d7452618ce681f4e3f5f536418e363ab70b8e248",
+      "bytes": 13751067,
+      "files": {
+        "prefix-four-final-binary": "aebd4a0baf96bafdb31f68415f0eaa74319d74bdacf26db79222de55857088eb",
+        "prefix-four-initial-binary": "4ee6c462919f243ce2ad27c5b765836c074a2adc51102d48d3110954656dbb2c"
+      }
+    },
+    {
+      "path": "author-03.tar.gz",
+      "sha256": "f080f934846dab94518f8c17acf4ba02a06886a898119fdfe91ec47b4eef2c5e",
+      "bytes": 13749701,
+      "files": {
+        "mutants/publication/test-binary": "f20be8adefee11ee090e0d0ad47620fd4393540fa497a4027669def8a5f884c4",
+        "mutants/lookup/test-binary": "b977c147301a44c455604b9a6df34cd1b7ceeb81c13c18e9cdc93ad8c889b96c"
+      }
+    },
+    {
+      "path": "author-04.tar.gz",
+      "sha256": "00713e74efd123bd82c385bde602fe9be12abb2cc5e2e6e4541f0c8b579e2328",
+      "bytes": 13750270,
+      "files": {
+        "mutants/unknown_ambient/test-binary": "9ef34bb0c808dadd6418b4fefb949ee1d01991871208a5d1c11c737b276b5fd7",
+        "restored-binaries/nativelink_canonical_store-a30d8c0f825535f5": "d199fc25abda290df136f4cd0d51df592bc44e0d47e08452cf1a4e37a23debc6"
+      }
+    },
+    {
+      "path": "author-05.tar.gz",
+      "sha256": "789e2b0e21669c4b38c3fc6b0052194a61c835385ac4af68fb3ccf55ef3b939b",
+      "bytes": 13751739,
+      "files": {
+        "mutants/capture_command/test-binary": "4bffbcd8d2846cc52203dff58f15aefc7d4aab7bf0b970fe4976f23115169c15",
+        "mutants/capture_action/test-binary": "d815f260063eceff3041a67424e2ca5bb9fba084f05bd6b6e78c3c3cfeb3a6e4"
+      }
+    },
+    {
+      "path": "author-06.tar.gz",
+      "sha256": "8a66098d45c32ffbe5b87d894bd6489c6387089676e6d8cfa1b8d808b1bb1389",
+      "bytes": 7649438,
+      "files": {
+        "restored-binaries/authority_listener_test-9cab74c1076d4950": "8a1a2e9ad6270d1770c64655fd2d111dfb2a728bee9ba513f2ae0cc9e105c42f",
+        "artifact-manifest.json": "2c113ba8d4e498f95018dbe4ca9b356a881b6e41e43240f115bb330eb4822a0f"
+      }
+    }
+  ],
+  "root_archive": {
+    "path": "root-integration.tar.gz",
+    "sha256": "eb70ccf072a2c8c750e2791f6b631600d4e5c3a503f7ed7f8ecdad083121a9ae",
+    "bytes": 791192,
+    "files": {
+      "author-root-difference.patch": "9ce333d0048f6c462f5d0e6670d7d93944d7d3821a88b5525c5f08db907741c7",
+      "author-root-source-comparison.json": "232630fdb1ce0837d43a643960eecdf9d30cc2b7e15cfae44205096e40df0f6f",
+      "baseline-command.json": "2a1028d83ff84a6730f28254af008f649f58f56e12ca89824c9fd9f9f43395ca",
+      "baseline-head.txt": "657cbc00a5d2a1fdd15f8f82f5953e4b68904aa6600bec7ebbc5edb529a2058a",
+      "baseline-sources-after.json": "0415f5a545f022a7086b6de12ebbba0e8dee4aed75499e87a8d0989cb1b47260",
+      "baseline-sources-before.json": "0415f5a545f022a7086b6de12ebbba0e8dee4aed75499e87a8d0989cb1b47260",
+      "baseline-testlogs/tools/canonical-store/canonical_store_test/test.log": "809ddd4b8a9d0319ee88777e97723515ee695dfe20d54830e8aeb014dd4ede92",
+      "baseline.log": "cc2c0e3eb599fb563b8ddff0848e9a56b8cfd85e9f13ea395c624b8521cd0f38",
+      "command.json": "0760edd26be29f9262eea41bf6836a5af5c784021bdc0ab60bcb4c8f021c5309",
+      "fixed-source-names.json": "05650a55363e889f0452215de94f51d8a6d484684ab1ef67d39d091216672ec0",
+      "head.txt": "89b84f5ee99f13dcc2341321dcc4f54e4f370fa7f172768e2df08910a3a14e23",
+      "initial-predicate-compile-failure/NOTE.txt": "f413faf64056e01da099a9e321c877448c13412c2c0ac02890655f4232a9cb46",
+      "initial-predicate-compile-failure/baseline-command.json": "2a1028d83ff84a6730f28254af008f649f58f56e12ca89824c9fd9f9f43395ca",
+      "initial-predicate-compile-failure/baseline-head.txt": "e11ebb7b4be8ce2bfc0024e6e39569cbebb53bcec6f8738b5ce48b3d25584f0e",
+      "initial-predicate-compile-failure/baseline-sources-after.json": "7b9c19d9bfdbc64e8b9e7a95e460de6b35c9542a69916c396f6083c40508d3ed",
+      "initial-predicate-compile-failure/baseline-sources-before.json": "7b9c19d9bfdbc64e8b9e7a95e460de6b35c9542a69916c396f6083c40508d3ed",
+      "initial-predicate-compile-failure/baseline-testlogs/tools/canonical-store/canonical_store_test/test.log": "6bc83727aa5ac78ef322c5754524fdbe209fdc5db4fd27172705701984d1c741",
+      "initial-predicate-compile-failure/baseline.log": "cab732be8eb64b1e67ee0de75f7140e4276ce66fc7eaef3e1f78af9ecc3bd4e5",
+      "initial-predicate-compile-failure/run-baseline.py": "e3529e05972eba682263fd830e28b0af96ee6dcd3fdc06fe976c0a8c129e68b5",
+      "integration.log": "8ea116b22b6d9086bf6383854e9e3e79c1dae72ec24a61b36f8372cb5126e378",
+      "run-baseline.py": "e3529e05972eba682263fd830e28b0af96ee6dcd3fdc06fe976c0a8c129e68b5",
+      "run-integration.py": "be1e45b41874c70d45e4283b567e9a2e44090181147b1be6ff2c201e567a1e70",
+      "source-names.json": "67fec6d9e047527a153d126138416210393deada89cebbc1cf54441d0a842f87",
+      "sources-after.json": "cbfdc65741cd291600bfa2ed77bb74617dbdffdbef9b5a6faf6f54f972bb890b",
+      "sources-before.json": "cbfdc65741cd291600bfa2ed77bb74617dbdffdbef9b5a6faf6f54f972bb890b",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "aeff6c33dd38b521a256b449a7db2e98873c00e377599fcae0fc090fad52c510"
+    }
+  },
+  "source_comparison": {
+    "tools/canonical-store/BUILD.bazel": {
+      "author_sha256": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+      "root_sha256": "811d14a91ac9dc97bf5209584204cc3ed2364e5a4a2dd7e08bc2b06bba98a516",
+      "same": true
+    },
+    "tools/canonical-store/src/tests/listener.rs": {
+      "author_sha256": "cccde05a2e3c5554eac11dfcf862ec60644b65f428ab6375e4a30bc0c5926b03",
+      "root_sha256": "82d13d2320fe83d807f88ab499153555eb5ab98c4d196e733c55f81aafb78268",
+      "same": false
+    },
+    "tools/canonical-store/src/tests/listener/hash_context.rs": {
+      "author_sha256": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+      "root_sha256": "3fe2db700e26b4aa943d7bdbbd9728a6f62d88884e3f8d75c56d23985ff04afe",
+      "same": true
+    },
+    "tools/canonical-store/src/lib.rs": {
+      "author_sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "root_sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "same": true
+    },
+    "nativelink-service/src/authority_server.rs": {
+      "author_sha256": "c873d2662e82e46aadc4e7dd65f43b2e9062439e176adbc9c305b0a8670fe688",
+      "root_sha256": "c873d2662e82e46aadc4e7dd65f43b2e9062439e176adbc9c305b0a8670fe688",
+      "same": true
+    },
+    "nativelink-scheduler/design/categorical/authority-storage-hash-context.md": {
+      "author_sha256": "c94d91c923efa5aee7592a212badf628c0f3b791892964abcf706d4bf8fef21f",
+      "root_sha256": "c94d91c923efa5aee7592a212badf628c0f3b791892964abcf706d4bf8fef21f",
+      "same": true
+    },
+    "nativelink-scheduler/src/authority/request.rs": {
+      "author_sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "root_sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "same": true
+    },
+    "nativelink-util/src/digest_hasher.rs": {
+      "author_sha256": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+      "root_sha256": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+      "same": true
+    }
+  },
+  "regression_baselines": {
+    "author": "Two compiled four-fixture runs each failed all4 with original runtime; initial and final formatted fixtures and both binaries retained. Three HTTP/2 cases fail first at BLAKE3 capture; later lookup/publication detection comes from separate compiled mutants. Fourth direct case proves Unknown ignores ambient BLAKE3.",
+    "root": "Three-fixture original-runtime baseline compiled after predicate Send+Sync correction and failed0/3. First compile failure and stale copied test log are archived and excluded from execution evidence."
+  },
+  "author_verification": {
+    "canonical_store_passed": 24,
+    "service_library_passed": 23,
+    "listener_passed": 15,
+    "ignored_tls": 1,
+    "compiled_mutants_detected": 5,
+    "strict_clippy": "Canonical --all-targets and service library/listener passed; frozen source restored and final tests rerun."
+  },
+  "root_verification": {
+    "focused_tests_passed": 4,
+    "executed_targets": 1,
+    "server_build": true,
+    "elapsed_seconds": 12.658,
+    "unchanged_inputs": 565,
+    "combined_AC_integration": "Later root ef57a7deae passed full24 canonical tests alongside fixed AC and worker suites; separately retained in authority-ac-admission receipt. Author worktree retains earlier AC late-encoding oracle."
+  },
+  "limitations": [
+    "Captured Action/Command reads and committed lookup/publication effects bind hash context individually; no persistence/protocol version change.",
+    "Three real plaintext HTTP/2 fixtures each cover SHA256/BLAKE3; fourth direct Execution call controls ambient hash context and is not another HTTP/2 case.",
+    "Replay uses real Singleton shutdown/reopen while filesystem capabilities stay alive. No power-loss, process restart, physical quiescence or cold-layout reconstruction claim.",
+    "AC keys remain opaque Action digests; mutable sink ordering retains M4 uncertainty.",
+    "Bounded read producer lifetime, combined admission, canonical assembly and deployment qualification are separate work. No milestone gate closed."
+  ]
+}
