@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Canonical namespaces expose ambient-hash mistakes hidden by MemoryStore.
+//! Canonical namespaces expose ambient-hash mistakes hidden by `MemoryStore`.
 //! The manual wire worker supplies a candidate, not a process-quiescence proof.
 
 use std::sync::atomic::Ordering;
@@ -139,7 +139,7 @@ async fn terminal(operations: &mut Streaming<Operation>) -> ExecuteResponse {
                 let Some(operation::Result::Response(response)) = operation.result else {
                     panic!("expected a terminal ExecuteResponse");
                 };
-                break ExecuteResponse::decode(response.value).unwrap();
+                break ExecuteResponse::decode(response.value.as_slice()).unwrap();
             }
         }
     })
