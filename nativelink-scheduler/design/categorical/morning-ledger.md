@@ -888,6 +888,21 @@ the full graph and automatic memory retry. This explicit gap remains open;
 bounded marked reports received by the coordinator cannot silently become
 ordinary completions when their committed representation is too large.
 
+Singleton construction now checks recovered membership before admission and
+before Raft can replay or mutate the journal. It projects the committed replay
+interval by index, refuses pending membership changes and requires exactly the
+local voter with no retained learners. Saved snapshots must be compatible with
+the recovered frontier; older snapshots from a committed three-to-one history
+remain admissible. The old implementation failed seven new recovery cases and
+the descriptor retry case; the fixed implementation passed 98 scheduler units
+and twelve descriptor cases. Five compiled faults were detected, and the restored
+integration passed eleven Bazel targets with 554 unchanged inputs. The
+[receipt](evidence/singleton-membership-preflight/manifest.json) retains the
+initial format failure and the guard removal masked by final-position checking.
+This is constructor admission: public experimental Raft handles can still change
+membership afterward. Synthetic histories do not certify an actual migration,
+historical quorum decisions or every internal index in an older snapshot.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
