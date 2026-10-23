@@ -230,14 +230,15 @@ async fn grpc_update_refuses_before_upstream_write_and_returns_original_bounded_
             .into_inner(),
         accepted
     );
-    let seen = upstream.writes.lock().unwrap();
-    assert_eq!(seen.len(), 1);
-    assert_eq!(seen[0].action_result.as_ref(), Some(&accepted));
-    assert_eq!(
-        seen[0].digest_function,
-        algorithm.proto_digest_func() as i32
-    );
-    drop(seen);
+    {
+        let seen = upstream.writes.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].action_result.as_ref(), Some(&accepted));
+        assert_eq!(
+            seen[0].digest_function,
+            algorithm.proto_digest_func() as i32
+        );
+    }
     drop(server);
     rpc.close().await;
 }

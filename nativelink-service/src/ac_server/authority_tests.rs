@@ -430,9 +430,8 @@ async fn excess_cancels_pending_producer_without_waiting_for_eof() {
     assert_eq!(spy.cancelled.load(Ordering::Relaxed), 1);
 }
 
-#[nativelink_test]
+#[nativelink_test(start_paused = true)]
 async fn fixed_timeout_cancels_incomplete_range() {
-    tokio::time::pause();
     let spy = Arc::new(Spy::default());
     spy.put(
         147,
