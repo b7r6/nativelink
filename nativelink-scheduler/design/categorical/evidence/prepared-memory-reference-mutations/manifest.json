@@ -1,0 +1,149 @@
+{
+  "artifacts": {
+    "baseline.log.gz": {
+      "sha256": "d59a2d8ab269d88ce7716cad4e0d03dd1472ed9d34f2c9db5f91dd27b78b9605",
+      "uncompressed_sha256": "5f7261216050d2b8065c80870be89b54f10010d0bdff2f2c57fe9fbf6bf929c8"
+    },
+    "drop_stage_protection_on_retry.log.gz": {
+      "sha256": "4249907620e29172a7d6622ddcd4d9f8b3af6d08f013793d62654b65818b0170",
+      "uncompressed_sha256": "528d4cc1426fcdeb3076906c639ec404817ac203ceeb53ff1299cec9ef84bed3"
+    },
+    "ignore_catalogue_revision.log.gz": {
+      "sha256": "333ed0aece61850e90108d89275894d55af3ce2df704a00cd300402db3172ce3",
+      "uncompressed_sha256": "454432364ff7714ee1485bd7a41021e5a5b0089b9aefe9219d94f2c4241ea9fe"
+    },
+    "ignore_invalid_replay_steps_and_encoding.log.gz": {
+      "sha256": "0944dcb064d46a5214da69be536613bccb75713c7e07a63a66508e4682acaeb4",
+      "uncompressed_sha256": "3afc57ec5295251e58deff7f2d3e846e2ad842ff3b63c0c131f3050bf7afe781"
+    },
+    "mutate_reference.py.gz": {
+      "sha256": "fa3a844fb806560f3a4d6d5d5a412c536ea8647461e40f97da3c3b2d4b4d6788",
+      "uncompressed_sha256": "366cfdccbf99f8034ed022006b3210708656e367cff748a956429b86a8e556c8"
+    },
+    "mutation-runner.log.gz": {
+      "sha256": "8eb1ea0d31a5f70931ea1b869a9374eeb836639d25d8d75f65cf13d976ac8875",
+      "uncompressed_sha256": "3c59c3ba6848609f98b4397738aa82828beafb42d3c45c5ffbf58ce97274d13c"
+    },
+    "protect_previously_cancelled_operation.log.gz": {
+      "sha256": "95f689b196f78ebdef642cc15b101ed34e70db3cfb36083ca423e0e29d046b00",
+      "uncompressed_sha256": "c057b66b381a81152e11f8101de59d2696be8cacebf44cd99a65c091fbe82f11"
+    },
+    "replace_observed_capacity_with_large_worker.log.gz": {
+      "sha256": "06121be50b644e6df0b2d263cf80822a1d030ae3cc8fa4606ec4d4e5aacc4a93",
+      "uncompressed_sha256": "ee9b5df0e3479d1c4c1758454cfcc534b576aba96a1b7f8755a7925fe4e3c135"
+    },
+    "replace_terminal_reason_with_missing_growth.log.gz": {
+      "sha256": "0e2ed23b6b04f6ff794f2d5ff16159e913baa9933baf7deb271e28d51da8c532",
+      "uncompressed_sha256": "20fdd69e97c8cfe1885ddc1c84be512762a333ea03a49ca3c848ce3082d69409"
+    },
+    "restored.log.gz": {
+      "sha256": "052eb075586fcd24c36c814781fc9a57205e53a06770dd425f37cbb539970915",
+      "uncompressed_sha256": "8911b1b7fab46d2f213e0d6404526f1bbe3af5fbca5e7c5b1cb7731203079298"
+    },
+    "results.json.gz": {
+      "sha256": "3101395e3c9ac57d8377a13beff9158f5f0cd4a6a03ca6303422f063edd0a5c0",
+      "uncompressed_sha256": "5b74531d64271d783fe09872c4246776b89d5ee3eebf7dc2b228ed165ecae77d"
+    }
+  },
+  "case_composition": {
+    "inherited_m1_cases": 7,
+    "original_prepared_memory_cases": 17,
+    "post_freeze_contract_audit_cases": 5
+  },
+  "commit": "d9be5a0d8ed56eb6be2dbe338f3daa483f0e34d6",
+  "detection_notes": {
+    "ignore_invalid_replay_steps_and_encoding": "One selected faulty recovery policy requires two source edits: ignore failed steps and skip canonical-history equality. The missing-preparation corruption then restores when the case requires refusal.",
+    "replace_terminal_reason_with_missing_growth": "The inconsistent final reason triggers the model terminal-operation consistency refusal; the valid-history case fails on unexpected Invalid. It does not demonstrate that a wrong reason escaped into accepted state."
+  },
+  "faults": [
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "ignore_catalogue_revision.log.gz",
+      "mutated_source_sha256": "fc7f5733f9c3805fda4eed48ab7fa91470d0ac1b6590ea104853b3eda37c055b",
+      "name": "ignore_catalogue_revision",
+      "test": "incomplete_stale_retired_and_unready_preparation_cannot_refund_or_finalize",
+      "test_executable_sha256": "c5035312f8976f925bd7fdeeaae8891267f27532a5c776f42b8e3df1895569e8"
+    },
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "replace_observed_capacity_with_large_worker.log.gz",
+      "mutated_source_sha256": "b27c5eddc8ca3da6c37ac76bc2f97f4f48f5bd87ffdc2c79e2198eec2efbe82f",
+      "name": "replace_observed_capacity_with_large_worker",
+      "test": "preparation_never_caches_capacity_decision_in_either_direction",
+      "test_executable_sha256": "7b42770be62da2335b9d593ae20fd25025baa6dec38d7edf85cf11427409761d"
+    },
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "replace_terminal_reason_with_missing_growth.log.gz",
+      "mutated_source_sha256": "88017921076a49db037394b700a983a26306313d61dd2378d15a1140e8bbeb07",
+      "name": "replace_terminal_reason_with_missing_growth",
+      "test": "all_memory_terminal_reasons_preserve_original_graph_response",
+      "test_executable_sha256": "85e1be44d2f509d8d6ebbd22be182b7a410cd4ab857856dc910cac52ae199467"
+    },
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "protect_previously_cancelled_operation.log.gz",
+      "mutated_source_sha256": "ac36695c00b066da13d871c9843470d1ee98cc54559dcf42b953099c6ea363de",
+      "name": "protect_previously_cancelled_operation",
+      "test": "graph_final_uses_exact_response_live_operations_and_no_ac_for_both_algorithms",
+      "test_executable_sha256": "16653123a28ead0ae7f8f70eb05e0642d7f6bff0401989b16767d6b59da57740"
+    },
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "drop_stage_protection_on_retry.log.gz",
+      "mutated_source_sha256": "df01b21b00bdb47171ae9fe556845bb8836ff687da167dd755de556eec35c11b",
+      "name": "drop_stage_protection_on_retry",
+      "test": "prepared_retry_then_no_graph_final_retains_stage_without_invented_graph_root",
+      "test_executable_sha256": "3355fd8f24c6f6ab4a14553593c71197dddcfb39a622858d2126de1903a12197"
+    },
+    {
+      "detected": true,
+      "exit_code": 101,
+      "log": "ignore_invalid_replay_steps_and_encoding.log.gz",
+      "mutated_source_sha256": "749bcc7899749c9d2b6eae50b218767091c1d8ea05d6697156e66b02dad437f0",
+      "name": "ignore_invalid_replay_steps_and_encoding",
+      "test": "restore_refuses_torn_history_conflicting_identity_downgrade_and_oversize",
+      "test_executable_sha256": "d6b01deb7df828e83451141c5c109ae1bbb5ba3dd501f2b904d97569cec3ccb6"
+    }
+  ],
+  "format": "nativelink-prepared-memory-reference-mutation-receipt-v1",
+  "limitations": [
+    "Selected semantic faults qualify the independent reference cases only; they are separate from candidate implementation mutation evidence.",
+    "Six selected faults do not define a general mutation score or prove completeness.",
+    "Baseline includes five post-freeze contract repairs; original oracle and audit evidence remain separate and unchanged.",
+    "No differential agreement, production activation, history feature 3, real RPC, provider I/O or deployment qualification is claimed.",
+    "Existing public finite alphabet, fixed operation deadline and replay-history recovery limits continue to apply."
+  ],
+  "original_independent_reference_freeze": "8b0dc3f3bf41b4027e4d05d70f5414830d228bce",
+  "qualified_successor_freeze": "d9be5a0d8ed56eb6be2dbe338f3daa483f0e34d6",
+  "reproduction": {
+    "command": "python3 mutate_reference.py --worktree <isolated-worktree> --output <evidence-directory> --cargo <cargo-1.97.1> --target <coordinated-warm-target> --reference-sha256 adeaf36e9e447a37ac4dc5b3a643d5f85061271ee6e833b908daa4261536e687 --cases-sha256 eda05e2b2b935b2d66251d7dc4bf139b98ef74fd4698a86032609c4f513a2369",
+    "details": "results.json.gz contains exact commands, patches, log hashes, executable hashes and elapsed times; the runner checks source and case hashes before any mutation and restores source in finally.",
+    "environment": {
+      "CARGO_INCREMENTAL": "0"
+    },
+    "harness": "mutate_reference.py.gz, decompress and run with an isolated clean worktree at qualified_successor_freeze"
+  },
+  "result": {
+    "baseline_passed": 29,
+    "compiled_faults": 6,
+    "compiler_failures": 0,
+    "detected_faults": 6,
+    "restored_passed": 29,
+    "source_and_cases_restored_exactly": true,
+    "surviving_selected_faults": 0
+  },
+  "sources": {
+    "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "nativelink-scheduler/tests/prepared_memory/audit_tests.rs": "5926c8960fdaa86fc79cae6b499cc7ae310271015d2510bd2b8ed7dade306286",
+    "nativelink-scheduler/tests/prepared_memory/cases.rs": "eda05e2b2b935b2d66251d7dc4bf139b98ef74fd4698a86032609c4f513a2369",
+    "nativelink-scheduler/tests/prepared_memory/reference.rs": "adeaf36e9e447a37ac4dc5b3a643d5f85061271ee6e833b908daa4261536e687",
+    "nativelink-scheduler/tests/prepared_memory/types.rs": "24e9e0d603dd4940180c20c2751058a5733c555078c49b5025d5676072aca4ba",
+    "nativelink-scheduler/tests/prepared_memory_reference_test.rs": "3c4c21f588c2542e7a75098cb08185869f6d40b2baeb1969a3812f51c4ac3db0"
+  }
+}
