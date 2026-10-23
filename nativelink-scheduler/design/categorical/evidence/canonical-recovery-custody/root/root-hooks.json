@@ -1,0 +1,37 @@
+{
+  "full_hooks_corrected_exit": 0,
+  "selected_files": 65,
+  "first_attempt": "Vale rejected the documentation word mutexes; rephrased to proposal lock. All runtime/fixture checks passed in both attempts. No hooks skipped.",
+  "sealed_packets": [
+    {
+      "directory": "canonical-recovery-custody/author",
+      "sealed_files_checked": 18,
+      "all_unchanged_after_hooks": true
+    },
+    {
+      "directory": "temporal-terminal-checkpoint",
+      "sealed_files_checked": 33,
+      "all_unchanged_after_hooks": true
+    }
+  ],
+  "logs": [
+    {
+      "path": "nativelink-custody-checkpoint-root-hooks.log.gz",
+      "source_sha256": "ab01cc43ff265e57e9058fcb06560490a1dbf12f2f7a4f94fee36dc7e76aff4d",
+      "archive_sha256": "0ba63d77397b955193fbc633873a1e7130bda581fa94f70405cf253559852154"
+    },
+    {
+      "path": "nativelink-custody-checkpoint-root-hooks-corrected.log.gz",
+      "source_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "archive_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d"
+    }
+  ],
+  "configuration_receipt": {
+    "source_derivation": "/nix/store/5wlvzpybb1f0naya03bf0jqxsmj6ii96-pre-commit-config.json.drv",
+    "expected_store_output": "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+    "generated": "/tmp/nativelink-current-precommit-config.json",
+    "sha256": "305c44c7245c0c451b3071ec592f73e31163aeea51e8d3d29380e27b62eb6e3d",
+    "method": "Executed exact declared text generator (two header lines + jq . on rawJSON) using installed jq, without rebuilding absent Nix build-time dependencies. No hook entry/filter/value altered.",
+    "missing_hook_commands": []
+  }
+}

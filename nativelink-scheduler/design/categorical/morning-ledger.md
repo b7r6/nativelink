@@ -18,7 +18,7 @@ Their receipts separate independent source review, original failures, author
 fault controls and root integration. Production construction, combined admission
 and the complete canonical clock contract remain open.
 
-Latest full Bazel checkpoint at `ef57a7deae`: all 172 targets passed in the
+Earlier full Bazel checkpoint at `ef57a7deae`: all 172 targets passed in the
 reduced-concurrency run, including six explicitly selected manual canonical
 targets. 172 executed and 0 were cached; the run took 1324.52
 seconds with 1,332 unchanged tracked inputs. The first run passed 171 targets
@@ -31,6 +31,19 @@ reduced concurrency does not prove load independence. The
 [previous checkpoint](evidence/canonical-construction-checkpoint/manifest.json)
 at `e6978139cf` remains a separate source boundary. Later changes do not inherit
 these full-run totals.
+
+The latest full attempt at `092d570ab9` executes all 174 targets without cached
+test results: 173 pass and the 28-case authority-format target reaches its
+60-second timeout after 27 cases pass. The unchanged focused rerun passes all
+28 cases in 40.9 seconds under the same timeout. All 174 targets therefore have
+passing executions across the two attempts; the full attempt itself is not green.
+The [sealed checkpoint](evidence/temporal-terminal-checkpoint/package.json)
+retains both raw attempts, all 1,354 exact source inputs, and fourteen selected
+executables matched against BEP hashes. Completed Rust summaries across these
+attempts contain 2,374 passes and eleven ignores; the 27 partial timeout cases
+are excluded from that count. The server builds, but its executable is not
+archived. The original root-label log-copy omission and subsequent supplementary
+copy remain explicit. Timing under concurrent work is still a residual.
 
 The later focused checkpoint at `d1c304281b` passed all eight selected targets
 and the server build: 303 Rust test passes, one normally ignored TLS case,
@@ -1169,11 +1182,15 @@ detections. Root's combined twelve-target run executes 421 passing Rust tests,
 with two ignored, and builds the server. The later fixture-only correction passes
 45 overlapping listener tests and strict service checks.
 
-Recovery custody remains the next boundary. Actual state-machine and spawned
-snapshot fixtures demonstrate that core shutdown can finish while storage work
-retains the journal and namespace locks. A private database drain is being
-qualified before introducing a supervised recovered owner. This does not change
-the existing inert release API or establish a serving runtime.
+The [private recovery custody helper](canonical-recovery-custody.md) is now
+qualified. Actual state-machine and snapshot fixtures demonstrate that core
+shutdown can finish while storage work retains the journal and namespace locks.
+The helper waits for sole database ownership and final blocking destruction.
+Twelve fixtures and two compiled faults qualify that boundary; the combined root
+run executes five targets with 258 passes, one ignore, and a successful server
+build. This source boundary leaves the existing inert release API unchanged.
+Permanent supervision and the recovered clock are being qualified separately;
+the helper alone does not make caller cancellation safe or establish serving.
 
 ## Next work and facts for the morning
 

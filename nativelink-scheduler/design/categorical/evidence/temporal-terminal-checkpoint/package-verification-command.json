@@ -1,0 +1,7 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-temporal-terminal-checkpoint-package/packet.py"
+  ],
+  "exit_code": 0
+}

@@ -1,0 +1,14 @@
+{
+  "package_sha256": "7a1d27188d18383f086541054343b809033fcc3d29d61b25284372a078804d10",
+  "seal_sha256": "56ecb9e47f4c2a62bf5da5b7a5fc722235a190e1a2a8219ca81b488d1a2d7072",
+  "copied_files": 33,
+  "all_copied_bytes_match": true,
+  "command": [
+    "python3",
+    "nativelink-scheduler/design/categorical/evidence/temporal-terminal-checkpoint/packet.py"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"files\": 1576,\n  \"unique_blobs\": 1554,\n  \"archives\": 22,\n  \"total_original_bytes\": 993085339,\n  \"result\": \"Every archive, blob, original path, size and mode mapping verified.\"\n}\n",
+  "stderr": "",
+  "scope": "Independent root verification of complete sealed checkpoint archive contents without Rust execution. Original173PASS1TIMEOUT and unchanged focused28PASS remain distinct attempts."
+}

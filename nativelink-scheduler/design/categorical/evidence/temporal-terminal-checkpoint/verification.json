@@ -1,0 +1,920 @@
+{
+  "reviewer": "/root/scheduler_review",
+  "kind": "External independent evidence packaging; no new execution or repository edits",
+  "source_commit": "092d570ab9708b360bb4514bfddeb96e121a5e4c",
+  "tracked_inputs": 1354,
+  "four_source_snapshots_equal": true,
+  "all_copied_git_blobs_match_snapshots": true,
+  "attempts": [
+    {
+      "path": "attempts/temporal-terminal-checkpoint",
+      "exit_code": 3,
+      "target_status": {
+        "PASSED": 173,
+        "TIMEOUT": 1
+      },
+      "original_test_logs": 173,
+      "supplemental_dummy_test_log": 1,
+      "completed_rust_summaries": 171,
+      "completed_rust_counts": {
+        "passed": 2346,
+        "failed": 0,
+        "ignored": 11
+      },
+      "format_individual_ok_before_timeout": 27,
+      "format_timeout_seconds": 60
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint-format-rerun",
+      "exit_code": 0,
+      "target_status": {
+        "PASSED": 1
+      },
+      "test_logs": 1,
+      "rust_passed": 28,
+      "rust_failed": 0,
+      "rust_ignored": 0,
+      "format_timeout_seconds": 60
+    }
+  ],
+  "conclusion": "All 174 distinct targets have a passing result across two attempts on the identical recorded 092 source boundary. The full attempt was 173 PASSED plus 1 TIMEOUT and exit 3; it was not a fully green workspace run. The unchanged focused rerun passed the format target with 28 Rust tests under the same 60-second limit. No cached test results were reported in either BEP.",
+  "counting": "2374 completed Rust test passes across complete summaries in the two attempts, plus 11 ignored. The 27 individual ok lines from the timed-out format attempt are preserved but not added to that total.",
+  "selected_artifact_count": 14,
+  "considered_but_unavailable": [
+    "//:nativelink"
+  ],
+  "limits": [
+    "This checkpoint predates cleanup helper integration and recovered clock runtime, and does not qualify those later changes.",
+    "Only selected executable artifacts are archived; all 174 test executables are not claimed preserved. The original server ELF was overwritten and is not included.",
+    "Original recorder omitted the root dummy test log. Its current retained log and XML are supplemental, with post-hoc provenance and no claim of contemporaneous output digest.",
+    "The 1354 snapshots cover tracked repository inputs except prior categorical evidence; external dependency/toolchain bytes are outside this source-copy boundary.",
+    "No diagnosis of the original format timeout is asserted. A passing isolated rerun does not erase it."
+  ],
+  "log_receipts": [
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-config/doc_test/test.log",
+      "sha256": "a91a42eacc1a64db4234ce1ee90249c822e679ecefc65c45a18bbc1712b1104d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-config/integration_tests/deserialization_test_test/test.log",
+      "sha256": "b17f7620790214041e4764d9ae1d5a981e370ad83803560a59d6b81e3629e5f0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-config/integration_tests/duplicate_servers_test_test/test.log",
+      "sha256": "d37ab90e9f918ccb2b7e492191bb53c3ed9a92b792972e8cbf909d2180bf36fe",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-config/integration_tests/json5_test_test/test.log",
+      "sha256": "7c37bc261f8379d15e51b79fb54a9aa35d6f32be5b22569502380f171cc24c96",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-config/unit_test/test.log",
+      "sha256": "5adc4df46bb786601e81a479a0b0fee505820f9fcc89bcd724bff72f9f6f2341",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-error/doc_test/test.log",
+      "sha256": "c19be1efff77065bc972cf73d781f25e2f83cbe7b3aa0b5a3ac72c5443c32d00",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-error/integration_tests/error_tests_test/test.log",
+      "sha256": "1f055c23f6dd5aacde88b1ce87b6d53deaeb2ffb19cfb6c4bb49550547ae91e1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-error/integration_tests/lib_tests_test/test.log",
+      "sha256": "2112581161fee915427de9f84a5bd120520c2d46a0e2dd85d6c1e1e6f963a58e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-error/unit_test/test.log",
+      "sha256": "e0994e9706af1e537cf833c70f8b1cd5f4956f1a611ca2143299593af770058b",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-macro/doc_test/test.log",
+      "sha256": "9dacd430684dcc2e3fe7ae18716db04840dc811ed395cdb9a0ef42bfc1cd5839",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-macro/unit_test/test.log",
+      "sha256": "dd2706d69508cd9953250289c18669e159f2a07ccc51020d5a41a007fe51678e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-metric/doc_test/test.log",
+      "sha256": "0ce05f09c5867702bb46128d073f10df8d60ee095de8d200dd02e502088392e0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-metric/nativelink-metric-macro-derive/doc_test/test.log",
+      "sha256": "3fe40fa04b84c3364d083841dbee6db21bcac42d26244456f8337ee24afdb5d1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-metric/unit_test/test.log",
+      "sha256": "c94baaeebd6c7c5b59c1a043833a3ccd48faebd34a22f941ae2d41a3d9cfa757",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-proto/update_protos_test/test.log",
+      "sha256": "68252d2f52e68790edd4c57582e6dbe361418f63aa31eb75c3f3c4b33952d9e6",
+      "complete_rust_summaries": 0
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-redis-tester/doc_test/test.log",
+      "sha256": "b066d9637954fb2409dc733712ea301d0807ea639ba8e266098d82cdb49d7148",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-redis-tester/unit_test/test.log",
+      "sha256": "5b26d947ce74c43b04349daad0589eee2db568e02a39323f955fede5e2a5a656",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/accepted_history_differential_test/test.log",
+      "sha256": "622e09e540f749aeed4db8817e32bcfdaa0d9f45c7c945f9a70b0013ff5569b2",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/accepted_history_reference_test/test.log",
+      "sha256": "b6c281ea5be486b3894074c10fe38687a3d4877e0e7d060af678d5bd626aa0e4",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/activation_inventory_test/test.log",
+      "sha256": "b6d1c9b6633f45e6e8a9cb16ee06fa0309a36a93fe32234249092c1538807069",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/authority_snapshot_capacity_test/test.log",
+      "sha256": "74867df42077b1f6873136489cf919ef96c99c648766d5578858be04947281cf",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/authority_test/test.log",
+      "sha256": "41c6978f672a40702a8832844d7f7f9b6d4d2da852c23687120ec5f09bc6a185",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/canonical_owner_api_test/test.log",
+      "sha256": "9ce76165cff9cd9448746dbeb906d55ee95b8f65d89a452a6abb1f87fd90542d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/doc_test/test.log",
+      "sha256": "36a0f585c73beda74bc6ab438a7367559b9541150a6d3c4afd0e650a3e081321",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/action_messages_test_test/test.log",
+      "sha256": "6cb34686f94adeaad322169da2b5795f9ea48ca4725014a3f19b2c610aa024d8",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/admin_test_test/test.log",
+      "sha256": "781949358be56e36e80b3dde716ad94b10eac3ceee418a370d5d6def0d95973d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log",
+      "sha256": "b39adc5f2f2fb8e0669aa745443f44c4ed7df1cc57a0b6a447f3c2052c1aa01a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log",
+      "sha256": "adc25db222afa0e50203f085a64fd521d5fd980b4a83cf14ae0bcac868bb38ee",
+      "complete_rust_summaries": 0
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log",
+      "sha256": "ce1e77159895359b5cf1210500e4ce72d67a8ae3c59d8fc303daaadd341e48ae",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_reapi_test_test/test.log",
+      "sha256": "36cc3a4fac0633bb184b1bce0ea38af039cf29aae4b55dc71704014d39a5db1d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_request_test_test/test.log",
+      "sha256": "def7efd03dcbe47f7c6f31f413816f7833e67a5fbff55d1721e212a5a38d615f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log",
+      "sha256": "2faea3f0c7ecec179dd657d06397a7e8f2cc70fd4a796b6f5d3674eb0dea2771",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/backpressure_test_test/test.log",
+      "sha256": "27730f48e9facbb9a7edb54a1ddb233a4f2112eead8148b97a846e588b210fa5",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/cache_lookup_scheduler_test_test/test.log",
+      "sha256": "b95e04138728cc122e5ebf56e78cc50b1fa347739ec5eebbe4d5803a6f2aa9c3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/dispatch_ack_test_test/test.log",
+      "sha256": "675253a311b8fd6b93177f056c7de07f8264f919c1fe01278c7ff88013a754f3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/escalation_test_test/test.log",
+      "sha256": "4ce334e82f737687733b86cfcfa6cc5b30fbcfa2bde837859e672cabd6bb7836",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/execution_active_count_test_test/test.log",
+      "sha256": "577dd28ee7b967edd0c290b8543bbe15b8ad336aba23daf93f2e9157dbc7b639",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/fleet_capabilities_test_test/test.log",
+      "sha256": "00d029ecea004748e7c1cfdfe00a4dc22cae5f0b2ccedd3a9237954e051d86e2",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/historical_resource_scheduler_test_test/test.log",
+      "sha256": "0ba51df9e702b21152ca0eb50c22cc33bea8c278db12d52f1beca528b37cff28",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/live_memory_veto_test_test/test.log",
+      "sha256": "2950994175ae0e24ea703a1acb7ce9a1c2765f0b1286e8fc0901ebe0be387a68",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/liveness_clock_step_test_test/test.log",
+      "sha256": "3f6e9de47c6b44aec5c6fbb0356be45b9325471c12a533ab7d0378ff8266f04e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/placement_test_test/test.log",
+      "sha256": "81061d22ed808816be61cbaefe37a7ccd77c462baeebb50abc0158e64c51b1a3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/platform_property_manager_test_test/test.log",
+      "sha256": "9ccc6ffac71e9266fd6b68fa1cba90eb048fb68da5a6535f47d33389001cd273",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/property_modifier_scheduler_test_test/test.log",
+      "sha256": "36cb5249cbf0469557ca7cebddedb8fa562a7afe0d562a4a02a45cd03dee197d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/queue_order_test_test/test.log",
+      "sha256": "03441091cfa76ae0c47375bb711dfa623408afd7d89b2e5b4dbfab51332677b7",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/redis_store_awaited_action_db_test_test/test.log",
+      "sha256": "7108b96ca4d96c64046a9abf34b16ee1b8cd0380152c3c6218d8c04780e07322",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/remote_exec_scheduling_test_test/test.log",
+      "sha256": "2b018bbbcab7d81dc68b23fc28d3f04d0565e7e4046047e437fb4c23f7ba1e53",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/reservation_hold_test_test/test.log",
+      "sha256": "2cc9f21a3860e8aad9e19ec9d27b153706a2bf4314f3b64c5ae74122962e1d6f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/simple_scheduler_state_manager_test_test/test.log",
+      "sha256": "ccf70282c51c71bd9101d39eee24703e5ccc3be8a6ef79458f5b88808e9bede1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/simple_scheduler_test_test/test.log",
+      "sha256": "e2a23f1601957d34eb446b6a5d8201be031fccb2bf94cf179855de691102e0fd",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/store_awaited_action_db_test_test/test.log",
+      "sha256": "97c4cc528b517b80e4d325cacc08b307ab36d3912d289b1cd1ab116826dc6ef2",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/unsatisfiable_action_test_test/test.log",
+      "sha256": "2c69b5745fd46865e2cf1e49ac631580c8052febe2e96b57ef1e1800d1b3b4ff",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/worker_capability_index_test_test/test.log",
+      "sha256": "4ebbffb42a4f63a8d823a58c1886ad493cd226d97f280305482c6e9509c8e5f4",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/worker_registry_test_test/test.log",
+      "sha256": "bb0e1f39e6e42c57f8303c48f98dd9ef9f3292319646d7e1551390f43b1396e0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/integration_tests/worker_running_operations_report_test_test/test.log",
+      "sha256": "bdc82ccb686b3de51e9691bfa21a45316d6902b7f737c522f3335b0110afc028",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/physical_retention_test/test.log",
+      "sha256": "363995d84b16a4b2fed3a45a8b8a5b782a64b5dfcf2cda1367ed222dcd41b7b0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/prepared_memory_differential_test/test.log",
+      "sha256": "293914dd6c1d4efb1317ab62247a54a782aa3f7ce9f1f3bd3b7e29862a9c42e1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/prepared_memory_reference_test/test.log",
+      "sha256": "f35df2f1ce379c2df8ad134ecc9239b06df3b9162d0c6991e39f19511c2e1bb0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_activation_bounded_test/test.log",
+      "sha256": "7a8b5d08ff4533c0f2e0e713df586af749fdea59701c165d7824eb11370a1014",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_activation_reference_test/test.log",
+      "sha256": "f394cf71710252ccb3b869fe292f91d51ac69e5b3c51ef0006039dc539bd4dae",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_activation_v2_reference_test/test.log",
+      "sha256": "5d5f769cad6ee9353521b85efc9b25f380f8332f3eaab26af039ac84cc5ef1bc",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_candidate_test/test.log",
+      "sha256": "398e880968c296dcd1af9e1f664168d0ffab3f7660c06b0fe9cc364ee7a92c4d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_differential_test/test.log",
+      "sha256": "d8e2bc6e903238b13e266a414963f9a86259d120c2756b6855b4d5f6fd41fdb0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_head_reference_test/test.log",
+      "sha256": "6f4aa6fe13ed9089e18f2f1d3f7761279daa1047a618372e86cfddd75ae9d6c8",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/publication_physical_test/test.log",
+      "sha256": "99d5c3688305acde7944169b0de2316d10d353b47fb190a55143232670b31538",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/receipt_retirement_differential_test/test.log",
+      "sha256": "1f7c7d833e7d88b800d1c30f04683d28cc948a7acc4dfd641d5eed1555991527",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/receipt_retirement_reference_test/test.log",
+      "sha256": "cc8ea8f84f9baeb10a918842870a32dccc79257fd892290417b953909ebf8359",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/retention_test/test.log",
+      "sha256": "5c84b3e422b0dfeee85bf0cc17012851387937f1cb8999ac8b881df639391ce6",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/terminal_outcome_differential_test/test.log",
+      "sha256": "e309451b7dc8e31769607bbba8beada14517368b318ea3bdc9420944cdbae90a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/terminal_outcome_reference_test/test.log",
+      "sha256": "f515af4b350145a2d1ce12142711bd195ea6c1cdd5b946b2be213cf1dff5f69d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/terminal_outcome_restore_audit_test/test.log",
+      "sha256": "7f4568049b4811500be7a84523b5a022568630a78aed50554956149037564e93",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/typed_physical_retention_test/test.log",
+      "sha256": "d9568125d8c568594f426ec58f96858da24f85342597d45881a5c8a29b658aa5",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-scheduler/unit_test/test.log",
+      "sha256": "c9eae56b0eb36a6e2afbb1a233717fada8cb9c927f93cf27e1780651134623f5",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/doc_test/test.log",
+      "sha256": "35309b0fad4f2776516fe924e05de938b92c0d12fa79ca7944e20abadeabeedf",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/ac_server_test_test/test.log",
+      "sha256": "007cd48fc0af9f05ff3620e08d55a30cd5b6373c6d3c8345bc3dc4f64a96ea96",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log",
+      "sha256": "ecfa49bb81c7ed0f360f05e77bf6a2a8c004d56c221526b8fdc1dce11ec500ce",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/bep_server_test_test/test.log",
+      "sha256": "01546bed73e9685bc76e7f092913411f81e181d4df962f64586977a77efff8c0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log",
+      "sha256": "dfa599ec97ab6689f7737c3842ffdead83ecbc92de308310543db832089f4a25",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/capabilities_server_test_test/test.log",
+      "sha256": "7d32ccf1d4c0d65b46ad6268ad923e4f6d1c1bb4cfe772921f5b62580d47066e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/cas_server_test_test/test.log",
+      "sha256": "348f5d0fbb89ee28e11952e99f033b5481a357d6cf6f619e96ef6b769dac87aa",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/execution_server_test_test/test.log",
+      "sha256": "3cc2f3f669994076eb216c8782aa0c2b5ff0811dd3ba4a4cb63b7be8b40053c6",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/fastcdc_conformance_test_test/test.log",
+      "sha256": "d6dce0daa98a2652280e11cafffbd1821eda6e20f5b18382d7849864680b4bbe",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/fetch_server_test_test/test.log",
+      "sha256": "4563665d8770f2c8829762e9ff9e97cc2e96331e30bc52d619223a83da955e09",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/grpc_scheduler_forwarding_test_test/test.log",
+      "sha256": "218e1501b526a7896d1b3c247ce86484d43056be65611e37d7421d9b528d0e30",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log",
+      "sha256": "ffd99e2640054d6fe059ef04ab70770797bb86769aa11e9b396e5dbf7bfc8247",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/health_server_test_test/test.log",
+      "sha256": "2b6b69ff0247e83925ca820bf17647f5ef51f6fc229593f4abfd7737b48b414d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/push_server_test_test/test.log",
+      "sha256": "5bc4ce8863e489425dcf44d4e5d94bd197a729884e2992fc656f837e90a2dff6",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log",
+      "sha256": "54779d6a46e743d701c06d2b76a826d2af2c48b6e63ac1b9527d7cc9bd5e8245",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/integration_tests/worker_api_server_test_test/test.log",
+      "sha256": "afc2296a66ef39b9890b68bd80d539ff045bbe502ac9903e492cba58e9325ff6",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-service/unit_test/test.log",
+      "sha256": "78f2512f4ba277873218525e865c92b3bb5d6a3ffe84f474128257ad725a0dc3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/doc_test/test.log",
+      "sha256": "69096f50a898c193162f785296201eb1626781b26f2ff7b33c4069494cf32624",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/ac_utils_test_test/test.log",
+      "sha256": "6857e47b499ce0d72f76dc75de8d3bbed03311673fb5b0e146a989fec50394f8",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/azure_blob_store_test_test/test.log",
+      "sha256": "de1d8a0f3832d57d6ea7157aaa99dc38213ce86834938c7c05988980c74afed7",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/azurite_store_test_test/test.log",
+      "sha256": "cffd5491943c1f5f8180bced45cb72209e018b04d7a508750c95c86d6da12b48",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/cache_metrics_remove_metrics_test_test/test.log",
+      "sha256": "36745d131e95de62c466f5e9613ea10899e4c0a84b7b2d3fe77d8a258ef1f078",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/cache_metrics_store_test_test/test.log",
+      "sha256": "d5121b89cb633ea869ccc7b0eeb3ae1684f25453f04b1188bffd1ae87b1bc43b",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/common_s3_utils_test_test/test.log",
+      "sha256": "77bdde65143c8688e94539b9d78d7b7dc88fc60418e042f083910e25297a1304",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/completeness_checking_store_test_test/test.log",
+      "sha256": "060a7bbc71c285da23e6dd1f39d3720fa3f01abb671fdbc8d46add76dce4b203",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/compression_store_test_test/test.log",
+      "sha256": "be49ab82d900e28e3a19d8d545ed9e48a60626af55e439dabf53aa5bf1995490",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/dedup_store_test_test/test.log",
+      "sha256": "e24c75e2265544c658a393ca1f374937cf526ed02627cc38c3d9d9a68bf92ff2",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/existence_store_test_test/test.log",
+      "sha256": "8e0275e505bba8096d7247bc4d2a42e04d46a6a6848ad22fa89611742ce7014f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/fast_slow_store_test_test/test.log",
+      "sha256": "09492e03c46012b91b1181364d7ce89a3a427ac375bfecfbbae46d3053b27710",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/filesystem_store_test_test/test.log",
+      "sha256": "4f0788f9be0f91665528cbabdde81c3c0f74cbd930d5869ffd31175757ef8cfb",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/gcs_client_test_test/test.log",
+      "sha256": "2703402a40644b088d41edbd67275657a56c56a258d2986b6a65fb814d37cac4",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/gcs_store_test_test/test.log",
+      "sha256": "c48bec0e246808fa5cd8cf56c05c90bc7c15bda9456cc56cc80a621011594911",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/grpc_read_batching_test_test/test.log",
+      "sha256": "d1d1d073c533ad7113a255fe017f69911d1f24e57210992cec9ac179a6e28c8f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/grpc_store_test_test/test.log",
+      "sha256": "c56cf7b6ffb48d6462d79a02f300653c3dcf28efdfe2df7af4e923628e959754",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/memory_store_test_test/test.log",
+      "sha256": "8dea4fd864d2e2e23ffbb531742e66342e67d551b66755f523d1288390a42bd0",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/mongo_store_test_test/test.log",
+      "sha256": "22c05d1071ff14b98c57c3fc6ebd5cb37053103cbeecdc409cf3263c913ee5fd",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/oci_store_test_test/test.log",
+      "sha256": "702eaed6317920998203a1cd2dcdeaa7a9ee795ea2bbc1faa970e7437b1ef72d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/ontap_s3_existence_cache_store_test_test/test.log",
+      "sha256": "8b2a965c28043824134670c2ca919c0e15d787ee7f5db578897353fb24b951b9",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/ontap_s3_store_test_test/test.log",
+      "sha256": "d27c609a14673cb767c5145c37ef10159197fa03656f30626944857d4ead2ba1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/physical_azure_test_test/test.log",
+      "sha256": "668be06fdfa5f8f462550146e83407c98f5532015e31fd0199994ef86483d097",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/physical_closure_test_test/test.log",
+      "sha256": "93bf030ced1da0a5189992d3c7de955deee12ba03d770f9a42ff729f84e1c5f1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/physical_filesystem_test_test/test.log",
+      "sha256": "1eff4982ca22b3fb0ba9bba972d67eaa2fae356be892073451ddaa89a4047c0a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/r2_store_test_test/test.log",
+      "sha256": "3d235a8fd0e3a0cdb7bf8a1c3781dc7a8e03de7e492ee3824341637539990d81",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/redis_store_test_test/test.log",
+      "sha256": "0cdfb8c2327118e0e1ae9749e8397b1ed095c5ee3f1be640a488ae635125dd60",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/ref_store_test_test/test.log",
+      "sha256": "ecaf2566510a06ddf2ce2c802465a215177749b4cea91c75947d7260fe82785b",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/s3_store_test_test/test.log",
+      "sha256": "0fc150287adf6e02f5e81af35c7936e9e1938cacb65f7c7c088065e100799167",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/shard_store_test_test/test.log",
+      "sha256": "73d9ed951b0b12e0b1baddefaa3a0997fb12dbbab67534f04b8119d7e3ba9896",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/size_partitioning_store_test_test/test.log",
+      "sha256": "064d3bf9ca454af369761b8185a60ad6cd9b9e35769630f0a46e1c7053636de4",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/store_manager_test_test/test.log",
+      "sha256": "cb3bf559461a285a9571f15b496ec93976fee5054c3fcbb8130031bde6b65ac7",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/tls_client_no_roots_test_test/test.log",
+      "sha256": "7f79021cb0daf594749792708dae561dce18f44b389b036a69ebe17ba149de51",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/integration_tests/verify_store_test_test/test.log",
+      "sha256": "577157694f30dd73e76e4e2c55db78813b6771b8a078f338a1e0049a848b373f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-store/unit_test/test.log",
+      "sha256": "08eab858c168af088f01317c075186c7bd8a21d893491091d884f1bbd044c66a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/doc_test/test.log",
+      "sha256": "361a258b084f1335a5b29f570b445c735c4046976ea9b9da12a6dde0dab2d0ac",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/action_messages_test_test/test.log",
+      "sha256": "843c23c059face90dfca4050bd2d52645312c99d0de344e48f74379efb2bdfc1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/adaptive_permits_test_test/test.log",
+      "sha256": "830d546ce8dbabc817b408eb75b635a488b39df75b1708e264fd38201b6760c9",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/buf_channel_test_test/test.log",
+      "sha256": "ee7fef5967e70cf17e1cf7e8d51784734b931faaeecc6c43d9f03c5faf7ca1f3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/cache_size_metrics_test_test/test.log",
+      "sha256": "720bb8af94c6fa6b5ee0b5a67dee56116c793a28d14f9274f127901981748c99",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/channel_body_for_tests_test_test/test.log",
+      "sha256": "ec2bf7fb799a51938b7c43ccd6a86d194d5087a83ed9e70ea24f97ee1adf3f38",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/common_test_test/test.log",
+      "sha256": "09e7d1353c80a4fcd53a17a5c3e8dd17f13605366f8f543cc67e384b200c1521",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/evicting_map_test_test/test.log",
+      "sha256": "da22cf76753d5792168b5ed5437dae25dc7822225765f355232ad545455f638e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/fastcdc_test_test/test.log",
+      "sha256": "7a20f5a2bc3ad2c201dfc3c03fb4197d6fe148296c1a87c20565aaec2bac58cd",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/fs_test_test/test.log",
+      "sha256": "f473e8d9bbb3be4f6fea2b6299ed841ef23279b5bfe7b3e53bf316828545e33c",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/health_utils_test_test/test.log",
+      "sha256": "788dfbb0998d5912a0cb65d6f52c33e0eb9624ab18d87ddbeac1e64a99b41b6f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/metrics_test_test/test.log",
+      "sha256": "cc705e33bba27f362b720390662fc72dccce5022e8d947e9265a68bb2f8dc19f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/operation_id_tests_test/test.log",
+      "sha256": "ac2bfa5320e284195f37aa9b2b72c0d6908125fe04b92658986637bf79ed6880",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/origin_event_test_test/test.log",
+      "sha256": "e332320942dad8d6a2b6dd642ad8e55344734067a793a556d24c6f48eac52b23",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/platform_properties_tests_test/test.log",
+      "sha256": "8f94e93b7ca6d24f14d5a32fd8b63d6d3d26fb81bc8727203b3cfcd65cb2966c",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/proto_stream_utils_test_test/test.log",
+      "sha256": "1a591dec05d307d93015950c7eca8655acee8583ca8ecd966e1c2a513a4c52d7",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/resource_info_test_test/test.log",
+      "sha256": "312ff44aad771d500bf695b5cdf4861654a1a3ce051d4c49b15b3f386ecac6d8",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/retry_test_test/test.log",
+      "sha256": "a69eb6cb2a3cfae62c64ee4d0f2c6b559f0cd8b7dc274078b637e8587ddbdc38",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/shutdown_guard_test_test/test.log",
+      "sha256": "132bf5a9ca0a755b377b89ff33bb19799d3e9a681f2a751768c03b5e9c97f9c3",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/store_trait_test_test/test.log",
+      "sha256": "18ac718e6c29d26a3bfe162be356b9f4d9e4ce96c8deab9cd53e68036d867f3b",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/telemetry_test_test/test.log",
+      "sha256": "2717a75b6aadf397bdeaddd5578abed86d9cac6a24b4f767ed4e339058e2111d",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/tls_utils_test_test/test.log",
+      "sha256": "3ac1fe353245cc0b11ff727be49bb0a21452eb592a5b7c0d68d9670c40bd8066",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/integration_tests/wire_compression_test_test/test.log",
+      "sha256": "0143c16cc344abb03293a21e4fa18ffdef8fc8cb587e6016d6365ac9aab9cc92",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-util/unit_test/test.log",
+      "sha256": "26144b31292c47cd789c67b3156094238cf2cebbb8767f6c97286894ee4db754",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/authority_history_rpc_test/test.log",
+      "sha256": "9c0b2752b82ec8c1f0af1cd8bb1366799c4a93e7677e8e8fc694a1d2e0199ba2",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/authority_publication_ordering_test/test.log",
+      "sha256": "d63c1378a52f8de1fd137feb8a7adf9e05bae46b8f9fd8577daf3064a79e4c08",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/authority_receipt_rpc_test/test.log",
+      "sha256": "935c1c88670b33e8e7ae3a6ae9471c70a4f6ce0aa59b48f92b08d94f155323db",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/authority_replicated_rpc_test/test.log",
+      "sha256": "b437f85d7b4d136cf8621d91cd2faea40845592784018ef66ba2167d7b8876ba",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/doc_test/test.log",
+      "sha256": "3362ae4192453d02ab65593f47c4dc1dc6b27845bbf1572299fa332409e0cd8c",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log",
+      "sha256": "10ca0e2a562a8f8b757f7106cca1ddc6ede25bea4f5459f5e565122c79357553",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/authority_scheduler_test_test/test.log",
+      "sha256": "cb24042ac852829f12b5d8a9506813f572313f455ae0d5104ed8171aa7380acb",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/authority_worker_test_test/test.log",
+      "sha256": "be99093eca0f30a5f9c558467424f448b2b0095cd920d3306b048327dace24f6",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/capacity_test_test/test.log",
+      "sha256": "6e611ff12924dfd7de7118198ec446ea2a6ca551a47ff2d99e7c77323dcf9529",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/directory_cache_stress_test_test/test.log",
+      "sha256": "0527b32cc212249aa23749161fc62dfec959e3e9e01d2aa27839ac3de7a8856a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/directory_cache_test_test/test.log",
+      "sha256": "dc1a498b13f61c0e2ed9a8023b5446dfb8c535cd7a26215429e955503627098a",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/local_worker_test_test/test.log",
+      "sha256": "3b5d96d1605f2d823b0fbf7611f860a75c9f54a152ed7118ad0d9eba01168126",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/namespace_utils_test_test/test.log",
+      "sha256": "6ee9aad0e1cc0ac43a41801496393a3afa383ed20a5672db1b9e273d1697de0f",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/reaper_test_test/test.log",
+      "sha256": "9029bf91671b89d6984a7d12bcefc6a50ffb38f99dcf50aa5a080532af5e02ad",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/running_actions_manager_test_test/test.log",
+      "sha256": "8dff59ed623b969ddee83e1b9f52ffc261dade873087c3129d4bc7a11429aba1",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/integration_tests/worker_utils_test_test/test.log",
+      "sha256": "1f7e4c71a16b1eb855ee1ae7b137380c34aa35aa64438cc27cd3b12d6496f36e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/nativelink-worker/unit_test/test.log",
+      "sha256": "be54ebaa1e1cb8034569c40d765a9488f14be67090f13d3f026bbc123784a077",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-config/conversion_test/test.log",
+      "sha256": "73e116563175547482f9c273f2584530ea7935eb9956aca8dd2b6b21fc776d80",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-config/parser_test/test.log",
+      "sha256": "2d75963177f738d81ec3f421b516feec4eaa45ef75ae6fc08a8e4ab6f124a709",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-filesystem/journal_bridge_test/test.log",
+      "sha256": "803de4b89b17b890d7970cbed0b7bf83063fd2419c58ffd0364133014703b310",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-filesystem/journal_test/test.log",
+      "sha256": "127c3a97a10565413a5e46447428761315ecc7d1593e59329f72da1528c0b36e",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-filesystem/ownership_test/test.log",
+      "sha256": "9365580b7df1d61e64fe8f061592aa4d76d9ba88cb5100d8505e8bb977292a24",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-store/canonical_store_test/test.log",
+      "sha256": "e359d34fe90b252fcac6d1a4ebe76d10b0effbc3be03fc3f623c63822828ee09",
+      "complete_rust_summaries": 1
+    },
+    {
+      "path": "attempts/temporal-terminal-checkpoint/testlogs/tools/canonical-store/fixed_digest_default_test/test.log",
+      "sha256": "337a8fbe827a306eb4b8b6b8bf0160a590a09e961223712f7d56fffae1267102",
+      "complete_rust_summaries": 1
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "source_commit": "f2ae7427ee304bd8ce870c46064c0c22fd86771d",
+  "package_sha256": "aac5854810e3531221f0b7e00d47e0080c61a0e5928e1d19ab43f86a2131d2e3",
+  "verification_sha256": "86c9bdc8e4667da3da8e5126c9ba9bf45dda7d1cc6ba304d37aafa63d8233561",
+  "receipts_sha256": "69a56eba16b8b63710ebe5632b299a6d2c6f1a5dba81bd1aff8c1e974c421350",
+  "stream_verification_pass": true,
+  "files": [
+    {
+      "path": "author-01.tar.gz",
+      "bytes": 208251,
+      "sha256": "30f38288136eb6448db764727e6680b618f4d582af3427f17be00f405882f73c"
+    },
+    {
+      "path": "author-02.tar.gz",
+      "bytes": 7406000,
+      "sha256": "5fd638d9e1dd382d4ca4f3b35e90ad33448008053c1dc700c30c5c30d5e9e531"
+    },
+    {
+      "path": "author-03.tar.gz",
+      "bytes": 4566133,
+      "sha256": "8580a7abd43428507003b497f1e455fe0bb61af4efd270daad5da3ebe53b7589"
+    },
+    {
+      "path": "author-04.tar.gz",
+      "bytes": 4929095,
+      "sha256": "1a8273804a75396426dd4ee37725323fbffc539e3b44f542582b16ff3e4a22ec"
+    },
+    {
+      "path": "author-05.tar.gz",
+      "bytes": 4873754,
+      "sha256": "3407a5a3b3b6b22534d108db5675f47fc0458a8ccfefec8dc893da12dc0e4ad9"
+    },
+    {
+      "path": "author-06.tar.gz",
+      "bytes": 5014761,
+      "sha256": "26c8c255a59f4feea75d202894454fb1421f9914119be26c0298f46104056e77"
+    },
+    {
+      "path": "author-07.tar.gz",
+      "bytes": 160441,
+      "sha256": "004e3f70fad9a3afd8d9f3920549197986d71dc5d0a3c764df3b39cabac6bfd1"
+    },
+    {
+      "path": "author-08.tar.gz",
+      "bytes": 4929248,
+      "sha256": "315f7b29a6424f63c061fb2cc1b9cc98f1a99228e87d975b576eb4dc9fafc462"
+    },
+    {
+      "path": "author-09.tar.gz",
+      "bytes": 7406005,
+      "sha256": "4d636c8d88ecdeed91737e0286dafc911e09d20e963c576e1c35ce1372c6530b"
+    },
+    {
+      "path": "author-10.tar.gz",
+      "bytes": 3356215,
+      "sha256": "4b3d5d658f527f83f78d3ded74f5d7e8cd7b2ea0cccb33a823f76cc444ba9298"
+    },
+    {
+      "path": "build.py",
+      "bytes": 2640,
+      "sha256": "22d44ffbaac8c4b9e00f183b341f2c8b4cd93078ad0c33deaec2c581a37ce5de"
+    },
+    {
+      "path": "package-verification.json",
+      "bytes": 512,
+      "sha256": "89ce32af85275aa19ec8a6213f27e378b1478bbaa3976e6af5fd845342881315"
+    },
+    {
+      "path": "package-verification.log",
+      "bytes": 180,
+      "sha256": "fa0417238653a867e0f38d0243ed77f2d22e6f39a4bb8f07b2bc3487e665c150"
+    },
+    {
+      "path": "package.json",
+      "bytes": 76917,
+      "sha256": "aac5854810e3531221f0b7e00d47e0080c61a0e5928e1d19ab43f86a2131d2e3"
+    },
+    {
+      "path": "packet.py",
+      "bytes": 3132,
+      "sha256": "f48cd6905d6383dbb483f718eb12676a0ef3321a6c9a8984456fceb448262869"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 74758,
+      "sha256": "69a56eba16b8b63710ebe5632b299a6d2c6f1a5dba81bd1aff8c1e974c421350"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 5203,
+      "sha256": "86c9bdc8e4667da3da8e5126c9ba9bf45dda7d1cc6ba304d37aafa63d8233561"
+    }
+  ]
+}
