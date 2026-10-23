@@ -27,8 +27,10 @@ use nativelink_macro::nativelink_test;
 use nativelink_scheduler::authority::format::{
     AdmissionRegistry, AuthorityDomain, JournalProfile, ReaderCapabilities,
 };
-use nativelink_scheduler::authority::journal::{Journal, JournalBinding, JournalDatabase};
-use nativelink_scheduler::authority::{ClusterEpoch, Limits};
+use nativelink_scheduler::authority::journal::{
+    Journal, JournalBinding, JournalDatabase, Singleton,
+};
+use nativelink_scheduler::authority::{ClusterEpoch, Event, Limits, RecordedEvent};
 use nativelink_util::background_spawn;
 use openraft::Vote;
 use openraft::storage::RaftLogStorage;
@@ -379,4 +381,159 @@ async fn replaced_ambient_root_cannot_redirect_initialization_or_sync() {
     assert!(journal.read_applied().await.unwrap().0.is_none());
     assert_eq!(fs::read(fixture.file()).unwrap(), b"replacement untouched");
     assert!(original.join(JOURNAL_FILE).is_file());
+}
+
+async fn open_singleton(fixture: &Fixture, directory: JournalDirectory, create: bool) -> Singleton {
+    Singleton::open_from_factory(
+        fixture.binding(),
+        fixture.binding().node_id,
+        Limits::default(),
+        fixture.profile(),
+        move || {
+            if create {
+                directory.create()
+            } else {
+                directory.reopen()
+            }
+            .map(carrier)
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[nativelink_test]
+async fn singleton_commits_and_reopens_through_renamed_root_with_all_locks() {
+    let mut fixture = Fixture::new();
+    let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let ambient = fixture.file();
+    let original = fixture.root.join("detached");
+    fs::rename(&fixture.manifest.authority.journal_root, &original).unwrap();
+    fs::create_dir(&fixture.manifest.authority.journal_root).unwrap();
+    fs::write(&ambient, b"replacement untouched").unwrap();
+    fixture.manifest.authority.journal_root = original.to_str().unwrap().to_owned();
+
+    let singleton = open_singleton(&fixture, directory, true).await;
+    fixture.assert_all_locked();
+    singleton
+        .write(RecordedEvent {
+            epoch: fixture.binding().domain.epoch,
+            event: Event::AdvanceTime { now: 17 },
+        })
+        .await
+        .unwrap();
+    assert_eq!(singleton.read().await.unwrap().view().now, 17);
+    assert_eq!(fs::read(&ambient).unwrap(), b"replacement untouched");
+    singleton.shutdown().await.unwrap();
+
+    let owner = fixture.released_owner().await;
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let singleton = open_singleton(&fixture, directory, false).await;
+    fixture.assert_all_locked();
+    assert_eq!(singleton.read().await.unwrap().view().now, 17);
+    assert_eq!(fs::read(&ambient).unwrap(), b"replacement untouched");
+    singleton.shutdown().await.unwrap();
+    drop(fixture.released_owner().await);
+}
+
+async fn cancel_singleton_creation(hold_parent_sync: bool) {
+    let fixture = Fixture::new();
+    let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let binding = fixture.binding();
+    let profile = fixture.profile();
+    let (started, reached) = tokio::sync::oneshot::channel();
+    let (release, resume) = std::sync::mpsc::channel();
+    let task = background_spawn!("singleton_bridge_cancel_creation", async move {
+        Singleton::open_from_factory(
+            binding,
+            binding.node_id,
+            Limits::default(),
+            profile,
+            move || {
+                if hold_parent_sync {
+                    let (database, parent) = directory.create()?.into_parts();
+                    Ok(JournalDatabase::created(database, move || {
+                        started.send(()).unwrap();
+                        resume.recv().map_err(io::Error::other)?;
+                        parent.unwrap().sync_all()
+                    }))
+                } else {
+                    started.send(()).unwrap();
+                    resume.recv().map_err(io::Error::other)?;
+                    directory.create().map(carrier)
+                }
+            },
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(10), reached)
+        .await
+        .unwrap()
+        .unwrap();
+    task.abort();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap_err()
+            .is_cancelled()
+    );
+    fixture.assert_all_locked();
+    if hold_parent_sync {
+        assert!(redb::Database::open(fixture.file()).is_err());
+    } else {
+        assert!(!fixture.file().exists());
+    }
+    release.send(()).unwrap();
+    let owner = fixture.released_owner().await;
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    // Owned preparation must finish membership initialization and shut Raft
+    // down. An orphan core retains locks; canceled initialization cannot reopen
+    // as an initialized Singleton through the existing strict reopen path.
+    let singleton = open_singleton(&fixture, directory, false).await;
+    fixture.assert_all_locked();
+    assert_eq!(singleton.read().await.unwrap().view().now, 0);
+    singleton.shutdown().await.unwrap();
+    drop(fixture.released_owner().await);
+}
+
+#[nativelink_test]
+async fn singleton_cancellation_before_file_open_retains_all_custody() {
+    cancel_singleton_creation(false).await;
+}
+
+#[nativelink_test]
+async fn singleton_cancellation_during_parent_sync_retains_all_custody() {
+    cancel_singleton_creation(true).await;
+}
+
+#[nativelink_test]
+async fn singleton_existing_uninitialized_membership_is_not_adopted() {
+    let fixture = Fixture::new();
+    let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    drop(open(&fixture, directory, true).await);
+    let owner = fixture.released_owner().await;
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let error = Singleton::open_from_factory(
+        fixture.binding(),
+        fixture.binding().node_id,
+        Limits::default(),
+        fixture.profile(),
+        move || directory.reopen().map(carrier),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.contains("existing journal lacks initialized membership"));
+    let owner = fixture.released_owner().await;
+    let journal = open(&fixture, fixture.directory(&owner), false).await;
+    assert!(journal.read_applied().await.unwrap().0.is_none());
 }

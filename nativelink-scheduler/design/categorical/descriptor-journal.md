@@ -73,6 +73,51 @@ and validation, and ordinary journal I/O captures the shared database together
 with its serialization guard. A canceled caller cannot release either while
 that I/O continues.
 
+## Singleton factory bridge
+
+`Singleton::open_from_factory` accepts the same binding, node, limits, profile
+and factory. It calls the journal factory and then the existing real singleton
+Raft startup path. The newly created journal receives singleton membership;
+an existing journal must already have initialized membership. This constructor
+does not adopt a metadata-only journal, infer canonical bootstrap permission,
+change format validation, or certify that recovered membership is exactly one
+member. Existing foreign or joint membership is still outside canonical startup
+qualification.
+
+After the constructor's first poll, an owned background task retains preparation
+through file creation, parent synchronization, Raft initialization and the
+existing leader wait. Canceling the caller does not abort this work. A successful
+result uses an explicit acknowledgment: the caller receives the result,
+acknowledges ownership and returns without an intervening await. Until then the
+preparation task retains both a Raft shutdown handle and the journal. If the
+caller disappears, including while the result is queued, preparation awaits Raft
+shutdown before releasing its custody. A detached raw task handle deliberately
+keeps this preparation alive; an abort-on-drop task handle would violate that
+contract.
+
+Cancellation may therefore leave a valid initialized journal. It does not roll
+back files or authorize retrying a failed cold create as a new identity. An error
+before membership initialization may leave metadata without initialized Raft
+membership; the existing singleton reopen path refuses that artifact. Explicit
+shutdown remains the successful caller's responsibility. Dropping a never-polled
+future, process death, runtime destruction and panics are outside the constructor
+cancellation evidence. The legacy path constructors are unchanged in this respect.
+
+The portable tests hold a per-construction private gate after `Raft::new` and
+before initialization. Canceling the receiver, releasing that gate and observing
+shutdown while an independent Raft clone remains alive checks explicit shutdown,
+rather than relying on the last handle disappearing. A separate withheld
+acknowledgment case covers result handoff; the public constructor has no await in
+that interval. Binding and limit refusal count factory invocations, and the
+successful handoff commits and reads an `AdvanceTime` event through real Raft.
+
+The manual descriptor integration adds a create/write/read/shutdown/reopen
+round trip after root rename, with the replacement path left untouched and all
+four actual directory locks held. Separate held-factory and held-parent-sync
+cancellation cases require prompt caller cancellation, retained locks, eventual
+lock release, and successful initialized singleton reopen. Another case refuses
+an existing metadata-only journal without adopting its membership.
+
 ## Executable checks
 
 Standalone Cargo with `--features redb` executes the filesystem tests. They cover

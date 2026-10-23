@@ -16,6 +16,7 @@ use nativelink_macro::nativelink_test;
 use nativelink_util::background_spawn;
 
 use super::*;
+use crate::authority::Event;
 
 const DOMAIN: AuthorityDomain = AuthorityDomain {
     epoch: ClusterEpoch(93),
@@ -112,7 +113,7 @@ async fn canceled_blocking_io_keeps_the_database_and_queue_until_completion() {
         .unwrap();
     let database = Arc::downgrade(&journal.database);
     let queue = Arc::downgrade(&journal.queue);
-    let (started, reached) = tokio::sync::oneshot::channel();
+    let (started, reached) = oneshot::channel();
     let (release, resume) = std::sync::mpsc::channel();
     let task = background_spawn!("journal_canceled_io_fixture", async move {
         journal
@@ -145,4 +146,169 @@ async fn canceled_blocking_io_keeps_the_database_and_queue_until_completion() {
     })
     .await
     .unwrap();
+}
+
+fn memory_database() -> io::Result<JournalDatabase> {
+    Database::builder()
+        .create_with_backend(redb::backends::InMemoryBackend::new())
+        .map(|database| JournalDatabase::created(database, || Ok(())))
+        .map_err(io::Error::other)
+}
+
+async fn await_shutdown(raft: &Raft<TypeConfig>) {
+    let mut metrics = raft.metrics();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if metrics.borrow().state == openraft::ServerState::Shutdown {
+                break;
+            }
+            metrics.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[nativelink_test]
+async fn singleton_binding_and_limits_refuse_before_factory() {
+    let invoked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let binding = JournalBinding {
+        node_id: NODE,
+        domain: DOMAIN,
+    };
+    for mismatch in [
+        JournalBinding {
+            node_id: NODE + 1,
+            ..binding
+        },
+        JournalBinding {
+            domain: AuthorityDomain {
+                epoch: ClusterEpoch(0),
+                ..DOMAIN
+            },
+            ..binding
+        },
+        JournalBinding {
+            domain: AuthorityDomain {
+                namespace: 0,
+                ..DOMAIN
+            },
+            ..binding
+        },
+    ] {
+        let calls = invoked.clone();
+        assert!(
+            Singleton::open_from_factory(mismatch, NODE, Limits::default(), profile(), move || {
+                calls.fetch_add(1, Ordering::Relaxed);
+                Err(io::Error::other("factory must not be invoked"))
+            },)
+            .await
+            .is_err()
+        );
+        assert_eq!(invoked.load(Ordering::Relaxed), 0);
+    }
+    let calls = invoked.clone();
+    assert!(
+        Singleton::open_from_factory(
+            binding,
+            NODE,
+            Limits {
+                max_payload_bytes: usize::MAX,
+                ..Limits::default()
+            },
+            profile(),
+            move || {
+                calls.fetch_add(1, Ordering::Relaxed);
+                Err(io::Error::other("factory must not be invoked"))
+            },
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(invoked.load(Ordering::Relaxed), 0);
+}
+
+#[nativelink_test]
+async fn canceled_singleton_startup_explicitly_stops_raft_after_gate() {
+    let (reached, observer) = oneshot::channel();
+    let (release, resume) = oneshot::channel();
+    let (prepared, accepted) = Singleton::prepare_from_factory(
+        JournalBinding {
+            node_id: NODE,
+            domain: DOMAIN,
+        },
+        NODE,
+        Limits::default(),
+        profile(),
+        memory_database,
+        Some(SingletonStartupGate { reached, resume }),
+    );
+    let raft = tokio::time::timeout(Duration::from_secs(10), observer)
+        .await
+        .unwrap()
+        .unwrap();
+    drop(prepared);
+    drop(accepted);
+    // Holding another Raft handle makes this an explicit shutdown witness:
+    // dropping the returned Singleton alone cannot stop this core.
+    assert_ne!(
+        raft.metrics().borrow().state,
+        openraft::ServerState::Shutdown
+    );
+    release.send(()).unwrap();
+    await_shutdown(&raft).await;
+}
+
+#[nativelink_test]
+async fn unacknowledged_singleton_handoff_explicitly_stops_raft() {
+    let (prepared, accepted) = Singleton::prepare_from_factory(
+        JournalBinding {
+            node_id: NODE,
+            domain: DOMAIN,
+        },
+        NODE,
+        Limits::default(),
+        profile(),
+        memory_database,
+        None,
+    );
+    // Receive while deliberately withholding the acknowledgement. The public
+    // constructor has no await in this interval. This tests the retained
+    // owner's responsibility even when the result still holds a Raft handle.
+    let singleton = tokio::time::timeout(Duration::from_secs(10), prepared)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_ne!(
+        singleton.raft.metrics().borrow().state,
+        openraft::ServerState::Shutdown
+    );
+    drop(accepted);
+    await_shutdown(&singleton.raft).await;
+}
+
+#[nativelink_test]
+async fn accepted_singleton_handoff_keeps_the_authority_live() {
+    let singleton = Singleton::open_from_factory(
+        JournalBinding {
+            node_id: NODE,
+            domain: DOMAIN,
+        },
+        NODE,
+        Limits::default(),
+        profile(),
+        memory_database,
+    )
+    .await
+    .unwrap();
+    singleton
+        .write(RecordedEvent {
+            epoch: DOMAIN.epoch,
+            event: Event::AdvanceTime { now: 17 },
+        })
+        .await
+        .unwrap();
+    assert_eq!(singleton.read().await.unwrap().view().now, 17);
+    singleton.shutdown().await.unwrap();
 }

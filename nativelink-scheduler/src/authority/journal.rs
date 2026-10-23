@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
-use nativelink_util::spawn_blocking;
+use nativelink_util::{background_spawn, spawn_blocking};
 use openraft::error::{InstallSnapshotError, RPCError, RaftError, Unreachable};
 use openraft::network::{RPCOption, RaftNetwork, RaftNetworkFactory};
 use openraft::raft::{
@@ -53,7 +53,7 @@ use redb::{
 };
 use serde::de::{DeserializeOwned, IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 
 use super::format::{
     ACCEPTED_HISTORY, ActiveFormat, AdmissionRegistry, AuthorityDomain, ControlAdmission,
@@ -975,8 +975,8 @@ pub struct Journal {
 }
 
 struct HistoryApplyPause {
-    reached: tokio::sync::oneshot::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
+    reached: oneshot::Sender<()>,
+    release: oneshot::Receiver<()>,
 }
 
 impl Debug for Journal {
@@ -1852,10 +1852,8 @@ impl Journal {
         &self,
         raft: &Raft<TypeConfig>,
         batch: Batch,
-    ) -> std::result::Result<
-        tokio::sync::oneshot::Receiver<openraft::raft::ClientWriteResult<TypeConfig>>,
-        String,
-    > {
+    ) -> std::result::Result<oneshot::Receiver<openraft::raft::ClientWriteResult<TypeConfig>>, String>
+    {
         batch.validate()?;
         if raft.metrics().borrow().id != self.node_id {
             return Err("proposal must use this journal's Raft member".into());
@@ -1897,7 +1895,7 @@ impl Journal {
                         raft.ensure_linearizable()
                             .await
                             .map_err(|e| e.to_string())?;
-                        let (sender, receiver) = tokio::sync::oneshot::channel();
+                        let (sender, receiver) = oneshot::channel();
                         drop(sender.send(Ok(openraft::raft::ClientWriteResponse {
                             log_id: decision.position,
                             data: BatchReply {
@@ -2002,14 +2000,9 @@ impl Journal {
     /// activation but before its state-machine transaction begins. No state or
     /// proposal gate is held. Dropping the release sender fails the apply.
     #[doc(hidden)]
-    pub fn pause_history_apply_once(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (reached, observed) = tokio::sync::oneshot::channel();
-        let (release, released) = tokio::sync::oneshot::channel();
+    pub fn pause_history_apply_once(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (reached, observed) = oneshot::channel();
+        let (release, released) = oneshot::channel();
         let mut slot = self
             .history_apply_pause
             .lock()
@@ -2025,14 +2018,9 @@ impl Journal {
     /// Qualification cutpoint after a successful preparation read barrier,
     /// before acquiring the enqueue gate. No registry or I/O lock is held.
     #[doc(hidden)]
-    pub fn pause_feature_prepare_once(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (reached, observed) = tokio::sync::oneshot::channel();
-        let (release, released) = tokio::sync::oneshot::channel();
+    pub fn pause_feature_prepare_once(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (reached, observed) = oneshot::channel();
+        let (release, released) = oneshot::channel();
         let mut slot = self
             .feature_prepare_pause
             .lock()
@@ -2545,6 +2533,12 @@ pub struct Singleton {
     pub journal: Journal,
 }
 
+#[cfg(test)]
+struct SingletonStartupGate {
+    reached: oneshot::Sender<Raft<TypeConfig>>,
+    resume: oneshot::Receiver<()>,
+}
+
 impl Debug for Singleton {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Singleton")
@@ -2590,7 +2584,12 @@ impl Singleton {
         let journal = Journal::open(path, node_id, epoch, limits)
             .await
             .map_err(|e| e.to_string())?;
-        Self::from_journal(journal).await
+        Self::from_journal(
+            journal,
+            #[cfg(test)]
+            None,
+        )
+        .await
     }
 
     pub async fn open_with_profile(
@@ -2602,10 +2601,98 @@ impl Singleton {
         let journal = Journal::open_with_profile(path, node_id, limits, profile)
             .await
             .map_err(|e| e.to_string())?;
-        Self::from_journal(journal).await
+        Self::from_journal(
+            journal,
+            #[cfg(test)]
+            None,
+        )
+        .await
     }
 
-    async fn from_journal(journal: Journal) -> std::result::Result<Self, String> {
+    /// Open through a custody-retaining journal factory and the existing real
+    /// singleton Raft path. Binding, state and format validation are unchanged.
+    /// This does not authorize canonical bootstrap or certify singleton recovery
+    /// membership, clock interpretation, or closed-member admission recovery.
+    ///
+    /// Once polled, preparation owns startup independently of this caller. If
+    /// the caller disappears before accepting the result, preparation shuts down
+    /// Raft before releasing its journal custody. Cancellation may leave a valid
+    /// initialized journal; it never rolls back initialization or adopts it anew.
+    pub async fn open_from_factory(
+        binding: JournalBinding,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+        factory: impl FnOnce() -> io::Result<JournalDatabase> + Send + 'static,
+    ) -> std::result::Result<Self, String> {
+        let (prepared, accepted) = Self::prepare_from_factory(
+            binding,
+            node_id,
+            limits,
+            profile,
+            factory,
+            #[cfg(test)]
+            None,
+        );
+        let result = prepared
+            .await
+            .map_err(|error| format!("Singleton preparation task failed: {error}"))?;
+        if result.is_ok() {
+            // No await separates receiving ownership, acknowledging the handoff
+            // and returning it. A queued result abandoned by cancellation never
+            // sends this acknowledgement, so preparation remains responsible.
+            let _accepted = accepted.send(());
+        }
+        result
+    }
+
+    fn prepare_from_factory(
+        binding: JournalBinding,
+        node_id: u64,
+        limits: Limits,
+        profile: JournalProfile,
+        factory: impl FnOnce() -> io::Result<JournalDatabase> + Send + 'static,
+        #[cfg(test)] gate: Option<SingletonStartupGate>,
+    ) -> (
+        oneshot::Receiver<std::result::Result<Self, String>>,
+        oneshot::Sender<()>,
+    ) {
+        let (prepared, receiver) = oneshot::channel();
+        let (accepted, acceptance) = oneshot::channel();
+        let _prepare = background_spawn!("authority_singleton_prepare", async move {
+            let result = async {
+                let journal =
+                    Journal::open_from_factory(binding, node_id, limits, profile, factory)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                Self::from_journal(
+                    journal,
+                    #[cfg(test)]
+                    gate,
+                )
+                .await
+            }
+            .await;
+            // Retain both custody and a shutdown handle until the caller takes
+            // ownership. Sending into an unpolled oneshot is not that handoff.
+            let retained = result
+                .as_ref()
+                .ok()
+                .map(|authority| (authority.raft.clone(), authority.journal.clone()));
+            let delivered = prepared.send(result).is_ok();
+            if let Some((raft, _journal)) = retained
+                && (!delivered || acceptance.await.is_err())
+            {
+                let _shutdown = raft.shutdown().await;
+            }
+        });
+        (receiver, accepted)
+    }
+
+    async fn from_journal(
+        journal: Journal,
+        #[cfg(test)] gate: Option<SingletonStartupGate>,
+    ) -> std::result::Result<Self, String> {
         let node_id = journal.node_id;
         let config = openraft::Config {
             cluster_name: format!("experimental-authority-{}", journal.epoch.0),
@@ -2625,6 +2712,13 @@ impl Singleton {
         )
         .await
         .map_err(|e| e.to_string())?;
+        #[cfg(test)]
+        if let Some(gate) = gate
+            && (gate.reached.send(raft.clone()).is_err() || gate.resume.await.is_err())
+        {
+            let _shutdown = raft.shutdown().await;
+            return Err("singleton startup test gate closed".to_owned());
+        }
         let initialize = if journal.created {
             raft.initialize(BTreeSet::from([node_id]))
                 .await
