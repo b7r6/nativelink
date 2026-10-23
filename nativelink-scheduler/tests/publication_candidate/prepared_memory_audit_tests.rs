@@ -93,3 +93,23 @@ fn audit_duplicate_admission_is_a_refusal_without_mutation() {
     unchanged(&state, &before);
     recover(&mut state);
 }
+
+#[test]
+fn audit_admission_resolves_an_absent_cache_head_atomically() {
+    let request = request(
+        1,
+        false,
+        false,
+        "audit-cache-miss",
+        &context().principal,
+        false,
+    );
+    let mut state = real(&request);
+    state.enable_prepared_memory().unwrap();
+    state
+        .admit_request(1, "action".into(), &context(), request, 100)
+        .unwrap();
+    assert_eq!(state.scheduler_view().executions[0].phase, a::Phase::Queued);
+    assert!(state.scheduler_view().effects.is_empty());
+    recover(&mut state);
+}

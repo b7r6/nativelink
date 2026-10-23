@@ -135,3 +135,62 @@ fn audit_duplicate_admission_is_a_refusal_without_mutation() {
     );
     assert_eq!(fixture.model.snapshot().unwrap(), before);
 }
+
+#[test]
+fn audit_admission_resolves_an_absent_cache_head_atomically() {
+    let captured = original("audit-cache-miss", 3);
+    let mut wire = serde_json::to_value(captured.payload.unwrap()).unwrap();
+    let bytes: Vec<u8> = serde_json::from_value(wire["execute"].clone()).unwrap();
+    let mut execute = ExecuteRequest::decode(bytes.as_slice()).unwrap();
+    execute.skip_cache_lookup = false;
+    wire["execute"] = serde_json::to_value(execute.encode_to_vec()).unwrap();
+    let parts: Vec<Vec<u8>> = ["execute", "queued", "action", "command"]
+        .iter()
+        .map(|name| serde_json::from_value(wire[*name].clone()).unwrap())
+        .collect();
+    let mut hash = Sha256::new();
+    hash.update(b"nativelink-request-v1");
+    hash.update(1_u32.to_be_bytes());
+    hash.update([0]);
+    for part in [
+        parts[0].as_slice(),
+        &[],
+        parts[1].as_slice(),
+        context().principal.as_bytes(),
+        parts[2].as_slice(),
+        parts[3].as_slice(),
+    ] {
+        hash.update(u64::try_from(part.len()).unwrap().to_be_bytes());
+        hash.update(part);
+    }
+    wire["sha256"] = serde_json::to_value(<[u8; 32]>::from(hash.finalize())).unwrap();
+    let mut request = m1::Reference::captured_request_facts(wire.clone()).unwrap();
+    request.payload = Some(Box::new(serde_json::from_value(wire).unwrap()));
+    assert!(!request.skip_cache_lookup);
+    let mut model = Model::new(
+        context(),
+        h::Scenario {
+            actions: BTreeMap::new(),
+            candidates: BTreeMap::new(),
+        },
+        vec![],
+    )
+    .unwrap();
+    model
+        .apply(
+            &Command::Admit {
+                operation: a::OperationId(1),
+                request,
+            },
+            &h::Facts::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        model.view().scheduler.executions[0].phase,
+        a::Phase::Queued,
+        "outer admission resolves an absent cache head before returning"
+    );
+    assert!(model.view().scheduler.effects.is_empty());
+    let bytes = model.snapshot().unwrap();
+    assert_eq!(Model::restore(&bytes).unwrap().view(), model.view());
+}
