@@ -326,6 +326,23 @@ async fn raw_unknown_fields_are_bounded_before_decode() {
 }
 
 #[nativelink_test]
+async fn sentinel_detects_valid_cap_prefix_with_semantic_tail() {
+    let spy = Arc::new(Spy::default());
+    let mut bytes = unknown_value(CAP).to_vec();
+    bytes.extend_from_slice(&[0x20, 7]);
+    assert_eq!(ActionResult::decode(bytes.as_slice()).unwrap().exit_code, 7);
+    spy.put(147, DigestHasherFunc::Sha256, bytes.into(), Finish::Eof);
+    assert_eq!(
+        fixed(Store::new(spy))
+            .get_action_result(Request::new(get(147, DigestHasherFunc::Sha256)))
+            .await
+            .unwrap_err()
+            .code(),
+        Code::ResourceExhausted
+    );
+}
+
+#[nativelink_test]
 async fn valid_ten_mib_prefix_cannot_hide_a_semantic_tail() {
     let spy = Arc::new(Spy::default());
     let store = Store::new(spy.clone());
@@ -410,6 +427,28 @@ async fn excess_cancels_pending_producer_without_waiting_for_eof() {
     .expect("collector waited for oversized producer")
     .unwrap_err();
     assert_eq!(error.code(), Code::ResourceExhausted);
+    assert_eq!(spy.cancelled.load(Ordering::Relaxed), 1);
+}
+
+#[nativelink_test]
+async fn fixed_timeout_cancels_incomplete_range() {
+    tokio::time::pause();
+    let spy = Arc::new(Spy::default());
+    spy.put(
+        147,
+        DigestHasherFunc::Sha256,
+        Bytes::from_static(&[0x20, 7]),
+        Finish::Pending,
+    );
+    let server = fixed(Store::new(spy.clone()));
+    let error = timeout(
+        Duration::from_secs(31),
+        server.get_action_result(Request::new(get(147, DigestHasherFunc::Sha256))),
+    )
+    .await
+    .expect("fixed thirty-second request deadline did not fire")
+    .unwrap_err();
+    assert_eq!(error.code(), Code::DeadlineExceeded);
     assert_eq!(spy.cancelled.load(Ordering::Relaxed), 1);
 }
 
