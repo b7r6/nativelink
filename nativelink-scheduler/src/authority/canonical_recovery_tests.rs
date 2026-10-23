@@ -17,7 +17,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nativelink_macro::nativelink_test;
 use nativelink_util::background_spawn;
@@ -31,6 +31,9 @@ use super::super::canonical_recovery::{LifecycleOwner, RecoveryError, start};
 use super::super::{CanonicalBootstrap, ClusterEpoch, OwnerPhase, PreparedCanonicalOwner};
 use super::{Fixture, applied, edit, sealed};
 use crate::authority::journal::{LOGS, META, MeasuredOperation, TypeConfig, decode};
+
+#[path = "canonical_recovered_owner_tests.rs"]
+mod composition;
 
 const WAIT: Duration = Duration::from_secs(10);
 type Starting = JoinHandle<Result<LifecycleOwner, RecoveryError>>;
@@ -46,6 +49,9 @@ pub(in crate::authority::journal::canonical_owner) enum Stage {
     RaftStored,
     Initialized,
     Leader,
+    BeforeClock,
+    ClockReadStarted,
+    ClockStored,
     BeforeOffer,
     Offered,
     ConsumerOffered,
@@ -79,6 +85,9 @@ struct Control {
     drop_gate: Mutex<Option<DropGate>>,
     reject_acceptance: AtomicBool,
     raft_probe: Mutex<Option<oneshot::Sender<Raft<TypeConfig>>>>,
+    clock_audit: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    clock_capture: Mutex<Option<Box<dyn FnOnce(Instant) + Send>>>,
+    clock_origin: Mutex<Option<Instant>>,
 }
 
 #[derive(Clone, Default)]
@@ -186,6 +195,29 @@ impl Hooks {
 
     pub(in crate::authority::journal::canonical_owner) fn reject_acceptance(&self) -> bool {
         self.0.reject_acceptance.load(Ordering::Relaxed)
+    }
+
+    pub(in crate::authority::journal::canonical_owner) fn take_clock_audit(
+        &self,
+    ) -> Option<Box<dyn FnOnce() + Send>> {
+        self.0.clock_audit.lock().unwrap().take()
+    }
+
+    // Called with the actual production origin after the actual read completed.
+    // Test callbacks can block or panic; they cannot replace facts or instants.
+    pub(in crate::authority::journal::canonical_owner) fn clock_capture(&self, origin: Instant) {
+        assert!(
+            self.0
+                .clock_origin
+                .lock()
+                .unwrap()
+                .replace(origin)
+                .is_none()
+        );
+        let hook = self.0.clock_capture.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook(origin);
+        }
     }
 
     // Test-only observation of a borrowed resource. No production callback or

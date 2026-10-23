@@ -49,7 +49,7 @@ type TemporalPause = (
     tokio::sync::oneshot::Receiver<bool>,
 );
 
-fn temporal_pause() -> TemporalPause {
+pub(super) fn temporal_pause() -> TemporalPause {
     let gate = Arc::new((Mutex::new(false), Condvar::new()));
     let held = gate.clone();
     let (reached, wait) = tokio::sync::oneshot::channel();
@@ -200,7 +200,7 @@ fn request(timeout: Option<ProtoDuration>) -> Request {
     .unwrap()
 }
 
-fn finite(seconds: i64, nanos: i32) -> Request {
+pub(super) fn finite(seconds: i64, nanos: i32) -> Request {
     request(Some(ProtoDuration { seconds, nanos }))
 }
 
@@ -213,7 +213,7 @@ fn step(state: &mut State, event: Event) -> Reply {
     reply
 }
 
-fn empty(epoch: ClusterEpoch, now: u64) -> State {
+pub(super) fn empty(epoch: ClusterEpoch, now: u64) -> State {
     let mut state = State::new(epoch, LIMITS).unwrap();
     step(&mut state, Event::AdvanceTime { now });
     state
@@ -234,7 +234,7 @@ fn queued(epoch: ClusterEpoch, now: u64, request: Request) -> State {
     state
 }
 
-fn attempt(epoch: ClusterEpoch, now: u64, request: Request, phase: Phase) -> State {
+pub(super) fn attempt(epoch: ClusterEpoch, now: u64, request: Request, phase: Phase) -> State {
     let capacity = request.resources;
     let mut state = queued(epoch, now, request);
     assert_eq!(
@@ -286,7 +286,7 @@ fn attempt(epoch: ClusterEpoch, now: u64, request: Request, phase: Phase) -> Sta
     state
 }
 
-fn with_database<T>(fixture: &Fixture, operation: impl FnOnce(&Database) -> T) -> T {
+pub(super) fn with_database<T>(fixture: &Fixture, operation: impl FnOnce(&Database) -> T) -> T {
     let owned = fixture.owned(false);
     let (database, _) = fixture.directory(&owned).reopen().unwrap().into_parts();
     operation(&database)
@@ -319,7 +319,7 @@ fn stored(fixture: &Fixture) -> Stored {
     })
 }
 
-async fn seeded(make: impl FnOnce(ClusterEpoch) -> State) -> Fixture {
+pub(super) async fn seeded(make: impl FnOnce(ClusterEpoch) -> State) -> Fixture {
     let fixture = Fixture::new();
     let owner = PreparedCanonicalOwner::prepare_cold(fixture.token(true))
         .await
@@ -399,7 +399,7 @@ async fn refuses(fixture: &Fixture, reason: &str) {
     assert!(rejected, "temporal owner admitted {reason}");
 }
 
-fn suffix(fixture: &Fixture, batches: Vec<Vec<Event>>, committed: bool) {
+pub(super) fn suffix(fixture: &Fixture, batches: Vec<Vec<Event>>, committed: bool) {
     with_database(fixture, |database| {
         let epoch = ClusterEpoch(fixture.manifest.authority.cluster_epoch);
         let value = applied(database, epoch);

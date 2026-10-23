@@ -86,6 +86,7 @@ rust_library(
         "src/authority/canonical_custody_tests.rs",
         "src/authority/canonical_owner.rs",
         "src/authority/canonical_owner_tests.rs",
+        "src/authority/canonical_recovered_owner_tests.rs",
         "src/authority/canonical_recovery.rs",
         "src/authority/canonical_recovery_clock_tests.rs",
         "src/authority/canonical_recovery_tests.rs",
@@ -790,6 +791,25 @@ rust_test(
 rust_test(
     name = "canonical_owner_api_test",
     srcs = ["tests/canonical_owner_api_test.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    proc_macro_deps = ["//nativelink-macro"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem-redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:tokio",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
+)
+
+# The filesystem redb variant must be the same crate identity used by the owner.
+rust_test(
+    name = "canonical_recovered_owner_api_test",
+    srcs = ["tests/canonical_recovered_owner_api_test.rs"],
     compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
     proc_macro_deps = ["//nativelink-macro"],
     target_compatible_with = ["@platforms//os:linux"],

@@ -1,0 +1,36 @@
+// Copyright 2026 The NativeLink Authors. All rights reserved.
+//
+// Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    See LICENSE file for details
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#![allow(dead_code, reason = "compile-only external capability probe")]
+
+use nativelink_scheduler::authority::journal::{
+    PreparedCanonicalOwner, RecoveredCanonicalOwner, RecoveryDiagnostic, RecoveryError,
+};
+async fn allowed(prepared: PreparedCanonicalOwner) -> Result<(), RecoveryError> {
+    let owner: RecoveredCanonicalOwner = prepared.recover_sealed().await?;
+    let facts: RecoveryDiagnostic = owner.diagnostic();
+    let _: (u64, u64, u64, u64, u64) = (
+        facts.applied_term,
+        facts.applied_node_id,
+        facts.applied_index,
+        facts.base_tick,
+        facts.first_tick,
+    );
+    let _: [u8; 32] = facts.owner.namespace_commitment;
+    owner.shutdown().await
+}
+fn error_contract<T: std::error::Error>() {}
+fn main() {
+    error_contract::<RecoveryError>();
+}
