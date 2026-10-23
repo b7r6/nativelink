@@ -53,7 +53,8 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
     Tree as ProtoTree, UpdateActionResultRequest,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
-    ActionResourceUsage, HistoricalExecuteResponse, Reservation, ResourceOutcome, StartExecute,
+    ActionResourceUsage, AuthorityResources, HistoricalExecuteResponse, Reservation,
+    ResourceOutcome, StartExecute,
 };
 use nativelink_store::ac_utils::{
     ESTIMATED_DIGEST_SIZE, compute_buf_digest, get_and_decode_digest, serialize_and_upload_message,
@@ -2273,6 +2274,61 @@ async fn do_cleanup(
     }
 }
 
+/// Immutable authority accounting and the optional sampled memory ceiling.
+/// The KiB ceiling rounds upward; it is a sampling threshold, not a hard OS cap.
+/// Legacy usage telemetry cannot replace the exact charged vector retained here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityResourceLimits {
+    /// Full original dispatch vector, without unit conversion or reconstruction.
+    pub charged: AuthorityResources,
+    /// Configured ceiling rounded upward to the sampler's KiB resolution.
+    /// Presence does not establish process coverage or an enforced OS limit.
+    pub memory_limit_kb: Option<u64>,
+}
+
+impl AuthorityResourceLimits {
+    fn capture(charged: AuthorityResources, memory: Option<&MemoryLimit>) -> Result<Self, Error> {
+        if charged.slots == 0 {
+            return Err(make_err!(
+                Code::InvalidArgument,
+                "authority grant requires a positive slot charge"
+            ));
+        }
+        let memory_limit_kb = if let Some(memory) = memory.filter(|_| charged.memory_bytes != 0) {
+            // Widen before multiplying so representable large byte grants do
+            // not fail merely because the percentage's intermediate is large.
+            let bytes = u128::from(charged.memory_bytes)
+                .checked_mul(100 + u128::from(memory.headroom_percent))
+                .map(|product| product.div_ceil(100))
+                .and_then(|bytes| u64::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    make_err!(
+                        Code::InvalidArgument,
+                        "authority memory headroom exceeds the byte range"
+                    )
+                })?;
+            Some(bytes.div_ceil(1024))
+        } else {
+            None
+        };
+        Ok(Self {
+            charged,
+            memory_limit_kb,
+        })
+    }
+
+    fn usage_reservation(self, legacy: Option<Reservation>) -> Reservation {
+        // These coarse legacy fields are diagnostics. The Rust grant retains
+        // fractional cores and individual bytes without this upward rounding.
+        Reservation {
+            cpu_count: self.charged.cpu_millis.div_ceil(1000),
+            memory_kb: self.charged.memory_bytes.div_ceil(1024),
+            // Disk remains a legacy platform diagnostic, outside the typed grant.
+            disk_kb: legacy.map_or(0, |reservation| reservation.disk_kb),
+        }
+    }
+}
+
 pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     /// Returns the action id of the action.
     fn get_operation_id(&self) -> &OperationId;
@@ -2311,6 +2367,11 @@ pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     fn get_finished_result(
         self: Arc<Self>,
     ) -> impl Future<Output = Result<ActionResult, Error>> + Send;
+
+    /// Exact authority grant and its configured sampled ceiling, when present.
+    fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
+        None
+    }
 
     /// Returns worker-observed resource usage captured while this action ran.
     fn resource_usage(&self) -> Option<ActionResourceUsage>;
@@ -2536,6 +2597,7 @@ pub struct RunningActionImpl {
     input_lease: Option<Arc<ActionInputLease>>,
     timeout: Duration,
     authority_request: bool,
+    authority_resources: Option<AuthorityResourceLimits>,
     progress: Option<ProgressObserver>,
     running_actions_manager: Arc<RunningActionsManagerImpl>,
     /// Set on a kill; every phase that can wait watches it, so a kill ends
@@ -2574,6 +2636,7 @@ impl RunningActionImpl {
             input_lease,
             timeout,
             authority_request: false,
+            authority_resources: None,
             progress: None,
             running_actions_manager,
             state: Mutex::new(RunningActionImplState {
@@ -2604,6 +2667,21 @@ impl RunningActionImpl {
     )]
     fn metrics(&self) -> &Arc<Metrics> {
         &self.running_actions_manager.metrics
+    }
+
+    fn usage_reservation(
+        &self,
+        memory_property: Option<&str>,
+        disk_property: Option<&str>,
+    ) -> Option<Reservation> {
+        let legacy = reservation_of(
+            &self.action_info.platform_properties,
+            memory_property,
+            disk_property,
+        );
+        self.authority_resources.map_or(legacy, |resources| {
+            Some(resources.usage_reservation(legacy))
+        })
     }
 
     /// Prepares any actions needed to execute this action. This action will do the following:
@@ -3298,11 +3376,7 @@ impl RunningActionImpl {
                                 peak_disk_kb: 0,
                                 outcome: outcome.into(),
                                 enforced,
-                                reserved: reservation_of(
-                                    &self.action_info.platform_properties,
-                                    memory_property,
-                                    disk_property,
-                                ),
+                                reserved: self.usage_reservation(memory_property, disk_property),
                             });
                             {
                                 let mut state = self.state.lock();
@@ -3494,24 +3568,30 @@ impl RunningActionImpl {
 
         // The reservation the scheduler placed this action by, if the
         // worker is asked to hold it to that number.
-        let memory_reservation = self
-            .running_actions_manager
-            .execution_configuration
-            .resource_enforcement
-            .as_ref()
-            .and_then(|enforcement| {
-                let memory = enforcement.memory.as_ref()?;
-                let reserved_kb = self
-                    .action_info
-                    .platform_properties
-                    .get(&memory.property_name)?
-                    .parse::<u64>()
-                    .ok()?;
-                (reserved_kb > 0).then(|| {
-                    let limit_kb = reserved_kb.saturating_mul(100 + memory.headroom_percent) / 100;
-                    (reserved_kb, limit_kb)
+        let memory_reservation = if let Some(resources) = self.authority_resources {
+            resources
+                .memory_limit_kb
+                .map(|limit_kb| (resources.charged.memory_bytes.div_ceil(1024), limit_kb))
+        } else {
+            self.running_actions_manager
+                .execution_configuration
+                .resource_enforcement
+                .as_ref()
+                .and_then(|enforcement| {
+                    let memory = enforcement.memory.as_ref()?;
+                    let reserved_kb = self
+                        .action_info
+                        .platform_properties
+                        .get(&memory.property_name)?
+                        .parse::<u64>()
+                        .ok()?;
+                    (reserved_kb > 0).then(|| {
+                        let limit_kb =
+                            reserved_kb.saturating_mul(100 + memory.headroom_percent) / 100;
+                        (reserved_kb, limit_kb)
+                    })
                 })
-            });
+        };
         // The disk reservation, held to only with `disk: soft`; disk is
         // measured whenever the enforcement names a disk property.
         let disk_enforcement = self
@@ -3736,7 +3816,7 @@ impl RunningActionImpl {
                             .resource_enforcement
                             .as_ref()
                             .and_then(|e| e.memory.as_ref())
-                            .map_or(("", 0), |m| (m.property_name.as_str(), m.headroom_percent));
+                            .map_or(("", 0), |m| (if self.authority_resources.is_some() { "typed authority grant" } else { m.property_name.as_str() }, m.headroom_percent));
                         warn!(
                             operation_id = ?self.operation_id,
                             reserved_kb,
@@ -3925,11 +4005,7 @@ impl RunningActionImpl {
                         peak_disk_kb: sampled_usage.peak_disk_kb,
                         outcome: outcome.into(),
                         enforced,
-                        reserved: reservation_of(
-                            &self.action_info.platform_properties,
-                            memory_property,
-                            disk_property,
-                        ),
+                        reserved: self.usage_reservation(memory_property, disk_property),
                     });
 
                     // log something useful instead of repeating same ?arg
@@ -4661,6 +4737,10 @@ impl RunningAction for RunningActionImpl {
             .await
     }
 
+    fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
+        self.authority_resources
+    }
+
     fn resource_usage(&self) -> Option<ActionResourceUsage> {
         self.state.lock().resource_usage.clone()
     }
@@ -4679,12 +4759,14 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
         start_execute: StartExecute,
     ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send;
 
-    /// Authority dispatch requires complete accepted platform facts and exact
-    /// finite execution deadlines. Implementations must opt in explicitly.
+    /// Authority dispatch requires complete accepted platform facts, finite
+    /// execution deadlines and the exact immutable accounting grant.
+    /// Implementations must opt in explicitly; platform strings are not grants.
     fn create_and_add_authority_action(
         self: &Arc<Self>,
         _worker_id: String,
         _start_execute: StartExecute,
+        _reserved_resources: AuthorityResources,
     ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
         async {
             Err(make_err!(
@@ -4699,6 +4781,7 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
         self: &Arc<Self>,
         _worker_id: String,
         _start_execute: StartExecute,
+        _reserved_resources: AuthorityResources,
         _progress: ProgressObserver,
     ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
         async {
@@ -4777,7 +4860,8 @@ pub struct ResourceEnforcement {
 /// The reservation a memory ceiling is built from.
 #[derive(Debug, Clone)]
 pub struct MemoryLimit {
-    /// Platform property carrying the reservation in KiB.
+    /// Legacy platform property carrying the reservation in KiB. Authority
+    /// actions use their separate typed byte grant and never read this property.
     pub property_name: String,
     /// Percent above the reservation the action may reach.
     pub headroom_percent: u64,
@@ -5802,8 +5886,20 @@ impl RunningActionsManagerImpl {
         self: &Arc<Self>,
         worker_id: String,
         start_execute: StartExecute,
-        authority_request: bool,
+        reserved_resources: Option<AuthorityResources>,
     ) -> Result<Arc<RunningActionImpl>, Error> {
+        let authority_request = reserved_resources.is_some();
+        let authority_resources = reserved_resources
+            .map(|charged| {
+                AuthorityResourceLimits::capture(
+                    charged,
+                    self.execution_configuration
+                        .resource_enforcement
+                        .as_ref()
+                        .and_then(|enforcement| enforcement.memory.as_ref()),
+                )
+            })
+            .transpose()?;
         self.metrics
             .create_and_add_action
             .wrap(async move {
@@ -5882,6 +5978,7 @@ impl RunningActionsManagerImpl {
                     self.clone(),
                 );
                 running_action.authority_request = authority_request;
+                running_action.authority_resources = authority_resources;
                 running_action.progress = if authority_request { ProgressObserver::current() } else { None };
                 let running_action = Arc::new(running_action);
                 {
@@ -5935,7 +6032,7 @@ impl RunningActionsManager for RunningActionsManagerImpl {
         worker_id: String,
         start_execute: StartExecute,
     ) -> Result<Arc<RunningActionImpl>, Error> {
-        self.create_and_add_action_impl(worker_id, start_execute, false)
+        self.create_and_add_action_impl(worker_id, start_execute, None)
             .await
     }
 
@@ -5943,8 +6040,9 @@ impl RunningActionsManager for RunningActionsManagerImpl {
         self: &Arc<Self>,
         worker_id: String,
         start_execute: StartExecute,
+        reserved_resources: AuthorityResources,
     ) -> Result<Arc<RunningActionImpl>, Error> {
-        self.create_and_add_action_impl(worker_id, start_execute, true)
+        self.create_and_add_action_impl(worker_id, start_execute, Some(reserved_resources))
             .await
     }
 
@@ -5952,11 +6050,12 @@ impl RunningActionsManager for RunningActionsManagerImpl {
         self: &Arc<Self>,
         worker_id: String,
         start_execute: StartExecute,
+        reserved_resources: AuthorityResources,
         progress: ProgressObserver,
     ) -> Result<Arc<RunningActionImpl>, Error> {
         work_progress::scope(
             Some(progress),
-            self.create_and_add_action_impl(worker_id, start_execute, true),
+            self.create_and_add_action_impl(worker_id, start_execute, Some(reserved_resources)),
         )
         .await
     }

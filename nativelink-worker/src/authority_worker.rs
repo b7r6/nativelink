@@ -830,6 +830,9 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
             Err(error) => return (Err(error), true, None),
         };
         async {
+            let reserved_resources = dispatch
+                .reserved_resources
+                .expect("validated immutable grant");
             let start = StartExecute {
                 execute_request: dispatch.execute_request,
                 operation_id: operation_id(&target),
@@ -846,6 +849,7 @@ impl<M: RunningActionsManager> AuthorityWorker<M> {
                 .create_and_add_authority_action_observed(
                     self.identity.worker_id.to_string(),
                     start,
+                    reserved_resources,
                     progress,
                 )
                 .await

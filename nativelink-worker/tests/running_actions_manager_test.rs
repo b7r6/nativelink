@@ -62,7 +62,7 @@ mod tests {
         digest_function::Value as ProtoDigestFunction, platform::Property,
     };
     use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
-        HistoricalExecuteResponse, ResourceOutcome, StartExecute,
+        AuthorityResources, HistoricalExecuteResponse, ResourceOutcome, StartExecute,
     };
     use nativelink_proto::google::rpc::Status;
     #[cfg(target_family = "unix")]
@@ -111,6 +111,11 @@ mod tests {
     use tokio::sync::watch;
     use tracing::info;
 
+    const AUTHORITY_GRANT: AuthorityResources = AuthorityResources {
+        cpu_millis: 1000,
+        memory_bytes: 1024 * 1024,
+        slots: 1,
+    };
     const DEFAULT_MAX_UPLOAD_TIMEOUT: u64 = 600;
     const DEFAULT_MAX_DOWNLOAD_TIMEOUT: u64 = 600;
     const DEFAULT_MAX_CLEANUP_WAIT: u64 = 30;
@@ -3788,7 +3793,11 @@ exit 0
         dispatch.queued_timestamp = Some(make_system_time(1000).into());
         dispatch.execute_request.as_mut().unwrap().digest_function = 0;
         let action = manager
-            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .create_and_add_authority_action(
+                "authority-worker".to_owned(),
+                dispatch,
+                AUTHORITY_GRANT,
+            )
             .await?;
         let result = run_action(action).await?;
         assert_eq!(result.exit_code, 0);
@@ -3894,7 +3903,11 @@ exit 0
                 let mut dispatch = dispatch_with_properties(digest, &properties);
                 dispatch.queued_timestamp = Some(make_system_time(1000).into());
                 let action = manager
-                    .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                    .create_and_add_authority_action(
+                        "authority-worker".to_owned(),
+                        dispatch,
+                        AUTHORITY_GRANT,
+                    )
                     .await?;
                 let result = run_action(action).await?;
                 assert_eq!(result.exit_code, 0);
@@ -3925,7 +3938,11 @@ exit 0
                 }
                 assert_eq!(
                     manager
-                        .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                        .create_and_add_authority_action(
+                            "authority-worker".to_owned(),
+                            dispatch,
+                            AUTHORITY_GRANT
+                        )
                         .await
                         .unwrap_err()
                         .code,
@@ -3946,7 +3963,11 @@ exit 0
         dispatch.queued_timestamp = Some(make_system_time(1000).into());
         let started = tokio::time::Instant::now();
         let error = manager
-            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .create_and_add_authority_action(
+                "authority-worker".to_owned(),
+                dispatch,
+                AUTHORITY_GRANT,
+            )
             .await
             .unwrap_err();
         assert_eq!(error.code, Code::DeadlineExceeded);
@@ -3971,6 +3992,7 @@ exit 0
         let creation = manager.create_and_add_authority_action_observed(
             "authority-worker".to_owned(),
             dispatch,
+            AUTHORITY_GRANT,
             observer,
         );
         tokio::pin!(creation);
@@ -4029,7 +4051,11 @@ exit 0
         let mut dispatch = dispatch_with_properties(digest, &[]);
         dispatch.queued_timestamp = Some(make_system_time(1000).into());
         let action = manager
-            .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+            .create_and_add_authority_action(
+                "authority-worker".to_owned(),
+                dispatch,
+                AUTHORITY_GRANT,
+            )
             .await?;
         let started = tokio::time::Instant::now();
         let action = action.prepare_action().await?;
@@ -4134,7 +4160,11 @@ exit 0
             let mut dispatch = dispatch_with_properties(digest, &[]);
             dispatch.queued_timestamp = Some(make_system_time(1000).into());
             let action = manager
-                .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                .create_and_add_authority_action(
+                    "authority-worker".to_owned(),
+                    dispatch,
+                    AUTHORITY_GRANT,
+                )
                 .await?;
             let result = run_action(action).await?;
             assert_eq!(result.error.as_ref().unwrap().code, Code::DeadlineExceeded);
@@ -4168,7 +4198,11 @@ exit 0
             dispatch.queued_timestamp = Some(make_system_time(1000).into());
             assert_eq!(
                 manager
-                    .create_and_add_authority_action("authority-worker".to_owned(), dispatch)
+                    .create_and_add_authority_action(
+                        "authority-worker".to_owned(),
+                        dispatch,
+                        AUTHORITY_GRANT
+                    )
                     .await
                     .unwrap_err()
                     .code,

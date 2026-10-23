@@ -84,6 +84,7 @@ struct Context {
     directory: TempDir,
     cas: Arc<FastSlowStore>,
     worker: Arc<AuthorityWorker<RunningActionsManagerImpl>>,
+    manager: Arc<RunningActionsManagerImpl>,
 }
 
 fn negotiation(session: u64) -> AuthorityRegistrationResult {
@@ -98,6 +99,33 @@ fn negotiation(session: u64) -> AuthorityRegistrationResult {
 }
 
 async fn setup(single_use: bool, slots: u64, limit: usize, namespaced: bool) -> Context {
+    setup_configured(
+        single_use,
+        limit,
+        namespaced,
+        AuthorityResources {
+            cpu_millis: RESOURCES.cpu_millis * slots,
+            memory_bytes: RESOURCES.memory_bytes * slots,
+            slots,
+        },
+        ExecutionConfiguration {
+            persistent_workers: PersistentWorkersSettings {
+                enabled: false,
+                ..PersistentWorkersSettings::default()
+            },
+            ..ExecutionConfiguration::default()
+        },
+    )
+    .await
+}
+
+async fn setup_configured(
+    single_use: bool,
+    limit: usize,
+    namespaced: bool,
+    capacity: AuthorityResources,
+    execution_configuration: ExecutionConfiguration,
+) -> Context {
     let directory = TempDir::new().unwrap();
     let filesystem = FilesystemSpec {
         content_path: directory
@@ -126,13 +154,7 @@ async fn setup(single_use: bool, slots: u64, limit: usize, namespaced: bool) -> 
     let manager = Arc::new(
         RunningActionsManagerImpl::new(RunningActionsManagerArgs {
             root_action_directory: root.to_string_lossy().into_owned(),
-            execution_configuration: ExecutionConfiguration {
-                persistent_workers: PersistentWorkersSettings {
-                    enabled: false,
-                    ..PersistentWorkersSettings::default()
-                },
-                ..ExecutionConfiguration::default()
-            },
+            execution_configuration,
             cas_store: cas.clone(),
             ac_store: None,
             historical_store: Store::new(cas.clone()),
@@ -160,20 +182,17 @@ async fn setup(single_use: bool, slots: u64, limit: usize, namespaced: bool) -> 
     let worker = AuthorityWorker::new(
         IDENTITY,
         single_use,
-        AuthorityResources {
-            cpu_millis: RESOURCES.cpu_millis * slots,
-            memory_bytes: RESOURCES.memory_bytes * slots,
-            slots,
-        },
+        capacity,
         limit,
         64 * 1024,
-        manager,
+        manager.clone(),
     )
     .unwrap();
     Context {
         directory,
         cas,
         worker,
+        manager,
     }
 }
 
@@ -1680,3 +1699,6 @@ async fn quiet_owned_child_progress_survives_reconnect_but_keeps_execution_deadl
         AuthorityAttemptPhase::TerminationUncertain as i32
     );
 }
+
+#[path = "authority_grant/cases.rs"]
+mod grant;
