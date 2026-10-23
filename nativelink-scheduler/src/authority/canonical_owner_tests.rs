@@ -33,6 +33,8 @@ use crate::authority::Event;
 
 #[path = "canonical_custody_tests.rs"]
 mod custody;
+#[path = "canonical_recovery_tests.rs"]
+pub(super) mod recovery;
 #[path = "canonical_temporal_tests.rs"]
 mod temporal;
 

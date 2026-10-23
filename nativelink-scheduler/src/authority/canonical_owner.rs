@@ -29,6 +29,8 @@ use super::{
 
 #[path = "canonical_cleanup.rs"]
 mod canonical_cleanup;
+#[path = "canonical_recovery.rs"]
+mod canonical_recovery;
 #[path = "canonical_temporal.rs"]
 mod temporal;
 
