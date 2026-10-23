@@ -31,12 +31,14 @@ use serde::{Deserialize, Serialize};
 mod capability;
 #[cfg(feature = "redb")]
 mod journal;
+mod namespace;
 pub use capability::{
     CasDirectory, DigestAlgorithm, DigestLeaf, FixedLayout, PendingWrite, ReadHandle,
     SinkDirectory, TemporaryId,
 };
 #[cfg(feature = "redb")]
 pub use journal::{JOURNAL_FILE, JournalBinding, JournalDirectory, JournalParent, OpenedJournal};
+pub use namespace::SyncedNamespace;
 
 /// Outside the fixed content/temp layout that a store may scan or prune.
 pub const OWNERSHIP_RECORD: &str = ".nativelink-namespace-v1.json";
@@ -173,33 +175,42 @@ impl Ownership {
     pub fn reopen(manifest: &Manifest) -> Result<Self, Error> {
         let owned = Self::preflight(manifest)?;
         for root in &owned.roots {
-            let descriptor = openat(
-                &root.descriptor,
-                OWNERSHIP_RECORD,
-                OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
-                Mode::empty(),
-            )
-            .map_err(|_| failure("open_record"))?;
-            let file = File::from(descriptor);
-            let metadata = file.metadata().map_err(|_| failure("stat_record"))?;
-            if !metadata.is_file() || metadata.len() > MAX_RECORD_BYTES {
-                return Err(failure("invalid_record"));
-            }
-            let mut bytes = Vec::new();
-            file.take(MAX_RECORD_BYTES + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|_| failure("read_record"))?;
-            if bytes.len() as u64 > MAX_RECORD_BYTES {
-                return Err(failure("invalid_record"));
-            }
-            let record: Record =
-                serde_json::from_slice(&bytes).map_err(|_| failure("invalid_record"))?;
-            if record != owned.record(root.role) {
-                return Err(failure("ownership_mismatch"));
-            }
+            owned.open_record(root)?;
         }
         owned.verify_attached()?;
         Ok(owned)
+    }
+
+    // Both reopen and explicit resynchronization use the same acceptance
+    // rules. Returning the file lets resynchronization retain every validated
+    // descriptor until all record and parent synchronization has finished.
+    fn open_record(&self, root: &Root) -> Result<File, Error> {
+        let descriptor = openat(
+            &root.descriptor,
+            OWNERSHIP_RECORD,
+            OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|_| failure("open_record"))?;
+        let file = File::from(descriptor);
+        let metadata = file.metadata().map_err(|_| failure("stat_record"))?;
+        if !metadata.is_file() || metadata.len() > MAX_RECORD_BYTES {
+            return Err(failure("invalid_record"));
+        }
+        let mut bytes = Vec::new();
+        (&file)
+            .take(MAX_RECORD_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| failure("read_record"))?;
+        if bytes.len() as u64 > MAX_RECORD_BYTES {
+            return Err(failure("invalid_record"));
+        }
+        let record: Record =
+            serde_json::from_slice(&bytes).map_err(|_| failure("invalid_record"))?;
+        if record != self.record(root.role) {
+            return Err(failure("ownership_mismatch"));
+        }
+        Ok(file)
     }
 
     /// Detect a path replacement at this instant. This cannot make a later

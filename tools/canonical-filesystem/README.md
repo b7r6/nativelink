@@ -1,10 +1,11 @@
 # Experimental filesystem namespace ownership
 
-This Linux library qualifies two small parts of canonical construction: cold
-namespace identity and descriptor capabilities with ownership that lasts through
-data access among cooperating local callers.
-**No runtime calls it, and it never constructs a store, opens a journal, serves
-traffic, starts collection, or authorizes a deployment.** The canonical parser
+This Linux library supplies namespace identity, explicit current synchronization,
+and descriptor capabilities with ownership that lasts through data access among
+cooperating local callers.
+**No production runtime calls it, and it never serves traffic, starts collection,
+or authorizes a deployment.** The optional journal backend is described below.
+The canonical parser
 remains a separate pure package; the offline converter does not link this library.
 
 The input is the experimental manifest from
@@ -71,6 +72,62 @@ identity. Reopening a worker directory grants no registration, process identity,
 incarnation reuse, or recovery permission. Those decisions require the separate
 durable authority protocol. Likewise matching an epoch record neither restores
 its journal nor proves an older authority was fenced.
+
+## Current synchronization and namespace commitment
+
+`Arc<Ownership>::resynchronize` returns an opaque, non-cloneable
+`SyncedNamespace`. It first checks that the retained roots remain attached,
+then opens and validates all four ownership records before the first sync.
+Every validated record descriptor stays open while each record and its pinned
+parent directory are synchronized. A final attachment check precedes success.
+The returned token retains all four locks after the caller's original ownership
+handle drops. Existing ownership aliases may remain; this is not linear ownership.
+
+Record acceptance is shared with `Ownership::reopen`: the same regular-file,
+bounded decoding and exact-record checks apply. Existing hard-linked ownership
+records remain accepted; this change does not introduce a link-count policy.
+No record is rewritten, created, repaired, or deleted. A missing or invalid last
+record refuses before synchronizing any of the earlier records. Any sync or
+attachment failure returns no token and preserves the artifacts. An explicit
+later retry validates and synchronizes the current records; it cannot establish
+that an earlier failed call acknowledged durability.
+
+The operation performs blocking I/O. An async caller must move the owning `Arc`
+into its blocking task, retaining custody even if the waiting future disappears.
+The tests stall the owned operation before its first sync, discard its receiver,
+and check all four locks until the operation finishes. This does not qualify an
+async serving supervisor or power-loss recovery.
+
+`SyncedNamespace::commitment()` returns one fixed SHA-256 digest of the private
+retained binding. Its domain is the ASCII bytes
+`nativelink.canonical.namespace.v1` followed by a zero byte. The stream then
+contains, in order: binding version (`u32`), instance text, authority node,
+epoch and namespace (`u64` each), principal text, physical CAS namespace text,
+physical sink namespace text, worker ID (`u64`), execution-configuration text,
+and the four ordered roots. Numbers use little-endian encoding. Every text value
+uses its `u32` UTF-8 byte length followed by its original UTF-8 bytes. Each
+root contains one role byte and its device/inode (`u64` each): journal = 1,
+CAS = 2, temporary AC = 3, worker = 4. Exactly these four roles in this order
+are required. The implementation streams the fields without a second serialized
+binding buffer; it does not hash JSON formatting or `Debug` output. An all-zero
+digest refuses. The independent 186-byte
+[golden input](fixtures/namespace-v1.hex) is checked against both its
+fixed digest and the streaming encoder.
+
+Ambient paths, listener and TLS declarations, worker incarnation and capacity
+are absent from this persistent namespace binding. Their absence does not
+authorize moves, TLS changes, capacity changes or incarnation reuse. Each needs
+its own future runtime gate. The local journal bootstrap phase and authority
+process incarnation are also separate facts. The API provides no manifest
+algorithm selector, public token constructor, deserializer or raw-handle access.
+Copying commitment bytes does not grant custody or execution authority.
+
+Successful current synchronization covers the retained ownership-record files
+and root directories only. It does not synchronize store objects, fixed child
+layouts or journal contents, seal a journal, start a clock, admit a worker or
+prove historical acknowledgements. Attachment checks detect replacements at the
+instants observed and do not exclude later noncooperative writers. The earlier
+inode-reuse, physical-generation and fencing limitations still apply.
 
 ## Placement and construction limitations
 

@@ -6,6 +6,7 @@ rust_library(
         "src/capability.rs",
         "src/journal.rs",
         "src/lib.rs",
+        "src/namespace.rs",
     ],
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
@@ -15,6 +16,7 @@ rust_library(
         "@crates//:rustix-1.1.2",
         "@crates//:serde",
         "@crates//:serde_json",
+        "@crates//:sha2",
     ],
 )
 
@@ -24,6 +26,7 @@ rust_library(
         "src/capability.rs",
         "src/journal.rs",
         "src/lib.rs",
+        "src/namespace.rs",
     ],
     crate_features = ["redb"],
     crate_name = "nativelink_canonical_filesystem",
@@ -36,14 +39,17 @@ rust_library(
         "@crates//:rustix-1.1.2",
         "@crates//:serde",
         "@crates//:serde_json",
+        "@crates//:sha2",
     ],
 )
 
 rust_test(
     name = "journal_test",
     compile_data = [
+        "fixtures/namespace-v1.hex",
         "src/capability_tests.rs",
         "src/journal_tests.rs",
+        "src/namespace_tests.rs",
         "src/tests.rs",
         "//tools/canonical-config:fixtures/canonical.json",
     ],
@@ -78,7 +84,9 @@ rust_test(
 rust_test(
     name = "ownership_test",
     compile_data = [
+        "fixtures/namespace-v1.hex",
         "src/capability_tests.rs",
+        "src/namespace_tests.rs",
         "src/tests.rs",
         "//tools/canonical-config:fixtures/canonical.json",
     ],
