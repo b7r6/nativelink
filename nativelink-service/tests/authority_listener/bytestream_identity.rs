@@ -708,3 +708,6 @@ async fn repeated_exact_resource_name_is_accepted() {
 
 #[path = "bytestream_identity/upstream.rs"]
 mod upstream;
+
+#[path = "bytestream_identity/completion.rs"]
+mod completion;

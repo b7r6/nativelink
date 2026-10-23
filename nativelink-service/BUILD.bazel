@@ -94,6 +94,7 @@ rust_test_suite(
     ],
     compile_data = glob(["tests/data/**"]) + [
         "tests/authority_listener/bytestream_identity.rs",
+        "tests/authority_listener/bytestream_identity/completion.rs",
         "tests/authority_listener/bytestream_identity/upstream.rs",
         "tests/authority_listener/cas_admission.rs",
         "tests/authority_listener/limits.rs",
