@@ -1,0 +1,192 @@
+{
+  "scope": "Integrated private canonical journal storage compatibility; no serving or full bootstrap claim",
+  "source_commit": "a460e3270e79eb431c83976b6a5ebf768b422103",
+  "author_source_commit": "dcd5ce8599b74e6bec6d004e68adfffb5e7a03ca",
+  "author_manifest": {
+    "path": "manifest.json",
+    "sha256": "6a2f069f81d73d4e14714e13a805c08536bbc48eae141571bca71f61be70b2d1",
+    "verification": "All57author archive members verified independently. Author original manifest remains immutable."
+  },
+  "source_comparison": "All9qualified author inputs match integration commit exactly; all562tracked integration inputs verified unchanged before/after and against git objects.",
+  "archive": {
+    "path": "root-integration.tar.gz",
+    "sha256": "331a81494c0faafe9bbb2be0cff74088d25749baf1d065e5e48152b5dfa57b3d",
+    "bytes": 4834823,
+    "files": {
+      "author-qualified-test-binary": "a89d1a1e74623ab494fda35e320a78313d61eb8bdc4ab2d6819c1fb9ebd66474",
+      "clock-binding-audit/audit.json": "6060e2bacd7eb2812281a7cc15fd9937044ba10123ae287eaeb07af4cde0ff46",
+      "clock-binding-audit/nativelink-canonical-bootstrap-audit.json": "9b92961741a63a46ecd9745a8dc3c158ee59e8d373debb480f1913b8fca764dc",
+      "clock-binding-audit/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "clock-binding-audit/source/nativelink-scheduler/design/categorical/authority-clock-proposal.md": "e48517b35dae9ee9b299441315223b333444853cec7c384ce0bb98658210a6d2",
+      "clock-binding-audit/source/nativelink-scheduler/design/categorical/authority-fallible-clock.md": "4f1899ec142dd699d487645e8198ee62d1c69bce7fd74f7f9ff88a343d0869ba",
+      "clock-binding-audit/source/nativelink-scheduler/design/categorical/authority-quantized-deadline.md": "7ce5d557a056691c7613b2ca5b96597b197784503de461c6c984ac11b847b576",
+      "clock-binding-audit/source/nativelink-scheduler/design/categorical/authority-running-clock-sampling.md": "8f5fbb626f0803e0de46d1099af4418d4aa1da2de7a798fd75717dacaa1515bc",
+      "clock-binding-audit/source/nativelink-scheduler/src/authority/format.rs": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "clock-binding-audit/source/nativelink-scheduler/src/authority/journal.rs": "4c0c46217fddd630640d8809aab079984d79124920c5a39057dcd3cde475eb47",
+      "clock-binding-audit/source/nativelink-scheduler/src/authority/mod.rs": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+      "clock-binding-audit/source/nativelink-scheduler/src/authority/request.rs": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "clock-binding-audit/source/nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "clock-binding-audit/source/nativelink-service/src/authority_clock.rs": "1f7514f7b84f1c966e0688ba190961bda469810c917e0876e62fd4daad124bf6",
+      "clock-binding-audit/source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+      "clock-binding-audit/source/nativelink-worker/src/authority_worker.rs": "7b65bf493f738c19d09270bcd08fc53c8ccbfe1285cfb217d7a13542fecb13a5",
+      "clock-binding-audit/source/nativelink-worker/src/running_actions_manager.rs": "767d035fe66c80bee33f3887732072d70d1cda581613ddccf0044832294a044c",
+      "clock-binding-audit/source/tools/canonical-config/src/lib.rs": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+      "clock-binding-audit/source/tools/canonical-config/src/schema.rs": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "clock-binding-audit/source/tools/canonical-filesystem/Cargo.toml": "44fb6630fd5539d71152d44cef5628aecc92f00871c78b9eefbcc96141b53a3d",
+      "clock-binding-audit/source/tools/canonical-filesystem/src/capability.rs": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "clock-binding-audit/source/tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+      "clock-binding-audit/source/tools/canonical-filesystem/src/lib.rs": "aed4e290e0373afa7bc55cb43ee85e0fdafc3f9d17d5193c1d21f86592496f52",
+      "command.json": "994338790a1a09598af15a2b06e23f7a0ff2b49272639afcd7d7cd3d1f9ec7ca",
+      "head.txt": "6f33211c88ccafe6ce1a4157eac844853addfa1261fa2670f7cc80cf5c73697e",
+      "independent-review/review.json": "d348328801d26c758c8ea43a644e80b0b8ad479c07c5b2b2019c60100d1427d5",
+      "independent-review/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-review/source/nativelink-scheduler/BUILD.bazel": "00ba51a97883f29fa7954574818dd61a5707224d309b3c3b39457555a9b9ea8b",
+      "independent-review/source/nativelink-scheduler/design/categorical/authority-canonical-binding.md": "5134464b8802d32fb933bb8c8f3a42abc1516daf238d2551dcbe8bf9786d2a18",
+      "independent-review/source/nativelink-scheduler/design/categorical/authority-clock-proposal.md": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a",
+      "independent-review/source/nativelink-scheduler/src/authority/canonical_binding.rs": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff",
+      "independent-review/source/nativelink-scheduler/src/authority/canonical_binding_tests.rs": "76d698dd3181f69ffee8cab51af4d6b9a2118579f8ddba1339550b55f431816f",
+      "independent-review/source/nativelink-scheduler/src/authority/journal.rs": "27e2ef1a8a0944d6eef5c727241aeb868d04099e8a87844b18909a5b0396619d",
+      "independent-review/source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "b04794ee8efd109a3aa1b60e284077773a68ed8b557f1cbc9e585f841e189b27",
+      "independent-review/source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "435531a5523b5af6c412d290b9d8146c4d59a05353cf5110aa7eb746bfd8896e",
+      "independent-review/source/nativelink-service/src/authority_server.rs": "bf872ea1e3b7e13c473c38e973188649fd5d747d083d77036c320076fdef5ec0",
+      "independent-review/source/tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+      "integrated-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "integrated-source/nativelink-scheduler/BUILD.bazel": "00ba51a97883f29fa7954574818dd61a5707224d309b3c3b39457555a9b9ea8b",
+      "integrated-source/nativelink-scheduler/design/categorical/authority-canonical-binding.md": "5134464b8802d32fb933bb8c8f3a42abc1516daf238d2551dcbe8bf9786d2a18",
+      "integrated-source/nativelink-scheduler/design/categorical/authority-clock-proposal.md": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a",
+      "integrated-source/nativelink-scheduler/src/authority/canonical_binding.rs": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff",
+      "integrated-source/nativelink-scheduler/src/authority/canonical_binding_tests.rs": "76d698dd3181f69ffee8cab51af4d6b9a2118579f8ddba1339550b55f431816f",
+      "integrated-source/nativelink-scheduler/src/authority/journal.rs": "27e2ef1a8a0944d6eef5c727241aeb868d04099e8a87844b18909a5b0396619d",
+      "integrated-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "b04794ee8efd109a3aa1b60e284077773a68ed8b557f1cbc9e585f841e189b27",
+      "integrated-source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "435531a5523b5af6c412d290b9d8146c4d59a05353cf5110aa7eb746bfd8896e",
+      "integrated-source.json": "06fac79277b178322fe8a9ca6861bb42b3d36e3d3d50226f8049d6254b138378",
+      "integration.log": "349b0cabad17dbd63dde6bebbe96f8cc8c1be9a71020ca121434844bd59c5005",
+      "run-integration.py": "caf4af471e666a06ee06be59492f8ca266ba4f5d74c3b53c6330830d481c2713",
+      "source-names.json": "961e6f5ee7a526dc212aa6c8ab5d25703dccc899b8537a17284d53311ebe6d50",
+      "sources-after.json": "e6305db97b56533f019781700969998db103c466c35f7091dd20b4d8e499537d",
+      "sources-before.json": "e6305db97b56533f019781700969998db103c466c35f7091dd20b4d8e499537d",
+      "testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log": "58ff597fd34063db77ac0453933c2ff99c32c3a8d96c440ff16f135f2fbc970b",
+      "testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log": "b4bdac3293f8faba0c2b461ac4066366a3b96b5db0b6b9fc8562e992ff7e65ee",
+      "testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log": "5a65d8a29b957ad7820072ba92148f1b0d64498515306afab124af99c2ad6f0b",
+      "testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log": "d36916d0eba270c5e3877b989251f367a3c5ba77ddbb0e9869d4a3c1af7f05c7",
+      "testlogs/nativelink-scheduler/unit_test/test.log": "666dd4c4d3e860367df5c89b1765d3323b1f9744e4d95985f2a5ccb9dd45fc7d",
+      "testlogs/nativelink-service/unit_test/test.log": "1c45662c80e241249be865aa6129d56e0f842fcf9bd9f770f71d4a1896bb242e",
+      "testlogs/nativelink-worker/authority_history_rpc_test/test.log": "86c1d774ab61f4c6faa36c95613ec85509fa3c3448aaf930a9c06ec670d6df86",
+      "testlogs/nativelink-worker/authority_replicated_rpc_test/test.log": "fe4d703d41a40221b1e77bad0ffec8aee9e8df45e8c1addb89c2a22fede43667",
+      "testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log": "e3dc01067f06d8148a55f4ed58b86971add1c8abf849a7d557b11df9243065c9",
+      "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "1e9bb22607ea1a558cc9c028599bd4658fa76198f29d2a633875a3e5e354ac62",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "6bc83727aa5ac78ef322c5754524fdbe209fdc5db4fd27172705701984d1c741"
+    }
+  },
+  "root_qualification": {
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=12",
+      "--local_test_jobs=4",
+      "--test_env=RUST_TEST_THREADS=4",
+      "--test_output=errors",
+      "//nativelink-scheduler:unit_test",
+      "//nativelink-scheduler:integration_tests/authority_raft_test_test",
+      "//nativelink-scheduler:integration_tests/authority_cluster_test_test",
+      "//nativelink-scheduler:integration_tests/authority_format_test_test",
+      "//nativelink-scheduler:integration_tests/authority_volatile_test_test",
+      "//nativelink-service:unit_test",
+      "//nativelink-worker:integration_tests/authority_rpc_test_test",
+      "//nativelink-worker:authority_history_rpc_test",
+      "//nativelink-worker:authority_replicated_rpc_test",
+      "//tools/canonical-filesystem:journal_bridge_test",
+      "//tools/canonical-store:canonical_store_test",
+      "//:nativelink"
+    ],
+    "targets_passed": 11,
+    "executed": 11,
+    "cached": 0,
+    "elapsed_seconds": 50.537,
+    "server_build": "//:nativelink",
+    "unchanged_inputs": 562,
+    "per_log": [
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log",
+        "passed": 28,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log",
+        "passed": 24,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/unit_test/test.log",
+        "passed": 107,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/unit_test/test.log",
+        "passed": 26,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_history_rpc_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_replicated_rpc_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log",
+        "passed": 22,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-store/canonical_store_test/test.log",
+        "passed": 20,
+        "failed": 0,
+        "ignored": 0
+      }
+    ]
+  },
+  "independent_review_sha256": "d348328801d26c758c8ea43a644e80b0b8ad479c07c5b2b2019c60100d1427d5",
+  "clock_binding_audit_sha256": "6060e2bacd7eb2812281a7cc15fd9937044ba10123ae287eaeb07af4cde0ff46",
+  "author_binary": "Final author executed binary added to this separate rootarchive; SHA matches author-qualified-binary receipt. Author bundle itself stores hashes/logs, not mutant binaries.",
+  "limitations": [
+    "All bound construction is private/test-only; public constructors expect absence. Namespace commitment bytes are synthetic test facts, not filesystem custody or clock provenance.",
+    "No complete cold bootstrap/seal ordering, current namespace resynchronization, cancellation supervisor or canonical serving constructor is exposed.",
+    "Live private cold handle accepts Preparing or Sealed; phase downgrade prevention and seal authorization remain future work.",
+    "Synthetic parent callback error is not an actual fsync fault or power-loss test. Synthetic Sealed fixtures are not successful bootstrap evidence.",
+    "No fixed-clock lifetime cutoff, elapsed-time guarantee, worker execution, process death, charge release or migration is claimed.",
+    "Admission recovery snapshot check is contract-only and does not expand its full snapshot/membership recovery proof.",
+    "Existing live install_snapshot validates a snapshot's own Limits but does not compare them with the constructor-requested Limits. A future fixed canonical facade must qualify or deny that semantic import path.",
+    "Tests-first source freeze required newprivate interfaces and was not compiled against old code.",
+    "No rawauthority exposure or productionconstructoractivation; genericinstallsnapshot Limitscompatibility remains a separate existinggap.",
+    "No M0-M9 gate closure."
+  ]
+}

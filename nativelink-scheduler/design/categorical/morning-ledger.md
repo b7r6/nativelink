@@ -934,6 +934,23 @@ build and 560 unchanged inputs. The
 incorrect Bazel label and its correction. This patch changes tests and documents
 the missing headroom contract; it changes no runtime timeout projection.
 
+The private journal path now binds one fixed canonical profile and a nonzero
+namespace commitment in required metadata, applied state and saved snapshots.
+Generic constructors and admission recovery refuse bound or partially bound
+histories. New private journals atomically record `preparing` before the parent
+sync callback; existing opens require `sealed`. No runtime code writes that seal
+yet. Live reads and writes check required metadata, and snapshot imports compare
+the immutable contract before mutation. Generic serialization remains unchanged.
+Nine storage fixtures and five detected compiled faults qualify this boundary;
+root integration executed eleven Bazel targets with 260 passes, a server build
+and 562 unchanged inputs. The
+[integration receipt](evidence/canonical-journal-binding/root-integration.json)
+preserves the independent review and earlier clock/constructor audit. Synthetic
+commitments, seals and parent callback failures do not prove owned bootstrap,
+actual sync failures or temporal provenance. Live generic snapshot installation
+still does not compare imported Limits with the constructor's requested Limits;
+the future canonical interface must qualify or prohibit that path.
+
 The constructor audit also separates logical accepted-history namespace from the
 physical CAS identity, and authority-member incarnation from worker incarnation.
 Neither pair can be substituted. Reopen must validate persisted limits,
@@ -955,7 +972,8 @@ service memory claim is justified.
    listener isolation, and strict configuration refusal plus the offline
    converter. The parser, converter and local mTLS fixture are implemented;
    physical namespace preflight, startup refusal ordering and the fixed clock
-   still need combined construction and persistent compatibility binding.
+   still need combined construction. The private compatibility binding must be
+   derived from retained ownership and sealed only after the required barriers.
    Existing fixtures qualify parts of these behaviors; production
    factories still select the legacy runtime. Unknown migration destinations must
    remain explicit blocking output from the converter.
