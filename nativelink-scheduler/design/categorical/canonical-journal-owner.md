@@ -1,12 +1,27 @@
 # Inert canonical journal owner
 
-`PreparedCanonicalOwner` is a Linux-only, storage-only constructor. It consumes a
-`SyncedNamespace`, derives node, epoch, nonzero authority namespace and the fixed
-namespace commitment from that retained capability, and keeps all four cooperative
-root locks until its journal backend is released. The public surface consists of
-cold preparation, sealed reopening, copied diagnostics and consuming release.
-It exposes no journal, Raft, arbitrary event, factory, clock, seal transition,
-snapshot or singleton constructor. It starts no scheduler, listener or worker.
+`PreparedCanonicalOwner` is a Linux-only owner for a bound journal. Its opening
+methods consume a `SyncedNamespace`, derive node, epoch, nonzero authority
+namespace and the fixed namespace commitment from that retained capability, and
+keep all four cooperative root locks until the journal backend is released.
+Cold preparation and sealed reopening perform storage work only. The public
+surface also provides copied diagnostics, consuming release, and a separate
+`recover_sealed` transition. It exposes no journal, Raft, arbitrary event,
+factory, clock sample, seal setter, snapshot or singleton constructor.
+
+`recover_sealed` consumes an existing sealed owner into a permanent supervisor.
+Actual Raft recovery and an applied read barrier precede the complete temporal
+audit and fixed monotonic clock capture. The returned `RecoveredCanonicalOwner`
+provides only a copied diagnostic and consuming shutdown; its diagnostic records
+the capture and does not report current health. Cancellation and shutdown retain
+custody until actual storage work and final backend destruction finish. This
+transition starts no listener, worker, effect driver or admission loop. Cold
+preparation still remains `preparing` and cannot enter this recovery path.
+
+The [closed recovery packet](evidence/canonical-recovery-composition/README.md)
+records the composed lifecycle and clock qualification, six compiled controls,
+and separate external API probes. These results extend the storage-only packet
+below without making the canonical runtime ready to serve.
 
 Cold preparation exclusively creates the fixed journal and writes compatible
 identity, fixed finite limits and `preparing` metadata in one Immediate
