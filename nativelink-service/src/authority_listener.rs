@@ -48,6 +48,14 @@ use crate::capabilities_server::CapabilitiesServer;
 use crate::cas_server::CasServer;
 use crate::wire_compression::RemoteCacheCompressionInstances;
 
+// Per-message wire ceilings, including protobuf envelopes. These do not bound
+// concurrent RPCs or allocations made by a service before response encoding.
+const CACHE_MESSAGE_BYTES: usize = 1024 * 1024;
+const WORKER_MESSAGE_BYTES: usize = 1024 * 1024;
+const CONTROL_MESSAGE_BYTES: usize = 64 * 1024;
+const OPERATION_MESSAGE_BYTES: usize = 128 * 1024;
+const READ_CHUNK_BYTES: usize = 64 * 1024;
+
 /// A fixed worker route set. There is deliberately no route-builder accessor.
 #[derive(Debug)]
 pub struct WorkerListener {
@@ -102,6 +110,7 @@ impl AuthorityListeners {
                     instance_name: config.instance.clone(),
                     config: ByteStreamConfig {
                         cas_store: "authority_objects".to_owned(),
+                        max_bytes_per_stream: READ_CHUNK_BYTES,
                         ..ByteStreamConfig::default()
                     },
                 }],
@@ -129,22 +138,47 @@ impl AuthorityListeners {
         };
         let capabilities = CapabilitiesServer::new_authority(config.instance.clone());
         let (service, coordinator) = AuthorityService::start(authority, config).await?;
-        let cas = cas.into_service();
-        let bytestream = bytestream.into_service();
+        let cas = cas
+            .into_service()
+            .max_decoding_message_size(CACHE_MESSAGE_BYTES)
+            .max_encoding_message_size(CACHE_MESSAGE_BYTES);
+        let bytestream = bytestream
+            .into_service()
+            .max_decoding_message_size(CACHE_MESSAGE_BYTES)
+            .max_encoding_message_size(CACHE_MESSAGE_BYTES);
         let worker = WorkerListener {
-            routes: Routes::new(AuthorityWorkerApiServer::new(service.clone()))
-                .add_service(cas.clone())
-                .add_service(bytestream.clone()),
+            routes: Routes::new(
+                AuthorityWorkerApiServer::new(service.clone())
+                    .max_decoding_message_size(WORKER_MESSAGE_BYTES)
+                    .max_encoding_message_size(WORKER_MESSAGE_BYTES),
+            )
+            .add_service(cas.clone())
+            .add_service(bytestream.clone()),
         };
         let client = ClientListener {
             routes: Routes::new(
-                ExecutionServer::new(service.clone()).max_encoding_message_size(128 * 1024),
+                ExecutionServer::new(service.clone())
+                    .max_decoding_message_size(CONTROL_MESSAGE_BYTES)
+                    .max_encoding_message_size(OPERATION_MESSAGE_BYTES),
             )
-            .add_service(OperationsServer::new(service.clone()))
-            .add_service(ac.into_service())
+            .add_service(
+                OperationsServer::new(service.clone())
+                    .max_decoding_message_size(CONTROL_MESSAGE_BYTES)
+                    .max_encoding_message_size(OPERATION_MESSAGE_BYTES),
+            )
+            .add_service(
+                ac.into_service()
+                    .max_decoding_message_size(CACHE_MESSAGE_BYTES)
+                    .max_encoding_message_size(CACHE_MESSAGE_BYTES),
+            )
             .add_service(cas)
             .add_service(bytestream)
-            .add_service(capabilities.into_service()),
+            .add_service(
+                capabilities
+                    .into_service()
+                    .max_decoding_message_size(CONTROL_MESSAGE_BYTES)
+                    .max_encoding_message_size(CONTROL_MESSAGE_BYTES),
+            ),
         };
         Ok(Self {
             service,

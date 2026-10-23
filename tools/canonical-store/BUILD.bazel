@@ -24,6 +24,7 @@ rust_test(
     name = "canonical_store_test",
     compile_data = [
         "src/tests.rs",
+        "src/tests/listener.rs",
         "src/tests/rpc.rs",
         "//tools/canonical-config:fixtures/canonical.json",
     ],
@@ -34,10 +35,12 @@ rust_test(
     deps = [
         "//nativelink-config",
         "//nativelink-proto",
+        "//nativelink-scheduler",
         "//nativelink-service",
         "//nativelink-store",
         "@crates//:hyper-util",
         "@crates//:opentelemetry",
+        "@crates//:prost",
         "@crates//:tokio-stream",
         "@crates//:tonic",
         "@crates//:tower",

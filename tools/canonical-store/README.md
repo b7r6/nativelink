@@ -90,6 +90,14 @@ backend; a backend size check alone cannot bound that earlier allocation.
 ByteStream identity and compressed reads are exercised separately. The harness
 is not an admission or memory proof for an arbitrary service configuration.
 
+A second fixture serves the fixed experimental `AuthorityListeners` roles over
+local TCP with these CAS and sink drivers. It checks chunked transfers larger
+than one wire message, refusal before filesystem mutation, and late response
+encoding refusals. Its journal is a separate test file. The
+[listener wire-limit audit](../../nativelink-scheduler/design/categorical/authority-listener-wire-limits.md)
+records the remaining service aggregation and capability advertisement gaps;
+this fixture does not qualify a canonical server or aggregate memory admission.
+
 ## Filesystem boundary
 
 All backend namespace access uses opaque directory-relative handles. The only capability

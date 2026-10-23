@@ -67,6 +67,9 @@ const INSTANCE: &str = "authority-listener-test";
 #[path = "authority_listener/tls.rs"]
 mod tls;
 
+#[path = "authority_listener/limits.rs"]
+mod limits;
+
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {
