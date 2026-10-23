@@ -8,6 +8,18 @@ load(
     "rust_test_suite",
 )
 
+# Shared singleton retention experiment; the store's explicit provider fixture
+# compiles this same authority and catalogue instead of copying them.
+exports_files(
+    [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/retention/typed_bridge.rs",
+    ],
+    visibility = ["//nativelink-store:__pkg__"],
+)
+
 rust_binary(
     name = "authority_budget",
     srcs = ["examples/authority_budget.rs"],

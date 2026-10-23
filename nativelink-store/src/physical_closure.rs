@@ -36,8 +36,33 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
 use prost::Message;
 
 use crate::physical_filesystem::{
-    Algorithm, Failure as PhysicalFailure, ObjectId, PhysicalFilesystem, PhysicalKey,
+    Algorithm, Failure as PhysicalFailure, ObjectId, PhysicalFilesystem, PhysicalKey, VerifiedRead,
 };
+
+/// Experimental physical read contract, independent of the provider.
+/// Implementations verify the exact key, descriptor, length and whole-object
+/// digest before returning any range, including a zero-length range.
+pub trait VerifiedReader: Clone {
+    fn read(
+        &self,
+        key: PhysicalKey,
+        object: ObjectId,
+        offset: u64,
+        length: Option<u64>,
+    ) -> Result<VerifiedRead, PhysicalFailure>;
+}
+
+impl VerifiedReader for PhysicalFilesystem {
+    fn read(
+        &self,
+        key: PhysicalKey,
+        object: ObjectId,
+        offset: u64,
+        length: Option<u64>,
+    ) -> Result<VerifiedRead, PhysicalFailure> {
+        Self::read(self, key, object, offset, length)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Failure {
@@ -224,8 +249,8 @@ enum Root {
 }
 
 /// No accessor exposes partial objects or edges. Any failed advance is terminal.
-pub struct Preparation {
-    store: PhysicalFilesystem,
+pub struct Preparation<R: VerifiedReader = PhysicalFilesystem> {
+    store: R,
     algorithm: Algorithm,
     limits: Limits,
     catalogue_revision: u64,
@@ -246,7 +271,7 @@ pub struct Preparation {
     failure: Option<Failure>,
 }
 
-impl Debug for Preparation {
+impl<R: VerifiedReader> Debug for Preparation<R> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Preparation")
@@ -258,9 +283,9 @@ impl Debug for Preparation {
     }
 }
 
-impl Preparation {
+impl<R: VerifiedReader> Preparation<R> {
     pub fn new(
-        store: PhysicalFilesystem,
+        store: R,
         catalogue_revision: u64,
         catalogue: &[Binding],
         action_result: ObjectId,

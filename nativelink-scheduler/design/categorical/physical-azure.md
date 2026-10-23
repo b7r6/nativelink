@@ -121,6 +121,40 @@ This test-only override avoids the relative crate directory set by `rules_rust`.
 The explicit standalone strategy permits that dependency and loopback listener;
 the ordinary target does not assume either prerequisite.
 
+## Typed retention over actual provider objects
+
+The separate `local_azurite_typed_retention_contract` fixture supplies this
+adapter to the existing [typed retention bridge](typed-retention-bridge.md).
+The bridge's catalogue, checkpoint, candidate, independent oracle, manifests,
+and grant checks remain one shared implementation. The typed closure preparer
+uses the same traversal and limits with an explicit verified reader. A plain
+synchronous test owns a two-thread Tokio runtime for SDK calls; no runtime is
+entered from an existing async task.
+
+The fixture uploads an ActionResult, Tree, and file/stream blob, verifies all
+three through actual provider GETs, and acquires publication and serving roots.
+It removes the head, reopens the authority and provider adapter, and reads all
+three objects through the original serving grant. Retirement while protected
+changes neither checkpoint nor state and issues no DELETE. A wrong descriptor
+and an expired grant are rejected before HTTP. Captured marks remain conservative
+after expiry, so the existing cohort protocol requires another close/mark cycle
+with a fresh fence. Committed retirement then permits conditional deletion of
+exactly those generations.
+
+A transport fault loses the response after a real conditional DELETE succeeds.
+The authority preserves its pending delete intent and exact checkpoint, including
+across reopening. Retrying reconciles provider absence before committing
+`DeleteDone`. The fixture reopens once more and checks both the committed deletion
+receipts and actual provider absence. It creates only an authority directory;
+no filesystem object fallback can supply the bytes. The SDK trace checks every
+actual DELETE for `If-Match` and rejects multipart writes.
+
+Run either command above with the exact test name replaced by
+`local_azurite_typed_retention_contract`. It is explicitly ignored in general
+suites and fails when selected without the emulator prerequisite. This is a
+singleton local composition qualification, not a production publication policy,
+replicated authority, cloud durability claim, or power-loss test.
+
 ## Missing capabilities
 
 This fixture does not qualify an Azure account, cloud persistence, service

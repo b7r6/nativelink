@@ -15,6 +15,8 @@
 #[path = "physical_azure/adapter.rs"]
 mod adapter;
 mod azurite_runner;
+#[path = "physical_azure/retention.rs"]
+mod retention;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -49,6 +51,7 @@ struct RequestRecord {
 struct ObservedTransport {
     inner: Arc<dyn HttpClient>,
     lose_next_put_response: AtomicBool,
+    lose_next_delete_response: AtomicBool,
     records: Mutex<Vec<RequestRecord>>,
 }
 
@@ -57,6 +60,7 @@ impl ObservedTransport {
         Arc::new(Self {
             inner: network_transport().unwrap(),
             lose_next_put_response: AtomicBool::new(false),
+            lose_next_delete_response: AtomicBool::new(false),
             records: Mutex::new(Vec::new()),
         })
     }
@@ -101,8 +105,23 @@ impl HttpClient for ObservedTransport {
                 "injected lost PUT response",
             ));
         }
+        if request.method() == Method::Delete
+            && status == StatusCode::Accepted
+            && self.lose_next_delete_response.swap(false, Ordering::SeqCst)
+        {
+            return Err(azure_core::Error::with_message(
+                ErrorKind::Other,
+                "injected lost DELETE response",
+            ));
+        }
         Ok(response)
     }
+}
+
+#[test]
+#[ignore = "Explicit local qualification: requires the pinned Azurite runner; select this exact test with --ignored, and missing dependencies fail"]
+fn local_azurite_typed_retention_contract() {
+    retention::qualify();
 }
 
 fn incarnation(last_byte: u8) -> Incarnation {

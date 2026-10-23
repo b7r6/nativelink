@@ -186,6 +186,11 @@ rust_test_suite(
         "tests/azurite_runner/process.rs",
         "tests/azurite_runner/sas.rs",
         "tests/physical_azure/adapter.rs",
+        "tests/physical_azure/retention.rs",
+        "//nativelink-scheduler:tests/retention/coarse.rs",
+        "//nativelink-scheduler:tests/retention/protocol.rs",
+        "//nativelink-scheduler:tests/retention/reference.rs",
+        "//nativelink-scheduler:tests/retention/typed_bridge.rs",
     ],
     # FIXME(palfrey): we should be including this in Bazel, but the azurite_runner program makes a
     # bunch of assumptions about it's environment (mainly regarding programs it can run) that are
@@ -236,6 +241,7 @@ rust_test_suite(
         "@crates//:reqwest",
         "@crates//:rlimit",
         "@crates//:rustls",
+        "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:serial_test",
         "@crates//:sha2",

@@ -25,11 +25,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use nativelink_store::physical_closure::{
-    Binding, Failure as ClosureFailure, Limits as ClosureLimits, Preparation,
+    Binding, Failure as ClosureFailure, Limits as ClosureLimits, Preparation, VerifiedReader,
 };
 use nativelink_store::physical_filesystem::{
-    Algorithm, Failure as PhysicalFailure, Incarnation, Limits as PhysicalLimits, ObjectId,
-    PhysicalFilesystem, PhysicalKey,
+    Algorithm, DeleteReceipt, Failure as PhysicalFailure, Incarnation, Limits as PhysicalLimits,
+    ObjectId, PhysicalFilesystem, PhysicalKey, WriteReceipt,
 };
 use serde::{Deserialize, Serialize};
 
@@ -385,8 +385,8 @@ impl Drop for Permit {
     }
 }
 
-pub(crate) struct Pending {
-    preparation: Preparation,
+pub(crate) struct Pending<B: PhysicalBackend = PhysicalFilesystem> {
+    preparation: Preparation<B>,
     revision: u64,
     deadline: u64,
     fences: BTreeMap<CohortId, u64>,
@@ -401,9 +401,41 @@ pub(crate) struct Grant {
     until: u64,
 }
 
-pub(crate) struct Bridge {
+/// Only physical effects vary; catalogue, authority, oracle and grant checks
+/// remain the same test composition for every explicitly supplied backend.
+pub(crate) trait PhysicalBackend: VerifiedReader {
+    fn write(
+        &self,
+        key: PhysicalKey,
+        write: u64,
+        object: ObjectId,
+        bytes: &[u8],
+    ) -> Result<WriteReceipt, PhysicalFailure>;
+
+    fn delete(&self, key: PhysicalKey, delete: u64) -> Result<DeleteReceipt, PhysicalFailure>;
+}
+
+impl PhysicalBackend for PhysicalFilesystem {
+    fn write(
+        &self,
+        key: PhysicalKey,
+        write: u64,
+        object: ObjectId,
+        bytes: &[u8],
+    ) -> Result<WriteReceipt, PhysicalFailure> {
+        let mut pending = self.begin_write(key, write, object)?;
+        pending.append(bytes)?;
+        pending.finish()
+    }
+
+    fn delete(&self, key: PhysicalKey, delete: u64) -> Result<DeleteReceipt, PhysicalFailure> {
+        Self::delete(self, key, delete)
+    }
+}
+
+pub(crate) struct Bridge<B: PhysicalBackend = PhysicalFilesystem> {
     state: State,
-    pub(crate) store: PhysicalFilesystem,
+    pub(crate) store: B,
     checkpoint: PathBuf,
     _lock: File,
     pending: Arc<AtomicUsize>,
@@ -411,8 +443,29 @@ pub(crate) struct Bridge {
     poisoned: bool,
 }
 
-impl Bridge {
+impl Bridge<PhysicalFilesystem> {
     pub(crate) fn bootstrap(base: &Path) -> Result<Self, Error> {
+        Self::bootstrap_with(base, |incarnation| {
+            PhysicalFilesystem::bootstrap(
+                &base.join("physical"),
+                incarnation,
+                PhysicalLimits::default(),
+            )
+        })
+    }
+
+    pub(crate) fn reopen(base: &Path) -> Result<Self, Error> {
+        Self::reopen_with(base, |incarnation| {
+            PhysicalFilesystem::open(&base.join("physical"), incarnation)
+        })
+    }
+}
+
+impl<B: PhysicalBackend> Bridge<B> {
+    pub(crate) fn bootstrap_with(
+        base: &Path,
+        create: impl FnOnce(Incarnation) -> Result<B, PhysicalFailure>,
+    ) -> Result<Self, Error> {
         let namespace = *uuid::Uuid::new_v4().as_bytes();
         let lock = OpenOptions::new()
             .read(true)
@@ -437,12 +490,7 @@ impl Bridge {
                     head: None,
                 },
             },
-            store: PhysicalFilesystem::bootstrap(
-                &base.join("physical"),
-                Incarnation::new(namespace).unwrap(),
-                PhysicalLimits::default(),
-            )
-            .map_err(Error::Physical)?,
+            store: create(Incarnation::new(namespace).unwrap()).map_err(Error::Physical)?,
             checkpoint: base.join("authority/checkpoint"),
             _lock: lock,
             pending: Arc::new(AtomicUsize::new(0)),
@@ -453,7 +501,10 @@ impl Bridge {
         Ok(bridge)
     }
 
-    pub(crate) fn reopen(base: &Path) -> Result<Self, Error> {
+    pub(crate) fn reopen_with(
+        base: &Path,
+        open: impl FnOnce(Incarnation) -> Result<B, PhysicalFailure>,
+    ) -> Result<Self, Error> {
         let lock = OpenOptions::new()
             .read(true)
             .write(true)
@@ -471,11 +522,8 @@ impl Bridge {
             .read_to_end(&mut bytes)
             .map_err(|_| Error::Storage)?;
         let state = State::decode(&bytes)?;
-        let store = PhysicalFilesystem::open(
-            &base.join("physical"),
-            Incarnation::new(state.metadata.namespace).unwrap(),
-        )
-        .map_err(Error::Physical)?;
+        let store =
+            open(Incarnation::new(state.metadata.namespace).unwrap()).map_err(Error::Physical)?;
         Ok(Self {
             state,
             store,
@@ -623,12 +671,10 @@ impl Bridge {
         })?;
         self.commit(next)?;
         let binding = row.binding();
-        let mut write = self
+        let receipt = self
             .store
-            .begin_write(binding.key, generation, binding.object)
+            .write(binding.key, generation, binding.object, bytes)
             .map_err(Error::Physical)?;
-        write.append(bytes).map_err(Error::Physical)?;
-        let receipt = write.finish().map_err(Error::Physical)?;
         assert_eq!(receipt.key, binding.key);
         assert_eq!(receipt.object, binding.object);
         assert_eq!(receipt.write, generation);
@@ -655,7 +701,7 @@ impl Bridge {
         Ok(row)
     }
 
-    pub(crate) fn begin(&self, result: Row) -> Result<Pending, Error> {
+    pub(crate) fn begin(&self, result: Row) -> Result<Pending<B>, Error> {
         self.live()?;
         self.pending
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
@@ -699,7 +745,7 @@ impl Bridge {
         })
     }
 
-    pub(crate) fn advance(&self, pending: &mut Pending, steps: usize) -> Result<bool, Error> {
+    pub(crate) fn advance(&self, pending: &mut Pending<B>, steps: usize) -> Result<bool, Error> {
         self.live()?;
         if self.view().now >= pending.deadline {
             return Err(Error::Expired);
@@ -709,7 +755,7 @@ impl Bridge {
 
     pub(crate) fn publish(
         &mut self,
-        pending: Pending,
+        pending: Pending<B>,
         root: RootId,
         lease: u64,
         until: u64,

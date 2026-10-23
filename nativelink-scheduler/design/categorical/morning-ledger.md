@@ -303,6 +303,18 @@ The plan's pinned public commit was initially absent, then fetched by root.
 [source-map.md](source-map.md) records the observed listing/test drift against
 the actual starting tree.
 
+The existing typed-retention composition now runs against the actual Azurite
+SDK fixture through a verified-read and physical-effect seam. Its catalogue,
+checkpoint, grant checks, and independent retention oracle are shared with the
+filesystem fixture. The provider run records 33 SDK requests and three
+conditional deletes; a successful delete with a lost acknowledgement remains
+pending across reopen until absence reconciliation commits its completion.
+Six compiled causal faults are detected and the restored baseline passes.
+Integrated Bazel passes the provider case and both unchanged filesystem suites.
+[Receipts](evidence/azure-typed-retention/manifest.json) retain failures and
+source hashes. This remains a singleton test composition, without production
+construction, cloud-account qualification, or a completed M5 gate.
+
 ## Decisions made provisionally
 
 - Use redb for the durable journal candidate behind exactly OpenRaft 0.9.25

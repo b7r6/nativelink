@@ -2,8 +2,11 @@
 
 `nativelink-store/src/physical_closure.rs` prepares a bounded, complete set of
 exact physical generations from an immutable `ActionResult` object. It uses
-the [physical filesystem experiment](physical-filesystem.md) and the existing
-generated REAPI types. No store factory, service, scheduler, worker, or live
+the [physical filesystem experiment](physical-filesystem.md) by default and the
+existing generated REAPI types. An explicit `VerifiedReader` parameter also
+lets the [local Azure fixture](physical-azure.md) run this same traversal against
+provider objects. Every reader must verify the whole object before returning a
+range, including an empty range. No store factory, service, scheduler, worker, or live
 publication path selects it. This is an M5/M6 preparation experiment, not a
 completed publication or retention implementation.
 
@@ -95,7 +98,9 @@ fields, decoded messages, graph edges, path bytes, and path depth. A schema-
 directed wire census checks field and structured-message budgets before prost
 allocates repeated messages. Its fixed schema recursion never enters file
 payloads, raw streams, or `Any.value`. Length-delimited bytes remain bounded by
-the metadata-message cap. Raw physical blobs are streamed with no retained body.
+the metadata-message cap. The preparer retains no body for raw physical blobs.
+The filesystem reader streams verification; the local Azure reader uses its
+separate bounded whole-object buffer.
 
 `advance` accepts 1–1024 steps. A step processes one physical object in one role
 or performs the final bounded graph pass. A step is not a constant latency or

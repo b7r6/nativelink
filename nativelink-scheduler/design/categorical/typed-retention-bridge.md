@@ -7,6 +7,12 @@ unchanged finite cohort candidate, and its independent retention oracle.
 authority, journal, worker, service, or factory selects it. These fixtures add
 composition evidence; they do not complete the M6 publication gate.
 
+The bridge and its pending preparation accept an explicit physical backend;
+their default remains the filesystem adapter. Only verified reads and physical
+write/delete receipts vary. The [local Azure fixture](physical-azure.md) compiles
+this same bridge, catalogue, candidate, and oracle against the existing SDK
+adapter. Its authority directory contains no filesystem object cache or mirror.
+
 ## Preparation and acquisition
 
 The wrapper owns one bounded catalogue, a monotonic catalogue revision, root
@@ -90,7 +96,7 @@ an edge cannot be hidden by feeding the same incomplete vector to both models.
 
 The experiment has no worker authorization, action-key protocol, durable
 preparation-resume format, Raft read barrier, lease coalescing, root reclamation,
-or Azure qualification. New serving-root acquisition follows the existing
+or cloud-account qualification. New serving-root acquisition follows the existing
 candidate's cohort-phase restrictions. Capacity exhaustion and conservative
 revision rejection remain explicit errors, not production throughput claims.
 
