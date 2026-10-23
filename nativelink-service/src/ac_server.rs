@@ -36,6 +36,10 @@ use prost::Message;
 use tonic::{Request, Response, Status};
 use tracing::{Instrument, Level, error, error_span, instrument};
 
+#[cfg(test)]
+#[path = "ac_server/authority_tests.rs"]
+mod authority_tests;
+
 #[derive(Debug, Clone)]
 pub struct AcStoreInfo {
     store: Store,

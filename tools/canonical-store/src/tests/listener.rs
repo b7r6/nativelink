@@ -411,7 +411,7 @@ async fn fixed_roles_refuse_oversized_malformed_and_compressed_writes_without_fi
 }
 
 #[nativelink_macro::nativelink_test]
-async fn fixed_roles_refuse_large_cas_batches_before_reads_and_ac_after_reads() {
+async fn fixed_roles_refuse_large_cas_batches_and_bound_ac_before_decode() {
     let (fixture, stores) = Fixture::new().await;
     let rpc = FixedRpc::new(&fixture, &stores).await;
     for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
@@ -464,10 +464,10 @@ async fn fixed_roles_refuse_large_cas_batches_before_reads_and_ac_after_reads() 
             })
             .await
         else {
-            panic!("oversized AC response must fail during encoding");
+            panic!("oversized AC value must fail before decoding");
         };
-        assert_eq!(error.code(), RpcCode::OutOfRange);
-        assert!(error.message().contains("encoded message length too large"));
+        assert_eq!(error.code(), RpcCode::ResourceExhausted);
+        assert!(error.message().len() <= 256);
     }
     rpc.shutdown().await;
 }
