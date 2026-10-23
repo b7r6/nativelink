@@ -619,3 +619,6 @@ async fn matching_nondefault_limits_reopen_including_disabled_admission() {
         }
     }
 }
+
+#[path = "singleton_recovery_tests.rs"]
+mod recovery_tests;

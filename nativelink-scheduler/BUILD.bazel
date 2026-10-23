@@ -85,6 +85,7 @@ rust_library(
         "src/authority/receipt_retirement.rs",
         "src/authority/receipt_retirement_tests.rs",
         "src/authority/request.rs",
+        "src/authority/singleton_recovery_tests.rs",
         "src/authority/snapshot_buffer.rs",
         "src/authority/tests.rs",
         "src/authority/types.rs",

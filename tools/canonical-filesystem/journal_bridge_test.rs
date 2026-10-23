@@ -519,23 +519,37 @@ async fn singleton_existing_uninitialized_membership_is_not_adopted() {
     let owner = Arc::new(Ownership::claim_cold(&fixture.manifest).unwrap());
     let directory = fixture.directory(&owner);
     drop(owner);
-    drop(open(&fixture, directory, true).await);
+    let journal = open(&fixture, directory, true).await;
+    let before = journal.read_applied().await.unwrap();
+    drop(journal);
     let owner = fixture.released_owner().await;
     let directory = fixture.directory(&owner);
     drop(owner);
+    let profile = fixture.profile();
     let error = Singleton::open_from_factory(
         fixture.binding(),
         fixture.binding().node_id,
         Limits::default(),
-        fixture.profile(),
+        profile.clone(),
         move || directory.reopen().map(carrier),
     )
     .await
     .unwrap_err();
     assert!(error.contains("existing journal lacks initialized membership"));
     let owner = fixture.released_owner().await;
-    let journal = open(&fixture, fixture.directory(&owner), false).await;
-    assert!(journal.read_applied().await.unwrap().0.is_none());
+    let directory = fixture.directory(&owner);
+    drop(owner);
+    let journal = Journal::open_from_factory(
+        fixture.binding(),
+        fixture.binding().node_id,
+        Limits::default(),
+        profile,
+        move || directory.reopen().map(carrier),
+    )
+    .await
+    .unwrap();
+    fixture.assert_all_locked();
+    assert_eq!(journal.read_applied().await.unwrap(), before);
 }
 
 #[nativelink_test]
