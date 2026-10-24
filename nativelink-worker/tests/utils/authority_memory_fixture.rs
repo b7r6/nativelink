@@ -95,9 +95,20 @@ pub(crate) fn allocate_to_target(target_kb: u64, upper_bound_kb: u64) -> Vec<Vec
     assert!(max_chunk_kb >= 1024);
     let path = std::env::var_os(OBSERVER_ENV).expect("The memory observer must be configured");
     let mut socket = UnixStream::connect(path).unwrap();
-    let timeout = Duration::from_secs(5);
-    socket.set_read_timeout(Some(timeout)).unwrap();
-    socket.set_write_timeout(Some(timeout)).unwrap();
+    let io_timeout = Duration::from_secs(5);
+    socket.set_read_timeout(Some(io_timeout)).unwrap();
+    socket.set_write_timeout(Some(io_timeout)).unwrap();
+    // Touching several GiB and observing their PSS can exceed five seconds
+    // under CPU contention. Scale only this fixture preparation budget with
+    // its workload; socket operations, memory windows and enforcement retain
+    // their independent bounds. Current workloads receive five or 15 seconds.
+    let calibration_timeout = Duration::from_secs(
+        target_kb
+            .div_ceil(1024 * 1024)
+            .max(1)
+            .checked_mul(5)
+            .unwrap(),
+    );
     // /proc is not remounted in this fixture. Its IDs match the worker's view,
     // unlike getpid/getpgrp inside the nested PID namespace.
     let stat = std::fs::read_to_string("/proc/self/stat").unwrap();
@@ -112,8 +123,8 @@ pub(crate) fn allocate_to_target(target_kb: u64, upper_bound_kb: u64) -> Vec<Vec
     let mut last_observed_kb = None;
     loop {
         assert!(
-            started.elapsed() < timeout,
-            "Memory calibration exceeded its deadline: elapsed={:?}, chunks={}, allocated={allocated_kb} KiB, last_observed={last_observed_kb:?} KiB, target={target_kb} KiB",
+            started.elapsed() < calibration_timeout,
+            "Memory calibration exceeded its deadline: elapsed={:?}, budget={calibration_timeout:?}, chunks={}, allocated={allocated_kb} KiB, last_observed={last_observed_kb:?} KiB, target={target_kb} KiB",
             started.elapsed(),
             allocations.len(),
         );
