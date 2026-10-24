@@ -40,7 +40,9 @@ writeShellScriptBin "rbe-toolchain-test" ''
     FULL_CMD="PATH=${bazel}/bin:$PATH ${bazel-retry}/bin/bazel-retry $cmd $CORE_BAZEL_ARGS"
     echo $FULL_CMD
     echo -e \\n$FULL_CMD\\n >> toolchain-examples/cmd.log
-    cmd_output=$(cd toolchain-examples && eval "$FULL_CMD" 2>&1 | tee -ai cmd.log)
+    # Stream diagnostics while Bazel runs so a timed-out job retains the
+    # client-side failure or stalled action alongside the NativeLink log.
+    (cd toolchain-examples && eval "$FULL_CMD" 2>&1 | tee -ai cmd.log)
     cmd_exit_code=$?
     case $cmd_exit_code in
       0 )
@@ -48,7 +50,6 @@ writeShellScriptBin "rbe-toolchain-test" ''
       ;;
       *)
         echo "Failed $cmd build:"
-        echo $cmd_output
         exit 1
       ;;
     esac
