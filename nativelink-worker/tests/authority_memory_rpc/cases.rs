@@ -30,6 +30,7 @@ use nativelink_scheduler::authority::accepted_history::{HistoryAssociation, Hist
 use nativelink_scheduler::authority::{ResourceFailureReason, TerminalResult};
 use nativelink_worker::authority_worker::{PROTOCOL_VERSION, REQUIRED_CAPABILITIES};
 use nativelink_config::cas_server::EnvironmentSource;
+use nativelink_util::task::JoinHandleDropGuard;
 use nativelink_worker::running_actions_manager::{MemoryLimit, ResourceEnforcement};
 use tokio::sync::mpsc;
 
@@ -37,6 +38,21 @@ use super::*;
 
 const MIB: u64 = 1024 * 1024;
 const CHILD_ENV: &str = "NATIVELINK_MEMORY_RPC_CHILD";
+// ASan and the namespace supervisor are charged with the child. The former
+// 32/128 MiB grants could kill the test harness before it wrote its outputs.
+// Keep a bounded startup allowance and the same 20% enforcement headroom:
+// 512 * 1.2 < 768 < 1024 * 1.2. The budget case uses a larger immutable
+// workload: 3072 > (512 << 2) * 1.2, so all three real attempts still breach.
+const GRANT: u64 = 512 * MIB;
+const WORKLOAD_TARGET: u64 = 3 * GRANT / 2;
+const BUDGET_WORKLOAD_TARGET: u64 = 6 * GRANT;
+const MEMORY_CAPACITY: Resources = Resources {
+    memory_bytes: 8 * GRANT,
+    ..CAPACITY
+};
+
+#[path = "../utils/authority_memory_fixture.rs"]
+mod memory_fixture;
 
 fn output_paths(count: usize) -> Vec<String> {
     if count == 1 {
@@ -80,10 +96,11 @@ fn allocator_child() {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
-    let mut allocation = vec![0_u8; 192 * 1024 * 1024];
-    for byte in allocation.iter_mut().step_by(4096) {
-        *byte = 19;
-    }
+    let target_kb: u64 = std::env::var("MEMORY_TARGET_KB").unwrap().parse().unwrap();
+    // Sharing changes in the namespace supervisor can move PSS between two
+    // observations. The normal workload's upper bound is still below the
+    // doubled grant's enforced limit (1024 MiB < 1024 MiB * 1.2).
+    let allocation = memory_fixture::allocate_to_target(target_kb, target_kb + GRANT / (2 * 1024));
     std::hint::black_box(&allocation);
     std::thread::sleep(Duration::from_secs(2));
     println!("MEMORY_AFTER");
@@ -103,7 +120,10 @@ async fn context_with_payload_bound(payload_bytes: usize) -> (Context, Arc<Memor
         Duration::from_secs(10),
         8,
         Duration::from_secs(30),
-        ManagerConstruction::AuthorityOnlyBounded { payload_bytes },
+        ManagerConstruction::AuthorityOnlyBounded {
+            payload_bytes,
+            capacity: MEMORY_CAPACITY,
+        },
         ExecutionConfiguration {
             persistent_workers: PersistentWorkersSettings {
                 enabled: false,
@@ -136,17 +156,29 @@ struct MemoryRequest {
     command: DigestInfo,
     command_bytes: Bytes,
     original_memory: u64,
+    _memory_observer: JoinHandleDropGuard<()>,
 }
 
 async fn request(
     context: &Context,
     algorithm: DigestHasherFunc,
     memory: u64,
+    workload_target: u64,
     outputs: usize,
     gate: bool,
 ) -> MemoryRequest {
     async {
+        let observer_path = context.directory.path().join("memory-observer.sock");
+        let memory_observer = memory_fixture::start_observer(&observer_path);
         let mut environment_variables = vec![
+            EnvironmentVariable {
+                name: memory_fixture::OBSERVER_ENV.into(),
+                value: observer_path.to_string_lossy().into_owned(),
+            },
+            EnvironmentVariable {
+                name: "MEMORY_TARGET_KB".into(),
+                value: (workload_target / 1024).to_string(),
+            },
             EnvironmentVariable {
                 name: CHILD_ENV.into(),
                 value: "1".into(),
@@ -251,6 +283,7 @@ async fn request(
             command,
             command_bytes,
             original_memory: memory,
+            _memory_observer: memory_observer,
         }
     }
     .with_context(make_ctx_for_hash_func(algorithm).unwrap())
@@ -273,7 +306,7 @@ impl Connection {
             .unwrap();
         let capacity = AuthorityResources {
             memory_bytes: memory,
-            ..resources(CAPACITY)
+            ..resources(MEMORY_CAPACITY)
         };
         registration.capacity = Some(capacity);
         registration.admission_ceiling = Some(capacity);

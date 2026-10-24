@@ -80,7 +80,11 @@ const RESOURCES: AuthorityResources = AuthorityResources {
     slots: 1,
 };
 
+#[path = "utils/authority_memory_fixture.rs"]
+mod memory_fixture;
+
 struct Context {
+    _memory_observer: JoinHandleDropGuard<()>,
     directory: TempDir,
     cas: Arc<FastSlowStore>,
     worker: Arc<AuthorityWorker<RunningActionsManagerImpl>>,
@@ -124,9 +128,20 @@ async fn setup_configured(
     limit: usize,
     namespaced: bool,
     capacity: AuthorityResources,
-    execution_configuration: ExecutionConfiguration,
+    mut execution_configuration: ExecutionConfiguration,
 ) -> Context {
     let directory = TempDir::new().unwrap();
+    let observer_socket = directory.path().join("memory-observer.sock");
+    let memory_observer = memory_fixture::start_observer(&observer_socket);
+    execution_configuration
+        .additional_environment
+        .get_or_insert_default()
+        .insert(
+            memory_fixture::OBSERVER_ENV.into(),
+            nativelink_config::cas_server::EnvironmentSource::Value(
+                observer_socket.to_string_lossy().into_owned(),
+            ),
+        );
     let filesystem = FilesystemSpec {
         content_path: directory
             .path()
@@ -189,6 +204,7 @@ async fn setup_configured(
     )
     .unwrap();
     Context {
+        _memory_observer: memory_observer,
         directory,
         cas,
         worker,

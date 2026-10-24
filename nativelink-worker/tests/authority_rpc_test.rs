@@ -97,7 +97,10 @@ struct Context {
 enum ManagerConstruction {
     LegacyPublication,
     AuthorityOnly,
-    AuthorityOnlyBounded { payload_bytes: usize },
+    AuthorityOnlyBounded {
+        payload_bytes: usize,
+        capacity: Resources,
+    },
 }
 
 impl Context {
@@ -257,10 +260,13 @@ impl Context {
         let worker = AuthorityWorker::new(
             IDENTITY,
             single_use,
-            resources(CAPACITY),
+            resources(match construction {
+                ManagerConstruction::AuthorityOnlyBounded { capacity, .. } => capacity,
+                _ => CAPACITY,
+            }),
             receipts,
             match construction {
-                ManagerConstruction::AuthorityOnlyBounded { payload_bytes } => payload_bytes,
+                ManagerConstruction::AuthorityOnlyBounded { payload_bytes, .. } => payload_bytes,
                 _ => 64 * 1024,
             },
             manager,

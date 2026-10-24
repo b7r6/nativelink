@@ -39,7 +39,11 @@ async fn fixture_with_namespace(
         namespaced,
         AuthorityResources {
             cpu_millis: 8000,
-            memory_bytes: 512 * MIB,
+            memory_bytes: if external_signal {
+                2 * HEURISTIC_GRANT
+            } else {
+                512 * MIB
+            },
             slots: 2,
         },
         ExecutionConfiguration {
@@ -282,7 +286,7 @@ async fn authority_memory_receipt_survives_upload_failure_without_a_finished_res
 #[nativelink_test]
 async fn authority_memory_heuristic_sigkill_does_not_mint_a_receipt() {
     let (context, start) = fixture(DigestHasherFunc::Sha256, true).await;
-    let action = execute(&context, start, 208 * MIB, true).await;
+    let action = execute(&context, start, HEURISTIC_GRANT, true).await;
     assert!(action.authority_memory_breach().is_none());
     action.clone().upload_results().await.unwrap();
     let usage = action.resource_usage().unwrap();

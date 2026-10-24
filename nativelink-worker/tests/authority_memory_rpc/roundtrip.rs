@@ -48,10 +48,11 @@ pub(super) fn assert_retry_has_no_history(runtime: &Runtime, state: &ObservableS
 async fn memory_rpc_r_then_2r_preserves_original_request_and_outputs_both_hashes() {
     for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
         let (context, contents) = context().await;
-        let request = request(&context, algorithm, 128 * MIB, 1, false).await;
+        let request = request(&context, algorithm, GRANT, WORKLOAD_TARGET, 1, false).await;
         let clock = Arc::new(AtomicU64::new(0));
         let mut runtime = Runtime::start_history(&context, clock, faults(), None).await;
-        let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+        let mut connection =
+            Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
         let mut operations = runtime
             .client
             .execute(request.request.clone())
@@ -62,7 +63,7 @@ async fn memory_rpc_r_then_2r_preserves_original_request_and_outputs_both_hashes
         let command = connection.dispatch().await;
         let first_state = runtime.wait(|state| state.attempts.len() == 1).await;
         let first = launch(&context, &connection, command, &request, &contents).await;
-        assert_memory_report(&first, &first_state, 128 * MIB);
+        assert_memory_report(&first, &first_state, GRANT);
         assert_graph(
             &contents,
             captured(&first),
@@ -73,16 +74,13 @@ async fn memory_rpc_r_then_2r_preserves_original_request_and_outputs_both_hashes
         connection.report(first).await;
         let retry = runtime.wait(|state| state.attempts.len() == 2).await;
         assert_retry_has_no_history(&runtime, &retry);
-        assert_eq!(
-            retry.executions[0].request.resources.memory_bytes,
-            128 * MIB
-        );
+        assert_eq!(retry.executions[0].request.resources.memory_bytes, GRANT);
         assert_eq!(
             retry.executions[0].reservation_target.memory_bytes,
-            256 * MIB
+            2 * GRANT
         );
         assert!(retry.reservations[0].released);
-        assert_eq!(retry.reservations[1].charged.memory_bytes, 256 * MIB);
+        assert_eq!(retry.reservations[1].charged.memory_bytes, 2 * GRANT);
         let command = connection.dispatch().await;
         let second = launch(&context, &connection, command, &request, &contents).await;
         assert!(second.memory_breach.is_none());
@@ -149,12 +147,13 @@ async fn memory_rpc_r_then_2r_preserves_original_request_and_outputs_both_hashes
 async fn memory_rpc_budget_failure_preserves_graph_and_history_across_restart_both_hashes() {
     for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
         let (context, contents) = context().await;
-        let request = request(&context, algorithm, 32 * MIB, 1, false).await;
+        let request = request(&context, algorithm, GRANT, BUDGET_WORKLOAD_TARGET, 1, false).await;
         let clock = Arc::new(AtomicU64::new(0));
         let faults = faults();
         let mut runtime =
             Runtime::start_history(&context, clock.clone(), faults.clone(), None).await;
-        let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+        let mut connection =
+            Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
         let mut operations = runtime
             .client
             .execute(request.request.clone())
@@ -167,7 +166,7 @@ async fn memory_rpc_budget_failure_preserves_graph_and_history_across_restart_bo
             let command = connection.dispatch().await;
             let state = runtime.wait(|state| state.attempts.len() == number).await;
             let report = launch(&context, &connection, command, &request, &contents).await;
-            assert_memory_report(&report, &state, (32 * MIB) << (number - 1));
+            assert_memory_report(&report, &state, (GRANT) << (number - 1));
             assert_graph(
                 &contents,
                 captured(&report),
@@ -276,10 +275,18 @@ async fn memory_rpc_budget_failure_preserves_graph_and_history_across_restart_bo
 #[nativelink_test]
 async fn memory_rpc_current_growth_and_lost_reply_reconnect_cannot_refund_successor() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        false,
+    )
+    .await;
     let mut runtime =
         Runtime::start_history(&context, Arc::new(AtomicU64::new(0)), faults(), None).await;
-    let mut connection = Connection::open(&runtime, &context, 1, 128 * MIB).await;
+    let mut connection = Connection::open(&runtime, &context, 1, GRANT).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -290,8 +297,8 @@ async fn memory_rpc_current_growth_and_lost_reply_reconnect_cannot_refund_succes
     let command = connection.dispatch().await;
     let state = runtime.wait(|state| state.attempts.len() == 1).await;
     let first = launch(&context, &connection, command, &request, &contents).await;
-    assert_memory_report(&first, &state, 128 * MIB);
-    connection.capacity(&runtime, 256 * MIB, false).await;
+    assert_memory_report(&first, &state, GRANT);
+    connection.capacity(&runtime, 2 * GRANT, false).await;
     connection.report(first.clone()).await;
     // The test observes the durable commit without reading its RPC reply.
     // Drop that unread response path only after delivery is established, so the
@@ -303,10 +310,10 @@ async fn memory_rpc_current_growth_and_lost_reply_reconnect_cannot_refund_succes
     assert_retry_has_no_history(&runtime, &retry);
     assert_eq!(
         retry.executions[0].reservation_target.memory_bytes,
-        256 * MIB
+        2 * GRANT
     );
     let successor = retry.attempts[1];
-    let mut connection = Connection::open(&runtime, &context, 2, 256 * MIB).await;
+    let mut connection = Connection::open(&runtime, &context, 2, 2 * GRANT).await;
     let command = connection.dispatch().await;
     let id = start(&context, &connection, command, &request, &contents).await;
     assert_eq!(id, successor.id.0);
@@ -335,7 +342,7 @@ async fn memory_rpc_current_growth_and_lost_reply_reconnect_cannot_refund_succes
     let after = connection.barrier(&runtime).await;
     assert_eq!(after.attempts[1], successor);
     assert!(!after.reservations[1].released);
-    assert_eq!(after.workers[0].charged.memory_bytes, 256 * MIB);
+    assert_eq!(after.workers[0].charged.memory_bytes, 2 * GRANT);
     assert_eq!(after.executions[0].attempts_started, 2);
     assert_retry_has_no_history(&runtime, &after);
     let second = candidate(&context, id).await;
@@ -357,10 +364,18 @@ async fn memory_rpc_current_growth_and_lost_reply_reconnect_cannot_refund_succes
 #[nativelink_test]
 async fn memory_rpc_capacity_shrink_preserves_original_failure_without_growth() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        false,
+    )
+    .await;
     let mut runtime =
         Runtime::start_history(&context, Arc::new(AtomicU64::new(0)), faults(), None).await;
-    let mut connection = Connection::open(&runtime, &context, 1, 512 * MIB).await;
+    let mut connection = Connection::open(&runtime, &context, 1, 4 * GRANT).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -378,7 +393,7 @@ async fn memory_rpc_capacity_shrink_preserves_original_failure_without_growth() 
         request.original_memory,
     )
     .await;
-    connection.capacity(&runtime, 96 * MIB, false).await;
+    connection.capacity(&runtime, 3 * GRANT / 4, false).await;
     connection.report(report).await;
     let accepted = terminal(&mut operations).await;
     let Some(operation::Result::Response(response)) = accepted.result else {
@@ -396,10 +411,7 @@ async fn memory_rpc_capacity_shrink_preserves_original_failure_without_growth() 
         })
     ));
     assert_eq!(state.executions[0].attempts_started, 1);
-    assert_eq!(
-        state.executions[0].reservation_target.memory_bytes,
-        128 * MIB
-    );
+    assert_eq!(state.executions[0].reservation_target.memory_bytes, GRANT);
     assert!(state.reservations[0].released);
     assert_eq!(state.workers[0].charged, Resources::default());
     assert!(

@@ -25,7 +25,15 @@ use super::*;
 
 const MIB: u64 = 1024 * 1024;
 const ORIGINAL: u64 = 128 * MIB;
+const HEURISTIC_GRANT: u64 = 1024 * MIB;
 const CHILD_ENV: &str = "NATIVELINK_AUTHORITY_GRANT_ALLOCATOR_CHILD";
+// The worker charges process-group PSS, including the namespace stub, test
+// harness and any sanitizer. Keep that total inside the intentional windows:
+// 128 MiB * 1.2 < 192 MiB < 256 MiB * 1.2 (typed grants), and
+// The external SIGKILL case uses 15/16 of a 1 GiB grant. Its 38.4 MiB lower
+// margin and 64 MiB upper margin accommodate sharing changes when other tests
+// fork or exit, while remaining within the heuristic's final 10% of the grant.
+const CHILD_TARGET_KB: u64 = 192 * MIB / 1024;
 
 #[nativelink_test]
 async fn typed_memory_and_cpu_preserve_original_disk_diagnostic() {
@@ -86,26 +94,29 @@ fn allocator_child() {
     if std::env::var_os("NATIVELINK_BREACH_OUTPUT").is_some() {
         std::fs::write("artifact", b"output-before-breach").unwrap();
     }
-    let mut bytes = vec![0_u8; 192 * 1024 * 1024];
-    for byte in bytes.iter_mut().step_by(4096) {
-        *byte = 17;
-    }
-    std::hint::black_box(&bytes);
+    let external_signal = std::env::var(CHILD_ENV).as_deref() == Ok("external-signal");
+    let (target_kb, upper_bound_kb) = if external_signal {
+        (HEURISTIC_GRANT / 1024 * 15 / 16, HEURISTIC_GRANT / 1024)
+    } else {
+        (CHILD_TARGET_KB, ORIGINAL * 2 / 1024)
+    };
+    let allocations = memory_fixture::allocate_to_target(target_kb, upper_bound_kb);
+    std::hint::black_box(&allocations);
     std::thread::sleep(Duration::from_secs(2));
-    if std::env::var(CHILD_ENV).as_deref() == Ok("external-signal") {
+    if external_signal {
         std::fs::write("ready-to-signal", b"allocated").unwrap();
         // Namespace PID 1 cannot kill itself with SIGKILL. The test supervisor
         // signals the observed outer process after the sampler sees this RSS.
         loop {
             std::thread::park();
-            std::hint::black_box(&bytes);
+            std::hint::black_box(&allocations);
         }
     }
     println!(
         "GRANT_CHILD_COMPLETED;platform={}",
         std::env::var("ORIGINAL_MEMORY").unwrap()
     );
-    std::hint::black_box(bytes);
+    std::hint::black_box(allocations);
 }
 
 #[nativelink_test]

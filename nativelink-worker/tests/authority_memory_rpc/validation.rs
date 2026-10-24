@@ -25,7 +25,15 @@ fn assert_unchanged(before: &ObservableState, after: &ObservableState) {
 #[nativelink_test]
 async fn memory_rpc_malformed_evidence_cannot_acknowledge_release_decline_or_grow() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        false,
+    )
+    .await;
     let mut runtime = Runtime::start_history(
         &context,
         Arc::new(AtomicU64::new(0)),
@@ -33,7 +41,8 @@ async fn memory_rpc_malformed_evidence_cannot_acknowledge_release_decline_or_gro
         None,
     )
     .await;
-    let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+    let mut connection =
+        Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -44,7 +53,7 @@ async fn memory_rpc_malformed_evidence_cannot_acknowledge_release_decline_or_gro
     let command = connection.dispatch().await;
     let report = launch(&context, &connection, command, &request, &contents).await;
     let before = connection.barrier(&runtime).await;
-    assert_memory_report(&report, &before, 128 * MIB);
+    assert_memory_report(&report, &before, GRANT);
     assert_eq!(before.attempts[0].phase, Phase::Dispatching);
     for case in 0..17 {
         let mut invalid = report.clone();
@@ -92,7 +101,7 @@ async fn memory_rpc_malformed_evidence_cannot_acknowledge_release_decline_or_gro
                     .memory_bytes = 0;
             }
             6 => invalid.memory_breach.as_mut().unwrap().limit_kb = 0,
-            7 => invalid.memory_breach.as_mut().unwrap().limit_kb = (128 * MIB / 1024) - 1,
+            7 => invalid.memory_breach.as_mut().unwrap().limit_kb = (GRANT / 1024) - 1,
             8 => {
                 let evidence = invalid.memory_breach.as_mut().unwrap();
                 evidence.observed_kb = evidence.limit_kb;
@@ -150,7 +159,7 @@ async fn memory_rpc_malformed_evidence_cannot_acknowledge_release_decline_or_gro
     let retry = runtime.wait(|state| state.attempts.len() == 2).await;
     assert_eq!(
         retry.executions[0].reservation_target.memory_bytes,
-        256 * MIB
+        2 * GRANT
     );
     roundtrip::assert_retry_has_no_history(&runtime, &retry);
     drop(connection);
@@ -170,7 +179,15 @@ async fn rejected_registration(runtime: &Runtime, registration: AuthorityRegistr
 #[nativelink_test]
 async fn memory_rpc_v2_and_capability_are_required_before_register_or_inventory() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        false,
+    )
+    .await;
     let mut runtime = Runtime::start_history(
         &context,
         Arc::new(AtomicU64::new(0)),
@@ -178,7 +195,8 @@ async fn memory_rpc_v2_and_capability_are_required_before_register_or_inventory(
         None,
     )
     .await;
-    let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+    let mut connection =
+        Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -189,7 +207,7 @@ async fn memory_rpc_v2_and_capability_are_required_before_register_or_inventory(
     let command = connection.dispatch().await;
     let report = launch(&context, &connection, command, &request, &contents).await;
     let before = connection.barrier(&runtime).await;
-    assert_memory_report(&report, &before, 128 * MIB);
+    assert_memory_report(&report, &before, GRANT);
     for case in 0..3 {
         let mut registration = context.worker.make_registration(2, Vec::new()).unwrap();
         assert_eq!(
@@ -210,11 +228,11 @@ async fn memory_rpc_v2_and_capability_are_required_before_register_or_inventory(
     }
     drop(connection);
     context.worker.disconnect(1);
-    let connection = Connection::open(&runtime, &context, 2, CAPACITY.memory_bytes).await;
+    let connection = Connection::open(&runtime, &context, 2, MEMORY_CAPACITY.memory_bytes).await;
     let retry = runtime.wait(|state| state.attempts.len() == 2).await;
     assert_eq!(
         retry.executions[0].reservation_target.memory_bytes,
-        256 * MIB
+        2 * GRANT
     );
     roundtrip::assert_retry_has_no_history(&runtime, &retry);
     drop(connection);
@@ -225,7 +243,15 @@ async fn memory_rpc_v2_and_capability_are_required_before_register_or_inventory(
 #[nativelink_test]
 async fn memory_rpc_upload_failure_has_no_marker_or_manufactured_graph() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, true).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        true,
+    )
+    .await;
     let mut runtime = Runtime::start_history(
         &context,
         Arc::new(AtomicU64::new(0)),
@@ -233,7 +259,8 @@ async fn memory_rpc_upload_failure_has_no_marker_or_manufactured_graph() {
         None,
     )
     .await;
-    let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+    let mut connection =
+        Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -278,10 +305,7 @@ async fn memory_rpc_upload_failure_has_no_marker_or_manufactured_graph() {
         Some(TerminalResult::Completed(_))
     ));
     assert_eq!(state.executions[0].attempts_started, 1);
-    assert_eq!(
-        state.executions[0].reservation_target.memory_bytes,
-        128 * MIB
-    );
+    assert_eq!(state.executions[0].reservation_target.memory_bytes, GRANT);
     assert_eq!(context.ac.len_for_test(), 0);
     drop(connection);
     drop(operations);
@@ -293,7 +317,15 @@ async fn memory_rpc_oversize_recipient_fallback_clears_explicit_memory_evidence(
     // The bounded recipient accepts the small ExecuteRequest while the result
     // grows beyond its 8 KiB limit. The Command still fits coordinator admission.
     let (context, contents) = context_with_payload_bound(8 * 1024).await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 50, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        50,
+        false,
+    )
+    .await;
     let mut runtime = Runtime::start_history(
         &context,
         Arc::new(AtomicU64::new(0)),
@@ -301,7 +333,8 @@ async fn memory_rpc_oversize_recipient_fallback_clears_explicit_memory_evidence(
         None,
     )
     .await;
-    let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+    let mut connection =
+        Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -332,10 +365,7 @@ async fn memory_rpc_oversize_recipient_fallback_clears_explicit_memory_evidence(
         Some(TerminalResult::Completed(_))
     ));
     assert_eq!(state.executions[0].attempts_started, 1);
-    assert_eq!(
-        state.executions[0].reservation_target.memory_bytes,
-        128 * MIB
-    );
+    assert_eq!(state.executions[0].reservation_target.memory_bytes, GRANT);
     assert_eq!(context.ac.len_for_test(), 0);
     drop(connection);
     drop(operations);
@@ -345,7 +375,15 @@ async fn memory_rpc_oversize_recipient_fallback_clears_explicit_memory_evidence(
 #[nativelink_test]
 async fn memory_rpc_usage_telemetry_alone_cannot_trigger_retry() {
     let (context, contents) = context().await;
-    let request = request(&context, DigestHasherFunc::Sha256, 128 * MIB, 1, false).await;
+    let request = request(
+        &context,
+        DigestHasherFunc::Sha256,
+        GRANT,
+        WORKLOAD_TARGET,
+        1,
+        false,
+    )
+    .await;
     let mut runtime = Runtime::start_history(
         &context,
         Arc::new(AtomicU64::new(0)),
@@ -353,7 +391,8 @@ async fn memory_rpc_usage_telemetry_alone_cannot_trigger_retry() {
         None,
     )
     .await;
-    let mut connection = Connection::open(&runtime, &context, 1, CAPACITY.memory_bytes).await;
+    let mut connection =
+        Connection::open(&runtime, &context, 1, MEMORY_CAPACITY.memory_bytes).await;
     let mut operations = runtime
         .client
         .execute(request.request.clone())
@@ -382,10 +421,7 @@ async fn memory_rpc_usage_telemetry_alone_cannot_trigger_retry() {
         Some(TerminalResult::Completed(_))
     ));
     assert_eq!(state.executions[0].attempts_started, 1);
-    assert_eq!(
-        state.executions[0].reservation_target.memory_bytes,
-        128 * MIB
-    );
+    assert_eq!(state.executions[0].reservation_target.memory_bytes, GRANT);
     assert_eq!(context.ac.len_for_test(), 0);
     drop(connection);
     drop(operations);
