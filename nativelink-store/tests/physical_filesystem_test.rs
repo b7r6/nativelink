@@ -16,11 +16,17 @@ use std::fs::{self, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::Command;
+use std::sync::RwLock;
 
 use nativelink_store::physical_filesystem::{
     Algorithm, Failure, FailureKind, Incarnation, Limits, ObjectId, PhysicalFilesystem, PhysicalKey,
 };
 use tempfile::TempDir;
+
+// A child briefly inherits other threads' manifest locks between fork and exec.
+// Keep ordinary cases concurrent, but exclude spawning while they own stores.
+// After exec the child has fresh test statics and closes inherited descriptors.
+static PROCESS_SPAWN: RwLock<()> = RwLock::new(());
 
 fn incarnation(value: u8) -> Incarnation {
     Incarnation::new([value; 16]).unwrap()
@@ -54,6 +60,7 @@ fn object_path(store: &PhysicalFilesystem, key: PhysicalKey) -> std::path::PathB
 
 #[test]
 fn both_algorithms_verify_full_object_before_exposing_exact_ranges() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let store =
         PhysicalFilesystem::bootstrap(directory.path(), incarnation(1), Limits::default()).unwrap();
@@ -93,6 +100,7 @@ fn both_algorithms_verify_full_object_before_exposing_exact_ranges() {
 
 #[test]
 fn immutable_retry_cannot_overwrite_another_descriptor_or_accept_bad_input() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let store =
         PhysicalFilesystem::bootstrap(directory.path(), incarnation(1), Limits::default()).unwrap();
@@ -123,6 +131,7 @@ fn immutable_retry_cannot_overwrite_another_descriptor_or_accept_bad_input() {
 
 #[test]
 fn empty_catalogue_and_explicit_new_incarnation_never_alias_old_deletion() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let old_incarnation = incarnation(1);
     let old_key = key(old_incarnation, 1);
@@ -162,6 +171,7 @@ fn empty_catalogue_and_explicit_new_incarnation_never_alias_old_deletion() {
 
 #[test]
 fn missing_corrupt_manifest_and_interrupted_bootstrap_never_reinitialize() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let inc = incarnation(1);
     failure(
@@ -198,6 +208,7 @@ fn missing_corrupt_manifest_and_interrupted_bootstrap_never_reinitialize() {
 
 #[test]
 fn staged_handle_keeps_exclusive_incarnation_ownership_and_blocks_discard() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let inc = incarnation(1);
     let key = key(inc, 1);
@@ -225,6 +236,7 @@ fn staged_handle_keeps_exclusive_incarnation_ownership_and_blocks_discard() {
 
 #[test]
 fn late_write_after_successful_delete_is_an_orphan_requiring_another_delete() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let inc = incarnation(1);
     let key = key(inc, 1);
@@ -250,6 +262,7 @@ fn late_write_after_successful_delete_is_an_orphan_requiring_another_delete() {
 
 #[test]
 fn corrupt_bytes_outside_requested_range_are_not_exposed_as_verified() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let store =
         PhysicalFilesystem::bootstrap(directory.path(), incarnation(1), Limits::default()).unwrap();
@@ -284,6 +297,7 @@ fn corrupt_bytes_outside_requested_range_are_not_exposed_as_verified() {
 
 #[test]
 fn admission_and_staging_bounds_do_not_overwrite_or_leak_completed_stages() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let directory = TempDir::new().unwrap();
     let store = PhysicalFilesystem::bootstrap(
         directory.path(),
@@ -324,6 +338,7 @@ const PROCESS_ENV: &str = "NATIVELINK_PHYSICAL_PROCESS_FIXTURE";
 
 #[test]
 fn physical_process_cutpoint() {
+    let _ownership = PROCESS_SPAWN.read().unwrap();
     let Some(base) = std::env::var_os(PROCESS_ENV) else {
         return;
     };
@@ -346,18 +361,23 @@ fn physical_process_cutpoint() {
 #[test]
 fn acknowledged_data_survives_process_exit_and_partial_upload_stays_unpublished() {
     for mode in ["acknowledged", "partial"] {
+        let spawn_guard = PROCESS_SPAWN.write().unwrap();
         let directory = TempDir::new().unwrap();
         let store =
             PhysicalFilesystem::bootstrap(directory.path(), incarnation(1), Limits::default())
                 .unwrap();
         drop(store);
-        let status = Command::new(std::env::current_exe().unwrap())
+        let mut child = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "physical_process_cutpoint", "--nocapture"])
             .env(PROCESS_ENV, directory.path())
             .env("NATIVELINK_PHYSICAL_PROCESS_MODE", mode)
-            .status()
+            .spawn()
             .unwrap();
+        // Spawn returns after exec has closed the inherited manifest locks.
+        drop(spawn_guard);
+        let status = child.wait().unwrap();
         assert_eq!(status.code(), Some(17));
+        let _ownership = PROCESS_SPAWN.read().unwrap();
         let store = PhysicalFilesystem::open(directory.path(), incarnation(1)).unwrap();
         let key = key(incarnation(1), 1);
         let object = ObjectId::for_bytes(Algorithm::Sha256, b"durable bytes");
