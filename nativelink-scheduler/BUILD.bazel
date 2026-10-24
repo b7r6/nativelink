@@ -447,7 +447,9 @@ rust_test(
 
 rust_test(
     name = "unit_test",
-    timeout = "short",
+    # Journal lifecycle cases perform real filesystem syncs. Concurrent
+    # sanitizer runs can exceed the short 60-second budget for the full suite.
+    timeout = "moderate",
     compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
     crate = ":nativelink-scheduler",
     proc_macro_deps = [
