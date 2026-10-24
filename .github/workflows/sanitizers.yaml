@@ -30,7 +30,7 @@ jobs:
         sanitizer: [asan]
     name: ${{ matrix.sanitizer }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: >- # v6.0.2
@@ -69,5 +69,18 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           unshare --user --map-current-user --pid --fork --ipc --uts true
 
+      # Instrumented history and snapshot campaigns need CPU time within
+      # their existing test deadlines. Finish compilation before testing,
+      # then bound both Bazel's test concurrency and Rust's nested test pool.
+      - name: Build sanitized targets
+        run: >-
+          bazel build --config=${{ matrix.sanitizer }} --config=nl-quiet
+          --lockfile_mode=error --verbose_failures --jobs=2
+          --@rules_rust//:rustfmt.toml=//:.rustfmt.toml
+          --output_groups=+rustfmt_checks --output_groups=+clippy_checks //...
+
       - name: Run Bazel tests
-        run: bazel test --config=${{ matrix.sanitizer }} --config=nl-quiet --lockfile_mode=error --verbose_failures //...
+        run: >-
+          bazel test --config=${{ matrix.sanitizer }} --config=nl-quiet
+          --lockfile_mode=error --verbose_failures --jobs=2
+          --local_test_jobs=1 --test_env=RUST_TEST_THREADS=2 //...
