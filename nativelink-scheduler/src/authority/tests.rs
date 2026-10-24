@@ -143,7 +143,7 @@ fn dispatch_identity_and_ingress_watermark_survive_consumption_and_retirement() 
         Reply::Applied
     );
     let mut empty = State::restore(&recovered.snapshot().unwrap()).unwrap();
-    assert!(empty.view().operations.is_empty());
+    assert_eq!(empty.view().operations, Vec::<OperationView>::new());
     assert_eq!(empty.dispatch_effect_id(attempt.id), None);
     assert_eq!(empty.ingress_watermark(), OperationId(1));
     assert!(matches!(
@@ -595,7 +595,7 @@ fn holds_stop_lower_ranked_refill_and_then_place_the_large_request() {
             ..
         }
     ));
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert_eq!(state.view().workers[0].charged.memory_bytes, 95);
 }
 
@@ -610,7 +610,7 @@ fn aged_one_completion_waits_are_held_and_uncertain_cleanup_cannot_steal_a_hold(
         },
     );
     assert_eq!(apply(&mut one, Event::Match), Reply::Ignored);
-    assert!(one.view().holds.is_empty());
+    assert_eq!(one.view().holds, Vec::<HoldView>::new());
     apply(&mut one, Event::AdvanceTime { now: HOLD_AFTER });
     assert_eq!(apply(&mut one, Event::Match), Reply::Applied);
     assert_eq!(one.view().holds.len(), 1);
@@ -639,7 +639,7 @@ fn revocation_can_invalidate_a_hold_without_refunding_the_original_charge() {
             operation: OperationId(1),
         },
     );
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert_eq!(state.view().workers[0].charged.memory_bytes, 20);
     assert_eq!(apply(&mut state, Event::Match), Reply::Applied);
     assert_eq!(state.view().holds[0].worker, WorkerId(2));
@@ -650,7 +650,7 @@ fn holds_expire_without_matching_and_cooldown_survives_restart() {
     let mut state = held_state();
     let until = HOLD_AFTER + HOLD_DURATION;
     apply(&mut state, Event::AdvanceTime { now: until });
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert_eq!(
         state.executions[&ExecutionId(5)].hold_cooldown_until,
         until + HOLD_COOLDOWN
@@ -754,7 +754,7 @@ fn worker_loss_is_fenced_and_clears_holds_without_creating_capacity() {
         ),
         Reply::Applied
     );
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert!(state.view().workers[0].draining);
     assert_eq!(state.view().workers[0].charged.memory_bytes, 20);
     assert!(
@@ -798,7 +798,7 @@ fn placement_elsewhere_and_loss_of_interest_release_the_held_worker() {
             ..
         }
     ));
-    assert!(elsewhere.view().holds.is_empty());
+    assert_eq!(elsewhere.view().holds, Vec::<HoldView>::new());
 
     let mut cancelled = held_state();
     apply(
@@ -807,7 +807,7 @@ fn placement_elsewhere_and_loss_of_interest_release_the_held_worker() {
             operation: OperationId(5),
         },
     );
-    assert!(cancelled.view().holds.is_empty());
+    assert_eq!(cancelled.view().holds, Vec::<HoldView>::new());
     assert_eq!(cancelled.view().workers[0].charged.memory_bytes, 20);
 }
 
@@ -865,7 +865,7 @@ fn decline_closes_admission_and_moves_the_hold_until_fresh_capacity() {
         panic!("held action did not dispatch");
     };
     assert_eq!(worker, WorkerId(1));
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert_eq!(
         apply(
             &mut state,
@@ -909,7 +909,7 @@ fn decline_closes_admission_and_moves_the_hold_until_fresh_capacity() {
             ..
         }
     ));
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
 }
 
 #[test]
@@ -939,7 +939,7 @@ fn reconnect_does_not_refresh_a_hold_and_replacement_does_not_forget_charges() {
             available: hold_capacity(100),
         },
     );
-    assert!(state.view().holds.is_empty());
+    assert_eq!(state.view().holds, Vec::<HoldView>::new());
     assert_eq!(state.view().workers[0].charged.memory_bytes, 20);
     assert!(state.view().workers[0].quarantined);
 }

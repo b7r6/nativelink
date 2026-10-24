@@ -830,7 +830,10 @@ fn legacy_rules_have_explicit_dimension_and_unit_blockers() {
         ("memory_kb".to_owned(), PropertyType::Minimum),
         ("cpu_arch".to_owned(), PropertyType::Exact),
     ]);
-    assert!(legacy_property_blockers(&accepted, CpuUnit::Cores).is_empty());
+    assert_eq!(
+        legacy_property_blockers(&accepted, CpuUnit::Cores),
+        Vec::<String>::new()
+    );
     assert_eq!(
         legacy_property_blockers(&accepted, CpuUnit::Millicores).len(),
         1

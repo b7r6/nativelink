@@ -148,10 +148,22 @@ async fn output_graph(context: &Context, algorithm: Algorithm, response: ResultP
     assert_eq!(result.output_files.len(), 1);
     assert_eq!(result.output_files[0].path, "output");
     assert!(!result.output_files[0].is_executable);
-    assert!(result.output_directories.is_empty());
-    assert!(result.output_symlinks.is_empty());
-    assert!(result.output_file_symlinks.is_empty());
-    assert!(result.output_directory_symlinks.is_empty());
+    assert_eq!(
+        result.output_directories,
+        Vec::<nativelink_proto::build::bazel::remote::execution::v2::OutputDirectory>::new()
+    );
+    assert_eq!(
+        result.output_symlinks,
+        Vec::<nativelink_proto::build::bazel::remote::execution::v2::OutputSymlink>::new()
+    );
+    assert_eq!(
+        result.output_file_symlinks,
+        Vec::<nativelink_proto::build::bazel::remote::execution::v2::OutputSymlink>::new()
+    );
+    assert_eq!(
+        result.output_directory_symlinks,
+        Vec::<nativelink_proto::build::bazel::remote::execution::v2::OutputSymlink>::new()
+    );
     assert!(result.stdout_raw.is_empty());
     assert!(result.stderr_raw.is_empty());
     let result_bytes = result.encode_to_vec();

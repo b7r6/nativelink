@@ -1270,7 +1270,7 @@ fn fair_drain_finishes_bounded_serviceable_work_and_clears_effects() {
             .iter()
             .all(|reservation| reservation.released)
     );
-    assert!(view.effects.is_empty());
+    assert_eq!(view.effects, Vec::<Effect>::new());
     assert!(steps <= STEP_BOUND);
     evidence(
         "fair-drain",

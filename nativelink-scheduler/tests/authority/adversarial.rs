@@ -329,7 +329,7 @@ fn captured_request_raw_fields_reject_forgery_without_consuming_an_operation() {
             Reply::Rejected(Rejection::Invalid),
             "invalid raw request case {case}"
         );
-        assert!(h.view().operations.is_empty());
+        assert_eq!(h.view().operations, Vec::<OperationView>::new());
     }
     submit(&mut h, 1, original);
 }
@@ -812,7 +812,7 @@ fn memory_growth_preserves_accepted_request_age_join_and_each_original_grant() {
     assert_eq!(grown.reservation_target.memory_bytes, 4096);
     assert_eq!(grown.enqueue_at, 0);
     assert_eq!(grown.phase, Phase::Queued);
-    assert!(h.view().effects.is_empty());
+    assert_eq!(h.view().effects, Vec::<Effect>::new());
     assert_eq!(submit(&mut h, 2, original.clone()), execution);
     h.checkpoint().unwrap();
     h.crash_restore().unwrap();
@@ -1083,7 +1083,7 @@ fn memory_retry_budget_is_three_total_attempts_and_preserves_full_final_failure(
             reason: ResourceFailureReason::AttemptBudgetExhausted,
         })
     );
-    assert!(h.view().effects.is_empty());
+    assert_eq!(h.view().effects, Vec::<Effect>::new());
     assert_eq!(apply(&mut h, Event::Match), Reply::Ignored);
     h.checkpoint().unwrap();
     h.crash_restore().unwrap();
@@ -1176,7 +1176,7 @@ fn aged_one_completion_wait_cannot_be_starved_by_repeated_small_backfill() {
         submit(&mut h, now + 4, request(now + 4));
         busy.push_back(assign(&mut h));
         finish(&mut h, &busy.pop_front().unwrap(), now);
-        assert!(h.view().holds.is_empty());
+        assert_eq!(h.view().holds, Vec::<HoldView>::new());
         assert_eq!(h.view().workers[0].charged.slots, 3);
     }
     apply(&mut h, Event::AdvanceTime { now: HOLD_AFTER });
@@ -1190,7 +1190,7 @@ fn aged_one_completion_wait_cannot_be_starved_by_repeated_small_backfill() {
     let dispatched = assign(&mut h);
     assert_eq!(dispatched.execution, large_id);
     assert_eq!(h.view().workers[0].charged.slots, 4);
-    assert!(h.view().holds.is_empty());
+    assert_eq!(h.view().holds, Vec::<HoldView>::new());
 }
 
 #[test]
@@ -1208,7 +1208,7 @@ fn held_worker_accumulates_capacity_without_minting_or_refunding_reservations() 
     }
     let attempt = assign(&mut h);
     assert_eq!(attempt.execution, execution);
-    assert!(h.view().holds.is_empty());
+    assert_eq!(h.view().holds, Vec::<HoldView>::new());
     assert_eq!(h.view().workers[0].charged.slots, 4);
 }
 
@@ -1274,7 +1274,7 @@ fn hold_expiry_records_cooldown_without_observer_or_match_and_does_not_extend() 
         assert_eq!(h.view().holds[0].until, until);
     }
     apply(&mut h, Event::AdvanceTime { now: until });
-    assert!(h.view().holds.is_empty());
+    assert_eq!(h.view().holds, Vec::<HoldView>::new());
     let owner = h
         .view()
         .executions
@@ -1340,7 +1340,7 @@ fn hold_invalidations_never_treat_worker_loss_or_capacity_veto_as_cleanup() {
             },
         };
         assert_eq!(apply(&mut h, event), Reply::Applied);
-        assert!(h.view().holds.is_empty());
+        assert_eq!(h.view().holds, Vec::<HoldView>::new());
         assert_eq!(
             h.view().workers[0].charged.slots,
             if case == 5 { 2 } else { 3 }
@@ -1416,14 +1416,14 @@ fn uncertain_capacity_is_an_immovable_floor_and_cleanup_can_place_holder_elsewhe
                     operation: OperationId(2),
                 },
             );
-            assert!(h.view().holds.is_empty());
+            assert_eq!(h.view().holds, Vec::<HoldView>::new());
             assert_eq!(h.view().workers[1].charged.slots, 3);
             assert_eq!(apply(&mut h, Event::Match), Reply::Ignored);
         } else {
             apply(&mut h, cleanup(&uncertain));
             let placed = assign(&mut h);
             assert_eq!((placed.execution, placed.worker), (execution, WorkerId(1)));
-            assert!(h.view().holds.is_empty());
+            assert_eq!(h.view().holds, Vec::<HoldView>::new());
             assert_eq!(h.view().workers[1].charged.slots, 3);
         }
     }
@@ -1558,7 +1558,7 @@ fn captured_response_facts_refine_oracle_and_preserve_terminal_and_publication_b
         if exit_code == 0 && status == 0 {
             assert_eq!(publications.as_slice(), std::slice::from_ref(&payload));
         } else {
-            assert!(publications.is_empty());
+            assert_eq!(publications, Vec::<ResultPayload>::new());
         }
         h.checkpoint().unwrap();
         h.crash_restore().unwrap();
@@ -1775,7 +1775,7 @@ fn finite_attempt_budget_finishes_despite_three_uncertain_old_processes() {
             .iter()
             .all(|reservation| reservation.released)
     );
-    assert!(h.view().effects.is_empty());
+    assert_eq!(h.view().effects, Vec::<Effect>::new());
     assert_eq!(h.view().operations[0], stable);
 }
 

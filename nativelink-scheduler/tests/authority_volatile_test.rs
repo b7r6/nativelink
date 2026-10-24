@@ -90,7 +90,10 @@ async fn assert_pristine(journal: &mut Journal) {
     let logs = journal.get_log_state().await.unwrap();
     assert_eq!(logs.last_log_id, None);
     assert_eq!(logs.last_purged_log_id, None);
-    assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+    assert_eq!(
+        journal.try_get_log_entries(..).await.unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
+    );
     assert_eq!(
         journal.applied_state().await.unwrap(),
         (None, StoredMembership::default())
@@ -170,7 +173,10 @@ async fn volatile_commit_cutpoints_keep_log_and_applied_outbox_atomic() {
     journal.enable_measurements();
     journal.inject_failure_once(JournalFault::BeforeCommit);
     assert!(journal.blocking_append([entry(0)]).await.is_err());
-    assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+    assert_eq!(
+        journal.try_get_log_entries(..).await.unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
+    );
     journal.inject_failure_once(JournalFault::AfterCommit);
     assert!(journal.blocking_append([entry(0)]).await.is_err());
     assert_eq!(journal.try_get_log_entries(..).await.unwrap().len(), 1);
@@ -226,14 +232,9 @@ async fn volatile_initialization_and_admission_use_the_same_payload_and_count_bo
         zero.apply([entry(0)]).await.unwrap()[0].replies,
         [Reply::Rejected(Rejection::Invalid)]
     );
-    assert!(
-        zero.read_applied()
-            .await
-            .unwrap()
-            .1
-            .view()
-            .effects
-            .is_empty()
+    assert_eq!(
+        zero.read_applied().await.unwrap().1.view().effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
     );
 
     let limits = Limits {

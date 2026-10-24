@@ -322,7 +322,7 @@ fn cold_activation_preserves_all_accepted_bytes_ids_and_uncertain_requests() {
             model.apply(&Event::Activate(activation.clone()), &facts),
             Ok(Outcome::Applied)
         );
-        assert!(model.heads.is_empty());
+        assert_eq!(model.heads, Vec::<Head>::new());
         assert_eq!(model.legacy, legacy);
         assert_eq!(model.activation, Some(activation));
         assert_eq!(
@@ -676,7 +676,7 @@ fn pending_history_keeps_exact_bytes_identity_origin_and_its_own_uncertainty() {
     assert!(model.unresolved_requests().contains(&history_request()));
     assert_eq!(model.legacy.histories[&13], legacy.histories[&13]);
     assert_eq!(model.legacy.terminals, legacy.terminals);
-    assert!(model.heads.is_empty());
+    assert_eq!(model.heads, Vec::<Head>::new());
 }
 
 #[test]

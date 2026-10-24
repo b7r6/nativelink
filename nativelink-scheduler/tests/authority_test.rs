@@ -170,10 +170,10 @@ fn proposals_and_commits_cannot_dispatch_before_apply() {
         },
     )
     .unwrap();
-    assert!(h.view().operations.is_empty());
+    assert_eq!(h.view().operations, Vec::<OperationView>::new());
     assert!(h.deliver(EffectId(1)).is_err());
     h.commit(10).unwrap();
-    assert!(h.view().operations.is_empty());
+    assert_eq!(h.view().operations, Vec::<OperationView>::new());
     assert!(h.deliver(EffectId(1)).is_err());
     h.apply_next().unwrap();
     let intent = h.deliver(EffectId(1)).unwrap();
@@ -438,12 +438,12 @@ fn noncacheable_work_is_independent_and_has_no_publication_intent() {
     let first = submit(&mut h, 1, req.clone());
     let second = submit(&mut h, 2, req);
     assert_ne!(first, second);
-    assert!(h.view().effects.is_empty());
+    assert_eq!(h.view().effects, Vec::<Effect>::new());
     let a = assign(&mut h);
     let b = assign(&mut h);
     finish(&mut h, &a, 1);
     finish(&mut h, &b, 2);
-    assert!(h.view().effects.is_empty());
+    assert_eq!(h.view().effects, Vec::<Effect>::new());
 }
 
 #[test]

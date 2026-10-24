@@ -343,13 +343,13 @@ async fn fixed_route_boundary(runtime: &Runtime, algorithm: DigestHasherFunc) {
             .unwrap()
             .update_enabled
     );
-    assert!(cache.supported_compressors.is_empty());
-    assert!(cache.supported_batch_update_compressors.is_empty());
+    assert_eq!(cache.supported_compressors, Vec::<i32>::new());
+    assert_eq!(cache.supported_batch_update_compressors, Vec::<i32>::new());
     assert!(!cache.split_blob_support);
     assert!(!cache.splice_blob_support);
     assert!(execution.exec_enabled);
     assert_eq!(execution.digest_functions, algorithms);
-    assert!(execution.supported_node_properties.is_empty());
+    assert_eq!(execution.supported_node_properties, Vec::<String>::new());
     let mut client_ac = ActionCacheClient::new(runtime.client.clone());
     let mut worker_ac = ActionCacheClient::new(runtime.worker.clone());
     let malicious = ActionResult {

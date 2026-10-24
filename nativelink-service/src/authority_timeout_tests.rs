@@ -221,15 +221,9 @@ async fn captured_durations_replay_committed_submission_and_grant_before_worker_
             .await
             .unwrap();
         journal.save_committed(Some(suffix)).await.unwrap();
-        assert!(
-            journal
-                .read_applied()
-                .await
-                .unwrap()
-                .1
-                .view()
-                .operations
-                .is_empty()
+        assert_eq!(
+            journal.read_applied().await.unwrap().1.view().operations,
+            Vec::<nativelink_scheduler::authority::OperationView>::new()
         );
         drop(journal);
 
@@ -373,7 +367,7 @@ async fn diagnostic_finite_maximum_deadline_aliases_omission_without_clock_headr
                 .is_none()
         );
         driver.restore_deadlines = true;
-        assert!(recorded_sweep(&mut driver, base).await.is_empty());
+        assert_eq!(recorded_sweep(&mut driver, base).await, Vec::<Event>::new());
         assert!(driver.state.attempts[0].authorized);
         assert!(!driver.state.reservations[0].released);
         driver.workers.clear();

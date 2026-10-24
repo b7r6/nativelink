@@ -820,7 +820,7 @@ async fn lost_candidate_and_coordinator_restart_preserve_one_launch_and_accepted
     ));
     let final_view = authority.read().await.unwrap().view();
     assert_eq!(final_view.operations[0], terminal);
-    assert!(final_view.effects.is_empty());
+    assert_eq!(final_view.effects, Vec::<Effect>::new());
     assert_eq!(
         ActionResult::decode(
             context

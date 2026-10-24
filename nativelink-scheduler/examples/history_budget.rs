@@ -683,8 +683,14 @@ async fn measure(
         );
     }
     let drained = reopened.read().await?;
-    assert!(drained.view().executions.is_empty());
-    assert!(drained.view().effects.is_empty());
+    assert_eq!(
+        drained.view().executions,
+        Vec::<nativelink_scheduler::authority::ExecutionView>::new()
+    );
+    assert_eq!(
+        drained.view().effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
+    );
     assert!(
         drained
             .accepted_history()

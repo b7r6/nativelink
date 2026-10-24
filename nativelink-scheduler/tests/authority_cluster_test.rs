@@ -570,9 +570,18 @@ impl Cluster {
         assert!(node.journal.clone().read_vote().await.unwrap().is_none());
         let state = node.journal.read_applied().await.unwrap();
         assert!(state.0.is_none());
-        assert!(state.1.view().operations.is_empty());
-        assert!(state.1.view().effects.is_empty());
-        assert!(state.1.view().reservations.is_empty());
+        assert_eq!(
+            state.1.view().operations,
+            Vec::<nativelink_scheduler::authority::OperationView>::new()
+        );
+        assert_eq!(
+            state.1.view().effects,
+            Vec::<nativelink_scheduler::authority::Effect>::new()
+        );
+        assert_eq!(
+            state.1.view().reservations,
+            Vec::<nativelink_scheduler::authority::ReservationView>::new()
+        );
         assert!(node.raft.ensure_linearizable().await.is_err());
         assert!(
             tokio::time::timeout(
@@ -819,7 +828,7 @@ async fn interrupted_snapshot_cannot_publish_partial_state_and_new_learner_repla
         .await
         .unwrap();
     assert_eq!(cluster.fabric.links.lock().interrupted_snapshots, 1);
-    assert!(
+    assert_eq!(
         cluster.nodes[&4]
             .journal
             .read_applied()
@@ -827,8 +836,8 @@ async fn interrupted_snapshot_cannot_publish_partial_state_and_new_learner_repla
             .unwrap()
             .1
             .view()
-            .operations
-            .is_empty()
+            .operations,
+        Vec::<nativelink_scheduler::authority::OperationView>::new()
     );
 
     // Restart the recipient with only a received prefix. No bootstrap occurs:
@@ -1075,9 +1084,18 @@ async fn recover_lost_volatile_voter(lose_snapshot_recipient: bool) {
         assert_eq!(cluster.fabric.links.lock().interrupted_snapshots, 1);
         let (applied, state) = cluster.nodes[&4].journal.read_applied().await.unwrap();
         assert!(applied.is_none());
-        assert!(state.view().operations.is_empty());
-        assert!(state.view().effects.is_empty());
-        assert!(state.view().reservations.is_empty());
+        assert_eq!(
+            state.view().operations,
+            Vec::<nativelink_scheduler::authority::OperationView>::new()
+        );
+        assert_eq!(
+            state.view().effects,
+            Vec::<nativelink_scheduler::authority::Effect>::new()
+        );
+        assert_eq!(
+            state.view().reservations,
+            Vec::<nativelink_scheduler::authority::ReservationView>::new()
+        );
         // A received prefix can already have voting history. Losing even this
         // learner's RAM requires another identity, never restart under ID 4.
         cluster.stop(4).await;

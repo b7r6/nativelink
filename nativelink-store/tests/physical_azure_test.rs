@@ -203,13 +203,13 @@ async fn ranges_and_wire_identity(store: &LocalAzurePhysical) {
                 .bytes,
             data[65_000..74_000]
         );
-        assert!(
+        assert_eq!(
             store
                 .read(key, object, object.size, Some(0))
                 .await
                 .unwrap()
-                .bytes
-                .is_empty()
+                .bytes,
+            Vec::<u8>::new()
         );
         failure(
             store.read(key, object, u64::MAX, Some(2)).await,

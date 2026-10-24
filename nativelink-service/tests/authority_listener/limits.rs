@@ -119,9 +119,18 @@ async fn every_fixed_route_rejects_oversized_and_malformed_protobuf_at_wire_deco
         assert!(malformed.message().contains("decode"));
     }
     let view = runtime.service.subscribe();
-    assert!(view.borrow().workers.is_empty());
-    assert!(view.borrow().executions.is_empty());
-    assert!(view.borrow().operations.is_empty());
+    assert_eq!(
+        view.borrow().workers,
+        Vec::<nativelink_scheduler::authority::WorkerView>::new()
+    );
+    assert_eq!(
+        view.borrow().executions,
+        Vec::<nativelink_scheduler::authority::ExecutionView>::new()
+    );
+    assert_eq!(
+        view.borrow().operations,
+        Vec::<nativelink_scheduler::authority::OperationView>::new()
+    );
     runtime.shutdown().await;
 }
 

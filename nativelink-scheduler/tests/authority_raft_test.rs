@@ -321,7 +321,10 @@ async fn durable_log_callback_failure_preserves_known_uncertainty() {
     journal.save_vote(&vote).await.unwrap();
     journal.inject_failure_once(JournalFault::BeforeCommit);
     assert!(journal.blocking_append([entry(0), entry(1)]).await.is_err());
-    assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+    assert_eq!(
+        journal.try_get_log_entries(..).await.unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
+    );
     journal.inject_failure_once(JournalFault::AfterCommit);
     assert!(journal.blocking_append([entry(0), entry(1)]).await.is_err());
     drop(journal);
@@ -329,15 +332,9 @@ async fn durable_log_callback_failure_preserves_known_uncertainty() {
     let mut journal = open(&directory.database()).await;
     assert_eq!(journal.read_vote().await.unwrap(), Some(vote));
     assert_eq!(journal.try_get_log_entries(..).await.unwrap().len(), 2);
-    assert!(
-        journal
-            .read_applied()
-            .await
-            .unwrap()
-            .1
-            .view()
-            .operations
-            .is_empty()
+    assert_eq!(
+        journal.read_applied().await.unwrap().1.view().operations,
+        Vec::<nativelink_scheduler::authority::OperationView>::new()
     );
     // A persisted log alone is not applied authority or a publication intent.
     let reply = journal.apply([entry(1)]).await.unwrap();
@@ -356,8 +353,14 @@ async fn applied_state_and_outbox_commit_atomically_at_failure_cutpoints() {
     assert!(journal.apply([entry(1)]).await.is_err());
     let (position, state) = journal.read_applied().await.unwrap();
     assert_eq!(position, None);
-    assert!(state.view().operations.is_empty());
-    assert!(state.view().effects.is_empty());
+    assert_eq!(
+        state.view().operations,
+        Vec::<nativelink_scheduler::authority::OperationView>::new()
+    );
+    assert_eq!(
+        state.view().effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
+    );
 
     journal.inject_failure_once(JournalFault::AfterCommit);
     assert!(journal.apply([entry(1)]).await.is_err());
@@ -517,7 +520,10 @@ async fn oversized_membership_is_rejected_before_durable_log_acknowledgment() {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("membership exceeds byte bound"));
-        assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+        assert_eq!(
+            journal.try_get_log_entries(..).await.unwrap(),
+            Vec::<Entry<TypeConfig>>::new()
+        );
         // A malformed later membership cannot commit the preceding command
         // through the state-machine interface either.
         let error = journal.apply([entry(0), oversized]).await.unwrap_err();
@@ -525,7 +531,10 @@ async fn oversized_membership_is_rejected_before_durable_log_acknowledgment() {
         assert_eq!(journal.read_applied().await.unwrap(), before);
         drop(journal);
         let mut journal = open(&directory.database()).await;
-        assert!(journal.try_get_log_entries(..).await.unwrap().is_empty());
+        assert_eq!(
+            journal.try_get_log_entries(..).await.unwrap(),
+            Vec::<Entry<TypeConfig>>::new()
+        );
         assert_eq!(journal.read_applied().await.unwrap(), before);
     }
 }
@@ -866,15 +875,9 @@ async fn snapshot_install_is_atomic_and_preserves_outbox_through_suffix() {
             .is_err()
     );
     assert!(target.get_current_snapshot().await.unwrap().is_none());
-    assert!(
-        target
-            .read_applied()
-            .await
-            .unwrap()
-            .1
-            .view()
-            .effects
-            .is_empty()
+    assert_eq!(
+        target.read_applied().await.unwrap().1.view().effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
     );
     target.inject_failure_once(JournalFault::AfterCommit);
     assert!(

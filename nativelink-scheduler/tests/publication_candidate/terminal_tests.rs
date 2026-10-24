@@ -723,7 +723,10 @@ fn last_cancel_keeps_live_charge_and_unknown_writes_until_actual_cleanup() {
             })
             .unwrap();
         assert_eq!(terminal(&queued, 1), a::TerminalResult::Cancelled);
-        assert!(queued.scheduler_view().attempts.is_empty());
+        assert_eq!(
+            queued.scheduler_view().attempts,
+            Vec::<nativelink_scheduler::authority::AttemptView>::new()
+        );
         assert!(queued.terminal_acceptances().unwrap().is_empty());
         recover(&mut queued);
 

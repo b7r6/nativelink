@@ -180,7 +180,7 @@ fn immutable_pending_certificate_pins_released_attempts_and_ack_never_releases_r
     );
     let next = issue(&mut state);
     assert!(next.effect > certificate.effects_through);
-    assert!(next.retain.is_empty());
+    assert_eq!(next.retain, Vec::<ReceiptBinding>::new());
     assert_eq!(next.attempts_through, certificate.attempts_through);
     assert_eq!(acknowledge(&mut state, next), Reply::Applied);
     let clean = state.snapshot().unwrap();
@@ -304,7 +304,7 @@ fn later_cancellation_does_not_rewrite_pending_and_replacement_preserves_uncerta
         Reply::Rejected(Rejection::Stale)
     );
     let replacement = issue(&mut state);
-    assert!(replacement.retain.is_empty());
+    assert_eq!(replacement.retain, Vec::<ReceiptBinding>::new());
     assert_eq!(acknowledge(&mut state, replacement), Reply::Applied);
     assert!(!state.reservations[&ReservationId(1)].released);
     apply(

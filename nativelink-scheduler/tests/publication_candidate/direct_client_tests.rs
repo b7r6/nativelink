@@ -98,7 +98,10 @@ fn trusted_direct_update_has_no_scheduler_identity_and_survives_later_revocation
         state
             .admit_request(1, "action".into(), &context(), lookup, 80)
             .unwrap();
-        assert!(state.scheduler_view().attempts.is_empty());
+        assert_eq!(
+            state.scheduler_view().attempts,
+            Vec::<nativelink_scheduler::authority::AttemptView>::new()
+        );
         let a::TerminalResult::Completed(cached) = terminal(&state, 1) else {
             panic!("cache miss")
         };

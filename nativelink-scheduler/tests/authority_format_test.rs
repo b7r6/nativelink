@@ -514,7 +514,10 @@ async fn history_compacted_prepare_preserves_freeze_and_rejects_missing_suffix()
     journal.build_snapshot().await.unwrap();
     journal.purge(prepared.log_id).await.unwrap();
     node.shutdown().await.unwrap();
-    assert!(journal.try_get_log_entries(0..).await.unwrap().is_empty());
+    assert_eq!(
+        journal.try_get_log_entries(0..).await.unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
+    );
     let work = Batch::new([submit(1)]).unwrap();
     assert!(
         journal
@@ -863,12 +866,12 @@ async fn history_append_stages_preceding_work_and_refuses_infeasible_activation_
             .await
             .is_err()
     );
-    assert!(
+    assert_eq!(
         journal
             .try_get_log_entries(work.log_id.index..)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
     );
     assert_eq!(journal.read_applied().await.unwrap().1, before);
     journal
@@ -878,12 +881,12 @@ async fn history_append_stages_preceding_work_and_refuses_infeasible_activation_
     let illegal_work = entry(activate.log_id, Batch::new([submit(2)]).unwrap());
     assert!(journal.blocking_append([illegal_work]).await.is_err());
     assert!(journal.blocking_append([activate]).await.is_err());
-    assert!(
+    assert_eq!(
         journal
             .try_get_log_entries(prepare.log_id.index + 1..)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<Entry<TypeConfig>>::new()
     );
     let abort = entry(
         next(prepare.log_id),
@@ -939,7 +942,10 @@ async fn history_commands_gate_append_apply_and_unapplied_activation_suffix() {
         assert!(journal.blocking_append([command.clone()]).await.is_err());
         assert!(journal.apply([command]).await.is_err());
         assert_eq!(journal.read_applied().await.unwrap(), before);
-        assert!(journal.try_get_log_entries(0..).await.unwrap().is_empty());
+        assert_eq!(
+            journal.try_get_log_entries(0..).await.unwrap(),
+            Vec::<Entry<TypeConfig>>::new()
+        );
     }
     let directory = Directory::new();
     let registry = AdmissionRegistry::new(DOMAIN);
@@ -2790,7 +2796,10 @@ async fn receipt_outbox_crosses_second_activation_and_restart_with_exact_acknowl
         .clone()
         .unwrap();
     assert!(successor.effect > pending.effects_through);
-    assert!(successor.retain.is_empty());
+    assert_eq!(
+        successor.retain,
+        Vec::<nativelink_scheduler::authority::ReceiptBinding>::new()
+    );
     node.shutdown().await.unwrap();
 }
 
@@ -2893,7 +2902,10 @@ async fn receipt_commands_require_activation_at_append_and_apply() {
             .unwrap(),
         );
         assert!(journal.blocking_append([command.clone()]).await.is_err());
-        assert!(journal.try_get_log_entries(0..=0).await.unwrap().is_empty());
+        assert_eq!(
+            journal.try_get_log_entries(0..=0).await.unwrap(),
+            Vec::<Entry<TypeConfig>>::new()
+        );
         assert!(journal.apply([command]).await.is_err());
         assert_eq!(journal.read_applied().await.unwrap(), old);
         assert!(!old.1.receipt_retirement_enabled());

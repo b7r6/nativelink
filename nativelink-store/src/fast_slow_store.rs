@@ -125,10 +125,9 @@ impl LoaderGuard<'_> {
                     }
                 }
             }
-        } else {
-            // This is impossible, but we do it anyway.
-            f().await
         }
+        // This is impossible, but we do it anyway.
+        f().await
     }
 }
 

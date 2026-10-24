@@ -657,7 +657,7 @@ fn qualify(harness: &Harness, assets: &Assets) -> (SourceInventory, model::Legac
         .apply(&model::Event::Activate(activation), &facts)
         .unwrap();
     assert_eq!(model.view().legacy, legacy);
-    assert!(model.view().heads.is_empty());
+    assert_eq!(model.view().heads, Vec::<types::Head>::new());
     assert!(model.view().unresolved_legacy_domain());
     assert!(model.view().unresolved_requests().is_empty());
     assert_eq!(

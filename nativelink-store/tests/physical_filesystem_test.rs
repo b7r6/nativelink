@@ -126,7 +126,10 @@ fn immutable_retry_cannot_overwrite_another_descriptor_or_accept_bad_input() {
     failure(too_long.finish(), FailureKind::Corrupt);
     let empty = PhysicalKey::new(incarnation(1), 2).unwrap();
     let id = publish(&store, empty, 5, b"");
-    assert!(store.read(empty, id, 0, None).unwrap().bytes.is_empty());
+    assert_eq!(
+        store.read(empty, id, 0, None).unwrap().bytes,
+        Vec::<u8>::new()
+    );
 }
 
 #[test]

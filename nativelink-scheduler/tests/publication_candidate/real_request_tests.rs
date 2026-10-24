@@ -309,7 +309,7 @@ fn matrix(algorithm: u8) {
                 };
                 let response = cached.require_response().unwrap().decode().unwrap();
                 assert!(response.cached_result);
-                assert!(response.message.is_empty());
+                assert_eq!(response.message, "");
                 assert_eq!(
                     response.result,
                     exact.require_response().unwrap().decode().unwrap().result

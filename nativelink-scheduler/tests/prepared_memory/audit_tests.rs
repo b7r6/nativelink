@@ -187,7 +187,10 @@ fn audit_admission_resolves_an_absent_cache_head_atomically() {
         a::Phase::Queued,
         "outer admission resolves an absent cache head before returning"
     );
-    assert!(model.view().scheduler.effects.is_empty());
+    assert_eq!(
+        model.view().scheduler.effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
+    );
     let bytes = model.snapshot().unwrap();
     assert_eq!(Model::restore(&bytes).unwrap().view(), model.view());
     let current = String::from_utf8(bytes).unwrap();

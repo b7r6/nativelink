@@ -596,7 +596,7 @@ async fn fixed_tree_pagination_advances_repeated_dag_occurrences_and_binds_token
                 .await
                 .unwrap();
             assert_eq!(first.directories, vec![root_directory.clone()]);
-            assert!(!first.next_page_token.is_empty());
+            assert_ne!(first.next_page_token, "");
             let second = tree(
                 &mut client,
                 tree_request(algorithm, &root, 1, &first.next_page_token),
@@ -612,7 +612,7 @@ async fn fixed_tree_pagination_advances_repeated_dag_occurrences_and_binds_token
             .await
             .unwrap();
             assert_eq!(third.directories, vec![leaf.clone()]);
-            assert!(third.next_page_token.is_empty());
+            assert_eq!(third.next_page_token, "");
             let zero = tree(
                 &mut client,
                 tree_request(algorithm, &root, 0, &first.next_page_token),
@@ -620,7 +620,7 @@ async fn fixed_tree_pagination_advances_repeated_dag_occurrences_and_binds_token
             .await
             .unwrap();
             assert_eq!(zero.directories, vec![leaf.clone(), leaf]);
-            assert!(zero.next_page_token.is_empty());
+            assert_eq!(zero.next_page_token, "");
             assert_eq!(
                 tree(
                     &mut client,
@@ -1006,7 +1006,7 @@ async fn fixed_tree_omits_missing_descendants_and_refuses_changed_continuations(
         .await
         .unwrap();
         assert_eq!(terminal.directories, vec![Directory::default()]);
-        assert!(terminal.next_page_token.is_empty());
+        assert_eq!(terminal.next_page_token, "");
         spy.directory(algorithm, &later_directory);
         assert_eq!(
             tree(

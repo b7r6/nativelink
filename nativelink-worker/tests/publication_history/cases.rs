@@ -529,7 +529,10 @@ async fn action_cache_hit_does_not_create_an_accepted_worker_history() {
     let response = ExecuteResponse::decode(encoded.value.as_slice()).unwrap();
     assert!(response.cached_result);
     assert_eq!(response.result, Some(cached));
-    assert!(runtime.service.subscribe().borrow().attempts.is_empty());
+    assert_eq!(
+        runtime.service.subscribe().borrow().attempts,
+        Vec::<nativelink_scheduler::authority::AttemptView>::new()
+    );
     assert!(
         runtime
             .service

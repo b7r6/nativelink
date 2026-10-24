@@ -172,7 +172,7 @@ fn disabled_scope_precedence_empty_frontiers_and_duplicate_ack() {
         ),
         (1, 0, 1, 0)
     );
-    assert!(certificate.retain.is_empty());
+    assert_eq!(certificate.retain, Vec::<ReceiptBinding>::new());
     assert_eq!(issue(&mut model, &mut facts, None), Reply::Ignored);
     let before_ack = facts.clone();
     assert_eq!(
@@ -317,7 +317,7 @@ fn replacement_resets_only_recipient_stream_and_same_incarnation_preserves_it() 
         Reply::Rejected(Rejection::Stale)
     );
     assert_eq!(issue(&mut model, &mut facts, None), Reply::Applied);
-    assert!(pending(&model).retain.is_empty());
+    assert_eq!(pending(&model).retain, Vec::<ReceiptBinding>::new());
     let new_certificate = pending(&model);
     assert_eq!(
         acknowledge(&mut model, &mut facts, new_certificate),

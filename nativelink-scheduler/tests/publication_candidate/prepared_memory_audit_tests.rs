@@ -110,6 +110,9 @@ fn audit_admission_resolves_an_absent_cache_head_atomically() {
         .admit_request(1, "action".into(), &context(), request, 100)
         .unwrap();
     assert_eq!(state.scheduler_view().executions[0].phase, a::Phase::Queued);
-    assert!(state.scheduler_view().effects.is_empty());
+    assert_eq!(
+        state.scheduler_view().effects,
+        Vec::<nativelink_scheduler::authority::Effect>::new()
+    );
     recover(&mut state);
 }

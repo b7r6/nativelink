@@ -328,7 +328,10 @@ async fn incompatible_protocol_and_unnegotiated_commands_are_rejected() {
     assert_eq!(registration.session.unwrap().worker, Some(IDENTITY));
     assert_eq!(registration.capacity, Some(RESOURCES));
     assert_eq!(registration.admission_ceiling, Some(RESOURCES));
-    assert!(registration.reconciliation.unwrap().attempts.is_empty());
+    assert_eq!(
+        registration.reconciliation.unwrap().attempts,
+        Vec::<AuthorityAttemptReport>::new()
+    );
     let command = context.sleeping(1).await;
     assert!(context.worker.command(1, command).is_err());
     let mut incompatible = negotiation(1);
@@ -347,7 +350,10 @@ async fn incompatible_protocol_and_unnegotiated_commands_are_rejected() {
         .unwrap()
         .incarnation_id += 1;
     assert!(context.worker.negotiate(&incompatible).is_err());
-    assert!(context.worker.reconcile().attempts.is_empty());
+    assert_eq!(
+        context.worker.reconcile().attempts,
+        Vec::<AuthorityAttemptReport>::new()
+    );
     context.worker.negotiate(&negotiation(1)).unwrap();
     assert!(context.worker.make_registration(1, Vec::new()).is_err());
 }
@@ -934,7 +940,7 @@ async fn normal_pid_namespace_exit_provides_domain_quiescence() {
     let report = wait_result(&context.worker, 1).await;
     assert_eq!(report.phase, AuthorityAttemptPhase::Quiescent as i32);
     let stopped = std::fs::read(&marker).unwrap();
-    assert!(!stopped.is_empty());
+    assert_ne!(stopped, Vec::<u8>::new());
     tokio::time::sleep(Duration::from_millis(80)).await;
     assert_eq!(std::fs::read(&marker).unwrap(), stopped);
     context
@@ -981,7 +987,7 @@ async fn hard_killed_namespace_waits_for_inner_domain_before_reusing_capacity() 
         AuthorityAttemptPhase::Quiescent as i32
     );
     let stopped = std::fs::read(&marker).unwrap();
-    assert!(!stopped.is_empty());
+    assert_ne!(stopped, Vec::<u8>::new());
     context
         .worker
         .command(1, context.sleeping(2).await)
@@ -1462,7 +1468,10 @@ async fn wire_committed_receipt_retirement_survives_cutpoints_and_old_active_hol
         receipt_certificate(101, 49, Vec::new()),
     ));
     journal.deliver(&connection, 4).await;
-    assert!(connection.retired(101).await.attempts.is_empty());
+    assert_eq!(
+        connection.retired(101).await.attempts,
+        Vec::<AuthorityAttemptReport>::new()
+    );
     assert_eq!(context.worker.ledger_counts_for_test(), (0, 0, 0, 0));
     assert!(!context.worker.admission_closed());
     drop(connection);
@@ -1508,7 +1517,10 @@ async fn wire_rejects_missing_handshake_and_wrong_capabilities_before_launch() {
             .send(authority_coordinator_update::Update::Command(command))
             .await;
         assert_eq!(session_error(task).await.code, Code::FailedPrecondition);
-        assert!(context.worker.reconcile().attempts.is_empty());
+        assert_eq!(
+            context.worker.reconcile().attempts,
+            Vec::<AuthorityAttemptReport>::new()
+        );
         assert!(!witness.launches.exists());
     }
 }

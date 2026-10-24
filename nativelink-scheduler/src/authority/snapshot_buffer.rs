@@ -192,7 +192,7 @@ mod tests {
         ] {
             let mut buffer = SnapshotBuffer::default();
             assert!(buffer.seek(seek).is_err());
-            assert!(buffer.get_ref().is_empty());
+            assert_eq!(buffer.get_ref(), b"");
             assert_eq!(buffer.cursor.get_ref().capacity(), 0);
             assert!(buffer.into_inner().is_err());
         }

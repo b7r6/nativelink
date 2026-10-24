@@ -639,7 +639,7 @@ fn prepared_memory_empty_action_result_still_requires_graph_path() {
         state.enable_prepared_memory().unwrap();
         let result = ActionResult::default();
         let bytes = result.encode_to_vec();
-        assert!(bytes.is_empty());
+        assert_eq!(bytes, Vec::<u8>::new());
         let object = Object::for_bytes(algorithm, &bytes).unwrap();
         state
             .install_physical_for(Some(attempt.execution), key(1), object, true)

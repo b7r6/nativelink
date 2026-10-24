@@ -565,7 +565,7 @@ fn real_state_replacement_discards_old_control_without_refund_or_new_stream_dirt
     assert_eq!(fixture.acknowledge(old), Reply::Rejected(Rejection::Stale));
     assert_eq!(fixture.issue(), Reply::Applied);
     let current = fixture.certificate();
-    assert!(current.retain.is_empty());
+    assert_eq!(current.retain, Vec::<ReceiptBinding>::new());
     fixture.register(IncarnationId(2));
     assert_eq!(fixture.certificate(), current);
     assert_eq!(fixture.acknowledge(current), Reply::Applied);
@@ -591,7 +591,7 @@ fn real_state_snapshot_and_suffix_matches_uninterrupted_history() {
         let certificate = fixture.certificate();
         assert_eq!(fixture.acknowledge(certificate), Reply::Applied);
         assert_eq!(fixture.issue(), Reply::Applied);
-        assert!(fixture.certificate().retain.is_empty());
+        assert_eq!(fixture.certificate().retain, Vec::<ReceiptBinding>::new());
     }
     assert_eq!(uninterrupted.driver.expected(), restored.driver.expected());
     assert_eq!(

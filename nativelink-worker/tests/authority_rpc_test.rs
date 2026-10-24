@@ -33,7 +33,7 @@ use nativelink_proto::build::bazel::remote::execution::v2::action_cache_client::
 use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
 use nativelink_proto::build::bazel::remote::execution::v2::{Action, ActionResult, Command, Directory, ExecuteOperationMetadata, ExecuteRequest, ExecuteResponse, Platform, RequestMetadata, UpdateActionResultRequest, WaitExecutionRequest};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::authority_worker_api_server::AuthorityWorkerApiServer;
-use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{AuthorityAttemptPhase, AuthorityResources, AuthorityWorkerIdentity};
+use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{AuthorityAttemptPhase, AuthorityAttemptReport, AuthorityResources, AuthorityWorkerIdentity};
 use nativelink_proto::google::longrunning::{Operation, operation};
 use nativelink_scheduler::authority::journal::{Journal, Singleton};
 use nativelink_scheduler::authority::format::{AdmissionRegistry, AuthorityDomain, JournalProfile, ReaderCapabilities, RECEIPT_RETIREMENT};
@@ -1307,7 +1307,10 @@ async fn actual_rpc_cancel_before_first_dispatch_releases_only_after_recipient_t
         })
         .await;
     assert!(!dispatching.reservations[0].released);
-    assert!(context.worker.reconcile().attempts.is_empty());
+    assert_eq!(
+        context.worker.reconcile().attempts,
+        Vec::<AuthorityAttemptReport>::new()
+    );
     clock.store(301, Ordering::Relaxed);
     let cleaned = runtime
         .wait(|view| {

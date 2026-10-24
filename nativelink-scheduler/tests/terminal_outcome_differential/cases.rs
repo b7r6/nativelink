@@ -220,7 +220,10 @@ fn last_interest_cancel_and_expiry_retain_charges_until_cleanup() {
             }),
             Outcome::Applied
         );
-        assert!(queued.view().attempts.is_empty());
+        assert_eq!(
+            queued.view().attempts,
+            Vec::<nativelink_scheduler::authority::AttemptView>::new()
+        );
         let mut active = setup(algorithm, 1, 16384, false);
         assert_eq!(active.event(a::Event::Match), Outcome::Applied);
         let active_writes = active.stage(100, 1);
