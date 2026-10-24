@@ -1,0 +1,360 @@
+{
+  "source_commit": "039c80950e51bc85c13774545e9a79b7b31a7af1",
+  "scope": "Checked experimental clock observations, awaited startup sweep and once-polled cancellation custody; no canonical bootstrap or expiry-comparison activation.",
+  "artifacts": {
+    "base.txt.gz": {
+      "sha256": "da9de7b7f904ce8c8b5a078f88e2713f288f788c295935d801d0c3c6ede9292e",
+      "uncompressed_sha256": "3a86680b2e151866e62ddeae99ea5b4e9663c271027cd53c7fe9498a9387777c",
+      "uncompressed_bytes": 41
+    },
+    "bootstrap-source-audit.json.gz": {
+      "sha256": "d21dbf6861e35e9c804c796d842484d26b98d6c00a29c2655049bc7891c62853",
+      "uncompressed_sha256": "9b92961741a63a46ecd9745a8dc3c158ee59e8d373debb480f1913b8fca764dc",
+      "uncompressed_bytes": 11630
+    },
+    "cancellation-fixed.log.gz": {
+      "sha256": "d468a528ba2ba09fa1947091ecc9b4fc7d69e69990ab142287d8de4967dd22d9",
+      "uncompressed_sha256": "3a74119643d379e703c2cc3f59aef9beacf5fc2b628b3bfa3f1477c9434191ec",
+      "uncompressed_bytes": 1021
+    },
+    "cancellation-test.log.gz": {
+      "sha256": "3de6cc810a2cf2ac78c976cb61de07db0c74ecd4e41a361ccfb4800dc5a990a1",
+      "uncompressed_sha256": "1c2ea080357b6fa86affd843d642fea80a82a7764e112cff21d2a08378fcaef7",
+      "uncompressed_bytes": 2366
+    },
+    "cancellation.log.gz": {
+      "sha256": "d53acc01cc4173cedd9f9bf0a939e5738dc2f95e3f0d9e740ee5ed745be40522",
+      "uncompressed_sha256": "65edf61fcaa11d410d2ce2b0717b55867dae4eb25979639ef471200085a37d01",
+      "uncompressed_bytes": 2429
+    },
+    "changed-files.txt.gz": {
+      "sha256": "9729c53a19bc41b472dd30fb9d4c3e57fbd7dfd999ec3326b17e8c25a2d6f558",
+      "uncompressed_sha256": "f9a2387523f3a860fd750b27f1e6307aefb6f7b1fdecee8e2640310a8867af4c",
+      "uncompressed_bytes": 709
+    },
+    "clippy.log.gz": {
+      "sha256": "454da3853a80a994323ee74251cab268a0d26cc00c9728e972c368c2ba6a046d",
+      "uncompressed_sha256": "af1ec213a9142b9877e64020a1ef91b74829485c9ce36996c66432b90fd179b4",
+      "uncompressed_bytes": 1033
+    },
+    "drop-owned-preparation-test.log.gz": {
+      "sha256": "af77ff90c4f5f71c6e5882fe8240219948c06f752a48ff67437ab70f63452a58",
+      "uncompressed_sha256": "782936360448669302faea2bcd60e9d5c9cac7ecf1a5d9f08ec0eb0a05f5bd76",
+      "uncompressed_bytes": 584212
+    },
+    "drop-owned-preparation.log.gz": {
+      "sha256": "063207941323ab575d507d5b7d031422c16421fd496056efef835eff6456e075",
+      "uncompressed_sha256": "d7f8f4deba1095a6210666bcd8b1f520f45b3b5eee4b126e22d3157378b285d9",
+      "uncompressed_bytes": 585735
+    },
+    "final-runtime.patch.gz": {
+      "sha256": "78eb6041bbff90d32b2c6858cc57e7a66d35c8aba890bec1668f5c821e5725f0",
+      "uncompressed_sha256": "12dc41dcdd9df69a953c2db11b167797e2d80812502e1d1ff0ec7516b7ed3bb2",
+      "uncompressed_bytes": 19451
+    },
+    "final-sources-after.json.gz": {
+      "sha256": "3efefa8f1c9a4dbd7a8dae75dbaa82c128693b87b7fcd28853fd3f27eca83d2a",
+      "uncompressed_sha256": "5093a14d5b824656f3a7db4aaf78983a8db107e3bf4767017c55c92dc9eb7d2e",
+      "uncompressed_bytes": 65226
+    },
+    "final-sources-before.json.gz": {
+      "sha256": "3efefa8f1c9a4dbd7a8dae75dbaa82c128693b87b7fcd28853fd3f27eca83d2a",
+      "uncompressed_sha256": "5093a14d5b824656f3a7db4aaf78983a8db107e3bf4767017c55c92dc9eb7d2e",
+      "uncompressed_bytes": 65226
+    },
+    "final-unit-test.log.gz": {
+      "sha256": "79206f969a29d6d3c7c0971279aeeea2978bc93c736d1fe7d84011e41468fcfc",
+      "uncompressed_sha256": "dfe38c71b6c8039ee14b0a83eb8b4a86234cad624a8fc535f80fb5dc7d70e103",
+      "uncompressed_bytes": 2366
+    },
+    "final-unit.log.gz": {
+      "sha256": "62c2ce7d0a6b23c6dc0812d57a41a91ac6fba75431870b314a1f762dbb23fbe9",
+      "uncompressed_sha256": "6f4cedef37ca6aef0854b843dfc2dfe1dcae8837f1cd34c093e817445249637d",
+      "uncompressed_bytes": 977
+    },
+    "first-authority-clock.rs.gz": {
+      "sha256": "68670360a28112cecf440eebb40e42901c41321e2c32a20e4b4dd2bff7766331",
+      "uncompressed_sha256": "1f7514f7b84f1c966e0688ba190961bda469810c917e0876e62fd4daad124bf6",
+      "uncompressed_bytes": 4498
+    },
+    "first-build.log.gz": {
+      "sha256": "1408b7b92f8fd292a6ff87638fbc314ba07b2a80e297f96cd763f5aaa40d1f92",
+      "uncompressed_sha256": "8c298f9a730d219548c9aaffcde66845800c7784b6dc7a1e793e26da4a8b51ed",
+      "uncompressed_bytes": 3125
+    },
+    "first-history-rpc.log.gz": {
+      "sha256": "e3702f8a485c8ea57b1fba4789dd1c35e49ced1d63cd68aedbebef9a85e2c69f",
+      "uncompressed_sha256": "62fcf75ee6d9ec79d7eb94b8b1204719836b9ce94f77df7c3d28f9fcc65bdc8d",
+      "uncompressed_bytes": 761
+    },
+    "first-listeners.log.gz": {
+      "sha256": "133b54f7ebd1ce444dc69fe6ddea42c5186f709b5ac1b3a8d2f11659395ff7a6",
+      "uncompressed_sha256": "f015e78d48f44051498bb5fdfa1794d9b534f7891aac6c698cc4826a9788ec7b",
+      "uncompressed_bytes": 711
+    },
+    "first-receipt-rpc.log.gz": {
+      "sha256": "73e906e467b1a2dbe13daa44bf71d69b35721e5e8cba4f1be7b6eb179a34e446",
+      "uncompressed_sha256": "01a06707070335221b9d5da3951a38a2ab9c42927e85c000c621f0fd77fb5bdf",
+      "uncompressed_bytes": 392
+    },
+    "first-rpc.log.gz": {
+      "sha256": "acdf322f154c3d2eadfaa74c59cd189f0284b161a8e9a4eb4822d05a8aaf1cb8",
+      "uncompressed_sha256": "365503df28c715116aabcd1ac55d8f2e6482a5a7c577fd6f37ecf8d3655f6a98",
+      "uncompressed_bytes": 1319
+    },
+    "first-runtime.patch.gz": {
+      "sha256": "e031cca6247b816f140d7302e834f2626f23afae74f28956ceecfc6f348fe149",
+      "uncompressed_sha256": "e1236e72e5c58c17df252b53b28012b110957d88acbb4fc22db370211ed5bef0",
+      "uncompressed_bytes": 13490
+    },
+    "first-service-unit.log.gz": {
+      "sha256": "deaa6250a8bae3a9a18274e1bd1058379f4f1e79ed45815fbe55982122388959",
+      "uncompressed_sha256": "5fe5d2d54ee1faacca51b43adbdb9095f0932bca410060bfe18afb879719bbff",
+      "uncompressed_bytes": 2256
+    },
+    "focused.log.gz": {
+      "sha256": "af7e5db307d399efffba863ecdc28d29336dcdab51d8ec73714a00257961007e",
+      "uncompressed_sha256": "b032a028ad22543cd0606fffbb174804bac0bda689956043bc41ecd366db6e8e",
+      "uncompressed_bytes": 2857
+    },
+    "frozen-authority_clock.rs.gz": {
+      "sha256": "68670360a28112cecf440eebb40e42901c41321e2c32a20e4b4dd2bff7766331",
+      "uncompressed_sha256": "1f7514f7b84f1c966e0688ba190961bda469810c917e0876e62fd4daad124bf6",
+      "uncompressed_bytes": 4498
+    },
+    "frozen-authority_running_clock_tests.rs.gz": {
+      "sha256": "e6b1820a709c4552a03194928b7a887b34dc03c30286cbee44d3710f62388659",
+      "uncompressed_sha256": "0cb70597ec1bc20e2b5af570a5e25577cca6c87664c8899ef0db5b22195fd797",
+      "uncompressed_bytes": 26133
+    },
+    "frozen-authority_server.rs.gz": {
+      "sha256": "e54a5524d62592b5b65015e0f450acdabeb2a8de1e049943fd8bb51db1865ac7",
+      "uncompressed_sha256": "630057fd0d3ec6e32a075f2d2832c34ca3c16aab6d362ff88affd75c54734164",
+      "uncompressed_bytes": 85715
+    },
+    "hooks.log.gz": {
+      "sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "uncompressed_bytes": 2160
+    },
+    "ignore-clock-error-format-failure-prior-test-log.log.gz": {
+      "sha256": "471b333b08ac61b40ebcdca6b00468b734749ffc37a65bff83a7cd8a2e189207",
+      "uncompressed_sha256": "548da2f5f78624fe43c2fc6b8b9947189bcad1a5ff803886aa12d403780da07e",
+      "uncompressed_bytes": 868
+    },
+    "ignore-clock-error-format-failure.log.gz": {
+      "sha256": "58da52269196f9c146797496c55143fcce5d245638fe65d970f5e067b09aa4a0",
+      "uncompressed_sha256": "7dcfff5afe5094c811308fe1cf95ad62500d447b1287367c10d61a5f4a2b614e",
+      "uncompressed_bytes": 1972
+    },
+    "ignore-clock-error-test.log.gz": {
+      "sha256": "bccc18068faf13000f108f6c7794739c634a17caa394d2b581bdff81752b4f68",
+      "uncompressed_sha256": "6f7d25ce61f8ea2c358f644f8ff48ce1a76396b0c93d60d23306353f1900e147",
+      "uncompressed_bytes": 3052737
+    },
+    "ignore-clock-error.log.gz": {
+      "sha256": "b5c76a050a8626bafee5b028ba1d9b044d110b85d9449dde2aee488d5bdfd02a",
+      "uncompressed_sha256": "a081a409612ef32c2f90d1be2da7d29171e9ea20eca98065df96cd11d2d116f3",
+      "uncompressed_bytes": 3054310
+    },
+    "independent-review.json.gz": {
+      "sha256": "8226e53d1153142b39edd2f3f11ac44bacb2c61f53f5288d9e6dba027adf3b70",
+      "uncompressed_sha256": "7c62c946e82661b654f0423c8545c09be8716f397b334e16cfc4e7572de38f19",
+      "uncompressed_bytes": 3071
+    },
+    "mutants-first-attempt.json.gz": {
+      "sha256": "65914b195d3f06adfb5384e2f703048507f1cd528ab6ccb4623fe330561dec40",
+      "uncompressed_sha256": "e2df88a76d59bf3e83511c9e0365ff34fa71ec2a44e832d425850f883a3d85e1",
+      "uncompressed_bytes": 1138
+    },
+    "mutants.json.gz": {
+      "sha256": "0ae983b6c952005e954c2b1a38148ffff96c6aa0db8962d91430c951d55e7a79",
+      "uncompressed_sha256": "366c27ec65357c48cb33e8ebe29b15edaf2ef642364e2b65d6a7774a9a8aede7",
+      "uncompressed_bytes": 2333
+    },
+    "pre-timeout-authority_running_clock_tests.rs.gz": {
+      "sha256": "ce88efd129c08b82eff3c09cbca80df7e649f56a8bb40aa8a219a25558755e4e",
+      "uncompressed_sha256": "f4aa57d8c9ee637dcefe5be0fa0f1fd63f7d2e03505d447cfdff531494e942ee",
+      "uncompressed_bytes": 26012
+    },
+    "restored-history-rpc.log.gz": {
+      "sha256": "2751bf31c4f655ffb014426a559bd41ab0ecf98c7f5e52801b626e8aae656b9d",
+      "uncompressed_sha256": "a73d4c80bf051426ebf6b8fa08eae527ffbc2ffc2e1bd60b38e68f5b18e2f4f9",
+      "uncompressed_bytes": 761
+    },
+    "restored-integration.log.gz": {
+      "sha256": "25ba8055a4e2497600e08a9d8f3cc1b538aa72de87b4415b7f08f2938fa54560",
+      "uncompressed_sha256": "63d330558ba27cc82c4b75a3bfc065da95c9e60aa6ac711a624795d83c7bfce6",
+      "uncompressed_bytes": 3662
+    },
+    "restored-listeners.log.gz": {
+      "sha256": "029b8981328cee49bdf63afa285d775894db6319bfbcb61f03b6517846fece7a",
+      "uncompressed_sha256": "b964ab869fdb7db46bbfea61344cd22209ba2482eca9d21787e68f62f1e2325f",
+      "uncompressed_bytes": 711
+    },
+    "restored-publication-ordering.log.gz": {
+      "sha256": "0f7921b78eb3c92bdc55a0aa41f654f8f15004405d05a307953cec0b42d26e72",
+      "uncompressed_sha256": "12a737a830dacfce7c619ad73e5531528846c528f961872297e79a7a55b32ae8",
+      "uncompressed_bytes": 1024
+    },
+    "restored-receipt-rpc.log.gz": {
+      "sha256": "a6eee80b036f7dc1b984fc6153044d337e3cd50dfa4737edc7ba0878c7897b7e",
+      "uncompressed_sha256": "59f8129c8d7a9df12b969cbdf8b448bc86e2580919b784f158e5f316abdb65e5",
+      "uncompressed_bytes": 392
+    },
+    "restored-replicated-rpc.log.gz": {
+      "sha256": "e332130d866c7fc6b8a1620a3c994a6f0d45729b4da1fe7f49a46e10c6083d11",
+      "uncompressed_sha256": "9abcf0b49d3c750d9652a31ead648baa945876b493c84a0226da46996f292ad4",
+      "uncompressed_bytes": 389
+    },
+    "restored-rpc.log.gz": {
+      "sha256": "02820c7937dbe2e38770a907dd56eecc094fef6eef1767074868fa86e4335373",
+      "uncompressed_sha256": "93e2c452fb433bf6bb92e923b75c95af245aa16455c6a4283e7017485cd0ae2d",
+      "uncompressed_bytes": 1319
+    },
+    "restored-service-unit.log.gz": {
+      "sha256": "dc185147610511253a2ef99eb0261c74446ee99cda15ce2c1bcb0210a04ec071",
+      "uncompressed_sha256": "b1a7ae1acdb49ac8833c8518931587263f39f8baf3a700fdd74df5893c9fc268",
+      "uncompressed_bytes": 2366
+    },
+    "run-mutants.py.gz": {
+      "sha256": "fd1f579d5084ce2661af4ccc7eb9043a759c2eb8c089c05fcbf6e53bd5bd70f0",
+      "uncompressed_sha256": "ee92ad3bf28928755627cb36fbd0ea266a44183077256e33003ad18c646133c8",
+      "uncompressed_bytes": 3513
+    },
+    "saturate-clock-test.log.gz": {
+      "sha256": "471b333b08ac61b40ebcdca6b00468b734749ffc37a65bff83a7cd8a2e189207",
+      "uncompressed_sha256": "548da2f5f78624fe43c2fc6b8b9947189bcad1a5ff803886aa12d403780da07e",
+      "uncompressed_bytes": 868
+    },
+    "saturate-clock.log.gz": {
+      "sha256": "ad6ff747b5509fa8f5c3374d93321f39c899461d74386a3159cd81b71a4f246d",
+      "uncompressed_sha256": "a3896836d5537dd1bb9a90839851a33015fbe0e2e5c7babff48ab78618795a56",
+      "uncompressed_bytes": 2220
+    },
+    "skip-startup-sweep-test.log.gz": {
+      "sha256": "d0c2e33bd64e2d7658b587f9e9006a6b03cbdbac6353ead03295188efe646461",
+      "uncompressed_sha256": "59246c37ac03a365eca8655334bfac8bf8ba361e79ff1fdba9d504942b7eb2b1",
+      "uncompressed_bytes": 295851
+    },
+    "skip-startup-sweep.log.gz": {
+      "sha256": "3ca9b7709cb96b8c725a54033af3adebf052f4670fdd151e35510afe7fbcb711",
+      "uncompressed_sha256": "37c784ba1f33c13e3ecefabf7c481ba88be9aab7e9b8fa9fc868bd17663bd499",
+      "uncompressed_bytes": 297203
+    },
+    "sources-before.json.gz": {
+      "sha256": "980f5c606442b058483385e8e266601c5343b3e7776bd3edc96aa990a48709d1",
+      "uncompressed_sha256": "f37c8f7cd10a146f8e18456eb9b0e3b8c23ca7d0dac3e069e0a18e0468c7ca57",
+      "uncompressed_bytes": 65226
+    }
+  },
+  "final_bazel": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=4 //:nativelink //nativelink-service:unit_test //nativelink-service:integration_tests/authority_listener_test_test //nativelink-worker:integration_tests/authority_rpc_test_test //nativelink-worker:authority_history_rpc_test //nativelink-worker:authority_receipt_rpc_test //nativelink-worker:authority_publication_ordering_test //nativelink-worker:authority_replicated_rpc_test --test_output=errors",
+    "server_built": true,
+    "test_targets_executed": 7,
+    "tests_passed": 51,
+    "tests_ignored": 1,
+    "cases": {
+      "service_unit": 20,
+      "listeners": 4,
+      "base_rpc": 12,
+      "history_rpc": 5,
+      "receipt_rpc": 1,
+      "publication_ordering": 8,
+      "replicated_rpc": 1
+    },
+    "selected_build_inputs_unchanged": 545,
+    "manifest_before": "final-sources-before.json.gz",
+    "manifest_after": "final-sources-after.json.gz"
+  },
+  "strict_clippy": "CARGO_INCREMENTAL=0 cargo clippy --locked --offline --profile smol -j8 -p nativelink-service --lib --tests -- -D warnings passed; Cargo retained preexisting unused workspace.cargo-features-manager metadata warning.",
+  "hooks": "All changed-file hooks pass; source hashes unchanged afterward.",
+  "negative_controls": [
+    {
+      "name": "saturate-clock",
+      "command": [
+        "bazel",
+        "test",
+        "--jobs=8",
+        "--local_test_jobs=2",
+        "--test_env=RUST_TEST_THREADS=4",
+        "//nativelink-service:unit_test",
+        "--test_output=errors",
+        "--test_arg=exhaustion_and_a_source_before_origin_are_errors"
+      ],
+      "exit_code": 3,
+      "elapsed_seconds": 6.831034469010774,
+      "mutated_path": "nativelink-service/src/authority_clock.rs",
+      "mutated_sha256": "0c190ce11beacb272a119178c6e1434337cb964958dad97a77d6683887a4f5e3",
+      "detected_compiled_semantic_failure": true
+    },
+    {
+      "name": "ignore-clock-error",
+      "command": [
+        "bazel",
+        "test",
+        "--jobs=8",
+        "--local_test_jobs=2",
+        "--test_env=RUST_TEST_THREADS=4",
+        "//nativelink-service:unit_test",
+        "--test_output=errors",
+        "--test_arg=clock_failure_"
+      ],
+      "exit_code": 3,
+      "elapsed_seconds": 25.103165104985237,
+      "mutated_path": "nativelink-service/src/authority_server.rs",
+      "mutated_sha256": "046efbeaf858e5ad1f10addaa40fa723b44846a0374a311897ca65b84a2884bb",
+      "detected_compiled_semantic_failure": true
+    },
+    {
+      "name": "skip-startup-sweep",
+      "command": [
+        "bazel",
+        "test",
+        "--jobs=8",
+        "--local_test_jobs=2",
+        "--test_env=RUST_TEST_THREADS=4",
+        "//nativelink-service:unit_test",
+        "--test_output=errors",
+        "--test_arg=clock_failure_refuses_start_before_due_recovery_mutations"
+      ],
+      "exit_code": 3,
+      "elapsed_seconds": 7.142405332007911,
+      "mutated_path": "nativelink-service/src/authority_server.rs",
+      "mutated_sha256": "fdb3012060ed1f5e65e98250ebd47232e01a86d52097c9d8e92cacf75120de75",
+      "detected_compiled_semantic_failure": true
+    },
+    {
+      "name": "drop-owned-preparation",
+      "command": [
+        "bazel",
+        "test",
+        "--jobs=8",
+        "--local_test_jobs=2",
+        "--test_env=RUST_TEST_THREADS=4",
+        "//nativelink-service:unit_test",
+        "--test_output=errors",
+        "--test_arg=cancelled_clock_preparation_retains_custody_until_shutdown"
+      ],
+      "exit_code": 3,
+      "elapsed_seconds": 14.607689599972218,
+      "mutated_path": "nativelink-service/src/authority_server.rs",
+      "mutated_sha256": "315d2b85a36a73abfa54f4a00192bcd67460e679edf47c3a136ddad583f35772",
+      "detected_compiled_semantic_failure": true
+    }
+  ],
+  "nonqualifying_attempts": [
+    "Initialbuild failed unchecked Instant subtraction lint; corrected before tests.",
+    "First cancellation build failed significant_drop_in_scrutinee lint; corrected and explicitly selected two-thread runtime before executing blocking fixture.",
+    "First ignore-clock-error mutation failed formatting before compilation; prior test log retained under explicit prior-test-log name; not counted. Corrected formatted mutation compiled and failed intended oracles."
+  ],
+  "independent_review_sha256": "7c62c946e82661b654f0423c8545c09be8716f397b334e16cfc4e7572de38f19",
+  "limitations": [
+    "Real journal tests qualify redb custody, not four descriptor root locks.",
+    "Once-polled startup cancellation only; discarding an unpolled async constructor is outside this guarantee.",
+    "No clock-error fallback, expiry, refund or acknowledgment is fabricated; existing authority state remains retained across error and reopen.",
+    "Exactly representable u64::MAX is not arithmetic overflow; deadline headroom/sentinel policy remains separate.",
+    "Current inclusive expiry, minimum-duration semantics, bootstrap time provenance and all canonical deadline classes remain unqualified.",
+    "Restart source deliberately excludes downtime and fractions; repeated restart can postpone expiry indefinitely."
+  ]
+}

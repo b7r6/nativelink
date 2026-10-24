@@ -1,0 +1,1233 @@
+{
+  "source_commit": "e6978139cf65e41dcd805b793c4eb2bbab1ece4d",
+  "scope": "Full Bazel //... plus six explicit manual canonical parser, filesystem, journal bridge and store targets. Predates persisted-limit and memory-wire changes.",
+  "command": "command.json",
+  "passed_targets": 172,
+  "executed_targets": 65,
+  "cached_targets": 107,
+  "elapsed_seconds": 345.873,
+  "unchanged_tracked_inputs": 1313,
+  "source_manifest_scope": "All tracked files except categorical evidence; symbolic links hash link text. No claim to enumerate every external tool/system input.",
+  "rust_summaries": {
+    "count": 170,
+    "passed": 2202,
+    "failed": 0,
+    "ignored": 10,
+    "qualification": "Counts include cached target logs and are not an independent Cargo run or a count of unique scenarios.",
+    "per_log": [
+      {
+        "log": "testlogs/nativelink-redis-tester/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-redis-tester/unit_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_receipt_rpc_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_publication_ordering_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_history_rpc_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/authority_replicated_rpc_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/unit_test/test.log",
+        "passed": 53,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/directory_cache_stress_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/worker_utils_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/local_worker_test_test/test.log",
+        "passed": 25,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/reaper_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/namespace_utils_test_test/test.log",
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/authority_worker_test_test/test.log",
+        "passed": 25,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/running_actions_manager_test_test/test.log",
+        "passed": 97,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/authority_scheduler_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/capacity_test_test/test.log",
+        "passed": 18,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-worker/integration_tests/directory_cache_test_test/test.log",
+        "passed": 19,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/unit_test/test.log",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/telemetry_test_test/test.log",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/tls_utils_test_test/test.log",
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/origin_event_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/action_messages_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/buf_channel_test_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/adaptive_permits_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/wire_compression_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/channel_body_for_tests_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/common_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/operation_id_tests_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/proto_stream_utils_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/shutdown_guard_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/health_utils_test_test/test.log",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/store_trait_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/metrics_test_test/test.log",
+        "passed": 20,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/fs_test_test/test.log",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/resource_info_test_test/test.log",
+        "passed": 45,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/cache_size_metrics_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/retry_test_test/test.log",
+        "passed": 21,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/fastcdc_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/platform_properties_tests_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-util/integration_tests/evicting_map_test_test/test.log",
+        "passed": 26,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-macro/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-macro/unit_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-metric/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-metric/unit_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-metric/nativelink-metric-macro-derive/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/prepared_memory_differential_test/test.log",
+        "passed": 18,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/physical_retention_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_activation_reference_test/test.log",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/receipt_retirement_differential_test/test.log",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/receipt_retirement_reference_test/test.log",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_physical_test/test.log",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/terminal_outcome_differential_test/test.log",
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_candidate_test/test.log",
+        "passed": 77,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/typed_physical_retention_test/test.log",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/activation_inventory_test/test.log",
+        "passed": 18,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_differential_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_activation_bounded_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/accepted_history_differential_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/authority_snapshot_capacity_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/accepted_history_reference_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/authority_test/test.log",
+        "passed": 68,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/terminal_outcome_reference_test/test.log",
+        "passed": 29,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_head_reference_test/test.log",
+        "passed": 18,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/retention_test/test.log",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/prepared_memory_reference_test/test.log",
+        "passed": 29,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/publication_activation_v2_reference_test/test.log",
+        "passed": 27,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/terminal_outcome_restore_audit_test/test.log",
+        "passed": 44,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/unit_test/test.log",
+        "passed": 84,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/historical_resource_scheduler_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/simple_scheduler_test_test/test.log",
+        "passed": 40,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/dispatch_ack_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/execution_active_count_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/unsatisfiable_action_test_test/test.log",
+        "passed": 41,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/store_awaited_action_db_test_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/worker_registry_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/simple_scheduler_state_manager_test_test/test.log",
+        "passed": 34,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/queue_order_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/action_messages_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/platform_property_manager_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/live_memory_veto_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/fleet_capabilities_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/worker_running_operations_report_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log",
+        "passed": 24,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/backpressure_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/worker_capability_index_test_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/redis_store_awaited_action_db_test_test/test.log",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 1
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/placement_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/property_modifier_scheduler_test_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/cache_lookup_scheduler_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/admin_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_reapi_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/reservation_hold_test_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/escalation_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/remote_exec_scheduling_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_request_test_test/test.log",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log",
+        "passed": 28,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-scheduler/integration_tests/liveness_clock_step_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-error/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-error/unit_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-error/integration_tests/error_tests_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-error/integration_tests/lib_tests_test/test.log",
+        "passed": 31,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-config/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-config/unit_test/test.log",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-config/integration_tests/deserialization_test_test/test.log",
+        "passed": 34,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-config/integration_tests/duplicate_servers_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-config/integration_tests/json5_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-store/canonical_store_test/test.log",
+        "passed": 20,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-filesystem/ownership_test/test.log",
+        "passed": 25,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-filesystem/journal_test/test.log",
+        "passed": 35,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-config/conversion_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/tools/canonical-config/parser_test/test.log",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/unit_test/test.log",
+        "passed": 23,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/grpc_scheduler_forwarding_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 1
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/health_server_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/push_server_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log",
+        "passed": 36,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/bep_server_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/fetch_server_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/execution_server_test_test/test.log",
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/capabilities_server_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/ac_server_test_test/test.log",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/worker_api_server_test_test/test.log",
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/cas_server_test_test/test.log",
+        "passed": 27,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-service/integration_tests/fastcdc_conformance_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/doc_test/test.log",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/unit_test/test.log",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/existence_store_test_test/test.log",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/physical_filesystem_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/ref_store_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/store_manager_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/common_s3_utils_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/azurite_store_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 2
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/grpc_store_test_test/test.log",
+        "passed": 19,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/size_partitioning_store_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/verify_store_test_test/test.log",
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/cache_metrics_remove_metrics_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/redis_store_test_test/test.log",
+        "passed": 68,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/ontap_s3_store_test_test/test.log",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/filesystem_store_test_test/test.log",
+        "passed": 57,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/compression_store_test_test/test.log",
+        "passed": 17,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/grpc_read_batching_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/r2_store_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/memory_store_test_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/oci_store_test_test/test.log",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/completeness_checking_store_test_test/test.log",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/azure_blob_store_test_test/test.log",
+        "passed": 38,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/ontap_s3_existence_cache_store_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/fast_slow_store_test_test/test.log",
+        "passed": 40,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/physical_azure_test_test/test.log",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 5
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/ac_utils_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/tls_client_no_roots_test_test/test.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/mongo_store_test_test/test.log",
+        "passed": 17,
+        "failed": 0,
+        "ignored": 1
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/gcs_store_test_test/test.log",
+        "passed": 22,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/shard_store_test_test/test.log",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/gcs_client_test_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/s3_store_test_test/test.log",
+        "passed": 19,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/physical_closure_test_test/test.log",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/cache_metrics_store_test_test/test.log",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "log": "testlogs/nativelink-store/integration_tests/dedup_store_test_test/test.log",
+        "passed": 10,
+        "failed": 0,
+        "ignored": 0
+      }
+    ]
+  },
+  "archive": {
+    "path": "bazel-evidence.tar.gz",
+    "bytes": 183430,
+    "sha256": "1c4af70e317704a0a43d9f1e1e9846d47bacbc091a0016c475774159786c89ab",
+    "files_sha256": {
+      "bazel.log": "d8b3d8b122f48c4bd2b9b05d4a850a7f021e3a76e46229ffeca6d6cb94034bf2",
+      "command.json": "78645c9c87e5ef2d41dd943776fcce12d106de68b089229ba711588c87dc2bd4",
+      "head.txt": "937c5e05c3fff3b143c1ae50a097950d3c76acc095a7238bc4509f468f619212",
+      "qualified-test-summaries.json": "4c1aeb826df33b2217ebe28881d6ef0b7fc17f34198d714b56fa846d6af4e976",
+      "run-bazel.py": "f14478656dd3d5e8d2fe6cff1ec17dde0c1ab21fedffaffd6fce142e2ded155b",
+      "sources-after.json": "c605998500e610df0cc3dc886680f3c21be4ddde87e4b573d4cf3098d262bf66",
+      "sources-before.json": "c605998500e610df0cc3dc886680f3c21be4ddde87e4b573d4cf3098d262bf66",
+      "status-before.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "testlogs/nativelink-config/doc_test/test.log": "a91a42eacc1a64db4234ce1ee90249c822e679ecefc65c45a18bbc1712b1104d",
+      "testlogs/nativelink-config/integration_tests/deserialization_test_test/test.log": "3460c381dda0b8a1bdf6325187f90bfaef135e70e36abaac39b0a16b40cd3a9b",
+      "testlogs/nativelink-config/integration_tests/duplicate_servers_test_test/test.log": "d37ab90e9f918ccb2b7e492191bb53c3ed9a92b792972e8cbf909d2180bf36fe",
+      "testlogs/nativelink-config/integration_tests/json5_test_test/test.log": "7c37bc261f8379d15e51b79fb54a9aa35d6f32be5b22569502380f171cc24c96",
+      "testlogs/nativelink-config/unit_test/test.log": "c3b350dacc2589e1aa188bdaf26269725316e63143edf0700e282b548838548a",
+      "testlogs/nativelink-error/doc_test/test.log": "c19be1efff77065bc972cf73d781f25e2f83cbe7b3aa0b5a3ac72c5443c32d00",
+      "testlogs/nativelink-error/integration_tests/error_tests_test/test.log": "1de5951e02261796d43d013867e65f4aed41ed168ad37ffb43086d8e526498a8",
+      "testlogs/nativelink-error/integration_tests/lib_tests_test/test.log": "498222bd1931a42af1ee754c7e5bd1e7713c3313f313a19b5312ebbfaf6c1bd6",
+      "testlogs/nativelink-error/unit_test/test.log": "e0994e9706af1e537cf833c70f8b1cd5f4956f1a611ca2143299593af770058b",
+      "testlogs/nativelink-macro/doc_test/test.log": "9dacd430684dcc2e3fe7ae18716db04840dc811ed395cdb9a0ef42bfc1cd5839",
+      "testlogs/nativelink-macro/unit_test/test.log": "dd2706d69508cd9953250289c18669e159f2a07ccc51020d5a41a007fe51678e",
+      "testlogs/nativelink-metric/doc_test/test.log": "0ce05f09c5867702bb46128d073f10df8d60ee095de8d200dd02e502088392e0",
+      "testlogs/nativelink-metric/nativelink-metric-macro-derive/doc_test/test.log": "3fe40fa04b84c3364d083841dbee6db21bcac42d26244456f8337ee24afdb5d1",
+      "testlogs/nativelink-metric/unit_test/test.log": "c94baaeebd6c7c5b59c1a043833a3ccd48faebd34a22f941ae2d41a3d9cfa757",
+      "testlogs/nativelink-proto/update_protos_test/test.log": "68252d2f52e68790edd4c57582e6dbe361418f63aa31eb75c3f3c4b33952d9e6",
+      "testlogs/nativelink-redis-tester/doc_test/test.log": "b066d9637954fb2409dc733712ea301d0807ea639ba8e266098d82cdb49d7148",
+      "testlogs/nativelink-redis-tester/unit_test/test.log": "5b26d947ce74c43b04349daad0589eee2db568e02a39323f955fede5e2a5a656",
+      "testlogs/nativelink-scheduler/accepted_history_differential_test/test.log": "88c84d167bed587aaea34f2124dc489a9558b3f7da3c0a3a6309de351e5d4c9b",
+      "testlogs/nativelink-scheduler/accepted_history_reference_test/test.log": "8fc5e715af53e0b9759e40260ab7f86077c1228b318aea25279bd93ca346b742",
+      "testlogs/nativelink-scheduler/activation_inventory_test/test.log": "c1d8da0a3f297b2e923b7b4902efc4a527c979ed10346a57a2d2b26246f66687",
+      "testlogs/nativelink-scheduler/authority_snapshot_capacity_test/test.log": "71aebc8582d61ee096deb2d8bb1af2e2fa673f848aa17dba102e797b85b07c7e",
+      "testlogs/nativelink-scheduler/authority_test/test.log": "46678d9d56dcce29f3cb159bcbd9cda923c1db1efb11e2bc489b2844882dc6db",
+      "testlogs/nativelink-scheduler/doc_test/test.log": "8dc1ad822ddf9204fc9ee7f91a03693f1e42104dfba6fe5c0a59a5ab748b4e47",
+      "testlogs/nativelink-scheduler/integration_tests/action_messages_test_test/test.log": "027c3b3f50757aa96257cc8dfe878215906a24b626234f59f3df891a15d4e052",
+      "testlogs/nativelink-scheduler/integration_tests/admin_test_test/test.log": "1babea3582e24ad9d4b21770b4fc28aef703064f357faabeaf19cc7eac123e9c",
+      "testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log": "cb41f67861ecc1724b93cf35333143418b8576ec15c6a3991c01bb6a741213f9",
+      "testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log": "65b75d5d2cb69a93fe354d395055f8ecfc5432e5dec4c2a4d399c2783fd7a069",
+      "testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log": "2135f4e2ff733ff1edc757e7e223eb352a66d3c388fbaadffe2f944f957d3c99",
+      "testlogs/nativelink-scheduler/integration_tests/authority_reapi_test_test/test.log": "952ff2d1a2171aaa3c4da6850ee32e2becc0d038b650bd0a887dc24f55f46368",
+      "testlogs/nativelink-scheduler/integration_tests/authority_request_test_test/test.log": "ec9dbd5fbbf2d0131fe78232a00522c847826bdff797e81b9d78b9a2b1de6a08",
+      "testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log": "bb378db6bd5d178c4ed8415d482b707cbd6ebeb7cf45dfa7b41fc50216f9e521",
+      "testlogs/nativelink-scheduler/integration_tests/backpressure_test_test/test.log": "27730f48e9facbb9a7edb54a1ddb233a4f2112eead8148b97a846e588b210fa5",
+      "testlogs/nativelink-scheduler/integration_tests/cache_lookup_scheduler_test_test/test.log": "cf20518ef764698393a15e3249cd4417ebfebfc65bc583c1efb0f0d97a48f78c",
+      "testlogs/nativelink-scheduler/integration_tests/dispatch_ack_test_test/test.log": "06f8cade6fed1c66bd0c5e58ca8c612837677963a0bce02ce58990a573a71e63",
+      "testlogs/nativelink-scheduler/integration_tests/escalation_test_test/test.log": "85937f0f27b8fb35a1f57e155571d2e443bea3f619a039bc4693c4093b588d16",
+      "testlogs/nativelink-scheduler/integration_tests/execution_active_count_test_test/test.log": "577dd28ee7b967edd0c290b8543bbe15b8ad336aba23daf93f2e9157dbc7b639",
+      "testlogs/nativelink-scheduler/integration_tests/fleet_capabilities_test_test/test.log": "e41d35aea81e4b906eca852ca683808440f106a8d8e48a76a2c47f33c5e05b71",
+      "testlogs/nativelink-scheduler/integration_tests/historical_resource_scheduler_test_test/test.log": "8f11da602809c1509daedf285fa0523d3e699da756a26e84f0bd0cbd7b2d3ff5",
+      "testlogs/nativelink-scheduler/integration_tests/live_memory_veto_test_test/test.log": "28d491cb96ccc5473b707c7a574bc3811d8b8935adc6853eaf16de360ba3000a",
+      "testlogs/nativelink-scheduler/integration_tests/liveness_clock_step_test_test/test.log": "303fea0b0a1b7624f11ecb52c2a522b061f1443a25249fadfdca5cf29abbb4c6",
+      "testlogs/nativelink-scheduler/integration_tests/placement_test_test/test.log": "81061d22ed808816be61cbaefe37a7ccd77c462baeebb50abc0158e64c51b1a3",
+      "testlogs/nativelink-scheduler/integration_tests/platform_property_manager_test_test/test.log": "9ccc6ffac71e9266fd6b68fa1cba90eb048fb68da5a6535f47d33389001cd273",
+      "testlogs/nativelink-scheduler/integration_tests/property_modifier_scheduler_test_test/test.log": "e5ed8316f9ed35747814a24a26a0fdd841509a7a5321d2bfad687297c91d8ef7",
+      "testlogs/nativelink-scheduler/integration_tests/queue_order_test_test/test.log": "a7fad504189daf55b466e70017ec8e42e50018394d6154f98d858a94a3dc0617",
+      "testlogs/nativelink-scheduler/integration_tests/redis_store_awaited_action_db_test_test/test.log": "e720d6e7d6981bf00f931337aa5523c95802d1cbfc847e602c3c904895866cc3",
+      "testlogs/nativelink-scheduler/integration_tests/remote_exec_scheduling_test_test/test.log": "cebd42493119dc4511f3a3020126435634fb30fe893cb1acb441af14191296d9",
+      "testlogs/nativelink-scheduler/integration_tests/reservation_hold_test_test/test.log": "86f039ab26cb70cc6717431246e1b1aa45480299ac865137ab27cc1a0765f1aa",
+      "testlogs/nativelink-scheduler/integration_tests/simple_scheduler_state_manager_test_test/test.log": "859c8300d5b458096e589a6e3adeb36417a49c23bf732869c411a8c373ff28ae",
+      "testlogs/nativelink-scheduler/integration_tests/simple_scheduler_test_test/test.log": "fe9e85bb9db906699c7e4f60a88098dfabf6816ec7a0701c7603f6a9be7b8507",
+      "testlogs/nativelink-scheduler/integration_tests/store_awaited_action_db_test_test/test.log": "af52a1f243072d1c7b9729b9831e93d13778477f4685930e5980cf2bba24428e",
+      "testlogs/nativelink-scheduler/integration_tests/unsatisfiable_action_test_test/test.log": "96c7ed5f71d40fa2880fac4711986a023e24f23a6ba2f306aff37beebf26a2a8",
+      "testlogs/nativelink-scheduler/integration_tests/worker_capability_index_test_test/test.log": "598d3e6478f2d79bac822e35860b1b638319cd2efacf5576d1a3dfc71798e7a7",
+      "testlogs/nativelink-scheduler/integration_tests/worker_registry_test_test/test.log": "7d4998b278adc15b9b5ff06046d3cfbc3e637b31ae7bed7b7fc36cdfe9b96cf0",
+      "testlogs/nativelink-scheduler/integration_tests/worker_running_operations_report_test_test/test.log": "5fec476f24dbd53c30fd0508a03754c0c458bb53eb622fee6bd7190887bdc092",
+      "testlogs/nativelink-scheduler/physical_retention_test/test.log": "030c114fb1be4014f32a0dd572b5ead73c8c4a8d4a71c98472c40b0a5e068066",
+      "testlogs/nativelink-scheduler/prepared_memory_differential_test/test.log": "b46ea3d7b7d62f6baa7135e36906dd0b1675daf62c6c2927f76770371ef27e45",
+      "testlogs/nativelink-scheduler/prepared_memory_reference_test/test.log": "fa652ade78d790ca1fd376c2f4d2fe0d841dd62e169fc3b2f1d4da6e5230e7df",
+      "testlogs/nativelink-scheduler/publication_activation_bounded_test/test.log": "16f2f0fd3c8587fa11d824fdf57e3c94dc09d20f9f3c70f0de410e6012990b82",
+      "testlogs/nativelink-scheduler/publication_activation_reference_test/test.log": "7df3427136e1dee681b5bc1d28335871001b05768647bef1a26498214d6355bc",
+      "testlogs/nativelink-scheduler/publication_activation_v2_reference_test/test.log": "54b40637374228c1ce73a9d3ec4577ea6141f102c9993b401ae2e87c83c059c2",
+      "testlogs/nativelink-scheduler/publication_candidate_test/test.log": "71c5397cb58dcd7cb245f70fe2f39df92b142535e5b66a59e4e1346f80b1c4bc",
+      "testlogs/nativelink-scheduler/publication_differential_test/test.log": "0272fcb9642967819eb7284024867b024b205825153f37234555e803022532a9",
+      "testlogs/nativelink-scheduler/publication_head_reference_test/test.log": "0119a9bd54528e64add8c519004bb9daa59d01b1bc327fecac0bfde4871b3a7c",
+      "testlogs/nativelink-scheduler/publication_physical_test/test.log": "d2f45e4e7eced45ac3ead40d18b0682d75637fd070e7ff20cf769f13f9405af8",
+      "testlogs/nativelink-scheduler/receipt_retirement_differential_test/test.log": "b08d3373f82873cf16e69863854c1611cd7bb47b63b397112bf1ff3b7db6d306",
+      "testlogs/nativelink-scheduler/receipt_retirement_reference_test/test.log": "cabceaf9f54e9e4d0fb190c89be80bd49248c5970d47969941f184981d65526f",
+      "testlogs/nativelink-scheduler/retention_test/test.log": "e82326032cff1be59d53d1e83eda709610732d2101c6b77c50559ab3d0676a35",
+      "testlogs/nativelink-scheduler/terminal_outcome_differential_test/test.log": "e8a6c711935a2362fd9f2746337895f48a50518fd077b914b82003a1b31c0330",
+      "testlogs/nativelink-scheduler/terminal_outcome_reference_test/test.log": "cd11649ecae171447b0dbdbde8560827d4c393ea718f308f72c1042856fa1fbd",
+      "testlogs/nativelink-scheduler/terminal_outcome_restore_audit_test/test.log": "568b2b9f644b99dc4467e7e02fdbf1e25cdbce5da50b99f83da96d2831f59ac7",
+      "testlogs/nativelink-scheduler/typed_physical_retention_test/test.log": "7bb771053043fd2e6e7bb798983883d9c7eba4b69eb51fc3baa43beb574b7c59",
+      "testlogs/nativelink-scheduler/unit_test/test.log": "f4142ea833b32c0a66e22b175ec022a8d643a66ab91f4fe9c8b1a634e9429c7d",
+      "testlogs/nativelink-service/doc_test/test.log": "35309b0fad4f2776516fe924e05de938b92c0d12fa79ca7944e20abadeabeedf",
+      "testlogs/nativelink-service/integration_tests/ac_server_test_test/test.log": "71ded09a420cc720cade36ed2f8f6cc415db16c702c37249ea82dad43826f735",
+      "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "48c1775f67f1c680de62e75bd63c04ed2282ba9a15513c365c26d8d57af1ce9d",
+      "testlogs/nativelink-service/integration_tests/bep_server_test_test/test.log": "1dfdffef183925ded48631c869e2732b82deb0444010180e14af233818cd05ca",
+      "testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "96024adcd5f3451f5dc709a3dd446743a1abaed7d6aa6b5ce4bf21021e1c76e0",
+      "testlogs/nativelink-service/integration_tests/capabilities_server_test_test/test.log": "e476e421861f1d3133665224b716dc2e2f9ed25e5607c1fa50d219968a9ec692",
+      "testlogs/nativelink-service/integration_tests/cas_server_test_test/test.log": "47257b56857a1ac0d771b4e1241ddd429cff1cb8d0fdbb63f18e992c6f2b0adb",
+      "testlogs/nativelink-service/integration_tests/execution_server_test_test/test.log": "698b3ec1b43a485067c44733fcb31a40affc42479ae41d9f2b9a06a061001ed8",
+      "testlogs/nativelink-service/integration_tests/fastcdc_conformance_test_test/test.log": "75f96db45587e66f5deaa8d29f127512e8c198466cb7b0ec0363155b12536f88",
+      "testlogs/nativelink-service/integration_tests/fetch_server_test_test/test.log": "4563665d8770f2c8829762e9ff9e97cc2e96331e30bc52d619223a83da955e09",
+      "testlogs/nativelink-service/integration_tests/grpc_scheduler_forwarding_test_test/test.log": "218e1501b526a7896d1b3c247ce86484d43056be65611e37d7421d9b528d0e30",
+      "testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "1e7e201d0c5480fbde49cb02a78a9755264d5917094e34ad3e49efd09e250544",
+      "testlogs/nativelink-service/integration_tests/health_server_test_test/test.log": "f858bcf27fd59240044a6fd5379f10ca1ea46fb5cdf07f0947fd616591c81f9b",
+      "testlogs/nativelink-service/integration_tests/push_server_test_test/test.log": "5bc4ce8863e489425dcf44d4e5d94bd197a729884e2992fc656f837e90a2dff6",
+      "testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "49359eec20795dae07b5301bfc1b08c9cb54a4d780814c0266f83c4623702889",
+      "testlogs/nativelink-service/integration_tests/worker_api_server_test_test/test.log": "042a5facf7fb3e2e3760dd02148cf9be4fa0278f61ab405bb6604c1a96739549",
+      "testlogs/nativelink-service/unit_test/test.log": "9ec5fd78fddba006a106104a4e6552572517291dd24f779bd14c040233beed10",
+      "testlogs/nativelink-store/doc_test/test.log": "69096f50a898c193162f785296201eb1626781b26f2ff7b33c4069494cf32624",
+      "testlogs/nativelink-store/integration_tests/ac_utils_test_test/test.log": "3e76ad4fca82100327e46e1583c596662e22cf2868ad3940b9fc02737a8a76c7",
+      "testlogs/nativelink-store/integration_tests/azure_blob_store_test_test/test.log": "09f3eb4f8dba348b9ed8286add5a2607c7cc0e621080b8e2bdb40bcb540fd2af",
+      "testlogs/nativelink-store/integration_tests/azurite_store_test_test/test.log": "cffd5491943c1f5f8180bced45cb72209e018b04d7a508750c95c86d6da12b48",
+      "testlogs/nativelink-store/integration_tests/cache_metrics_remove_metrics_test_test/test.log": "36745d131e95de62c466f5e9613ea10899e4c0a84b7b2d3fe77d8a258ef1f078",
+      "testlogs/nativelink-store/integration_tests/cache_metrics_store_test_test/test.log": "fbb82d2125ac6070ab4d4730679a050cec7c02d1aca99b41c7e8f43c7a28e90f",
+      "testlogs/nativelink-store/integration_tests/common_s3_utils_test_test/test.log": "effdf99461564013cee6020cfa9b500d6141b4ad94033915f8485c8518cfb72f",
+      "testlogs/nativelink-store/integration_tests/completeness_checking_store_test_test/test.log": "060a7bbc71c285da23e6dd1f39d3720fa3f01abb671fdbc8d46add76dce4b203",
+      "testlogs/nativelink-store/integration_tests/compression_store_test_test/test.log": "82b1a151256bcfa9a244a50377fad86f5d6aa389c70cbabf40636c5352524c21",
+      "testlogs/nativelink-store/integration_tests/dedup_store_test_test/test.log": "bf3a50e0d7f90b1aa95c82f4fe871dee998e5efefa1b33144384fd100cbd87c7",
+      "testlogs/nativelink-store/integration_tests/existence_store_test_test/test.log": "44a0af046ecf5f58800bd4851e5084e9a971d22f2bf11400efa9bfc69e698102",
+      "testlogs/nativelink-store/integration_tests/fast_slow_store_test_test/test.log": "2f53e66650ade2aa5964be68deaf44e508026a5808c99f6df6aa6e581232a57c",
+      "testlogs/nativelink-store/integration_tests/filesystem_store_test_test/test.log": "99c82953f1b007697e58295ee4683fda7e7932c4ab0d6777e0fc56d1b21cb003",
+      "testlogs/nativelink-store/integration_tests/gcs_client_test_test/test.log": "e287a6c7f86b19b83756e281111c951d7cd71557c90ab4ce4ce54ad656aa23ec",
+      "testlogs/nativelink-store/integration_tests/gcs_store_test_test/test.log": "cd66bd3f6b98ee2a0e2db010079591ba3b074ff728bfdaf96c02e3dc86045687",
+      "testlogs/nativelink-store/integration_tests/grpc_read_batching_test_test/test.log": "f85013622a8ec263f0509b29bc53f53daa4ecfe87ab55e6c5982fdc081c17441",
+      "testlogs/nativelink-store/integration_tests/grpc_store_test_test/test.log": "e1782cb4ba05c29bd118f5ee9cfe74fb8a51ba55c1a0621afab72c61ef0d06d3",
+      "testlogs/nativelink-store/integration_tests/memory_store_test_test/test.log": "fcf50ab27d7930215617878307fb79f6717518c33f9873a0ba8376e44d2a6d8e",
+      "testlogs/nativelink-store/integration_tests/mongo_store_test_test/test.log": "a7ef8c5b47072485ce8c29a8490e50e4414ea531e15c63fe653b667f86302809",
+      "testlogs/nativelink-store/integration_tests/oci_store_test_test/test.log": "55cbdd668df17d4c2069440a84b725c2aa7144baab17480575e297987d987bd9",
+      "testlogs/nativelink-store/integration_tests/ontap_s3_existence_cache_store_test_test/test.log": "bbe69c6bd62163875b9e5032b0d2a82477a61378a15f6d5477d0214dfb65c322",
+      "testlogs/nativelink-store/integration_tests/ontap_s3_store_test_test/test.log": "d9b4e1d88cae31d0ae7540a4b51989fa1ae7eed30ec2be7db87176bcc8d325aa",
+      "testlogs/nativelink-store/integration_tests/physical_azure_test_test/test.log": "2c83060549247a185f694f1f2aa3ac2127707c9ed93ca578dd7e2dc4f7b30bc5",
+      "testlogs/nativelink-store/integration_tests/physical_closure_test_test/test.log": "927309aff2bf8ad3446aeb53a2d7e5f77dd3737e3fd48298ca9138fe51c03614",
+      "testlogs/nativelink-store/integration_tests/physical_filesystem_test_test/test.log": "e127317d220a3d09e286f0f0022447a9361dc07b282065af54fc563605d86945",
+      "testlogs/nativelink-store/integration_tests/r2_store_test_test/test.log": "76dabac063cfa5b30eb4ce72fc5f46897716221783bf7335e0797cc18f8e085f",
+      "testlogs/nativelink-store/integration_tests/redis_store_test_test/test.log": "06838083bc7469d41ab05740ed95fb86872cf88e47a54d74e1bf6fe58494c21a",
+      "testlogs/nativelink-store/integration_tests/ref_store_test_test/test.log": "3a6d8c5fc235c550a26a35cb936907646a26b30302d34f2a0ccde5e9ed7e5e61",
+      "testlogs/nativelink-store/integration_tests/s3_store_test_test/test.log": "c6e848970cd2eb84fe3f4ac728cf102a11840c8ca290b071ef29a8e7da3094e6",
+      "testlogs/nativelink-store/integration_tests/shard_store_test_test/test.log": "7635d1178f35c08c305dd94d05d3601d8152a29bbed25ae378e044830c6ed87e",
+      "testlogs/nativelink-store/integration_tests/size_partitioning_store_test_test/test.log": "064d3bf9ca454af369761b8185a60ad6cd9b9e35769630f0a46e1c7053636de4",
+      "testlogs/nativelink-store/integration_tests/store_manager_test_test/test.log": "cb3bf559461a285a9571f15b496ec93976fee5054c3fcbb8130031bde6b65ac7",
+      "testlogs/nativelink-store/integration_tests/tls_client_no_roots_test_test/test.log": "7f79021cb0daf594749792708dae561dce18f44b389b036a69ebe17ba149de51",
+      "testlogs/nativelink-store/integration_tests/verify_store_test_test/test.log": "d5000bba82c5aa2c3ddebaef3a211faee88c47fabc4763a7121ab7c06c99af4f",
+      "testlogs/nativelink-store/unit_test/test.log": "b3773f2d90d4625c0c8df96fa9f787e27f79c2ef3314ca39928723e2f73ec182",
+      "testlogs/nativelink-util/doc_test/test.log": "361a258b084f1335a5b29f570b445c735c4046976ea9b9da12a6dde0dab2d0ac",
+      "testlogs/nativelink-util/integration_tests/action_messages_test_test/test.log": "d81d7e8dcb2b81f716f505b1f6eab0e2be7a3ac6c069098b904d03eccb5dfd4a",
+      "testlogs/nativelink-util/integration_tests/adaptive_permits_test_test/test.log": "42ba4f7d1205ffa5d8d28541ea258494248ce40608ee2ac8d84b0e1cd0a09b25",
+      "testlogs/nativelink-util/integration_tests/buf_channel_test_test/test.log": "d6a377d80403d614cbb9c2775a5b236f66f83b5e3fb6d5c0b496e66a2cec808e",
+      "testlogs/nativelink-util/integration_tests/cache_size_metrics_test_test/test.log": "aaf65cc77931f58f645e4a55948b59a3c7918b84353535ee0c10ad4b8426ee6c",
+      "testlogs/nativelink-util/integration_tests/channel_body_for_tests_test_test/test.log": "5bdb16dc022a089b5acf34c020eda694db8964dfff005bf8c71fb7ff11eed669",
+      "testlogs/nativelink-util/integration_tests/common_test_test/test.log": "1089ea36e0d5fc8cef0469603f5f6975d8faf7a30aa4bcf9c91da558978e143f",
+      "testlogs/nativelink-util/integration_tests/evicting_map_test_test/test.log": "8fccb890d68350201b24ff9f37ddec13e4f8fa1c8f0ce94b7282ea2951ee5b20",
+      "testlogs/nativelink-util/integration_tests/fastcdc_test_test/test.log": "9f02e72724e6fff3b6347792dd51609fc85ed71122398204862b2f86f4b69756",
+      "testlogs/nativelink-util/integration_tests/fs_test_test/test.log": "c417963aa38575f381a226c5c8e556f57b2f46253b23baa49501b86fafc75e4d",
+      "testlogs/nativelink-util/integration_tests/health_utils_test_test/test.log": "6414847c2e8f1928c070eef58bd78ac74d2bad72b13cd56e79476fafb7eaff46",
+      "testlogs/nativelink-util/integration_tests/metrics_test_test/test.log": "faa11546a4bb04646904eacd596cdbd363ff2f6f3e0ea76ae51008055af328e2",
+      "testlogs/nativelink-util/integration_tests/operation_id_tests_test/test.log": "d9efe62f22c51ad3eb9c7b9885a08381b5ed642eec44c162ba128f46c0579108",
+      "testlogs/nativelink-util/integration_tests/origin_event_test_test/test.log": "e332320942dad8d6a2b6dd642ad8e55344734067a793a556d24c6f48eac52b23",
+      "testlogs/nativelink-util/integration_tests/platform_properties_tests_test/test.log": "6b19c6422a0ff2fc66e506206f796b1a07d2d322934cf89a2588cca7fe009358",
+      "testlogs/nativelink-util/integration_tests/proto_stream_utils_test_test/test.log": "1a591dec05d307d93015950c7eca8655acee8583ca8ecd966e1c2a513a4c52d7",
+      "testlogs/nativelink-util/integration_tests/resource_info_test_test/test.log": "56e835bb8373017844778f6ba98a8098ed4ceaf1cef44b92d44144099f2cf4f0",
+      "testlogs/nativelink-util/integration_tests/retry_test_test/test.log": "d0d176fd2960020cde5070630eafa764b490a45ba75d0061061919be3dc64671",
+      "testlogs/nativelink-util/integration_tests/shutdown_guard_test_test/test.log": "c29503324f8a6884dbff3c5cad10701aa6f7e4872fc5b02a645dc9a6c4510b3c",
+      "testlogs/nativelink-util/integration_tests/store_trait_test_test/test.log": "18ac718e6c29d26a3bfe162be356b9f4d9e4ce96c8deab9cd53e68036d867f3b",
+      "testlogs/nativelink-util/integration_tests/telemetry_test_test/test.log": "26869102058bd297b580cdc9dbd1ff858187a552324c9d623f72456aa4113538",
+      "testlogs/nativelink-util/integration_tests/tls_utils_test_test/test.log": "b236afe4107a49e71093df0ab96140a6c291925c4b84d424379d7fbf2c758841",
+      "testlogs/nativelink-util/integration_tests/wire_compression_test_test/test.log": "d4450366d071200f8a70b6e9f6d8da3db0180b35c9ca8e3085988df36edfb0af",
+      "testlogs/nativelink-util/unit_test/test.log": "1a21a86a0941c8ce975ca50e8b1ee3944343462c2e57d22a67299eafe0e72200",
+      "testlogs/nativelink-worker/authority_history_rpc_test/test.log": "35c942f347366b431ac64fac487d0f2f05bbedde1c467393b791dff559ed2e0b",
+      "testlogs/nativelink-worker/authority_publication_ordering_test/test.log": "4c4d9fc8793ec4f4472d2f8b3683c4b8e0cb72f83c1ed9b5bda844f3b60ed111",
+      "testlogs/nativelink-worker/authority_receipt_rpc_test/test.log": "6031a400b87c9e385a16d25445e87407da99aaca0396e09748b5a60f83c1f35a",
+      "testlogs/nativelink-worker/authority_replicated_rpc_test/test.log": "35c16e4468b427eb36cbfb8f6cb9034b2bd3357e842f32d68ed508031ede8354",
+      "testlogs/nativelink-worker/doc_test/test.log": "3362ae4192453d02ab65593f47c4dc1dc6b27845bbf1572299fa332409e0cd8c",
+      "testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log": "6f9e10d99511855d4c0b1484ae50c3ba7578bab338780178f36493c5c344c53f",
+      "testlogs/nativelink-worker/integration_tests/authority_scheduler_test_test/test.log": "28fa02c2e3ffb986519155c0d75209e056a1e82ea59d4342e69741ddab0ae38f",
+      "testlogs/nativelink-worker/integration_tests/authority_worker_test_test/test.log": "3863784b2162463fa183e5bff905e474b6594084ddcf929a41598ca486b61ee4",
+      "testlogs/nativelink-worker/integration_tests/capacity_test_test/test.log": "6e611ff12924dfd7de7118198ec446ea2a6ca551a47ff2d99e7c77323dcf9529",
+      "testlogs/nativelink-worker/integration_tests/directory_cache_stress_test_test/test.log": "957039723d135703412ebf6d2682ba848b10427a7d853143a9462352a53718d2",
+      "testlogs/nativelink-worker/integration_tests/directory_cache_test_test/test.log": "b7c713fa40f3ee11247c60c61481832f2f0a0e2acd9c7ccadc24d13d2c028aea",
+      "testlogs/nativelink-worker/integration_tests/local_worker_test_test/test.log": "f98c221f8f1f3a5353c0286ea6030a0e116322cc951dbd52c764ca26e2cf6e46",
+      "testlogs/nativelink-worker/integration_tests/namespace_utils_test_test/test.log": "0ef0be740b18df2b5399069df531952f4660378756c69ff7e526301f770afde7",
+      "testlogs/nativelink-worker/integration_tests/reaper_test_test/test.log": "fc5c6857d2a14c9421f49513cb668f1042f9da29a9c86f5ae4579707889260cb",
+      "testlogs/nativelink-worker/integration_tests/running_actions_manager_test_test/test.log": "f1a974927b3851e33674dea44ce8d08c94cda4c1ea5a8b7a0ceedf8330bbe9af",
+      "testlogs/nativelink-worker/integration_tests/worker_utils_test_test/test.log": "3592f1ccefb66da751aa100c71726e7a8e969e3a496433558e501d9296e577f5",
+      "testlogs/nativelink-worker/unit_test/test.log": "414f210687e82ad946acee4c76ba16a53c21d7fd530d78d9437e4a0487d1ebf3",
+      "testlogs/tools/canonical-config/conversion_test/test.log": "1d964eacb3db8ff0a8bbd60efb753a9ec77972fb0dc1c3352749ae0bc2fd4e13",
+      "testlogs/tools/canonical-config/parser_test/test.log": "40d8660e5f9d3d3a2a14c73cf3e56cf8351f18e46801c4f3a9ecafb4ca19fd01",
+      "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "0a8185cb14e3210625c9d577ff96299c0f6ac6f424eaad7ded0021903fe88d0b",
+      "testlogs/tools/canonical-filesystem/journal_test/test.log": "4d4e6c7846ce6f57ffe42242117ddddfb9e30b66a8b810a35906d4ca8ee75314",
+      "testlogs/tools/canonical-filesystem/ownership_test/test.log": "e3f32f92b572a794a6df5ec62683eb19dd990ef8f8e8765d7cab88b9a3bfcfc5",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "61c472d70aa3d7d96ba2e1a8e8bd2428273411b53aaa7af7b1a85e0f7f6b1302"
+    }
+  },
+  "build_event_receipt": "Selected test summary fields archived without raw BEP command lines or file URIs; raw build-event artifact retained outside git.",
+  "limitations": [
+    "Production factories still construct legacy runtime; passing tests is not canonical cutover.",
+    "No new full Cargo workspace run in this checkpoint.",
+    "Manual mTLS runs and syscall faults retain their separately bound receipts; ignored TLS case is not counted as this Bazel execution.",
+    "Later commits do not inherit these exact-source totals."
+  ]
+}

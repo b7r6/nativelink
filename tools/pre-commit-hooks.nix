@@ -27,7 +27,7 @@ in {
   };
   end-of-file-fixer = {
     enable = true;
-    inherit excludes;
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/"];
     types = ["text"];
   };
   fix-byte-order-marker = {
@@ -58,18 +58,21 @@ in {
       "web/apps/web/public/assets/re-api-fellow-fig1-action-lifecycle.jpg"
       "web/apps/web/public/assets/re-api-fellow-fig2-protocol-never-says-compiler.jpg"
       "web/apps/web/public/assets/re-api-fellow-fig3-overlap-hiring.jpg"
+      # Immutable compressed experiment logs, accompanied by hash manifests.
+      "^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"
     ];
     name = "forbid-binary-files";
     types = ["binary"];
   };
   mixed-line-endings = {
     enable = true;
-    inherit excludes;
+    # Extension-based text detection can also select compressed Markdown.
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     types = ["text"];
   };
   trim-trailing-whitespace = {
     enable = true;
-    inherit excludes;
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     types = ["text"];
   };
 
@@ -79,7 +82,8 @@ in {
   # Documentation
   vale = {
     enable = true;
-    inherit excludes;
+    # This is an exact archived user-supplied plan, not maintained prose.
+    excludes = excludes ++ ["^nativelink-scheduler/design/categorical/source-plan\\.md$"];
     settings.configPath = ".vale.ini";
   };
 
@@ -87,6 +91,9 @@ in {
   typos = {
     enable = true;
     settings.configPath = "typos.toml";
+    # The pinned git-hooks module synthesizes an empty `default` table which
+    # overrides configPath. Keep the repository dictionary authoritative.
+    entry = "${pkgs.typos}/bin/typos --config typos.toml --force-exclude";
   };
 
   # Nix
@@ -137,6 +144,8 @@ in {
     description = "Format Starlark";
     enable = true;
     entry = "${pkgs.bazel-buildtools}/bin/buildifier -lint=fix";
+    # identify also classifies archived BUILD.bazel.gz as Starlark.
+    excludes = ["^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"];
     name = "buildifier format";
     types = ["bazel"];
   };
@@ -144,7 +153,10 @@ in {
     description = "Lint Starlark";
     enable = true;
     entry = "${pkgs.bazel-buildtools}/bin/buildifier -lint=warn";
-    excludes = ["local-remote-execution/generated-cc/cc/cc_toolchain_config.bzl"];
+    excludes = [
+      "local-remote-execution/generated-cc/cc/cc_toolchain_config.bzl"
+      "^nativelink-scheduler/design/categorical/evidence/.*\\.gz$"
+    ];
     name = "buildifier lint";
     types = ["bazel"];
   };
@@ -162,6 +174,8 @@ in {
   pretty-format-json = {
     enable = true;
     args = ["--autofix" "--top-keys" "name,type"];
+    # Preserve captured observations and their recorded byte hashes.
+    excludes = ["^nativelink-scheduler/design/categorical/evidence/"];
   };
 
   # json5

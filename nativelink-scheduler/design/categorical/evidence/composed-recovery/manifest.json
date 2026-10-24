@@ -1,0 +1,41 @@
+{
+  "scope": "Focused experimental cluster composition checks. Trusted in-process identity and caller-enforced fresh node IDs, not deployed peer authentication or membership admission. Sender cutpoint delivers a valid preceding AppendEntries prefix before withholding the target uniform membership entry. Interrupted volatile snapshot recipient is replaced under a surviving quorum; no lost-quorum reset claim.",
+  "base_commit": "7ad3ae7b8eaf111af5e6f206301d44b7c9ed9ee4",
+  "source_sha256": {
+    "nativelink-scheduler/src/authority/mod.rs": "1184c9d84da654e7cffe64bc052c5bd431e21e7169b5d1ef9225e8eb788c3088",
+    "nativelink-scheduler/src/authority/journal.rs": "390bf2332a95a18178f69dface4a12986323b379f52ff09b9cbc657a37b842f7",
+    "nativelink-scheduler/tests/authority_cluster_test.rs": "973c758d147a32a2a156cad9e68a3fe03cefbda8e1e2085f6b017b19293b399b",
+    "nativelink-scheduler/BUILD.bazel": "6af28a11eabbb4c94ff534564b587303d7cf76263c470bd8f640422371159db1",
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c"
+  },
+  "logs": [
+    {
+      "file": "cluster-composed-recovery.log.gz",
+      "uncompressed_sha256": "d758ff7ef86a781f2741a282659d4a2b8d376783983910b2e839caf33e2e1169",
+      "archive_sha256": "ff38608200c39fe49aa23f1dbc8c8c61df979d645955ca5c6e38f8ed7ef4b56e",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler --test authority_cluster_test",
+      "result": "Initial fixture: 9 passed, 1 failed; sender cutpoint incorrectly intercepted earlier membership catch-up. Retained as failed fixture evidence."
+    },
+    {
+      "file": "cluster-composed-recovery-final.log.gz",
+      "uncompressed_sha256": "75444ae47e9c2599b03b2bf4f397aa17778b05d37d7135e3b6531d08a05ffdab",
+      "archive_sha256": "a304b5d9ee7bfa4a4adb80dda126c386dbb8765c019aefe8935d932c15b5266c",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler --test authority_cluster_test",
+      "result": "10 passed, including restarted old leader and lost volatile snapshot recipient"
+    },
+    {
+      "file": "cluster-composed-recovery-bazel.log.gz",
+      "uncompressed_sha256": "5a331bcef35638312b194094b211cebe919240961711d84e9c3b7b8f52b03d27",
+      "archive_sha256": "14268e427b26584338c6dfeb6542a22170e2a8e1845200d688d688fe23f9e3d0",
+      "command": "bazel test //nativelink-scheduler:integration_tests/authority_cluster_test_test --jobs=24 --test_output=errors",
+      "result": "Passed: 10 tests"
+    },
+    {
+      "file": "cluster-composed-recovery-clippy.log.gz",
+      "uncompressed_sha256": "3dd750a2e0262c4710f22daceff892946fd08fef434a27425c76bf1e43bd2862",
+      "archive_sha256": "d3d2ca690489cce9318d12002c70c84123781759813bb1f8aefacf1193cce0a1",
+      "command": "cargo clippy --locked --offline --profile smol -p nativelink-scheduler --test authority_cluster_test -- -D warnings",
+      "result": "Passed"
+    }
+  ]
+}

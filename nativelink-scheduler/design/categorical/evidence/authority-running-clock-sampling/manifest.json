@@ -1,0 +1,187 @@
+{
+  "artifacts": {
+    "authority_running_clock_tests.final.rs.gz": {
+      "sha256": "c5888956912d3339aef8c1110580c285a2242dada48b297bfc09da579a06ef93",
+      "uncompressed_sha256": "75dfbbdc1e3b557c0304af2cb873047e6b8c1cbfab4096cf80e78584ff5d2627"
+    },
+    "authority_running_clock_tests.fixed-test.rs.gz": {
+      "sha256": "06c1ccdc74e2bcd31aa04854ddc7bb145ddb8c91aba51914fb657b1987aa31d1",
+      "uncompressed_sha256": "3ec716af3f2aab3ca6b0e43973a06a1f40e742f2cfeb8c85224f39f69f036b23"
+    },
+    "authority_running_clock_tests.prefixed.rs.gz": {
+      "sha256": "d890c01b71223688cb17b799dc4d67b5fd6a8f21c555313aa8ae0ba0e5ec29a1",
+      "uncompressed_sha256": "43d7f900bf7af9545dab6a7d3c575f57d29b1c68350064e18865427a5233b08c"
+    },
+    "authority_server.final.rs.gz": {
+      "sha256": "6e07d192a05458788f2379f72d4f1d58b10c5e8cfd411d2b717b3bba50e4fb88",
+      "uncompressed_sha256": "43fc479674a43645dae8182e8fbd2d90da1527f5909a5e679bd5f8f3c3a5ae4b"
+    },
+    "authority_server.fixed-test.rs.gz": {
+      "sha256": "6e07d192a05458788f2379f72d4f1d58b10c5e8cfd411d2b717b3bba50e4fb88",
+      "uncompressed_sha256": "43fc479674a43645dae8182e8fbd2d90da1527f5909a5e679bd5f8f3c3a5ae4b"
+    },
+    "authority_server.original.rs.gz": {
+      "sha256": "c0ca1a44d540aa7795880fc8a387c4da2088a073e20b4e366835dd85772df8a9",
+      "uncompressed_sha256": "bfda953e05b95e0f26a2fe4cf938477ba7a3a477c2e90dabdb8a71041d3ba82e"
+    },
+    "authority_server.prefixed.rs.gz": {
+      "sha256": "0ba1742202d07dbde0274d9bb3662776db9ca893df26db183bacff1b17e350bf",
+      "uncompressed_sha256": "17a244390254ef74f9d01a61ef16943428e0715579655f5d5871c4b91dca3eb1"
+    },
+    "duration-clippy.log.gz": {
+      "sha256": "b9fe62e14f46a3e335fcb3bcd81623d1fd24523e13257273d583392c68389494",
+      "uncompressed_sha256": "1f5131b7d4169d21882161867b0060005a2fd68dd7daa7b0b554cfaa3a700728"
+    },
+    "final-clippy.log.gz": {
+      "sha256": "632f5fdb2b06cdd1b173765e0ae97078941f81c17115f66c31566965eb61d4ba",
+      "uncompressed_sha256": "4925cdc58384973021465e3d3e7332f4ff93149d3ed2c8395ed2dd6e8dfefe53"
+    },
+    "final-focused-test.log.gz": {
+      "sha256": "359dcc4de114dd93e52ed25a2dd3067d88c5305fe7925d2a6ed74ff01786df00",
+      "uncompressed_sha256": "f198209f7de0fbbc6d3bdddae3c07189681c2179ec222721bc9f1b8d51fd3372"
+    },
+    "final-hooks.log.gz": {
+      "sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    },
+    "final-source-clippy.log.gz": {
+      "sha256": "cd07515a87de5eb2b5de7b2a980698759715662a8cefb53c0bf7175e5f53f272",
+      "uncompressed_sha256": "ba8518e1c784ebc3d49a8e7b7bc0cdb5a7f2955bab8f89722f885498f0770df8"
+    },
+    "final-source-focused-test.log.gz": {
+      "sha256": "f92d42ff458ca39d84886da5f53b947216ee10081fd9ac1c16e700f01229153a",
+      "uncompressed_sha256": "f6508152c73aeafc8db7c04d536b3f180aa0a10a41c4093d865b88477bdac302"
+    },
+    "final-source-hooks.log.gz": {
+      "sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    },
+    "final-unit-test.log.gz": {
+      "sha256": "f16a7523497bffdd8f6058f5146d73ec9838a4e1afb6b8c131bcde2d4c17b3f2",
+      "uncompressed_sha256": "06e266348af0e6e202fbc2acef62b5e6e809e5583585304c727ebad53c1b6af3"
+    },
+    "final-vale.log.gz": {
+      "sha256": "9cfc370e8cd8a1b10e7e901dfb87731e82c012a563217545f67e4d20e60c83e5",
+      "uncompressed_sha256": "49cdfd37e68cbb2dd74a3e9baa957e2a221536a99f1a5a41cb737c77f8749ad2"
+    },
+    "fixed-unit-test.log.gz": {
+      "sha256": "56552420670b50e2136cb6b1414734b68478e16dfcbd1ed825074ef7d08d19e0",
+      "uncompressed_sha256": "9c23e3c7d84f52ec2d1a636c8e251d44632e2fbffb83322dec09cd4dbfd98587"
+    },
+    "initial-clippy.log.gz": {
+      "sha256": "4c392dd732d3323eedef30639fbcb887c163dfa1307561db12339720ab0c0288",
+      "uncompressed_sha256": "272fd7cd588883925b1395e8b0fdf82e4d3b57ce36467b8d70760a82968e067c"
+    },
+    "initial-hooks.log.gz": {
+      "sha256": "5bb1bc8b59f572b9bc1fc2d13fa935cd3bfb41be7fe761f5b1828475a2b5dcc0",
+      "uncompressed_sha256": "346cb27a3ea358f69edc5a6ed5e454f803f7c410fa3dea6aed31374de06af60d"
+    },
+    "prefix-witness.log.gz": {
+      "sha256": "1e903765d9a7816493794724761bf4b0cf340c4a1a8b76d5ced776256094febc",
+      "uncompressed_sha256": "6cb7f813f427e49e2ea378411f9dc466068acc408247abffad10ed99abfca028"
+    },
+    "upload-deadline-rpc-regression.log.gz": {
+      "sha256": "4d4d2b170a50d47a0c098a1e4f39385f2b003a84ddd15662c412fe74e2a59542",
+      "uncompressed_sha256": "50dec74d2da2bb92944b2e74157849bb4abb260d7b8bee80736c5c633c4f0f5d"
+    }
+  },
+  "base_commit": "370935a2720dc711ea56f38c41259de133e00e26",
+  "commands": {
+    "clippy": "clippy --locked --offline --profile smol -j8 -p nativelink-service --lib --tests -- -D warnings",
+    "environment": "CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target CARGO_INCREMENTAL=0",
+    "final_focused": "test --locked --offline --profile smol -j8 -p nativelink-service --lib authority_server::running_clock_tests -- --test-threads=1 --nocapture",
+    "hooks_config": "/nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json",
+    "pre_fix": "test --locked --offline --profile smol -j8 -p nativelink-service --lib authority_server::running_clock_tests::first_running_samples_after_report_before_derived_deadline -- --exact --nocapture",
+    "rpc_regression": "test --locked --offline --profile smol -j8 -p nativelink-worker --test authority_rpc_test deadlines::uploading_progress_deadline_survives_expired_running_deadline -- --exact --nocapture",
+    "toolchain": "/nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo",
+    "unit": "test --locked --offline --profile smol -j8 -p nativelink-service --lib -- --nocapture"
+  },
+  "executed_invalid_inputs": [
+    "Stale session",
+    "Zero observation sequence",
+    "Invalid/unspecified phase",
+    "Wrong incarnation",
+    "Unknown attempt",
+    "Wrong dispatch effect",
+    "Missing attempt identity"
+  ],
+  "external_binaries": "Pre-fix and final executables retained under /tmp/nativelink-authority-clock-sampling-evidence; their hashes are portable, binaries are not included in this receipt.",
+  "fixed": {
+    "authorized_after_sweep": true,
+    "committed_running_now": 10,
+    "derived_deadline": 15,
+    "earlier_full_service_unit_passed": 13,
+    "existing_service_unit_cases": 7,
+    "final_focused_passed": 6,
+    "focused_real_http2_upload_deadline_regression_passed": 1,
+    "next_sweep": 11,
+    "periodic_first_tick_seconds": 3600,
+    "report_clock": 10,
+    "reservation_released": false,
+    "strict_clippy": "Final source passed for service --lib --tests with -D warnings",
+    "test_executable_sha256": "f1211bb7d77dc7e67b195d820e7b6ea78a1916b50d9d362c3f49f345c19da42c"
+  },
+  "format": "nativelink-authority-running-clock-sampling-evidence-v1",
+  "limitations": [
+    "Manual report timing is not a measured child-process launch or minimum elapsed execution duration.",
+    "No reducer, timeout projection, fixed time unit, journal format, canonical schema or runtime clock source changed.",
+    "Inclusive expiry, quantization allowance, clock exhaustion, recovery binding and old-anchor compatibility remain open.",
+    "Later progress timestamps remain coarse; this repair only samples before the first eligible Running grant.",
+    "Synthetic cleanup qualifies protocol accounting, not physical process termination.",
+    "No production readiness or full duration guarantee is claimed.",
+    "Bazel target source list updated; root integration owns any Bazel execution. No Bazel pass claimed here."
+  ],
+  "measured_proposals": {
+    "clock_advanced": {
+      "before": 0,
+      "events": "AdvanceTime then Progress",
+      "observed": 10,
+      "proposals": 2
+    },
+    "clock_unchanged": {
+      "before": 0,
+      "events": "Progress",
+      "observed": 0,
+      "proposals": 1
+    },
+    "method": "Real journal applied log-position difference around Driver::input after stopping only the private outer loop; excludes independent Match/Observe proposals.",
+    "other_due_work": "Existing sweep may add expiry/retirement proposals; source-level accounting, not a benchmark."
+  },
+  "ordering": "Existing validation and decline handling precede sampling. First phase-eligible Running samples and sweeps already-due dispatch/progress/interest expiry, then reloads authorization. Replayed/revoked/backward-phase reports do not reanchor. Only matching synthetic cleanup releases charge.",
+  "pre_fix": {
+    "authorized_after_sweep": false,
+    "committed_running_now": 0,
+    "compiled": true,
+    "derived_deadline": 5,
+    "executed_tests": 1,
+    "expected_failed_tests": 1,
+    "next_sweep": 11,
+    "periodic_first_tick_seconds": 60,
+    "production_body_unchanged": "Original source plus only a cfg(test) module link; both versions archived.",
+    "report_clock": 10,
+    "reservation_released": false,
+    "test_executable_sha256": "bb1ac3e3a2e97d5363c53fa304d8a1e1f1d1e5d295ba90564410f0f1dd2c7a1e"
+  },
+  "source_only_guard_checks": [
+    "Encoded frame-size bound",
+    "Wrong epoch",
+    "Progress-generation exhaustion"
+  ],
+  "sources": {
+    "nativelink-scheduler/design/categorical/authority-clock-proposal.md": "a71aecbb87f4a18b5da10de18db69a5b7b8e35b694a88b1efd033253c9b1d6b0",
+    "nativelink-scheduler/design/categorical/authority-running-clock-sampling.md": "7f9bbc4ba7fdfac602601ae0a8599f3c4a7221405263e6d810033aaef50fb007",
+    "nativelink-service/BUILD.bazel": "6f2920a530b4ad29277516a4c192693e268eccbc946ab5c59df5bca01dcf9f21",
+    "nativelink-service/src/authority_running_clock_tests.rs": "75dfbbdc1e3b557c0304af2cb873047e6b8c1cbfab4096cf80e78584ff5d2627",
+    "nativelink-service/src/authority_server.rs": "43fc479674a43645dae8182e8fbd2d90da1527f5909a5e679bd5f8f3c3a5ae4b"
+  },
+  "validation_history": [
+    "Original compiled witness failed its stale-start assertion as intended.",
+    "Initial repaired full service unit suite passed 13/13.",
+    "Strict Clippy then refused test spawn-helper, debug-format and semicolon conventions; repaired without changing coordinator logic.",
+    "Full 13/13 suite passed again and existing upload-deadline HTTP/2 test passed 1/1.",
+    "A slow parallel unit run took 59.57s; the private delayed first tick was increased from one minute to one hour to keep the timer outside the controlled schedule.",
+    "Clippy requested Duration::from_hours(1) for the equivalent 3600-second literal; the refusal is archived.",
+    "Final exact-source focused suite passed 6/6 serially in 4.00s and final strict Clippy passed.",
+    "Initial prose hook refused requalify; replaced. Other source hooks passed."
+  ]
+}

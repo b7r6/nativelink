@@ -1,0 +1,37 @@
+[
+  {
+    "path": "nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto",
+    "before_sha256": "8a839bfc8a2b7f3c251ca5d6e61e6071918a0a4d0b0bb7e2f11c056d61997557",
+    "after_sha256": "bd5043487c914bb5c897fb2beaa0b6e11c6922a83e8240862922f52940e6e053"
+  },
+  {
+    "path": "nativelink-proto/genproto/com.github.trace_machina.nativelink.remote_execution.pb.rs",
+    "before_sha256": "861bcd527222a7a6068e3e31cae5f1070b940c2cba6288db86f5a106291acef4",
+    "after_sha256": "d106ded0ccf0d724e7ed63f31bfe45bff9790a0e015d802dee6637813f5af4be"
+  },
+  {
+    "path": "nativelink-service/src/authority_server.rs",
+    "before_sha256": "b4916ee1469b4fad1c68710ff82cbf286e7b07ce979ca023d4eaaecee3d7a8ad",
+    "after_sha256": "9d5c57b8ad4dbdb6808936aa7ee6475e60fae95a5d84965d83eca390669fea43"
+  },
+  {
+    "path": "nativelink-worker/src/authority_worker.rs",
+    "before_sha256": "a39bf106b8d1e1f4f72a2d21c9ccde3ca1860adfd19f672ffbff83f120b9fdd2",
+    "after_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab"
+  },
+  {
+    "path": "nativelink-worker/src/authority_worker_transport.rs",
+    "before_sha256": "10d77e35342ce23c6abeba39e455d8729e827dd87245408cfd33aa3326f78b7f",
+    "after_sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377"
+  },
+  {
+    "path": "nativelink-worker/tests/authority_worker_test.rs",
+    "before_sha256": "9ac9ba4c2caa17c32bee3ab5e41c9b204343d2f7fed18e2921a7db7b22689ba0",
+    "after_sha256": "ed5086117a164400d4564ef31ca08007732036ac3dbb9009fa5de8f5464ecb10"
+  },
+  {
+    "path": "nativelink-scheduler/design/categorical/receipt-retirement.md",
+    "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "after_sha256": "4ac56322225588ba446bd592b2339a8f7f6bf9efbae629d50172c75036d7732a"
+  }
+]

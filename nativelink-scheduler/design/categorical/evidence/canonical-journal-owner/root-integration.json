@@ -1,0 +1,445 @@
+{
+  "scope": "Root integration of inert namespace-bound canonical journal owner. Independent actual syscall qualification on root Bazel executable. No Raft start, clock, serving, seal writer or production constructor.",
+  "author_runtime_commit": "f1847e64c39203ae81c73d05edfd177d0dba5ce2",
+  "root_runtime_commit": "2947999e964fa0e48b6664ea1cf9324e9657e7bd",
+  "runs": [
+    {
+      "exit_code": 1,
+      "elapsed_seconds": 121.29995953990147,
+      "targets": 8,
+      "passed": 8,
+      "executed": 8,
+      "rust_counts_from_logs": [
+        298,
+        0,
+        2
+      ],
+      "source_inputs_unchanged": 1346,
+      "source_commit": "2947999e964fa0e48b6664ea1cf9324e9657e7bd",
+      "git_source_verified": true,
+      "failure": "External API test did not compile: E0433 missing tracing dependency required by test attribute macro. All eight compiled test targets executed successfully; not a behavioral fault detection."
+    },
+    {
+      "exit_code": 0,
+      "elapsed_seconds": 1.9890545170055702,
+      "targets": 9,
+      "passed": 9,
+      "executed": 1,
+      "rust_counts_from_logs": [
+        299,
+        0,
+        2
+      ],
+      "source_inputs_unchanged": 1346,
+      "source_commit": "595ece120c3de799d6ae912d119d98cad543dd38",
+      "git_source_verified": true,
+      "correction": "One tracing dependency added to the external API Bazel target; runtime and fixtures unchanged. One test executes, eight cached results."
+    }
+  ],
+  "source_comparison": {
+    "author_inputs": {
+      "Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "nativelink-scheduler/BUILD.bazel": "47fc85e247611538d9cb80504c165e23a55fbecd0c757fc657e21408b9bb2087",
+      "nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "nativelink-scheduler/src/authority/canonical_binding_tests.rs": "506d02f1cfd62d2dce76e62bffb882e8bc4403435874f6aa10f55985491059fc",
+      "nativelink-scheduler/src/authority/canonical_owner.rs": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+      "nativelink-scheduler/src/authority/canonical_owner_tests.rs": "13282b580a8b4c3b762066e48b9a53c07bbd370a502fa3b8f22b74c982b17cb9",
+      "tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "tools/canonical-filesystem/src/journal_tests.rs": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+      "nativelink-scheduler/tests/canonical_owner_api_test.rs": "e9d0294d590ff64d1e8cfa2d87541ec2850c51ef1d8c46f3107567eee2326f56",
+      "tools/test-canonical-owner-api.py": "52ab81474c9353bf75afd819879fab4e5a7d16343ce97e3d6f65a5faa4fa040c",
+      "tools/test-canonical-owner-sync.py": "7ada7381e9e17aca054a71fe020f9faeb65e9a298e415d3ced5f82de9fde5253",
+      "nativelink-scheduler/design/categorical/authority-canonical-binding.md": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "nativelink-scheduler/design/categorical/canonical-journal-owner.md": "212eb4b5ac6b315e80666721a34f5696fcaecefd65e608f187e767a29ec9fe68",
+      "tools/canonical-store/Cargo.lock": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7"
+    },
+    "root_inputs": {
+      "Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "nativelink-scheduler/BUILD.bazel": "24d036fd6d0b219170076e402e094309ef931047959104a2b0ecfda151321b9c",
+      "nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "nativelink-scheduler/src/authority/canonical_binding_tests.rs": "506d02f1cfd62d2dce76e62bffb882e8bc4403435874f6aa10f55985491059fc",
+      "nativelink-scheduler/src/authority/canonical_owner.rs": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+      "nativelink-scheduler/src/authority/canonical_owner_tests.rs": "13282b580a8b4c3b762066e48b9a53c07bbd370a502fa3b8f22b74c982b17cb9",
+      "tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "tools/canonical-filesystem/src/journal_tests.rs": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+      "nativelink-scheduler/tests/canonical_owner_api_test.rs": "e9d0294d590ff64d1e8cfa2d87541ec2850c51ef1d8c46f3107567eee2326f56",
+      "tools/test-canonical-owner-api.py": "52ab81474c9353bf75afd819879fab4e5a7d16343ce97e3d6f65a5faa4fa040c",
+      "tools/test-canonical-owner-sync.py": "7ada7381e9e17aca054a71fe020f9faeb65e9a298e415d3ced5f82de9fde5253",
+      "nativelink-scheduler/design/categorical/authority-canonical-binding.md": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "nativelink-scheduler/design/categorical/canonical-journal-owner.md": "212eb4b5ac6b315e80666721a34f5696fcaecefd65e608f187e767a29ec9fe68",
+      "tools/canonical-store/Cargo.lock": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7"
+    },
+    "exact_inputs": 16,
+    "delta": "One missing tracing dependency added to external API Bazel test; runtime unchanged."
+  },
+  "sync_run": {
+    "exit_code": 0,
+    "elapsed_seconds": 5.438890725024976,
+    "source_inputs_unchanged": 1346,
+    "binary_sha256": "1ed58213aaed71e8a56894baf5ae0a18932fbbccce846c3570aab9e76c606af7"
+  },
+  "sync_matrix": {
+    "verification_sha256": "29816e2a8a29d3433ae789f5e4d19f1a105b6009e909838bc7ac9e4cf0fbbc4b",
+    "attempts": 18,
+    "successful_opens": 3,
+    "targeted_EIO_refusals": 6,
+    "seed_and_crash_setup_invocations": 9,
+    "observed_repair_callback": true,
+    "scope": "Current file commit and pinned-parent synchronization occur before successful owner return; later Database Drop writes are not the barrier. Not power-loss durability qualification."
+  },
+  "archive": {
+    "path": "root-integration.tar.gz",
+    "sha256": "e885971a6f054afb203a33501c32c462b0a902f90773a0fc31cc0cdddb543505",
+    "bytes": 587478,
+    "files": {
+      "api-dependency-corrected/author-source-comparison.json": "553777f9d40eb7291ec30c614fd3dba4c118b78dde40d4154d3b09b32af699a4",
+      "api-dependency-corrected/build-and-test.log": "3760b79f40e0bd9c44f806c6aa0ee8d41dc132d59e4bf660f3fd44fc705dee0d",
+      "api-dependency-corrected/command.json": "18392fa042f55255062f1f7a1a1fa01af0532796f2930158c1caacbf48d1ff3c",
+      "api-dependency-corrected/head.txt": "cd307e8fec0cc663191ad74236813952bea08a040201e10ef1eff0ea9e2222f2",
+      "api-dependency-corrected/result.json": "66490c234e36f218e1bd8a673f22f2c3e224266287eaf8a7404f2321436da03c",
+      "api-dependency-corrected/run.py": "7bad17b36b2fe317498a1382d4617a7537f51249aef2af66e01322dfee971505",
+      "api-dependency-corrected/sources-after.json": "e72f5ab82f390d730d709b2ac1918c194fb4e435894afc91e1ece24a999c00c5",
+      "api-dependency-corrected/sources-before.json": "e72f5ab82f390d730d709b2ac1918c194fb4e435894afc91e1ece24a999c00c5",
+      "api-dependency-corrected/status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "api-dependency-corrected/summaries.json": "3edab38747f780740136a22583fa1566931ef58a69a63d0b78cb5e01be95b4d1",
+      "api-dependency-corrected/testlogs/nativelink-scheduler/canonical_owner_api_test/test.log": "3ab83d62a43c09cdafc081214b83e88b4a7c8b9f5103d774de87ddcd82f975ef",
+      "api-dependency-corrected/testlogs/nativelink-scheduler/unit_test/test.log": "624651684fdbdabfb59ecff3fd32d2ac53f6acb9b4e40dba24040678363f5885",
+      "api-dependency-corrected/testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "958716fa4be03cc25b4e71e50481b83fe7060cee9dcb260f08c28e85838186be",
+      "api-dependency-corrected/testlogs/nativelink-service/unit_test/test.log": "64f0d4f35e6afb7c139cffdda7a719e3f90f9f6264b31b996e5628383d9a2afb",
+      "api-dependency-corrected/testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "f882339992382f0326850781ea5f4295d4fa9a8e22363faad3d0e7b7de054ec5",
+      "api-dependency-corrected/testlogs/tools/canonical-filesystem/journal_test/test.log": "f019646be6c33a958f2caeb0cc8db9cb478ea4ca24c92b564850d15102ce2c0f",
+      "api-dependency-corrected/testlogs/tools/canonical-filesystem/ownership_test/test.log": "117b23cf1f638ab0532dfdaddd097b5b84bdef473d6d2791b3807477be8f1b95",
+      "api-dependency-corrected/testlogs/tools/canonical-store/canonical_store_test/test.log": "dc5f252573ac91b423b58986a5a209a2358c649bfca6c80a1182586b93de70ed",
+      "api-dependency-corrected/testlogs/tools/canonical-store/fixed_digest_default_test/test.log": "67942cc90c51d980e6aa887b63f088d44a2aecdeb67b48eb3c291718e5de33a0",
+      "author-source-comparison.json": "bf1fefb77dce3c671c2c3379c5f24ee268caf84bae19c8cc14027d8f275aade4",
+      "build-and-test.log": "f03f24d00502336c0d1d5edd438a5eff39c642033f67dbcba1edb1eca1f8623d",
+      "command.json": "fa4a4493b55d9cb525a85c367dda29105edb83e4c42ec273595b890ac380f9e3",
+      "head.txt": "6c9138f80ac73af8f71bb0ab63915de9a3b16deb6dae9ed9d309341da76346b0",
+      "hooks-api-dependency.log": "f7e159c7b3cd0464b0894179e3808209953d7f144a1de5ded733b87a82a21eb1",
+      "independent-root-review/review.json": "e974470be9e9256d2c6066b80569a59d1e00ffdb2e64cba21966944d6199f816",
+      "independent-root-review/source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "independent-root-review/source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "independent-root-review/source/nativelink-scheduler/BUILD.bazel": "47fc85e247611538d9cb80504c165e23a55fbecd0c757fc657e21408b9bb2087",
+      "independent-root-review/source/nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "independent-root-review/source/nativelink-scheduler/design/categorical/authority-canonical-binding.md": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "independent-root-review/source/nativelink-scheduler/design/categorical/canonical-journal-owner.md": "212eb4b5ac6b315e80666721a34f5696fcaecefd65e608f187e767a29ec9fe68",
+      "independent-root-review/source/nativelink-scheduler/src/authority/canonical_binding_tests.rs": "506d02f1cfd62d2dce76e62bffb882e8bc4403435874f6aa10f55985491059fc",
+      "independent-root-review/source/nativelink-scheduler/src/authority/canonical_owner.rs": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735",
+      "independent-root-review/source/nativelink-scheduler/src/authority/canonical_owner_tests.rs": "13282b580a8b4c3b762066e48b9a53c07bbd370a502fa3b8f22b74c982b17cb9",
+      "independent-root-review/source/nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "independent-root-review/source/nativelink-scheduler/tests/canonical_owner_api_test.rs": "e9d0294d590ff64d1e8cfa2d87541ec2850c51ef1d8c46f3107567eee2326f56",
+      "independent-root-review/source/tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "independent-root-review/source/tools/canonical-filesystem/src/journal_tests.rs": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+      "independent-root-review/source/tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "independent-root-review/source/tools/canonical-store/Cargo.lock": "9a63f1719f1f6fd6e40b93896b11dda56ff836e5e3f1b954cb35b5e0678fbab7",
+      "independent-root-review/source/tools/test-canonical-owner-api.py": "52ab81474c9353bf75afd819879fab4e5a7d16343ce97e3d6f65a5faa4fa040c",
+      "independent-root-review/source/tools/test-canonical-owner-sync.py": "7ada7381e9e17aca054a71fe020f9faeb65e9a298e415d3ced5f82de9fde5253",
+      "independent-root-sync-review/attempts.json": "c83f4d3e13192f0a584a8bd682057eda445197fe3daeb61fe7574f4962cb8bf7",
+      "independent-root-sync-review/cold-fault-1.log": "667ee0511387382b09713336859a4ceacfaa7fe64c561cf1053aae731924dd2b",
+      "independent-root-sync-review/cold-fault-1.strace": "8639713567d1e7a3dcc8ad9fab8c865848a5f5ba24ef5f1ac0de5238975e6bb2",
+      "independent-root-sync-review/cold-fault-2.log": "fefe25d767546177bb4a55f171af0894359a06d8613f5565205385f7cbd2e359",
+      "independent-root-sync-review/cold-fault-2.strace": "9d285f2ebbf1e02c8a11feb420ee253b220ce6ddbc8eefde72ade7d0a36ecc5f",
+      "independent-root-sync-review/cold.log": "5f047f5fea9995e0e280f644769867c248cd8dc5e991b44d0da502f4263941ab",
+      "independent-root-sync-review/cold.strace": "163f60454f803a2fdaf651e5adf1a498c78c619c16fd1fb58015be0498b93687",
+      "independent-root-sync-review/independent-check.json": "db13abc50ae8e4c338949cd263a441f0c48c73e7f9c03e40444e45aa675c1b92",
+      "independent-root-sync-review/reopen-fault-1-seed.log": "bc592a639f964cf2667941de3a3a3e9affb91bb0cc26c4efcc7ac27a65f98623",
+      "independent-root-sync-review/reopen-fault-1.log": "7f1764f5bd874a7eaa4c88618cb2f39e33f50334f7d63825f07c40fffe915b07",
+      "independent-root-sync-review/reopen-fault-1.strace": "47521f5e2404f0a267dbfd02e8f87a2a168469fef453935c89daa8a4bdc2888e",
+      "independent-root-sync-review/reopen-fault-2-seed.log": "6d98cb9b9f9f3ba7532f5c20cefd25b5cfc350c040f1f121080149258c920b86",
+      "independent-root-sync-review/reopen-fault-2.log": "c63b3160c9bfe9187ccb43fb9a03cbb64c181d4e671026ade8783ae06b3591e0",
+      "independent-root-sync-review/reopen-fault-2.strace": "5d591be1f84e456f354dc771ede08e8a6ce8ec66266a96a4bdb98929bb8590d4",
+      "independent-root-sync-review/reopen-seed.log": "60f60296426e4071b821b4a31049aef79b43f4369a9b50ed51c6f9a69b32799f",
+      "independent-root-sync-review/reopen.log": "9c93269e0343506edd535083efebddf9a7c9c108371f56e9802b149b7737b9e4",
+      "independent-root-sync-review/reopen.strace": "13a9c5cfb0f2b85041fca59f901d12ab9b582b481572dd4cd5e7c6ceb2dfc11d",
+      "independent-root-sync-review/repair-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "independent-root-sync-review/repair-fault-1-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "independent-root-sync-review/repair-fault-1-seed.log": "90855c759f747022efdf4ac8426bda7979b638791cb1cacdde07e8e99ad78504",
+      "independent-root-sync-review/repair-fault-1.log": "f7aa01e173f07f734c4e1a0b8bf0ece2c66a4b1c95388765833faa06f8008138",
+      "independent-root-sync-review/repair-fault-1.strace": "2c9c29c3bfdc063c1cdea39c3d4e34071698fbf2d588fb424319f6b58ac79bfa",
+      "independent-root-sync-review/repair-fault-2-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "independent-root-sync-review/repair-fault-2-seed.log": "5fe2ee464189ac64ed58d5517bc75371874611e5e2517bc7c6e29733c412bd23",
+      "independent-root-sync-review/repair-fault-2.log": "430b3bd51021044f08cb017b0a0e0699a0865c12e0232e8ec34d7aa2e34c6bd1",
+      "independent-root-sync-review/repair-fault-2.strace": "2393eb79aa99e4718f7808bbd14df2cb711638ebaf5e1b0cecc6c768a0a65c88",
+      "independent-root-sync-review/repair-seed.log": "065257a9a689061ed9e182456201cd3a103087bd2a4ab96f1583ee5287c9ef77",
+      "independent-root-sync-review/repair.log": "dd99be7198388f197b85e6cba1d43dd0031b0ba3c3b29bd8b201235776688f86",
+      "independent-root-sync-review/repair.strace": "45c0b7c11b880371ec7854646883f32d164f4047cde5beb647645f8ec11ce94f",
+      "independent-root-sync-review/verification.json": "29816e2a8a29d3433ae789f5e4d19f1a105b6009e909838bc7ac9e4cf0fbbc4b",
+      "result.json": "c5e17e3a9a9697a4f5e55e9734fe4934cf08d7acf3e57f3a5fb9368119c3a528",
+      "run-initial.py": "2659dcc424961c8aca2761f4d7b23f8c7af8095f9215524cbc9de14986ef6ab9",
+      "sources-after.json": "099fcc820b364ba41584d334b9778fe9699a25efd9bc65f8b8a6fc6d493dc184",
+      "sources-before.json": "099fcc820b364ba41584d334b9778fe9699a25efd9bc65f8b8a6fc6d493dc184",
+      "status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summaries.json": "1f5bd7311b03eea58cf80192aaea37075e291e0307b8800f3024301ba845396e",
+      "sync-run/command.json": "c0f3037039eef7c26d24fa31306d85137cd386c81999e85686bcbdf96d22d081",
+      "sync-run/execution.log": "e8f33bec11c3fff7edca29b7395bbf350705437435882136af700df752f81a45",
+      "sync-run/head.txt": "cd307e8fec0cc663191ad74236813952bea08a040201e10ef1eff0ea9e2222f2",
+      "sync-run/matrix/attempts.json": "c83f4d3e13192f0a584a8bd682057eda445197fe3daeb61fe7574f4962cb8bf7",
+      "sync-run/matrix/cold-fault-1.log": "667ee0511387382b09713336859a4ceacfaa7fe64c561cf1053aae731924dd2b",
+      "sync-run/matrix/cold-fault-1.strace": "8639713567d1e7a3dcc8ad9fab8c865848a5f5ba24ef5f1ac0de5238975e6bb2",
+      "sync-run/matrix/cold-fault-2.log": "fefe25d767546177bb4a55f171af0894359a06d8613f5565205385f7cbd2e359",
+      "sync-run/matrix/cold-fault-2.strace": "9d285f2ebbf1e02c8a11feb420ee253b220ce6ddbc8eefde72ade7d0a36ecc5f",
+      "sync-run/matrix/cold.log": "5f047f5fea9995e0e280f644769867c248cd8dc5e991b44d0da502f4263941ab",
+      "sync-run/matrix/cold.strace": "163f60454f803a2fdaf651e5adf1a498c78c619c16fd1fb58015be0498b93687",
+      "sync-run/matrix/reopen-fault-1-seed.log": "bc592a639f964cf2667941de3a3a3e9affb91bb0cc26c4efcc7ac27a65f98623",
+      "sync-run/matrix/reopen-fault-1.log": "7f1764f5bd874a7eaa4c88618cb2f39e33f50334f7d63825f07c40fffe915b07",
+      "sync-run/matrix/reopen-fault-1.strace": "47521f5e2404f0a267dbfd02e8f87a2a168469fef453935c89daa8a4bdc2888e",
+      "sync-run/matrix/reopen-fault-2-seed.log": "6d98cb9b9f9f3ba7532f5c20cefd25b5cfc350c040f1f121080149258c920b86",
+      "sync-run/matrix/reopen-fault-2.log": "c63b3160c9bfe9187ccb43fb9a03cbb64c181d4e671026ade8783ae06b3591e0",
+      "sync-run/matrix/reopen-fault-2.strace": "5d591be1f84e456f354dc771ede08e8a6ce8ec66266a96a4bdb98929bb8590d4",
+      "sync-run/matrix/reopen-seed.log": "60f60296426e4071b821b4a31049aef79b43f4369a9b50ed51c6f9a69b32799f",
+      "sync-run/matrix/reopen.log": "9c93269e0343506edd535083efebddf9a7c9c108371f56e9802b149b7737b9e4",
+      "sync-run/matrix/reopen.strace": "13a9c5cfb0f2b85041fca59f901d12ab9b582b481572dd4cd5e7c6ceb2dfc11d",
+      "sync-run/matrix/repair-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "sync-run/matrix/repair-fault-1-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "sync-run/matrix/repair-fault-1-seed.log": "90855c759f747022efdf4ac8426bda7979b638791cb1cacdde07e8e99ad78504",
+      "sync-run/matrix/repair-fault-1.log": "f7aa01e173f07f734c4e1a0b8bf0ece2c66a4b1c95388765833faa06f8008138",
+      "sync-run/matrix/repair-fault-1.strace": "2c9c29c3bfdc063c1cdea39c3d4e34071698fbf2d588fb424319f6b58ac79bfa",
+      "sync-run/matrix/repair-fault-2-crash.log": "577836e29aeffd4859635b201399df401b72e196a294706403d6dfbcbf66822a",
+      "sync-run/matrix/repair-fault-2-seed.log": "5fe2ee464189ac64ed58d5517bc75371874611e5e2517bc7c6e29733c412bd23",
+      "sync-run/matrix/repair-fault-2.log": "430b3bd51021044f08cb017b0a0e0699a0865c12e0232e8ec34d7aa2e34c6bd1",
+      "sync-run/matrix/repair-fault-2.strace": "2393eb79aa99e4718f7808bbd14df2cb711638ebaf5e1b0cecc6c768a0a65c88",
+      "sync-run/matrix/repair-seed.log": "065257a9a689061ed9e182456201cd3a103087bd2a4ab96f1583ee5287c9ef77",
+      "sync-run/matrix/repair.log": "dd99be7198388f197b85e6cba1d43dd0031b0ba3c3b29bd8b201235776688f86",
+      "sync-run/matrix/repair.strace": "45c0b7c11b880371ec7854646883f32d164f4047cde5beb647645f8ec11ce94f",
+      "sync-run/matrix/verification.json": "29816e2a8a29d3433ae789f5e4d19f1a105b6009e909838bc7ac9e4cf0fbbc4b",
+      "sync-run/result.json": "556c67a833dd5ebe9609ee2ca6039df57e67fea0e2e3ba562fb500a614c58f50",
+      "sync-run/run.py": "ac1ab2b00ceb2e6e4e51b1a8f8a5a2037a4d132412b6406f6e6c37ac91ceb9e4",
+      "sync-run/sources-after.json": "e72f5ab82f390d730d709b2ac1918c194fb4e435894afc91e1ece24a999c00c5",
+      "sync-run/sources-before.json": "e72f5ab82f390d730d709b2ac1918c194fb4e435894afc91e1ece24a999c00c5",
+      "testlogs/nativelink-scheduler/unit_test/test.log": "624651684fdbdabfb59ecff3fd32d2ac53f6acb9b4e40dba24040678363f5885",
+      "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "958716fa4be03cc25b4e71e50481b83fe7060cee9dcb260f08c28e85838186be",
+      "testlogs/nativelink-service/unit_test/test.log": "64f0d4f35e6afb7c139cffdda7a719e3f90f9f6264b31b996e5628383d9a2afb",
+      "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "f882339992382f0326850781ea5f4295d4fa9a8e22363faad3d0e7b7de054ec5",
+      "testlogs/tools/canonical-filesystem/journal_test/test.log": "f019646be6c33a958f2caeb0cc8db9cb478ea4ca24c92b564850d15102ce2c0f",
+      "testlogs/tools/canonical-filesystem/ownership_test/test.log": "117b23cf1f638ab0532dfdaddd097b5b84bdef473d6d2791b3807477be8f1b95",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "dc5f252573ac91b423b58986a5a209a2358c649bfca6c80a1182586b93de70ed",
+      "testlogs/tools/canonical-store/fixed_digest_default_test/test.log": "67942cc90c51d980e6aa887b63f088d44a2aecdeb67b48eb3c291718e5de33a0"
+    }
+  },
+  "executable_archives": [
+    {
+      "path": "root-executable-canonical_owner_api_test.tar.gz",
+      "sha256": "5d5d1543657bcc5a37e93211fdb4d4b49f304193b79a3cefd4a28e9506dee015",
+      "bytes": 8543393,
+      "member": {
+        "path": "api-dependency-corrected/binaries/nativelink-scheduler/canonical_owner_api_test",
+        "sha256": "2fdde312d6a5f89e75eccf488618b3ae2e8c273fba481e22b5690f6d908d499c",
+        "bytes": 40006736
+      }
+    },
+    {
+      "path": "root-executable-unit_test.tar.gz",
+      "sha256": "a8e34f3b7a9cba8bb4aee0c271994235ae16a0a402d9f5626c114e895ff499d8",
+      "bytes": 12706669,
+      "member": {
+        "path": "api-dependency-corrected/binaries/nativelink-scheduler/unit_test",
+        "sha256": "1ed58213aaed71e8a56894baf5ae0a18932fbbccce846c3570aab9e76c606af7",
+        "bytes": 65957432
+      }
+    }
+  ],
+  "external_build_events": {
+    "api-dependency-corrected/events.jsonl": {
+      "bytes": 580323,
+      "sha256": "d1ca32cb51ce8ee591529656f5cafc5b4be2c56c6af6903543869204a0c075c0"
+    },
+    "events.jsonl": {
+      "bytes": 717708,
+      "sha256": "3d8480152c078d66e3f5f2594af93e7c4f9b3575a4b59bd261c5147697fdd4d2"
+    }
+  },
+  "external_temporary_fixture_roots": {
+    "sync-run/matrix/roots/cold/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "8f1d4047dad2d4257e5872f0a5b7fcb2165041c6e068419338af48a0e766caf8"
+    },
+    "sync-run/matrix/roots/cold/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "8c59e4361abeccad99e081bb87c061d337a1a6e5b963d30f74c8a3eb40d9a33b"
+    },
+    "sync-run/matrix/roots/cold/journal/authority.redb": {
+      "bytes": 1056768,
+      "sha256": "479a2c8d081cbafed4e6beb0bebd8350f251d1fd1e97468f1f66e530723e7951"
+    },
+    "sync-run/matrix/roots/cold/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "5e16b2c35a096a46c104a6cc683ff3ed263aa3256c56a804201115b5e87c3fad"
+    },
+    "sync-run/matrix/roots/cold/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "1529540741e17fc27f537e05c50d8bbcbed34012f615d9907edd5dd32370cfb1"
+    },
+    "sync-run/matrix/roots/cold-fault-1/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "ef57c924b4bda2f2242b13436eb480fb8c7d53863154dd901fe451ca5acf0e89"
+    },
+    "sync-run/matrix/roots/cold-fault-1/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "d2e2c9edb0c10b2e4efb990a07dab848d39971c71f726aad47436f93a05bf067"
+    },
+    "sync-run/matrix/roots/cold-fault-1/journal/authority.redb": {
+      "bytes": 1056768,
+      "sha256": "914c570fa4bf49fb961bbeab0cbe8eb49652516f1c7b0f7a31a8f0ea06487b48"
+    },
+    "sync-run/matrix/roots/cold-fault-1/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "139abab06d48cbe148a3dcbd97d165a5648f34b382e35adee590c8470cf7f1cc"
+    },
+    "sync-run/matrix/roots/cold-fault-1/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "a74d283bed28f7a9622f4d6ac01cd5c1d6ed939785b8f280f677a06e49fc4385"
+    },
+    "sync-run/matrix/roots/cold-fault-2/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "82039641f94c693cca8fc4279a0d0b7a333b39c4b7fe8a65b6c2c13ed0f7ceb2"
+    },
+    "sync-run/matrix/roots/cold-fault-2/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "41a8d37cc24d3a3aaea6ca38265f655bdc4bb9da90dd4aa790c1c2f5ddbb1ddf"
+    },
+    "sync-run/matrix/roots/cold-fault-2/journal/authority.redb": {
+      "bytes": 1056768,
+      "sha256": "0a17ccfc4d31b1ac7c42e86c9981cf4d3be60f2b7f507c1a1117efb40d87b617"
+    },
+    "sync-run/matrix/roots/cold-fault-2/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "07b5cc44af0f166228b384efec15d618d7bdfaefbb1c68e3ec540e0dc4e7f5f0"
+    },
+    "sync-run/matrix/roots/cold-fault-2/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "8610a8ecd030bc0c5d1b61cc8def6d82558e9fa108a1d599b813558c11b91762"
+    },
+    "sync-run/matrix/roots/reopen/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "49e4f47a4852832c6890363d95343ec8efa2079e1dec62015c1fdd9270d13cb5"
+    },
+    "sync-run/matrix/roots/reopen/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "3d31ebe572f5c5a1ea463eb7bd956305199f49e32d7e4b3d2acf863ce1fc2eda"
+    },
+    "sync-run/matrix/roots/reopen/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "f7207ca8832755133da8ac2085ff07346d17c8791b4268e87ba4fd9d6a98173b"
+    },
+    "sync-run/matrix/roots/reopen/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "6563849ca7388ed243c8224dd842421156a40dea1dfaa51d2eea90616b0ce1d9"
+    },
+    "sync-run/matrix/roots/reopen/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "cd6b3c24cc47e94bcfc046d420a72a935c3a68d31a48ea857ec90208d00f8f63"
+    },
+    "sync-run/matrix/roots/reopen-fault-1/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "4cc55e008b82963fc1a78b4311edd02fe93311c7d884d366a9656532d460c3d3"
+    },
+    "sync-run/matrix/roots/reopen-fault-1/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "4a61f8b2e640f54242f5862cdbbe996791660befcc8097144fc45633b9b6a02f"
+    },
+    "sync-run/matrix/roots/reopen-fault-1/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "39dfb07aa36a684dd8aa7a52cc1c653b48a1b37f42980715aba85ff4c06bd203"
+    },
+    "sync-run/matrix/roots/reopen-fault-1/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "e3202a56cee5b85b9f753d6f588b927e6b42f34ad670b34cc369156aa3467408"
+    },
+    "sync-run/matrix/roots/reopen-fault-1/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "c8d5474cc841dbd93eff80c50e0ec5ebccf022f094954258c4e76b56876169ac"
+    },
+    "sync-run/matrix/roots/reopen-fault-2/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "fc840c5ecaf6e7b7185ca7b1aa732b4d74a507433f2ba7e7a9f3d9d506636f4e"
+    },
+    "sync-run/matrix/roots/reopen-fault-2/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "8e7cc90ddf1925193063a243e7bc24a4e5573eb61b27d5b2d25deb46857eb2ae"
+    },
+    "sync-run/matrix/roots/reopen-fault-2/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "c7dea0e1bc1f4994db054dbd3e7a9f1d82aa713bf8a67fd17a3db660331856d0"
+    },
+    "sync-run/matrix/roots/reopen-fault-2/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "479ae008255a26ad509093b0aeec82657fe9f5f309cab1aaa5fcd43d7f2c384d"
+    },
+    "sync-run/matrix/roots/reopen-fault-2/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "b51171b229c7bbbc74bbda283c126b0a6ed14506bc97aca5983d896b47aa729b"
+    },
+    "sync-run/matrix/roots/repair/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "a83e36da768b7da5a39aac96380531f3d82ba2d0194aed7675a26762335d70ef"
+    },
+    "sync-run/matrix/roots/repair/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "1e57c53ea5c07ec71aaea9242dd1a077f592e52e7ba506d3e0c5a1dc149ef0a8"
+    },
+    "sync-run/matrix/roots/repair/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "587e26f49519945877e1a7bca3ac2221976a0ba1a31a86f4c344bb46cd4e0057"
+    },
+    "sync-run/matrix/roots/repair/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "90d861e8c7f603f4ab5cf797a870f156974dc693a95175d2276033665a34d8ee"
+    },
+    "sync-run/matrix/roots/repair/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "934383564ecbdd1788adc3796f949b771ea0f2dc4df053bb8abd1d88d22f670b"
+    },
+    "sync-run/matrix/roots/repair-fault-1/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "21b0b377c497f5b160dcd8d0f07b55d04369cb4a320247df00fb5a01fa8a91d0"
+    },
+    "sync-run/matrix/roots/repair-fault-1/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "772d69e03d63dfda454eb815682b1fc51dc42ee7fba38e30072db37eb741d26b"
+    },
+    "sync-run/matrix/roots/repair-fault-1/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "132a2ed23fd480aa34001c0aa93962e7f2a01b0dbc035e69288852779d6c3d76"
+    },
+    "sync-run/matrix/roots/repair-fault-1/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "74e7c4491ece98a67050347c34853c066feb3a6ff876cb86ae18360bd0913cf7"
+    },
+    "sync-run/matrix/roots/repair-fault-1/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "9338ebd3abe85ab21f8e30fb3dcefa0f2bddbfe2f1126c08d3aa308890645a45"
+    },
+    "sync-run/matrix/roots/repair-fault-2/cas/.nativelink-namespace-v1.json": {
+      "bytes": 625,
+      "sha256": "bbf7d1fd8f685a8aaf743ddcd06380d5f1a458c28b23a66ad6597a9db5d35329"
+    },
+    "sync-run/matrix/roots/repair-fault-2/journal/.nativelink-namespace-v1.json": {
+      "bytes": 629,
+      "sha256": "fb547c6f10e3520f886374a592e8a8a188d6ffb071c8876876d49e52ebc4d121"
+    },
+    "sync-run/matrix/roots/repair-fault-2/journal/authority.redb": {
+      "bytes": 53248,
+      "sha256": "5c05bcf49a3947760ea6689391042b80a5bb56a8eb2c446650d1e230b49ed113"
+    },
+    "sync-run/matrix/roots/repair-fault-2/sink/.nativelink-namespace-v1.json": {
+      "bytes": 642,
+      "sha256": "2563cd2fc30c371532fd27b5680864e140d85a8a40e297dbb8fa7b13075634fe"
+    },
+    "sync-run/matrix/roots/repair-fault-2/worker/.nativelink-namespace-v1.json": {
+      "bytes": 628,
+      "sha256": "d95b2cd0137f1f234052460c49d484ad861d60afaf605a5510853e3da80310f2"
+    }
+  },
+  "limits": [
+    "Counts overlap author suites and earlier root gates.",
+    "Two normal ignored cases: explicit syscall witness separately run here and local TLS not explicitly run here.",
+    "Author compiled semantic mutants and compiler negative controls remain separately source-qualified.",
+    "Every M0-M9 gate and production cutover remains open."
+  ]
+}

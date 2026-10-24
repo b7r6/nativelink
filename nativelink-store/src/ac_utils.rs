@@ -104,6 +104,10 @@ pub async fn serialize_and_upload_message<'a, T: Message>(
     let mut buffer = BytesMut::with_capacity(message.encoded_len());
     let digest = message_to_digest(message, &mut buffer, hasher)
         .err_tip(|| "In serialize_and_upload_message")?;
+    let progress = nativelink_util::work_progress::ProgressObserver::store_object(
+        nativelink_util::work_progress::WorkKind::Write,
+        &digest.into(),
+    );
     // Note: For unknown reasons we appear to be hitting:
     // https://github.com/rust-lang/rust/issues/92096
     // or a smiliar issue if we try to use the non-store driver function, so we
@@ -113,6 +117,9 @@ pub async fn serialize_and_upload_message<'a, T: Message>(
         .update_oneshot(digest.into(), buffer.freeze())
         .await
         .err_tip(|| "In serialize_and_upload_message")?;
+    if let Some(progress) = progress {
+        progress.complete();
+    }
     Ok(digest)
 }
 

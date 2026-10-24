@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-bytestream-terminal-update-package/packet.py",
+    "--allow-unsealed"
+  ],
+  "returncode": 0,
+  "elapsed_s": 5.591255450039171,
+  "log_sha256": "19195e4b68c2d3500f3c086a9ea8b1c61c70403368849abacba338050f1b9793",
+  "mode": "Every original file reconstructed and hashed through deduplicated temporary chunks; no duplicate ELF expansion."
+}

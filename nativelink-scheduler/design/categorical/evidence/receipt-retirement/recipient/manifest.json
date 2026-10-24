@@ -1,0 +1,288 @@
+{
+  "generated_at": "2026-10-23T00:57:12.318772+00:00",
+  "scope": "Bounded worker receipt retirement wire, recipient, transport, capability negotiation and qualification fixture. No automatic certificate issuer or production activation.",
+  "patch": {
+    "path": "/tmp/nativelink-receipt-retirement.patch",
+    "sha256": "d0cde6b12feb4a8ba9072282fb84103db173c6d42258617f1ff5ceed1683e154"
+  },
+  "worktree": "/tmp/nativelink-categorical-runtime",
+  "cargo_target_dir": "/tmp/nativelink-categorical-runtime-target",
+  "sources": [
+    {
+      "path": "nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto",
+      "before_sha256": "8a839bfc8a2b7f3c251ca5d6e61e6071918a0a4d0b0bb7e2f11c056d61997557",
+      "after_sha256": "bd5043487c914bb5c897fb2beaa0b6e11c6922a83e8240862922f52940e6e053"
+    },
+    {
+      "path": "nativelink-proto/genproto/com.github.trace_machina.nativelink.remote_execution.pb.rs",
+      "before_sha256": "861bcd527222a7a6068e3e31cae5f1070b940c2cba6288db86f5a106291acef4",
+      "after_sha256": "d106ded0ccf0d724e7ed63f31bfe45bff9790a0e015d802dee6637813f5af4be"
+    },
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "before_sha256": "b4916ee1469b4fad1c68710ff82cbf286e7b07ce979ca023d4eaaecee3d7a8ad",
+      "after_sha256": "9d5c57b8ad4dbdb6808936aa7ee6475e60fae95a5d84965d83eca390669fea43"
+    },
+    {
+      "path": "nativelink-worker/src/authority_worker.rs",
+      "before_sha256": "a39bf106b8d1e1f4f72a2d21c9ccde3ca1860adfd19f672ffbff83f120b9fdd2",
+      "after_sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab"
+    },
+    {
+      "path": "nativelink-worker/src/authority_worker_transport.rs",
+      "before_sha256": "10d77e35342ce23c6abeba39e455d8729e827dd87245408cfd33aa3326f78b7f",
+      "after_sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377"
+    },
+    {
+      "path": "nativelink-worker/tests/authority_worker_test.rs",
+      "before_sha256": "9ac9ba4c2caa17c32bee3ab5e41c9b204343d2f7fed18e2921a7db7b22689ba0",
+      "after_sha256": "ed5086117a164400d4564ef31ca08007732036ac3dbb9009fa5de8f5464ecb10"
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/receipt-retirement.md",
+      "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "after_sha256": "4ac56322225588ba446bd592b2339a8f7f6bf9efbae629d50172c75036d7732a"
+    }
+  ],
+  "validation": {
+    "compatibility": {
+      "status": "pass",
+      "counts": {
+        "authority_rpc_test": 9,
+        "authority_scheduler_test": 4,
+        "authority_worker_test": 18
+      },
+      "commands_file": "/tmp/nativelink-categorical-evidence/receipt-retirement/commands-serial.json",
+      "log": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets-serial.log.gz",
+      "note": "Serialized test threads, unchanged test timeouts."
+    },
+    "strict_worker_clippy": {
+      "status": "pass",
+      "receipt": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--profile",
+          "smol",
+          "-p",
+          "nativelink-worker",
+          "--lib",
+          "--test",
+          "authority_worker_test",
+          "--test",
+          "authority_rpc_test",
+          "--test",
+          "authority_scheduler_test",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit": 0,
+        "seconds": 2.11991626303643
+      }
+    },
+    "strict_service_clippy": {
+      "status": "pass",
+      "receipt": {
+        "label": "service-clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--profile",
+          "smol",
+          "-p",
+          "nativelink-service",
+          "--lib",
+          "--tests",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit": 0,
+        "seconds": 52.606414556503296
+      }
+    },
+    "mutations": {
+      "status": "pass",
+      "compiled": 6,
+      "killed": 6,
+      "records": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutations.json",
+      "runner": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutations.py",
+      "source_restored": true
+    },
+    "restored_recipient": {
+      "status": "pass",
+      "count": 18,
+      "receipt": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "smol",
+          "-p",
+          "nativelink-worker",
+          "--test",
+          "authority_worker_test",
+          "--",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit": 0,
+        "seconds": 24.75979342905339
+      }
+    },
+    "root_apply_check": "pass",
+    "git_diff_check": "pass",
+    "physical_fixture": {
+      "status": "pass",
+      "actual_quiescent_completions": 48,
+      "recipient_limit": 4,
+      "old_active_attempt": 1,
+      "counts_after_each_certificate": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "explicit_namespace_skip": false,
+      "cutpoints": [
+        "coordinator loss before certificate commit",
+        "committed certificate before delivery",
+        "worker application before coordinator consumes acknowledgment",
+        "same live worker reconnect and exact body replay"
+      ]
+    }
+  },
+  "preserved_failures": [
+    {
+      "log": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets.log.gz",
+      "failure": "Initial parallel compatibility run: 8 RPC tests passed; automatic_deadlines_cleanup_retirement_and_ingress_ids_survive_restart timed out in the 20-second state wait at line372. Host load was around65; contention is a hypothesis, not a proven cause. Unchanged serialized suite passed; no timeout was extended."
+    },
+    {
+      "log": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy.log.gz",
+      "failure": "Initial strict Clippy flagged grouping false positives and an unquoted Rustdoc identifier; expressions split and identifier quoted."
+    },
+    {
+      "log": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy-final.log.gz",
+      "failure": "Second strict Clippy flagged three test helpers missing const; fixed and strict Clippy rerun passed."
+    }
+  ],
+  "claims_excluded": [
+    "authority-side eligibility or acceptance",
+    "real authority journal/outbox certificate issuance",
+    "replicated automatic issuance",
+    "production authentication",
+    "durable worker state under reused incarnation",
+    "canonical service activation"
+  ],
+  "logs": [
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy-final.log",
+      "sha256": "9117e7d8c4b9b2cfa188868c2abe287d1b2b490a1709a2369c575033fa9ac943",
+      "bytes": 2102,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy-final.log.gz",
+      "gzip_sha256": "99d60f4d455beb89ca343b0df1bceac702e6fcf58334a932ee0ab1c21c6bfc66"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy-fixed.log",
+      "sha256": "97fe27ab70997ab5fb13eb88743fb18c9ee4507950a6b7a52b4c4e52bb3ac46d",
+      "bytes": 264,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy-fixed.log.gz",
+      "gzip_sha256": "5d385cfbd19c85e1d28b273ab6edda984a98f6f6c08e05ebb5b2269287b5d91b"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy.log",
+      "sha256": "915d4f038b1ff43592b203570ca5a110747542b037a438aa2f52cc54509d087b",
+      "bytes": 3328,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/clippy.log.gz",
+      "gzip_sha256": "99457430e442b84bafedcf83ef818dfd6212f4a00b3e62e29b2e744179d261e4"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/compile-first.log",
+      "sha256": "a8bb205d36f4b674631c72f0116bb58aef1a5925c2f4c0120c39ce9a4f0ae24b",
+      "bytes": 1121,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/compile-first.log.gz",
+      "gzip_sha256": "315360d014f1186d4f44748f7451c20b0b6e8aa55bda10b445f69f6cbbe51b91"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-certificate-effect-floor.log",
+      "sha256": "3496971c99a44ed6675093fecd5af7b87beb54c1090f643329b37058179d49d6",
+      "bytes": 4115,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-certificate-effect-floor.log.gz",
+      "gzip_sha256": "657779aa0d70040e08440f59f41c75ec254d617958cc666a2652bcfdcbe1679d"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-postcut-cancel-identity.log",
+      "sha256": "ade47923f1945707df24c173f67ea3f9709438baa898bdfdc39c2febf5543d5d",
+      "bytes": 4017,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-postcut-cancel-identity.log.gz",
+      "gzip_sha256": "7702771136d385e2899e8081cf5f6be56f6a5a44b6b7c884266b5e25e3b31b25"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-retired-attempt-floor.log",
+      "sha256": "5e194ee3385bf4daa03b3de28fd7bbc992921ee019fc34f56a2a11c10b3c4cca",
+      "bytes": 9136,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-retired-attempt-floor.log.gz",
+      "gzip_sha256": "ccd40a1ab795bbd691c70d2767db7c25c4b4bcf37081eec41f608c7ee3532984"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-retired-command-effect-floor.log",
+      "sha256": "798509268c0d4b917d8673f61f128d18066489a4a91cdb90521a4a5fc2b1f540",
+      "bytes": 4091,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-retired-command-effect-floor.log.gz",
+      "gzip_sha256": "277dc1836cb8ba7cdd3ca7222205a23672e9603761c251ab5aa9440fb4c2400c"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-same-certificate-changed-body.log",
+      "sha256": "0dde30cde9eb48e9ae9da9135afe2b30164c7f0c028a017705a0f3c08ec95ccb",
+      "bytes": 23710,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-same-certificate-changed-body.log.gz",
+      "gzip_sha256": "d26330aadcfd708c2623b5cffad377404149212723757bc91a45c70fcb46b364"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-single-use-spent-latch.log",
+      "sha256": "3b3de7c6c8571a0395fa7729b1e1105d7890ef8d546e40f4b0810a0abdb8f0e4",
+      "bytes": 12317,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/mutation-single-use-spent-latch.log.gz",
+      "gzip_sha256": "ed8cd681f5b7caf5ce310e58bf891c2556ecd92991e5632d66e89c7a9486e70c"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/recipient-first.log",
+      "sha256": "640a9f23604333ba60d5c7763dcd592142c1d7bbc70bfde1f30180522416a5f5",
+      "bytes": 6837602,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/recipient-first.log.gz",
+      "gzip_sha256": "f474ca9a7aadf25e703c68297dd3050183188e310aed96d9d7f71c80a02401ae"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/recipient-restored.log",
+      "sha256": "410f3cf7357f9a191d619080e7d3cb3f7f698f61c5aada43583bd5e5cf9a43e5",
+      "bytes": 6841613,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/recipient-restored.log.gz",
+      "gzip_sha256": "9b338b5b8027dae4fb19c065f902b3d50ec0d96417e227e65537561b2071e0bf"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/service-clippy.log",
+      "sha256": "07a0035beb20d612e5b0061618f57bf984af7fed0e030dcc884b6fb2684352c8",
+      "bytes": 841,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/service-clippy.log.gz",
+      "gzip_sha256": "1c2eb580ee530e3bc1cc7d96c93496477f94e18c7063aeeced26f52f1ca8c01f"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets-serial.log",
+      "sha256": "170524fb63ec8a06bb64c2b724b0ffd87776202dfe563c74476ef34f58ebd020",
+      "bytes": 31588251,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets-serial.log.gz",
+      "gzip_sha256": "26051a6faafe053f56622e97717d7e09f10a3fb3471d176e4eca101ec34826de"
+    },
+    {
+      "path": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets.log",
+      "sha256": "38cfe533c64b18808e0c9daaf599c21caaf4d89b10d2e5ef6cfc110b0222966d",
+      "bytes": 31807186,
+      "gzip": "/tmp/nativelink-categorical-evidence/receipt-retirement/targets.log.gz",
+      "gzip_sha256": "753e3495e830bc5e4b05807a6eff1eabbeced59d9ddebb2cd50acc62327f8e10"
+    }
+  ]
+}

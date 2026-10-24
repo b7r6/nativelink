@@ -1,0 +1,70 @@
+{
+  "source": "nativelink-scheduler/tests/retention/typed_bridge.rs",
+  "baseline_sha256": "c7c0cc0d8aca93fef52b6d8c826326ac7996c5664eea756f7c0ab5e08096a5f5",
+  "compile_command": [
+    "cargo",
+    "test",
+    "-p",
+    "nativelink-scheduler",
+    "--profile=smol",
+    "--test",
+    "typed_physical_retention_test",
+    "--no-run"
+  ],
+  "test_command": [
+    "cargo",
+    "test",
+    "-p",
+    "nativelink-scheduler",
+    "--profile=smol",
+    "--test",
+    "typed_physical_retention_test"
+  ],
+  "mutations": [
+    {
+      "name": "omit_required_object",
+      "sha256": "95767735bc42a90594b0b3bc67437b9161d516e86e864e61341ee6a7759b7b34",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    },
+    {
+      "name": "ignore_catalogue_revision",
+      "sha256": "b4893197631ff7572f13b1d5a74f826cad7ee1d2b9168deb60f3cc87c9b9ea08",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    },
+    {
+      "name": "ignore_physical_identity",
+      "sha256": "ccc7d5783dc57c9356e285c6b6e43d4988330d519095333b05c6c38fa3b03a93",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    },
+    {
+      "name": "replace_captured_fences",
+      "sha256": "a3e417544d7951596788d8c188142879463b40fc72d77a252d4c1f545eb94df9",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    },
+    {
+      "name": "expose_head_before_checkpoint",
+      "sha256": "317e5dab06e3020d5241a1cd29ec92719efd7b930863a0e35ca4769716af0562",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    },
+    {
+      "name": "release_serving_with_head",
+      "sha256": "df63161362014095d6a54a9d5a81874d11d3e9727206c1b45082ac049dec2369",
+      "compile_exit": 0,
+      "test_exit": 101,
+      "classification": "semantic_kill"
+    }
+  ],
+  "baseline_exit": 0,
+  "restored_sha256": "c7c0cc0d8aca93fef52b6d8c826326ac7996c5664eea756f7c0ab5e08096a5f5",
+  "restored_exit": 0
+}

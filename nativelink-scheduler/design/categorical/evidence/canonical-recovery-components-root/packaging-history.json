@@ -1,0 +1,15 @@
+{
+  "initial_package_manifest_sha256": "f1e40165d197e6da03113734964418dcba27eabbb05e8f77c925530189ffb42f",
+  "initial_package_seal_sha256": "22bc55a6c75b7133a1eabe288ea70c014f215b57e508e48ee1d50d657ece4c57",
+  "failed_command": [
+    "git",
+    "commit",
+    "-m",
+    "Qualify combined recovery components at the root checkpoint"
+  ],
+  "exit_code": 1,
+  "failure": "forbid-binary-files rejected the two executable-nativelink.tar.gz.part-* files; all other applicable hooks passed.",
+  "evidence_note": "Hook output observed in exec session62011; this is a subsequent structured receipt, not a retained raw hook logfile.",
+  "correction": "Rejoin the identical compressed server archive into its real .tar.gz name. The archive is 43291224 bytes, below45MiB. Do not change hooks or exclusions; all tar member and archive bytes remain identical.",
+  "original_package_preserved": "/tmp/nativelink-canonical-recovery-components-root-package"
+}

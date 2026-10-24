@@ -380,6 +380,23 @@ impl DropCloserReadHalf {
     /// This method is optimized to reduce copies when possible.
     /// If `size` is None, it will take all the bytes in the stream.
     pub async fn consume(&mut self, size: Option<usize>) -> Result<Bytes, Error> {
+        self.consume_observed(size, None, 0).await
+    }
+
+    /// Additive observed variant; only bytes actually received advance progress.
+    pub async fn consume_observed(
+        &mut self,
+        size: Option<usize>,
+        progress: Option<&crate::work_progress::ObjectProgress>,
+        offset: u64,
+    ) -> Result<Bytes, Error> {
+        let observe = |length: usize| {
+            if let Some(progress) = progress
+                && let Some(position) = offset.checked_add(length as u64)
+            {
+                progress.offset(position);
+            }
+        };
         let size = size.unwrap_or(usize::MAX);
         let first_chunk = {
             let mut chunk = self
@@ -393,8 +410,10 @@ impl DropCloserReadHalf {
                 let remaining = chunk.split_off(size);
                 self.queued_data.push_front(remaining);
                 // No need to read EOF if we are a partial chunk.
+                observe(chunk.len());
                 return Ok(chunk);
             }
+            observe(chunk.len());
             // Try to read our EOF to ensure our sender did not error out.
             match self.peek().await {
                 Ok(peeked_chunk) => {
@@ -425,6 +444,7 @@ impl DropCloserReadHalf {
                 self.queued_data.push_front(remaining);
             }
             output.extend_from_slice(&chunk);
+            observe(output.len());
             if output.len() == size {
                 break; // We are done.
             }

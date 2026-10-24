@@ -1,0 +1,121 @@
+{
+  "base_commit": "d30ff7bfa83a480a22e610074f4f484e5db1790d",
+  "bounded_alphabet": {
+    "graph_closure": "Independently declared complete typed scenario facts, not a full REAPI tree walker",
+    "max_changing_events": 192,
+    "max_snapshot_bytes": 2097152,
+    "operations_retain_until_absolute_tick": 100,
+    "publication_lease_is_separate": true,
+    "snapshot": "Canonical replay history with original observed physical/capacity facts, not candidate structural state"
+  },
+  "commands": {
+    "clippy": "CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target CARGO_INCREMENTAL=0 /nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo clippy --locked --offline --profile smol -j8 -p nativelink-scheduler --test prepared_memory_reference_test -- -D warnings",
+    "hooks": "/nix/store/x6cgwhgjipmrflxnr2wh0n9p20kwpvxm-pre-commit-4.5.1/bin/pre-commit run --config /nix/store/llxhiivz6jahnfx7wsyyghq318lggww1-pre-commit-config.json --files <the seven new/changed source and contract paths listed in freeze>",
+    "test": "CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target CARGO_INCREMENTAL=0 /nix/store/16iqjcbihzjbj6hdr7iqwdqzgwrwgrzr-rust-default-1.97.1/bin/cargo test --locked --offline --profile smol -j8 -p nativelink-scheduler --test prepared_memory_reference_test"
+  },
+  "format": "nativelink-prepared-memory-reference-evidence-v1",
+  "freeze": {
+    "cargo_test_executable_location": "External /tmp/nativelink-prepared-memory-reference-evidence/prepared_memory_reference_test.frozen; not portable receipt payload",
+    "cargo_test_executable_sha256": "7f1d19f8fbc17488cb129cacf5936ba8a280eedeebe1bf834899ed0e361f6eb0",
+    "sources": {
+      "nativelink-scheduler/BUILD.bazel": "28ad7f1403679a1e17d495beaaa005f6ab4efcf97a69b450fac4848b3768f4af",
+      "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+      "nativelink-scheduler/tests/prepared_memory/README.md": "4199720517f950057f7e404f6aa7c5c7031bba7f98be018bde65c1155abd3060",
+      "nativelink-scheduler/tests/prepared_memory/cases.rs": "315aabb29d2c94610391cde6295b0b9b1832f84ff13d4305ba869e06c1f2ea0e",
+      "nativelink-scheduler/tests/prepared_memory/head.rs": "2c37f3c538fdfee424ced7dd7ba0a4a3d48f7e0061b481df748bbb5c1121bb6a",
+      "nativelink-scheduler/tests/prepared_memory/reference.rs": "c77936bd829bda646f8b04eebc79f356a81ca447ba5fab93edf031ef8283ef5e",
+      "nativelink-scheduler/tests/prepared_memory/types.rs": "2603c943e6e779e42bf976fb5042d38278774ed5ff405ab63081a79ab095fd57",
+      "nativelink-scheduler/tests/prepared_memory_reference_test.rs": "3c4c21f588c2542e7a75098cb08185869f6d40b2baeb1969a3812f51c4ac3db0",
+      "nativelink-scheduler/tests/publication_head/reference.rs": "9c4a4c45acb37d04659296888f07c84b66026ca6adca2a368658ca23baa3bcab",
+      "nativelink-scheduler/tests/publication_head/types.rs": "25e7d82dc5d0d1cd38e2f00b5c94d78c6e98aa367d14c150c28a9c913e926610",
+      "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+      "nativelink-scheduler/tests/terminal_outcome/types.rs": "c36082d9426adce123405a5a01a2856f32ce15d15239cd9e7b880cc465cc4032"
+    }
+  },
+  "independence": {
+    "candidate_source_and_tests_read_before_reference_freeze": false,
+    "inputs": [
+      "Source elimination plan and prior frozen reference contracts",
+      "Candidate public command/result contract only",
+      "Public clarification before freeze: stage replay conflicts; operation retention is separate from publication lease"
+    ],
+    "production_transition_helpers_used": false,
+    "unchanged_dependencies": [
+      "nativelink-scheduler/tests/authority/reference.rs",
+      "nativelink-scheduler/tests/publication_head/reference.rs",
+      "nativelink-scheduler/tests/publication_head/types.rs",
+      "nativelink-scheduler/tests/retention/protocol.rs",
+      "nativelink-scheduler/tests/terminal_outcome/types.rs"
+    ]
+  },
+  "limitations": [
+    "No coordinated-history authentication; a coherent alternate valid history may restore.",
+    "No history feature 3, production format activation, RPC deployment, collector progress, or provider-I/O qualification.",
+    "No operation serving or renewal beyond the fixed retained operation lease.",
+    "No candidate/oracle differential claimed by this receipt.",
+    "Finite final response is not a production readiness claim."
+  ],
+  "logs": [
+    {
+      "exit_code": 0,
+      "file": "initial-test.log.gz",
+      "sha256": "d91c327d3dd689aa1375188e5c3e1840cf52e4fb5e07388514efe6477b7b9495",
+      "uncompressed_sha256": "ec7d7d6f481309a313a621861460af3a3b5b8899fed3a295a3b5ce0fe031b642"
+    },
+    {
+      "exit_code": 101,
+      "file": "initial-clippy.log.gz",
+      "sha256": "89237f9b6a897b3b2339dc6750f0dfaa572ff08e137375c393f38e1b7f925ed1",
+      "uncompressed_sha256": "82ae673a86c0f2173ce52851f0159cbdfc7d83f91c03604f13dcbc2a1caeb46e"
+    },
+    {
+      "exit_code": 1,
+      "file": "initial-hooks.log.gz",
+      "sha256": "526f041cece5b736155650dbb5b8f70d894c054d8df5c491bbfe4466ad08f0b5",
+      "uncompressed_sha256": "0ba96c3a2cc8ce903d5ab960548f344b49e693d1e650efff8b7be138ff914309"
+    },
+    {
+      "exit_code": 0,
+      "file": "final-test.log.gz",
+      "sha256": "b15895c3cd5329e98212ad6a434bfd7d1255e330d33eaadaa6f92dfd05ef48ab",
+      "uncompressed_sha256": "ac74d01bf54e47a962bbf598e7d2eef70cd82961fbe72c17630ac45d23e6ef57"
+    },
+    {
+      "exit_code": 0,
+      "file": "final-clippy.log.gz",
+      "sha256": "bb5c24d2734ddf9830945dc754248bb580d13681f9195414b6ff97eceede0ad6",
+      "uncompressed_sha256": "cf96bc040df266845d1d89204d9a098c209ad58b7add4861c818d5a60051c658"
+    },
+    {
+      "exit_code": 0,
+      "file": "final-vale.log.gz",
+      "sha256": "9cfc370e8cd8a1b10e7e901dfb87731e82c012a563217545f67e4d20e60c83e5",
+      "uncompressed_sha256": "49cdfd37e68cbb2dd74a3e9baa957e2a221536a99f1a5a41cb737c77f8749ad2"
+    },
+    {
+      "exit_code": 0,
+      "file": "final-hooks.log.gz",
+      "sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a"
+    }
+  ],
+  "preserved_attempts": [
+    "Initial tests passed 23/23 before the operation lease rollback case was added.",
+    "Initial strict Clippy refused four style issues; fixed before freeze.",
+    "Initial hooks refused three prose vocabulary words; replaced before final hooks.",
+    "Before freeze public contract clarified identical stage replay refusal and separate admitted operation lease; no candidate implementation or tests read."
+  ],
+  "validation": {
+    "bazel": "Target added; root integration owns execution. No Bazel pass claimed in this receipt.",
+    "compiled_mutations": "Not run by oracle author; parent owns separate candidate mutation qualification.",
+    "final_tests": {
+      "failed": 0,
+      "ignored": 0,
+      "inherited_m1_cases": 7,
+      "new_prepared_memory_cases": 17,
+      "passed": 24
+    },
+    "source_hooks": "passed",
+    "strict_clippy": "passed"
+  }
+}

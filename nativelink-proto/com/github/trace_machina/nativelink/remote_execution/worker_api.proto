@@ -41,6 +41,218 @@ service WorkerApi {
     rpc ConnectWorker(stream UpdateForScheduler) returns (stream UpdateForWorker);
 }
 
+/// Experimental identity-bearing authority protocol. This service is mounted
+/// only by test wiring until the canonical construction and cutover gates land.
+/// It never negotiates a downgrade to WorkerApi. Transport disconnection does
+/// not revoke an attempt or release its reservation.
+service AuthorityWorkerApi {
+    rpc Connect(stream AuthorityWorkerUpdate) returns (stream AuthorityCoordinatorUpdate);
+}
+
+/// A process lifetime, independent of a coordinator connection or election.
+/// Every identifier is nonzero and allocated within the named cluster epoch.
+/// A new incarnation requires trusted old-domain fencing outside this message;
+/// a worker's assertion alone cannot establish that old processes are gone.
+message AuthorityWorkerIdentity {
+    uint64 cluster_epoch = 1;
+    uint64 worker_id = 2;
+    uint64 incarnation_id = 3;
+}
+
+message AuthoritySession {
+    AuthorityWorkerIdentity worker = 1;
+    uint64 session_id = 2;
+}
+
+/// A command target remains unchanged when the transport session changes.
+message AuthorityAttemptIdentity {
+    AuthorityWorkerIdentity worker = 1;
+    uint64 execution_id = 2;
+    uint64 attempt_id = 3;
+}
+
+message AuthorityResources {
+    uint64 cpu_millis = 1;
+    uint64 memory_bytes = 2;
+    uint64 slots = 3;
+}
+
+enum AuthorityCapability {
+    AUTHORITY_CAPABILITY_UNSPECIFIED = 0;
+    AUTHORITY_CAPABILITY_ATTEMPT_EFFECT_IDENTITIES = 1;
+    AUTHORITY_CAPABILITY_RECONNECT_RECONCILIATION = 2;
+    AUTHORITY_CAPABILITY_CLEANUP_TOMBSTONES = 3;
+    AUTHORITY_CAPABILITY_CANDIDATE_RESULTS = 4;
+    AUTHORITY_CAPABILITY_MEANINGFUL_PROGRESS = 5;
+    AUTHORITY_CAPABILITY_RECEIPT_RETIREMENT = 6;
+    /// Protocol version 2 requires explicit observed memory-policy evidence.
+    AUTHORITY_CAPABILITY_OBSERVED_MEMORY_BREACH = 7;
+}
+
+message AuthorityRegistration {
+    AuthoritySession session = 1;
+    uint32 protocol_version = 2;
+    repeated AuthorityCapability capabilities = 3;
+    repeated build.bazel.remote.execution.v2.Platform.Property properties = 4;
+    AuthorityResources capacity = 5;
+    /// Total current admission ceiling INCLUDING outstanding reservations.
+    /// This is not a raw free-memory sample.
+    AuthorityResources admission_ceiling = 6;
+    /// Immutable process-lifetime property; reconnect cannot reset spent state.
+    bool single_use = 7;
+    AuthorityReconciliation reconciliation = 8;
+}
+
+message AuthorityRegistrationResult {
+    AuthoritySession session = 1;
+    uint32 protocol_version = 2;
+    repeated AuthorityCapability required_capabilities = 3;
+}
+
+message AuthorityCapacityObservation {
+    AuthoritySession session = 1;
+    uint64 observation_sequence = 2;
+    AuthorityResources capacity = 3;
+    AuthorityResources admission_ceiling = 4;
+    bool draining = 5;
+}
+
+message AuthorityDispatch {
+    uint64 reservation_id = 1;
+    build.bazel.remote.execution.v2.ExecuteRequest execute_request = 2;
+    google.protobuf.Timestamp queued_timestamp = 3;
+    build.bazel.remote.execution.v2.Platform platform = 4;
+    build.bazel.remote.execution.v2.RequestMetadata request_metadata = 5;
+    /// Immutable accounting vector, independent of platform-property spelling.
+    /// These admission charges do not by themselves promise OS enforcement.
+    AuthorityResources reserved_resources = 6;
+}
+
+message AuthorityCommand {
+    AuthorityAttemptIdentity attempt = 1;
+    uint64 effect_id = 2;
+    oneof command {
+        AuthorityDispatch dispatch = 3;
+        google.protobuf.Empty cancel = 4;
+    }
+}
+
+enum AuthorityAttemptPhase {
+    AUTHORITY_ATTEMPT_PHASE_UNSPECIFIED = 0;
+    /// Intent is retained, but process launch has no recorded observation yet.
+    AUTHORITY_ATTEMPT_PHASE_LAUNCH_UNCERTAIN = 1;
+    AUTHORITY_ATTEMPT_PHASE_PREPARING = 2;
+    AUTHORITY_ATTEMPT_PHASE_RUNNING = 3;
+    AUTHORITY_ATTEMPT_PHASE_UPLOADING = 4;
+    AUTHORITY_ATTEMPT_PHASE_TERMINATION_UNCERTAIN = 5;
+    /// Cleanup succeeded and the recipient tombstone prevents delayed dispatch.
+    AUTHORITY_ATTEMPT_PHASE_QUIESCENT = 6;
+}
+
+message AuthorityDecline {
+    enum Reason {
+        REASON_UNSPECIFIED = 0;
+        REASON_SINGLE_USE_SPENT = 1;
+        REASON_ADMISSION = 2;
+    }
+    Reason reason = 1;
+    string detail = 2;
+}
+
+/// A first selected memory-policy stop, sampled while the child was live and
+/// followed by a completed kill procedure. This is not heuristic OOM telemetry,
+/// an exact memory peak, proof of exclusive exit cause, or proof of quiescence.
+/// The enclosing report supplies attempt identity and separate quiescence.
+message AuthorityMemoryBreach {
+    uint64 reservation_id = 1;
+    AuthorityResources charged = 2;
+    uint64 limit_kb = 3;
+    uint64 observed_kb = 4;
+}
+
+/// Candidate output; only the authority may accept or publish it. The worker
+/// retains this report for replay, including after an acknowledgment is lost.
+message AuthorityAttemptReport {
+    AuthorityAttemptIdentity attempt = 1;
+    uint64 dispatch_effect_id = 2;
+    uint64 cancel_effect_id = 3;
+    uint64 observation_sequence = 4;
+    AuthorityAttemptPhase phase = 5;
+    oneof result {
+        build.bazel.remote.execution.v2.ExecuteResponse execute_response = 6;
+        google.rpc.Status internal_error = 7;
+        /// A confirmed refusal installs a quiescent attempt tombstone first.
+        /// Transport ResourceExhausted alone is never refusal/cleanup evidence.
+        AuthorityDecline decline = 9;
+    }
+    ActionResourceUsage resource_usage = 8;
+    /// Monotonic work advancement within this phase, independent of report order.
+    /// Reconnect, retries, and transport traffic do not advance it. Running
+    /// liveness never extends the original execution deadline.
+    uint64 phase_progress = 10;
+    /// Protocol 2 only: eligible beside the exact uploaded failing response,
+    /// after process-domain quiescence and cleanup. Invalid explicit evidence
+    /// must be refused, never downgraded to an ordinary completion.
+    AuthorityMemoryBreach memory_breach = 11;
+}
+
+/// Complete process-incarnation inventory, including uncertain launches,
+/// uncertain termination, retained candidates, and cancellation tombstones.
+/// Missing reports never prove cleanup. A certificate acknowledges only receipt
+/// compaction, never process cleanup, result acceptance or resource release.
+message AuthorityReconciliation {
+    AuthoritySession session = 1;
+    repeated AuthorityAttemptReport attempts = 2;
+    bool single_use_spent = 3;
+    /// Absent means no certificate was applied, never implicit acknowledgment.
+    AuthorityReceiptCertificate receipt_retirement = 4;
+}
+
+/// Exact identity exceptions retained below cumulative retirement watermarks.
+/// An unknown local attempt may still need its first dispatch or cancellation.
+message AuthorityRetainedReceipt {
+    uint64 attempt_id = 1;
+    uint64 execution_id = 2;
+    uint64 dispatch_effect_id = 3;
+    uint64 reservation_id = 4;
+    /// Zero means no cancellation was allocated at this certificate's cut.
+    uint64 cancel_effect_id = 5;
+}
+
+/// Immutable committed retirement intent, scoped by the envelope's process
+/// identity. effect_id is its stable authority effect identity and revision.
+/// The recipient retains only the latest certificate across reconnects.
+/// Qualification-only trusted issuance until the real authority outbox lands.
+message AuthorityReceiptCertificate {
+    uint64 effect_id = 1;
+    uint64 attempts_through = 2;
+    uint64 effects_through = 3;
+    uint64 reservations_through = 4;
+    repeated AuthorityRetainedReceipt retain = 5;
+}
+
+message AuthorityReceiptRetirement {
+    AuthoritySession session = 1;
+    AuthorityReceiptCertificate certificate = 2;
+}
+
+message AuthorityWorkerUpdate {
+    oneof update {
+        AuthorityRegistration registration = 1;
+        AuthorityReconciliation reconciliation = 2;
+        AuthorityAttemptReport report = 3;
+        AuthorityCapacityObservation capacity = 4;
+    }
+}
+
+message AuthorityCoordinatorUpdate {
+    oneof update {
+        AuthorityRegistrationResult registration = 1;
+        AuthorityCommand command = 2;
+        AuthorityReceiptRetirement retirement = 3;
+    }
+}
+
 /// What a worker has to spare, sent with every keepalive so the scheduler
 /// can veto a placement the admission ledger would allow. Absent from
 /// older workers.

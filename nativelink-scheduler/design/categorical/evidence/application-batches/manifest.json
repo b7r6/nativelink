@@ -1,0 +1,124 @@
+{
+  "scope": "Experimental bounded application batching above real OpenRaft 0.9.25 API; single-member shared host, preformed bounded causal rounds, no production ingress wait or sustainable load/capacity claim.",
+  "build_command": "cargo build --locked -p nativelink-scheduler --profile=smol --example authority_budget",
+  "profile": "smol opt-level=z debug-assertions=true",
+  "durability": "Unchanged redb Immediate at append, committed-position and applied-state persistence. Measured successful durable transactions, not fsync syscall/device byte counts. Raft append/apply batches still contain one log entry; an application entry contains up to64 events and1MiB canonical JSON.",
+  "format": "Experimental envelope version2 and required section experimental-scheduler-batch-v2 intentionally reject prototype version1; no production migration claim. Batch command version1.",
+  "ordering": "Each raw write has actual response log_index and event_ordinal. State transitions execute in that order, with all per-event replies withheld until whole batch applied state/outbox/position transaction succeeds. Batch retry is not blanket exactly-once; individual event identities govern deduplication.",
+  "comparison": "All five runs use identical source hash set and binary; serial-width16 is causal-round control. Shared-host latency stalls contaminate rate ratios; exact event/log/transaction counts are the causal evidence.",
+  "unqualified": [
+    "production ingress aggregation/backpressure/fairness",
+    "replication transport/quorum",
+    "provider/publication/lease/GC workload",
+    "production RPC/workers",
+    "load envelope",
+    "persistent-format migration"
+  ],
+  "runs": [
+    {
+      "name": "width1-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-appbatch1-01",
+        "5",
+        "1",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "application-batch"
+      ],
+      "summary": "width1-1k-summary.json",
+      "raw_samples": "width1-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "b4f4cee993b865d9c2e0f1489e2375dafc2ee0f91b1262182075d3cc8b5a4e5e",
+      "raw_uncompressed_bytes": 44048,
+      "compressed_bytes": 3892,
+      "logical_events": 56,
+      "raft_entries": 56,
+      "max_events_in_entry": 1,
+      "durable_transactions": 173
+    },
+    {
+      "name": "width16-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-appbatch16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "application-batch"
+      ],
+      "summary": "width16-1k-summary.json",
+      "raw_samples": "width16-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "4884e4e751ed978685b3f10cdb6764126ebbe7f4b1240dad6e86a8abbddd0e5a",
+      "raw_uncompressed_bytes": 271459,
+      "compressed_bytes": 12077,
+      "logical_events": 484,
+      "raft_entries": 34,
+      "max_events_in_entry": 16,
+      "durable_transactions": 105
+    },
+    {
+      "name": "width64-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-appbatch64-01",
+        "3",
+        "64",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "application-batch"
+      ],
+      "summary": "width64-1k-summary.json",
+      "raw_samples": "width64-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "1f8a63a31190a4cb12efbaf3433f2d4d48e666f8388f1c8bbbd0f73a2133566c",
+      "raw_uncompressed_bytes": 1056169,
+      "compressed_bytes": 39670,
+      "logical_events": 1924,
+      "raft_entries": 34,
+      "max_events_in_entry": 64,
+      "durable_transactions": 105
+    },
+    {
+      "name": "width16-16k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-appbatch16-payload16k-01",
+        "3",
+        "16",
+        "16384",
+        "smol opt-level=z debug-assertions=true",
+        "application-batch"
+      ],
+      "summary": "width16-16k-summary.json",
+      "raw_samples": "width16-16k-samples.json.gz",
+      "raw_uncompressed_sha256": "9fed09bec56dba9aead571843a85ecb3da4aa27f142f7379b798a89d0e28541a",
+      "raw_uncompressed_bytes": 1024385,
+      "compressed_bytes": 14814,
+      "logical_events": 484,
+      "raft_entries": 34,
+      "max_events_in_entry": 16,
+      "durable_transactions": 105
+    },
+    {
+      "name": "serial-width16-1k",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-appbatch-serial16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "serial-rounds"
+      ],
+      "summary": "serial-width16-1k-summary.json",
+      "raw_samples": "serial-width16-1k-samples.json.gz",
+      "raw_uncompressed_sha256": "94fc675356c1607f7101b1c269a16a24f121c665368beb894fe2cdd026c503ee",
+      "raw_uncompressed_bytes": 275739,
+      "compressed_bytes": 15303,
+      "logical_events": 484,
+      "raft_entries": 484,
+      "max_events_in_entry": 1,
+      "durable_transactions": 1455
+    }
+  ]
+}

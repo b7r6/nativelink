@@ -1,0 +1,29 @@
+{
+  "changed": [],
+  "executed_targets": 1,
+  "exit_code": 0,
+  "files": {
+    "bazel.log.gz": {
+      "sha256": "dd8d85973c1071e69493e71f690ab0fc701132fca0513f2792ce6e05dc729c31",
+      "uncompressed_sha256": "341e0248fc0ec49d52ad0978c703d1480572341c020951fc59e633883a325957"
+    },
+    "before.json.gz": {
+      "sha256": "43c362f4eba021eef91987c6f24ab4f3e1bb9145087e41060376e822c0866d35",
+      "uncompressed_sha256": "91c9ebc7cb309aa6cb54e907a31fd776720330b33c10bc96a187f118339bedf9"
+    },
+    "ownership-test.log.gz": {
+      "sha256": "620d800d5dfe9a80f910c3cedf529806a2131f64bd1fb0aeb372dc275b86f902",
+      "uncompressed_sha256": "c2258898b4763045182d6841a0d7723a5b426ba88974c6e333a3fbada7b0e5b1"
+    },
+    "result.json.gz": {
+      "sha256": "7a8dcffeb8c807d460fa50c1e0d3d5406a195ff9c0f5d94daaf8ccfe6cf615a9",
+      "uncompressed_sha256": "1014f5657d73408e0a339b72157cceccba0da360bf7adacd68eedbefcdbcf98c"
+    }
+  },
+  "head": "e449d0a5906d72abb400e5ba9212a81b949c414b",
+  "passing_targets": 1,
+  "schema_version": 1,
+  "scope": "Focused integrated targets only; does not repeat or inherit earlier full workspace totals.",
+  "seconds": 2.9549915039679036,
+  "source_count": 23
+}

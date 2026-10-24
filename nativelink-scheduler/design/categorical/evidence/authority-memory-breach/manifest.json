@@ -1,0 +1,93 @@
+{
+  "author_source_commit": "dba956b0abdf578eda17560c054e1417f2bc102d",
+  "root_source_commit": "4d0e01f779b24a31d3da1e229cf92cafe5110f9f",
+  "archive": {
+    "name": "author-evidence.tar.gz",
+    "sha256": "33da03f3444885a28922eecd648284010e695f0b78ad3e757b14a92b5e29bc25",
+    "bytes": 14453085,
+    "verified_receipt_entries": 54
+  },
+  "author_tests": {
+    "log": "restored-tests.log",
+    "lib": 53,
+    "authority_worker_test": 25,
+    "running_actions_manager_test": 97
+  },
+  "compiled_mutants_detected": 5,
+  "independent_review_files": [
+    "independent-runtime-review.json",
+    "independent-runtime-clippy-delta-review.json",
+    "test-review.json"
+  ],
+  "scope": "Rust-only local authority memory-policy receipt; no protocol/coordinator/retry policy changes",
+  "claims": [
+    "Receipt requires a positive exact captured grant, strict sampled ceiling breach, no earlier selected authority stop, live-child probe and a completed kill procedure.",
+    "First selected stop owns authority cause while later termination requests still execute; legacy kill behavior remains unchanged.",
+    "Private receipt captures charged vector, checked ceiling and observed KiB before namespace closure, drain and upload.",
+    "Real namespace R/2R cases for SHA-256 and BLAKE3 preserve stdout/stderr/output bytes and original request.",
+    "Actual upload failure leaves receipt available and no finished result.",
+    "Actual external SIGKILL near the ceiling qualifies existing heuristic telemetry with enforced=false and produces no receipt."
+  ],
+  "limitations": [
+    "Receipt does not prove exclusive physical exit cause, hard memory isolation, namespace closure, directory cleanup, upload success or authoritative acceptance.",
+    "Ordering, exited/error probes and kill-result failures use deterministic private decision seams; exhaustive OS scheduling and OS kill-error injection are not claimed.",
+    "Protocol still uses the existing Complete path; no wire receipt, coordinator MemoryFailure classification or M6 retention change.",
+    "Initial fixture self-SIGKILL was ignored by namespace PID1 and failed its oracle; it was corrected to supervisor SIGKILL with real launch PID. Initial failure remains in focused-tests.log.",
+    "Bazel integration is performed separately by parent; this isolated receipt qualification uses Cargo with repository lints."
+  ],
+  "integration": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=4 //:nativelink //nativelink-worker:unit_test //nativelink-worker:integration_tests/authority_worker_test_test //nativelink-worker:integration_tests/running_actions_manager_test_test //nativelink-worker:integration_tests/authority_rpc_test_test --test_output=errors",
+    "server_built": true,
+    "executed_targets": 4,
+    "unchanged_build_inputs": 546,
+    "test_summaries": {
+      "unit": [
+        "test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s"
+      ],
+      "recipient": [
+        "test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.32s"
+      ],
+      "manager": [
+        "test result: ok. 97 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.55s"
+      ],
+      "base-rpc": [
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 9.53s"
+      ]
+    },
+    "artifacts": {
+      "integration-base-rpc.log.gz": {
+        "sha256": "16190caf0fcc8f4570590fdda915587fe3ddc2f56e5fd618ad6425a118308133",
+        "uncompressed_sha256": "5c1774902ccd623ad7287f42e196921aa58d53c57579e9d4a88b490cddd93292"
+      },
+      "integration-bazel.log.gz": {
+        "sha256": "006c4acdff4ee4432f3c834fa697be7a2137b8127969ce57a2b57ebe048656e0",
+        "uncompressed_sha256": "a5570eaf1a98c97fa351bcf3f45c3376f8b47c7d7e14ec297239044e57e9e139"
+      },
+      "integration-head.txt.gz": {
+        "sha256": "f69a9203f2545ffcd8891ef43cfd6249ad8a5b2a6091ffec3405ce775623b13f",
+        "uncompressed_sha256": "3ac4f52e5a7d335721be40394ab01488eeefe6b707d80af4e257025d8a8267c8"
+      },
+      "integration-manager.log.gz": {
+        "sha256": "3c6b5cc42db7be75f081d58f8920c62580b7cf5c2b1ae017f90a395189d75c87",
+        "uncompressed_sha256": "f1a974927b3851e33674dea44ce8d08c94cda4c1ea5a8b7a0ceedf8330bbe9af"
+      },
+      "integration-recipient.log.gz": {
+        "sha256": "7ac2257a5309074b2f11a0cda52b00bf60e3f08f7d84dea8023d62d8676a9bf6",
+        "uncompressed_sha256": "3863784b2162463fa183e5bff905e474b6594084ddcf929a41598ca486b61ee4"
+      },
+      "integration-sources-after.json.gz": {
+        "sha256": "90a57f7d9cba29b1bbf0a3a613369676ec54db18255426a84f61624b0bf2c9a6",
+        "uncompressed_sha256": "19626b7afb55c6e22078d2581295b8a9ba4d2f908a038cbf3af2c581a4ea0acd"
+      },
+      "integration-sources-before.json.gz": {
+        "sha256": "90a57f7d9cba29b1bbf0a3a613369676ec54db18255426a84f61624b0bf2c9a6",
+        "uncompressed_sha256": "19626b7afb55c6e22078d2581295b8a9ba4d2f908a038cbf3af2c581a4ea0acd"
+      },
+      "integration-unit.log.gz": {
+        "sha256": "c5ccf8f1a0f0fe3aee867f9e04ecb88fa00985b388b8bc957b8afaca3b754061",
+        "uncompressed_sha256": "414f210687e82ad946acee4c76ba16a53c21d7fd530d78d9437e4a0487d1ebf3"
+      }
+    },
+    "scope": "Base RPC target has12cases and6filtered; separatehistory/receipt RPCtargets were previously qualified withclock beforethisworkerchange, not rerunhere."
+  }
+}

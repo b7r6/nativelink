@@ -1,0 +1,314 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "6f8fc96b6214c056d6a1fefd048ce6352f9329dfb1e31a6376a4c375da08af08",
+      "bytes": 3563
+    },
+    {
+      "path": "build-package.py",
+      "sha256": "042a6d46161d8ff78cb0c9109d108734229e1d4f702ff114a5d04379d2eb973f",
+      "bytes": 2318
+    },
+    {
+      "path": "controls-01.tar.gz",
+      "sha256": "29242d66b2ebe15ed9e70c9a91bc90ea2a77b08b691dc42927f9e25d58f63fbb",
+      "bytes": 274909
+    },
+    {
+      "path": "controls-index.json",
+      "sha256": "1f810e97abcf081a8ac3c7bee0c10b762a8fe4cd1c116c8cf057599c6cf27a15",
+      "bytes": 19314
+    },
+    {
+      "path": "independent-root-01.tar.gz",
+      "sha256": "8f42a31bc819935be7472025fb7c89e279c75a5ff39395fa06ec9fd1daf08c0e",
+      "bytes": 597214
+    },
+    {
+      "path": "independent-root-index.json",
+      "sha256": "4ede236f3c5b08afd408c151a96cf065d43e7ba2877499ca898d64848bacb2c3",
+      "bytes": 40199
+    },
+    {
+      "path": "independent-storage-01.tar.gz",
+      "sha256": "f4c7de62cda223b620a9f9af4b4083a98e26c804cf5afd61170b87e320a82531",
+      "bytes": 4158267
+    },
+    {
+      "path": "independent-storage-02.tar.gz",
+      "sha256": "4004c06050693da4d10a1d8543b08074b5625ef52afefca11e86d7eea7f4f571",
+      "bytes": 6401477
+    },
+    {
+      "path": "independent-storage-03.tar.gz",
+      "sha256": "cfb907543e385ea168e4e8c86472658f7fb0387bb1423db7e7bf14605d227852",
+      "bytes": 3879293
+    },
+    {
+      "path": "independent-storage-04.tar.gz",
+      "sha256": "957154f1ef75119b5d257fdb5135f958dda7441d0c3ff09cb7ccc9a61a715639",
+      "bytes": 6398191
+    },
+    {
+      "path": "independent-storage-05.tar.gz",
+      "sha256": "fdeecd7b322a9171a6dd8e18ffa001dc9a5316dcd95031118b57fe21edbc63c3",
+      "bytes": 3877543
+    },
+    {
+      "path": "independent-storage-06.tar.gz",
+      "sha256": "4db4eb57fa9bc2aa0fc7fc5746babd85c4b185b6d5a92a47f6c98246c4db7822",
+      "bytes": 6400583
+    },
+    {
+      "path": "independent-storage-07.tar.gz",
+      "sha256": "e0db48a5746d5552328eb7767d6b1b706504d3c6c552883944952a66ad5ae375",
+      "bytes": 3877945
+    },
+    {
+      "path": "independent-storage-08.tar.gz",
+      "sha256": "375efeddc3b60edc34d1c8a8c840fb1214ae144f91d74eef9746a1152256ae40",
+      "bytes": 6400867
+    },
+    {
+      "path": "independent-storage-09.tar.gz",
+      "sha256": "5b158c05b3bdd77d54de18cf84352ef75f6183d42d1bf6fc95ca3926412e1ac7",
+      "bytes": 3881109
+    },
+    {
+      "path": "independent-storage-10.tar.gz",
+      "sha256": "76b66242bfd88bac059f21948efe6278ea4063aabf24db3b537d14c59c1bf081",
+      "bytes": 3574099
+    },
+    {
+      "path": "independent-storage-11.tar.gz",
+      "sha256": "456555e5c86292b73b5fb557302601f54fdbebe255151fe1fad986ceb179ee1a",
+      "bytes": 6398961
+    },
+    {
+      "path": "independent-storage-12.tar.gz",
+      "sha256": "25f57de62596ae6ec6b20bb7db7cccc4bb02ec154dbc767f397ff8feba5f4230",
+      "bytes": 1981524
+    },
+    {
+      "path": "independent-storage-13.tar.gz",
+      "sha256": "61317141f69adc7239e201aa7801100b78eaa45bb677d3df29e9fd0718019840",
+      "bytes": 3987410
+    },
+    {
+      "path": "independent-storage-14.tar.gz",
+      "sha256": "e74f02bb6d28fa6f535b2dc7e67a7413331a0d82d720cc946a7cf069335b7855",
+      "bytes": 3696161
+    },
+    {
+      "path": "independent-storage-15.tar.gz",
+      "sha256": "7ecdd3ba289c0ac4ec37b9798f9b948487c3283822e9f921723ecd793d60f0c6",
+      "bytes": 3987428
+    },
+    {
+      "path": "independent-storage-16.tar.gz",
+      "sha256": "e8c80be23a5adb30f21550e57a90a47691293f2d47a5eec74b0cda932304a864",
+      "bytes": 5088079
+    },
+    {
+      "path": "independent-storage-index.json",
+      "sha256": "746db2a4f5db43ba5f72c627d9eb4c623d09a6a2b47d201cb491c54bcfe8184c",
+      "bytes": 192577
+    },
+    {
+      "path": "mutations-01.tar.gz",
+      "sha256": "08062194b3a26615b7a34b68a577021a735d66d70ee84c06992a0021a7f02ee8",
+      "bytes": 3506884
+    },
+    {
+      "path": "mutations-02.tar.gz",
+      "sha256": "76e7b373a0e27bb0b9337e96c043ffb71a1b9525fdcf7fdbb779139da69995b0",
+      "bytes": 6401276
+    },
+    {
+      "path": "mutations-03.tar.gz",
+      "sha256": "ab4b99f475f8bad84bc4b5a65d6ffe666a234c2c37f08ce02256d719e9beab80",
+      "bytes": 3879059
+    },
+    {
+      "path": "mutations-04.tar.gz",
+      "sha256": "5d74d99308df95511ef1513d07c00444a571fb32c001ca035230c5b8ea75eb2a",
+      "bytes": 6398116
+    },
+    {
+      "path": "mutations-05.tar.gz",
+      "sha256": "edb867d539c6a5453d0464f76fc2d7108ce84ba28fb0eb8b2b5f945cdc5d5c14",
+      "bytes": 3877292
+    },
+    {
+      "path": "mutations-06.tar.gz",
+      "sha256": "e612ad8222815fbddac9146ccdf70ed9f2c07295cfe7455549e2eabdc3d5548d",
+      "bytes": 6400281
+    },
+    {
+      "path": "mutations-07.tar.gz",
+      "sha256": "e84d3e1406bb3af0063a894fee62d69d3e1bda38209cb8cad4956a79f67606c9",
+      "bytes": 3877706
+    },
+    {
+      "path": "mutations-08.tar.gz",
+      "sha256": "29740787a2afcda93753ff3e33b034bd93219a17035c26ad2fedf5b0bc8a4844",
+      "bytes": 6400609
+    },
+    {
+      "path": "mutations-09.tar.gz",
+      "sha256": "18b995a00224ea13cce50882bd3afd60814d1c6d271043f2e8cc49baf2f454dc",
+      "bytes": 3880794
+    },
+    {
+      "path": "mutations-10.tar.gz",
+      "sha256": "73b0ded73852c0e700551e3ad0cd74f3edd9b4c072301ea7ef568ab6ea082963",
+      "bytes": 3573918
+    },
+    {
+      "path": "mutations-11.tar.gz",
+      "sha256": "0632b00d4452815b03a6d37453878a9c09972a1ab99fc7069c2cab18b1febf3a",
+      "bytes": 6398858
+    },
+    {
+      "path": "mutations-12.tar.gz",
+      "sha256": "3e30eb00f9348a8bbb3a4d4f445f324896ad734a3c0ab86a9e68f6fced7b0c76",
+      "bytes": 1981187
+    },
+    {
+      "path": "mutations-13.tar.gz",
+      "sha256": "2a13d745007ba8a389219309301273bcee59890a1d6a5a57622fef64258e854c",
+      "bytes": 3987334
+    },
+    {
+      "path": "mutations-14.tar.gz",
+      "sha256": "0bb0dcbedf4947b1927722e192f13fe049828e0c73f6cc681fafe140fd1d6bbd",
+      "bytes": 3135647
+    },
+    {
+      "path": "mutations-index.json",
+      "sha256": "3065524185fe87357d4f46cd22f3bdbde3847a9d55b626c9f643ec47323597dc",
+      "bytes": 102121
+    },
+    {
+      "path": "package-finalize-prerequisite-script.py.gz",
+      "sha256": "c474bcc6b60f8beee26d5ba8a99e1c34ed25bcec73c69fd3eff96994ebef0834",
+      "bytes": 1642
+    },
+    {
+      "path": "package-finalize-prerequisite.json.gz",
+      "sha256": "d090cdf46619700d0f2e40ee5ba5fce9a08d5a6de5d4802e1ddb78a962b70e84",
+      "bytes": 379
+    },
+    {
+      "path": "package-hooks-command.json.gz",
+      "sha256": "2ece72244534e2a6de2ea32368cc85ef1d9c528ab00f37793abb49ceb8d39d1b",
+      "bytes": 674
+    },
+    {
+      "path": "package-hooks-result.json.gz",
+      "sha256": "53deffb8411a06834eca85fd2841068e4f1a014c7eba07a1b1063294bb4210b5",
+      "bytes": 137
+    },
+    {
+      "path": "package-hooks.log.gz",
+      "sha256": "aa80ad78139dca00f7887ab313df38fee8a7528ea5768d40e46fdb097d82055f",
+      "bytes": 340
+    },
+    {
+      "path": "package-precommit-config.yaml.gz",
+      "sha256": "5a6f057afeb87bcbfd54e8aeea07c7df5a053fcd955c53314a85200ce14c6d9c",
+      "bytes": 2304
+    },
+    {
+      "path": "package-verification-command.json",
+      "sha256": "28c446362dbd52ca7cf749457177a780a150f4ee756d49586288e212cb7f6de5",
+      "bytes": 348
+    },
+    {
+      "path": "package-verification.json",
+      "sha256": "c92038d9290a3cb00399600cb60cc1e2acb1c381eee2be987498eaf693f9f820",
+      "bytes": 254
+    },
+    {
+      "path": "package.json",
+      "sha256": "c8ae6d644a110c198bc0e57b65ce6ee2bb254a46d1f9495a751b3fd202f747fa",
+      "bytes": 433741
+    },
+    {
+      "path": "positive-01.tar.gz",
+      "sha256": "2b188b4bc91a41b303d120975e9fa44c77ee9967750a60fcf97643817b1b9911",
+      "bytes": 4308696
+    },
+    {
+      "path": "positive-02.tar.gz",
+      "sha256": "13f5841e0582a5a1c21ec18092b203d5801f371f3e0d14d2f8c32ab6e03c19fe",
+      "bytes": 4411782
+    },
+    {
+      "path": "positive-03.tar.gz",
+      "sha256": "6fce6cc88bc197f95c85117648f3cb2203c0dee9492ed5cde2108cabce966991",
+      "bytes": 3987355
+    },
+    {
+      "path": "positive-04.tar.gz",
+      "sha256": "2e4f4e9d116988a8a88a2bef516ad5a34bb652c51e3501ab40a3134860b653e4",
+      "bytes": 4134383
+    },
+    {
+      "path": "positive-index.json",
+      "sha256": "144021046d38cb757322997e6f82e04cf8e5a83e04f9c76bad9664f9236f0887",
+      "bytes": 30403
+    },
+    {
+      "path": "runtime-source-01.tar.gz",
+      "sha256": "558eade40066671c6811ac5fc85bce74fd9967a4e0889a1a0413ca2d550d7022",
+      "bytes": 357772
+    },
+    {
+      "path": "runtime-source-index.json",
+      "sha256": "4d86c198dea3e96cfcb1aeb03da0aee27acaea151cc8d57dc1b4df0a0c2b0ce2",
+      "bytes": 21320
+    },
+    {
+      "path": "source-audit-01.tar.gz",
+      "sha256": "c57118d861098cc0efd738ba23e950403410bd7101a2d1bc13afab365dfff811",
+      "bytes": 462656
+    },
+    {
+      "path": "source-audit-index.json",
+      "sha256": "406abe9c9ea202cfdc4ee59dc6d14344b9367f2d8913e73ad38eae9f46942767",
+      "bytes": 11513
+    },
+    {
+      "path": "tests-addendum-01.tar.gz",
+      "sha256": "eb313cf1e461c40281aca5307c98345b623fbf79d535ab81ecf9b44f5886f61b",
+      "bytes": 45229
+    },
+    {
+      "path": "tests-addendum-index.json",
+      "sha256": "36dfce9b6bd9ff61fa0067d9dd27b2c109bbbffbcb822d0d3829f5e63ff98368",
+      "bytes": 4651
+    },
+    {
+      "path": "tests-first-01.tar.gz",
+      "sha256": "b5643e2faaacc0ec2d49050ff9ece09cdb8236f832b8e6a4238c788db98a432b",
+      "bytes": 195937
+    },
+    {
+      "path": "tests-first-index.json",
+      "sha256": "e24fcf2dda2b31f38fef1f7888dc5707d20ba806dfc77a4b567c3210510aa7c0",
+      "bytes": 11965
+    },
+    {
+      "path": "verify.py",
+      "sha256": "9e976491444747f6cf4f7d035a7064f2a06fcaae00aee4a5405ca51d3828f865",
+      "bytes": 2382
+    }
+  ],
+  "package_sha256": "c8ae6d644a110c198bc0e57b65ce6ee2bb254a46d1f9495a751b3fd202f747fa",
+  "verification_sha256": "c92038d9290a3cb00399600cb60cc1e2acb1c381eee2be987498eaf693f9f820",
+  "archive_bytes": 156463831,
+  "source_member_bytes": 622861154,
+  "mutations_immutable_seal_sha256": "1cf6d686051b0eb23bcef1331b453e0df3e2061313da73e4d3c7bf6d4dc1a30b"
+}

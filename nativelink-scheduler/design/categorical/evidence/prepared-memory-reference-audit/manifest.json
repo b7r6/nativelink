@@ -1,0 +1,11 @@
+{
+  "archive": "author-evidence.tar.gz",
+  "archive_sha256": "d77d2a4cb31dbfda82313aa8f451306e85ef11f64a1d4e4cbda9323bde669cdd",
+  "embedded_manifest_sha256": "1159686e84d2aa17c254989448c6c78fd09612d4f9d160e9e593ba5f94b405e7",
+  "qualification_sha256": "83008fdc81ee66b90118a4e4d46370196d813024464fb247b0a50a3014ebe80e",
+  "reference_original_commit": "8b0dc3f3bf",
+  "reference_successor_commit": "d9be5a0d8ed56eb6be2dbe338f3daa483f0e34d6",
+  "root_successor_commit": "370935a272",
+  "schema_version": 1,
+  "scope": "Five executable comparison counterexamples and bounded reference repair. Not compiled mutation kills; not production routing/history activation/collector/M6 completion. Differential adapter remains separately qualified."
+}

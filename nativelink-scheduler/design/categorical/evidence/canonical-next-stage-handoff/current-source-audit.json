@@ -1,0 +1,209 @@
+{
+  "recorded_at": "2026-10-23T23:49:55.457891+00:00",
+  "kind": "Fresh source-only audit and handoff by proposal author; not an independent second-reviewer attestation or runtime qualification.",
+  "proposal_sha256": "081864e8620a235bc9dd82dff6cc2c2f54b40c7452530a271e0ff7a6836787c9",
+  "current_commit": "78ab50c3b632dc9a1b36db77f411a1aef277ef32",
+  "current_source_inputs": [
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_owner.rs",
+      "proposal_sha256": "4c1e1afe4ab59cef2de7fd916428c0119e5d2540bf33c85e3ff9c34c771eb1cf",
+      "current_sha256": "4c1e1afe4ab59cef2de7fd916428c0119e5d2540bf33c85e3ff9c34c771eb1cf",
+      "same": true,
+      "bytes": 14737
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_recovery.rs",
+      "proposal_sha256": "0123ddf0ec1722bdc129af1be14adfae15a542c291e3452bb9ba50c1c6f36cdc",
+      "current_sha256": "0123ddf0ec1722bdc129af1be14adfae15a542c291e3452bb9ba50c1c6f36cdc",
+      "same": true,
+      "bytes": 13334
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_clock.rs",
+      "proposal_sha256": "2e36d691fab0ccfd3b570da0bfb3d2c1f187ab1648754d319e89fdb988b03c06",
+      "current_sha256": "2e36d691fab0ccfd3b570da0bfb3d2c1f187ab1648754d319e89fdb988b03c06",
+      "same": true,
+      "bytes": 5747
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "proposal_sha256": "79f6b5fc379016aee0e3713b0c44c5c53decf696fa2c8ea6a9e1fe3c99890e80",
+      "current_sha256": "79f6b5fc379016aee0e3713b0c44c5c53decf696fa2c8ea6a9e1fe3c99890e80",
+      "same": true,
+      "bytes": 14704
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_binding.rs",
+      "proposal_sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff",
+      "current_sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff",
+      "same": true,
+      "bytes": 3272
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/journal.rs",
+      "proposal_sha256": "b2432bd2922de404d3b270c015948fdb90749559233bd9708de7bdfb3c5244f7",
+      "current_sha256": "b2432bd2922de404d3b270c015948fdb90749559233bd9708de7bdfb3c5244f7",
+      "same": true,
+      "bytes": 124513
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/format.rs",
+      "proposal_sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "current_sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "same": true,
+      "bytes": 42037
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/types.rs",
+      "proposal_sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "current_sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "same": true,
+      "bytes": 18199
+    },
+    {
+      "path": "nativelink-scheduler/Cargo.toml",
+      "proposal_sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "current_sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "same": true,
+      "bytes": 3175
+    },
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "proposal_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+      "current_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+      "same": true,
+      "bytes": 90986
+    },
+    {
+      "path": "nativelink-service/Cargo.toml",
+      "proposal_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "current_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "same": true,
+      "bytes": 3313
+    },
+    {
+      "path": "tools/canonical-filesystem/src/namespace.rs",
+      "proposal_sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "current_sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "same": true,
+      "bytes": 8025
+    },
+    {
+      "path": "tools/canonical-filesystem/src/capability.rs",
+      "proposal_sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "current_sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "same": true,
+      "bytes": 17462
+    },
+    {
+      "path": "tools/canonical-filesystem/src/journal.rs",
+      "proposal_sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "current_sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "same": true,
+      "bytes": 9482
+    },
+    {
+      "path": "tools/canonical-filesystem/src/lib.rs",
+      "proposal_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "current_sha256": "15e0efd795918447f13c9a06ef9c1b9cae1cffebe02ed6829a5499c51851049d",
+      "same": false,
+      "bytes": 12137
+    },
+    {
+      "path": "tools/canonical-store/src/lib.rs",
+      "proposal_sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "current_sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "same": true,
+      "bytes": 20261
+    },
+    {
+      "path": "tools/canonical-config/src/schema.rs",
+      "proposal_sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "current_sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "same": true,
+      "bytes": 9802
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+      "proposal_sha256": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "current_sha256": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "same": true,
+      "bytes": 4418
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+      "proposal_sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a",
+      "current_sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a",
+      "same": true,
+      "bytes": 11728
+    }
+  ],
+  "source_comparison": {
+    "equal": 18,
+    "changed": 1,
+    "changed_path": "tools/canonical-filesystem/src/lib.rs",
+    "change": "Only five added lines declare private worker module with a staging dead_code allowance. Existing public exports and namespace/layout construction unchanged; no proposal premise changes."
+  },
+  "verified_claims": "All five frozen observed dependency claims agree with current implementation. Exact current references below supersede approximate line numbers in the frozen proposal. Source search found only test seal writers; production initialization writes Preparing.",
+  "dependencies": [
+    {
+      "order": 1,
+      "dependency": "Match actual synchronized fixed layout to namespace custody",
+      "current_gap": "SyncedNamespace retains ownership-record/root synchronization; FixedLayout::sync_layout returns unit and CanonicalStores::from_layout returns store adapters. No opaque matching layout-sync proof is accepted by authority bootstrap.",
+      "source_refs": [
+        "tools/canonical-filesystem/src/namespace.rs:31",
+        "tools/canonical-filesystem/src/namespace.rs:39",
+        "tools/canonical-filesystem/src/capability.rs:186",
+        "tools/canonical-store/src/lib.rs:64"
+      ],
+      "next_evidence": "Current actual child/parent sync ordering, EIO/cancellation custody and foreign-namespace refusal. Exact proof API remains a reviewed design choice, not a unique conclusion forced by source."
+    },
+    {
+      "order": 2,
+      "dependency": "Supervised cold initialization and seal",
+      "current_gap": "prepare_cold creates Preparing; recover_sealed rejects Preparing or created journals. Production only writes Preparing. Preparing temporal audit does not run singleton recovery validation.",
+      "source_refs": [
+        "nativelink-scheduler/src/authority/canonical_owner.rs:194",
+        "nativelink-scheduler/src/authority/canonical_recovery.rs:239",
+        "nativelink-scheduler/src/authority/journal.rs:1125",
+        "nativelink-scheduler/src/authority/canonical_temporal.rs:357",
+        "nativelink-scheduler/design/categorical/authority-canonical-binding.md:42"
+      ],
+      "next_evidence": "Actual singleton initialization/application, full audit and fixed clock before a private seal transaction/current sync; same permanent custody/ACK rules. Preserve partial artifacts and do not auto-resume Preparing. Keep result closed and without serving readiness."
+    },
+    {
+      "order": 3,
+      "dependency": "Fixed canonical admitted feature/profile path",
+      "current_gap": "Canonical owner passes JournalProfile=None; journal selects Base decoder. Temporal audit explicitly refuses any ActiveFormat other than Base. Generic admission remains separate from canonical binding.",
+      "source_refs": [
+        "nativelink-scheduler/src/authority/canonical_owner.rs:294",
+        "nativelink-scheduler/src/authority/canonical_owner.rs:299",
+        "nativelink-scheduler/src/authority/journal.rs:1537",
+        "nativelink-scheduler/src/authority/canonical_temporal.rs:174",
+        "nativelink-scheduler/src/authority/canonical_temporal.rs:180"
+      ],
+      "next_evidence": "One compiled admitted profile with actual activation/recovery, writer gates and snapshot-plus-suffix compatibility before canonical DirectScheduler/ReceiptRetirement/AcceptedHistory serving. Merely changing decoder or accepting feature states is insufficient. This is a serving dependency, not a prerequisite to a closed Base-format cold owner."
+    },
+    {
+      "order": 4,
+      "dependency": "Closed scheduler-owned typed coordinator and explicit readiness",
+      "current_gap": "Experimental Driver owns public Singleton, injected clock and generic stores; service directly builds and commits events. Existing initial sweep and first-Running sample rules must migrate with ownership.",
+      "source_refs": [
+        "nativelink-service/src/authority_server.rs:107",
+        "nativelink-service/src/authority_server.rs:118",
+        "nativelink-service/src/authority_server.rs:225",
+        "nativelink-service/src/authority_server.rs:654",
+        "nativelink-service/src/authority_server.rs:732",
+        "nativelink-service/src/authority_server.rs:1173"
+      ],
+      "next_evidence": "Keep Raft/Journal/Clock and time/expiry/identity/feature decisions inside permanent supervisor. Expose bounded typed ingress/observations, preserve initial due sweep and fresh first-Running sample, qualify effect/task shutdown before readiness. No Recovered-to-Singleton adapter or arbitrary Event/clock capability."
+    }
+  ],
+  "design_caveats": [
+    "New opaque proof type is a proposed way to enforce matching synchronization/custody; the concrete API and exact retained identity test require review.",
+    "The four entries are implementation dependencies, not a claim they must all be serial: fixed feature admission and typed coordinator design can proceed alongside cold bootstrap.",
+    "Cold sealing produces a closed Base-format owner, not a completed canonical service. Listener, trust, worker incarnation, cutover and end-to-end deployment gates remain later work.",
+    "No new tests or runtime changes were performed for this source-only audit."
+  ],
+  "no_source_mutation": true
+}

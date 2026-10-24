@@ -1,0 +1,197 @@
+{
+  "source_commit": "4841fae0ed7b6901e976742daf7040c799634f93",
+  "artifacts": [
+    {
+      "path": "author/01_suffix_staged_facts-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739440,
+      "sha256": "2855d2056dd40c16ad09a8ccfd79e69f717071a34e622696f2152ef269075346"
+    },
+    {
+      "path": "author/02_omit_actual_apply_wait-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13738480,
+      "sha256": "cd6b9cb05495842e7b20b31ff57af1b59e9040e5fc1ebcd5f55838641b1896c5"
+    },
+    {
+      "path": "author/03_origin_before_audit-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739696,
+      "sha256": "8ad54e7cfa106ae7a7ac911e4dc10cf7fc324f713738861d7580831a740dfb83"
+    },
+    {
+      "path": "author/04_bypass_sealed_audit_with_real_read-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13748944,
+      "sha256": "c7e598c47f22bccca424ab33afa8c1493486ab3d0ad4ef501bb2b206a2c17ab0"
+    },
+    {
+      "path": "author/05_round_elapsed_fraction_up-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13734928,
+      "sha256": "a9074d8701d511347eae403777721ce825348ebbf4e28f72ef60bda1e8a4b33b"
+    },
+    {
+      "path": "author/06_admit_cutoff_plus_one-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "949201aba0be7bfba3de3190a4390fdc8246e9f1d8512773631928009fd00eb6"
+    },
+    {
+      "path": "author/06_admit_cutoff_plus_one-oracle-2-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "949201aba0be7bfba3de3190a4390fdc8246e9f1d8512773631928009fd00eb6"
+    },
+    {
+      "path": "author/07_backward_check_only_origin-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "1afa65a06dd4651c8879dee48a47d359a339221e30244a9b88c0befd2e41fb09"
+    },
+    {
+      "path": "author/08_skip_immediate_first_observation-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739200,
+      "sha256": "ed341ca08017caf7bd5654d5eb8ee83328cc858a6fc302f399b3f765dae065d3"
+    },
+    {
+      "path": "author/09_saturating_addition_cutoff_survivor-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739760,
+      "sha256": "40230fb117587bda14df3256e21e915d440607dbd41af8a7ee4bfbdf53c86604"
+    },
+    {
+      "path": "author/09_saturating_addition_cutoff_survivor-oracle-2-nativelink_scheduler-test-binary",
+      "bytes": 13739760,
+      "sha256": "40230fb117587bda14df3256e21e915d440607dbd41af8a7ee4bfbdf53c86604"
+    },
+    {
+      "path": "author/10_allow_missing_barrier-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739504,
+      "sha256": "cdf41baf7247e133821edd9a3cd3d4992604bc9c78e40eb4bd5f98e71100057e"
+    },
+    {
+      "path": "author/11_allow_applied_behind_barrier-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739032,
+      "sha256": "1843bf0bc452a2d71999aefbe83ca6d31d50222945164941548be944436ff6c3"
+    },
+    {
+      "path": "author/12_ignore_full_logid_at_equal_index-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739640,
+      "sha256": "1fc5d7c5fdadf7a253ee8e1a450e81f4743f9e26a7abe570446424b7fa51e68d"
+    },
+    {
+      "path": "author/focused-first-nativelink_scheduler-test-binary",
+      "bytes": 13739752,
+      "sha256": "905096dcb524ad8304f1a90fa28da853a5dd605aea8c47f5656dcb4f4679f5de"
+    },
+    {
+      "path": "author/qualified-broad-canonical_owner_api_test-test-binary",
+      "bytes": 8421752,
+      "sha256": "5941505aec7d30f839571361ad89db8615ae1aa641160ae1500c68e9ca749336"
+    },
+    {
+      "path": "author/qualified-broad-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "c3cb2c8098c913659361fa72bf053d87df94826f83bbfc7adf51f628bf96e49a"
+    },
+    {
+      "path": "author/restored-broad-canonical_owner_api_test-test-binary",
+      "bytes": 8421752,
+      "sha256": "5941505aec7d30f839571361ad89db8615ae1aa641160ae1500c68e9ca749336"
+    },
+    {
+      "path": "author/restored-broad-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "c3cb2c8098c913659361fa72bf053d87df94826f83bbfc7adf51f628bf96e49a"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/01_suffix_staged_facts-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739440,
+      "sha256": "2855d2056dd40c16ad09a8ccfd79e69f717071a34e622696f2152ef269075346"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/02_omit_actual_apply_wait-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13738480,
+      "sha256": "cd6b9cb05495842e7b20b31ff57af1b59e9040e5fc1ebcd5f55838641b1896c5"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/03_origin_before_audit-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739696,
+      "sha256": "8ad54e7cfa106ae7a7ac911e4dc10cf7fc324f713738861d7580831a740dfb83"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/04_bypass_sealed_audit_with_real_read-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13748944,
+      "sha256": "c7e598c47f22bccca424ab33afa8c1493486ab3d0ad4ef501bb2b206a2c17ab0"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/05_round_elapsed_fraction_up-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13734928,
+      "sha256": "a9074d8701d511347eae403777721ce825348ebbf4e28f72ef60bda1e8a4b33b"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/06_admit_cutoff_plus_one-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "949201aba0be7bfba3de3190a4390fdc8246e9f1d8512773631928009fd00eb6"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/06_admit_cutoff_plus_one-oracle-2-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "949201aba0be7bfba3de3190a4390fdc8246e9f1d8512773631928009fd00eb6"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/07_backward_check_only_origin-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "1afa65a06dd4651c8879dee48a47d359a339221e30244a9b88c0befd2e41fb09"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/08_skip_immediate_first_observation-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739200,
+      "sha256": "ed341ca08017caf7bd5654d5eb8ee83328cc858a6fc302f399b3f765dae065d3"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/09_saturating_addition_cutoff_survivor-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739760,
+      "sha256": "40230fb117587bda14df3256e21e915d440607dbd41af8a7ee4bfbdf53c86604"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/09_saturating_addition_cutoff_survivor-oracle-2-nativelink_scheduler-test-binary",
+      "bytes": 13739760,
+      "sha256": "40230fb117587bda14df3256e21e915d440607dbd41af8a7ee4bfbdf53c86604"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/10_allow_missing_barrier-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739504,
+      "sha256": "cdf41baf7247e133821edd9a3cd3d4992604bc9c78e40eb4bd5f98e71100057e"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/11_allow_applied_behind_barrier-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739032,
+      "sha256": "1843bf0bc452a2d71999aefbe83ca6d31d50222945164941548be944436ff6c3"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/12_ignore_full_logid_at_equal_index-oracle-1-nativelink_scheduler-test-binary",
+      "bytes": 13739640,
+      "sha256": "1fc5d7c5fdadf7a253ee8e1a450e81f4743f9e26a7abe570446424b7fa51e68d"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/focused-first-nativelink_scheduler-test-binary",
+      "bytes": 13739752,
+      "sha256": "905096dcb524ad8304f1a90fa28da853a5dd605aea8c47f5656dcb4f4679f5de"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/qualified-broad-canonical_owner_api_test-test-binary",
+      "bytes": 8421752,
+      "sha256": "5941505aec7d30f839571361ad89db8615ae1aa641160ae1500c68e9ca749336"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/qualified-broad-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "c3cb2c8098c913659361fa72bf053d87df94826f83bbfc7adf51f628bf96e49a"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/restored-broad-canonical_owner_api_test-test-binary",
+      "bytes": 8421752,
+      "sha256": "5941505aec7d30f839571361ad89db8615ae1aa641160ae1500c68e9ca749336"
+    },
+    {
+      "path": "independent-storage-review/attempt-evidence/restored-broad-nativelink_scheduler-test-binary",
+      "bytes": 13739632,
+      "sha256": "c3cb2c8098c913659361fa72bf053d87df94826f83bbfc7adf51f628bf96e49a"
+    }
+  ],
+  "logical_controls": 12,
+  "scope": "Actual executable paths retained in author and independent reviews. Distinct hashes need not equal paths or test invocations."
+}

@@ -1,0 +1,338 @@
+{
+  "base_commit": "ec22f03826b67ebd6a39a3d8001a315241b39288",
+  "scope": "Deterministic accepted-history component, fixed metadata/identity budgets, pure activation and restore invariants. Separate journal, RPC and provider qualifications required.",
+  "source_sha256": {
+    "nativelink-scheduler/src/authority/mod.rs": "d34a770007d29811534730acaf1fbf43feec24e07273c2241c9cb1b103792f36",
+    "nativelink-scheduler/src/authority/accepted_history.rs": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+    "nativelink-scheduler/src/authority/accepted_history_tests.rs": "32b9015ec45b02b2b586bc88aa764b3017b4afe9e839fa8f48c9681244a2bb91",
+    "nativelink-scheduler/src/authority/receipt_retirement.rs": "e2946bbf4a592f87577aa36b5f189596593ac984bbfdc5e67a3d99c4d47868f0",
+    "nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+    "nativelink-scheduler/src/authority/tests.rs": "7c522292f0fe46de83108f81c31454cbe5e4a692e28469dddfb0c91ddca0a154"
+  },
+  "validation": [
+    "Canonical lowercase action algorithms:74 scheduler library tests pass. Integrated Bazel library/reference/differential targets pass.",
+    "Eight compiled authority faults detected on the canonical source; baseline and restored10 history cases pass. Earlier uppercase candidate and tests/failures preserved.",
+    "Root integration changes only the module introductory comments beyond the v2 candidate patch; source hashes identify the integrated version.",
+    "The updated receipt mutation anchor disables only its pin predicate even when a preceding history pin also exists; composition mutation requalification is recorded separately."
+  ],
+  "receipts": [
+    {
+      "file": "history-candidate-canonical-digest.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-canonical-digest.log",
+      "source_sha256": "0c564163e9e47996416fd335d8b88636213017367cc11f1742f0352933d8a132",
+      "archive_sha256": "ebcb2ee86a32e2b8e66f4e3a150273594ae3258f98e0162c0d36a6aab7a3cbdc"
+    },
+    {
+      "file": "history-candidate-clippy-fixed.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-clippy-fixed.log",
+      "source_sha256": "307ee277853485a0de0ac7a2f030f0b6b85904de8b81d645fdca7af038d3e958",
+      "archive_sha256": "56daf7bf0104f5d4acb4932de254ded2fe52d222fbcafbb8aac4e6da5ceb186e"
+    },
+    {
+      "file": "history-candidate-clippy.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-clippy.log",
+      "source_sha256": "9d5dadb9e302046f82edcab7313ad5e829194e0ae05ad72628cb108a5959b55e",
+      "archive_sha256": "b9def17f80c7d07a3748e9db88863023745752b2bf15a2ee166931487ebf3ab4"
+    },
+    {
+      "file": "history-candidate-first-check.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-first-check.log",
+      "source_sha256": "e76ff38f0eddc998a4d94dd70d582c9fd1463352e47ccb4c564e02df29ac1ee0",
+      "archive_sha256": "99eb7778cb20174e12b772651be6b10960a2e34266661f4191b2d5f9f491dd3e"
+    },
+    {
+      "file": "history-candidate-first-tests.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-first-tests.log",
+      "source_sha256": "55d49af61b67b8ad596da7042d3570ed87e28c823d7439c0eab0f6eb1525d21a",
+      "archive_sha256": "d7d365c736c3a43855bc6c31fa0c9bcf1549f95890db4f8f317105e7fd4f74c5"
+    },
+    {
+      "file": "history-candidate-full-unit.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-full-unit.log",
+      "source_sha256": "f067372fd955364f201b149095a85499e9c8e4e65419a10c0c9afc1380a6f095",
+      "archive_sha256": "05dfcfb2e03fb90da45eae3a68b9aaa30167daa0a8bcf5bed4717c47ba38a77c"
+    },
+    {
+      "file": "history-candidate-tests-fixed-budget-fixture.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-tests-fixed-budget-fixture.log",
+      "source_sha256": "4b1cc100d5501e93f3b44bde4b2788ba46a87294b2ef1ffa82945199c3be9a9e",
+      "archive_sha256": "a49347acf35bf7ae06b310ef964011255ce7b2f9532c6c8a41ad8be8a6a65f89"
+    },
+    {
+      "file": "history-candidate-tests.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-tests.log",
+      "source_sha256": "6e6dc4ef15646ebd250705b7fef7e751acdc9a799da9d8643268cd80cf88710e",
+      "archive_sha256": "9aa6056aabe58f6daf48c44ae088abc42855e6520b9f7edba994842cac52cfe0"
+    },
+    {
+      "file": "history-candidate-worktree.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-candidate-worktree.log",
+      "source_sha256": "a4052308b275101de02cb704e781019d14671a8a8c0b6fda9b972d13e245be7b",
+      "archive_sha256": "aff19c15829108da891009e74c0dc604740c46d92058bae72451f4125df4d577"
+    },
+    {
+      "file": "history-authority-mutations/acknowledge_wrong_object-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/acknowledge_wrong_object-compile.log",
+      "source_sha256": "97d69d2bd73848154f317a45d6cb8c3fef1d7f9475c2faeae10825b2b27d8466",
+      "archive_sha256": "1eb2c2c5ccf04a8a2ed41e8471b2c366b094f0ab4bc477e19844eeaccb75e220"
+    },
+    {
+      "file": "history-authority-mutations/acknowledge_wrong_object-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/acknowledge_wrong_object-test.log",
+      "source_sha256": "1c6838336e5a642407169a101954ea2dcd95752c5e3658fad3d661fd22fcb4b3",
+      "archive_sha256": "94279f20fa08b0212611990e4ac95b4623c4da40a62b141d50321720b0d7969b"
+    },
+    {
+      "file": "history-authority-mutations/baseline.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/baseline.log",
+      "source_sha256": "20f988a16abe798130f660cefc7f034f48c843c6c91928a65caae436045638e7",
+      "archive_sha256": "8afc35343bdaa6658d38dca2bf49c6304729cd878f5d1082b72edef0d5acd9b3"
+    },
+    {
+      "file": "history-authority-mutations/failed_history_becomes_materialized-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/failed_history_becomes_materialized-compile.log",
+      "source_sha256": "9a8bdb3c7549fe34431544a458204043e203aacc28d46d449f2dcb337219124c",
+      "archive_sha256": "371987a48d9ea87ceed9226538ece2293af30b26b0e0ec90d4e6436ca0fcdc62"
+    },
+    {
+      "file": "history-authority-mutations/failed_history_becomes_materialized-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/failed_history_becomes_materialized-test.log",
+      "source_sha256": "348427291bc2157d0accbc166409b3cce227fa7aa9efeaeef9f6a4ed5c90bf55",
+      "archive_sha256": "71e8382b8dace5e1d124db2cb343fa7ad43650bb62a19ef688fb0eaa44b35617"
+    },
+    {
+      "file": "history-authority-mutations/forget_pending_history_pin-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/forget_pending_history_pin-compile.log",
+      "source_sha256": "997996c9245db2c37ee15d6f78d6cd759654671ea83203749443cdd56c02e18d",
+      "archive_sha256": "66292a622865c69eb3089ee07f90770996a9e1a375a9f8b2f5de3e270c926902"
+    },
+    {
+      "file": "history-authority-mutations/forget_pending_history_pin-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/forget_pending_history_pin-test.log",
+      "source_sha256": "33ff2d8ca1ef8002ccfc74ffd4115af0955e19ff1b65e1ae16553ad512177cbf",
+      "archive_sha256": "d5e7e7ff9fae2337918adebb14c44940500adc29326f78fbceb3f978d62d95e9"
+    },
+    {
+      "file": "history-authority-mutations/omit_final_resource_history-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/omit_final_resource_history-compile.log",
+      "source_sha256": "0c7afd5a46515448e9e0ce5d98bcd304cd2d736ce22f579dbcbda06dd90626b7",
+      "archive_sha256": "749dfb4569d7000f825d10227fe45667d74672942842aacfbc5fb925309d83aa"
+    },
+    {
+      "file": "history-authority-mutations/omit_final_resource_history-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/omit_final_resource_history-test.log",
+      "source_sha256": "a9130a6a6d7eb1dd84a0e51ffca1e4c6cab071f9778fd866e80c905e81c51a0c",
+      "archive_sha256": "aa6fce4f372c1f501e4a747b1defbe6f3d7f9ad46baa0a39018a9e01fde13992"
+    },
+    {
+      "file": "history-authority-mutations/report.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/report.json",
+      "source_sha256": "7f390f728bda14dce37047cdf6d92e4b1a9bbf2183f68a50ff9be4c68c467f19",
+      "archive_sha256": "72597dfd3532436ce486d9682837b9afcde6f9b459b685e7221a7af3386d2f87"
+    },
+    {
+      "file": "history-authority-mutations/restored.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/restored.log",
+      "source_sha256": "688575ddc2e8d6923d4ce84f04aa417abecf98bab42c103d924af97dba07559a",
+      "archive_sha256": "1403129334db1bb9807e985394cee1ef60ea7f3c4c0b7f9ffc30b758a7c9b824"
+    },
+    {
+      "file": "history-authority-mutations/revalidate_current_worker_after_acceptance-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/revalidate_current_worker_after_acceptance-compile.log",
+      "source_sha256": "4f6ef4195f046dc1b241cfe6c04766ff0d71ed82ca3b2adba6c3685269e8931c",
+      "archive_sha256": "1fd46242a61b81932c0a1566f8fc656595b3991d5066dfcb694b4188c5b252ad"
+    },
+    {
+      "file": "history-authority-mutations/revalidate_current_worker_after_acceptance-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/revalidate_current_worker_after_acceptance-test.log",
+      "source_sha256": "c0769614295d8ef089374bd35320795a87cd01f910c5ecd6d7e456f22dc8afb4",
+      "archive_sha256": "a91e4c3e7d380107d62101499f9ab5c6a1b25be42cf2131cac692871cabe986b"
+    },
+    {
+      "file": "history-authority-mutations/skip_restored_recipe_validation-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/skip_restored_recipe_validation-compile.log",
+      "source_sha256": "0b0cbcf0c600f5b25c97daecfe7cbde3c3e4ae884af1ec71047283a01154a3e5",
+      "archive_sha256": "cb9fa45aa9a6fbbc45bd5bf49f28dcf51bdcb00122f42e20ed3dd3908f5821c6"
+    },
+    {
+      "file": "history-authority-mutations/skip_restored_recipe_validation-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/skip_restored_recipe_validation-test.log",
+      "source_sha256": "c435abe9926e5662c147a292f98adc6400f6f41c7f2cc12ade49c8d4b4b1b3e6",
+      "archive_sha256": "81f67343a7614bbd0337bfa7f6cd4af9caf8284596af60830bf2ebe9172bfc05"
+    },
+    {
+      "file": "history-authority-mutations/spend_history_finalization_identity-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/spend_history_finalization_identity-compile.log",
+      "source_sha256": "85e1dde511acecc222a56c50b5584b4ed03738157c091fa275e6008b0691d9e5",
+      "archive_sha256": "839ac079e7f09a3759ebb505423b098096d49b1c1ec878921484a73c9c5670fe"
+    },
+    {
+      "file": "history-authority-mutations/spend_history_finalization_identity-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/spend_history_finalization_identity-test.log",
+      "source_sha256": "92383d159d97e357f77d499c20c63084df445fec9ebb95db6df2449b14def9cf",
+      "archive_sha256": "cab174b649f41180b13c9a315449a65661c093292b31c8eeabcd02bc720c0d2a"
+    },
+    {
+      "file": "history-authority-mutations/wrong_digest_algorithm-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/wrong_digest_algorithm-compile.log",
+      "source_sha256": "43b9cef8b27f6cfb7abd38f7e745b165656c5846987af9b5a4ecb9c61b6739c4",
+      "archive_sha256": "1c949f6713cea0d9de568f37d7d71fe51f2c3d5bb25f36d921fb7ce2854504f0"
+    },
+    {
+      "file": "history-authority-mutations/wrong_digest_algorithm-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations/wrong_digest_algorithm-test.log",
+      "source_sha256": "6ed45a141a287fe2947061f62d21d0999218acad31708c198c9376e760a8f896",
+      "archive_sha256": "d8c8e3f6406418596677312a04ee91183aefe37edcfa3127655205c530a99f98"
+    },
+    {
+      "file": "history-authority-mutations-canonical/acknowledge_wrong_object-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/acknowledge_wrong_object-compile.log",
+      "source_sha256": "ebb07b9d5ddf508eb82a46d93600d19f7e11a9545b70e4bcf51e607741f57437",
+      "archive_sha256": "dc930ccedb1bd2f72282274423ddb054c3418b408e1c0dda541e0e8888a16d6e"
+    },
+    {
+      "file": "history-authority-mutations-canonical/acknowledge_wrong_object-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/acknowledge_wrong_object-test.log",
+      "source_sha256": "fbf7308cdb6c56f673b3e1c83670cab798f21738f5cd9fe72b4845e5551add39",
+      "archive_sha256": "2202fd24f998d31a4039df299d4dcfc36a7a3d2be7c3db31e2310fd264ef4196"
+    },
+    {
+      "file": "history-authority-mutations-canonical/baseline.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/baseline.log",
+      "source_sha256": "0be4ff7a965d2d06dcf8ecaf6c4a996e54aaf6e266b2e0f508b418e61bc7fe94",
+      "archive_sha256": "27453f020e2b05c225c966719da66c1f3bba1d466788f9f3e945fd5f6195c8e4"
+    },
+    {
+      "file": "history-authority-mutations-canonical/failed_history_becomes_materialized-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/failed_history_becomes_materialized-compile.log",
+      "source_sha256": "3ea6045ac470fc46a536ca893c88937aa99d7d28e23237baa6be65999cd74e13",
+      "archive_sha256": "81f468202854d770ef58851b7f604a9ac4512fd84be6e5d42adfa921acc68dda"
+    },
+    {
+      "file": "history-authority-mutations-canonical/failed_history_becomes_materialized-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/failed_history_becomes_materialized-test.log",
+      "source_sha256": "db685dde0f50189855da1832e1d8e5de9dab6c0198ae8c693372ab4785622ec8",
+      "archive_sha256": "a6cee571feba462ce4afe4c06ab088b04b5928b83bc0ff548662cdd18fef8f6b"
+    },
+    {
+      "file": "history-authority-mutations-canonical/forget_pending_history_pin-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/forget_pending_history_pin-compile.log",
+      "source_sha256": "7d0dc60cca817e2adec11ac450b5f16e55a9ba276a4925cf9a8ee9943001d981",
+      "archive_sha256": "5ef226e0b7f9d562571b3a68b9e2c3e0ad2e3c04f67e2e088405b83f819d6bd9"
+    },
+    {
+      "file": "history-authority-mutations-canonical/forget_pending_history_pin-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/forget_pending_history_pin-test.log",
+      "source_sha256": "a904a630f1320506af09db5503a305c0e79e7d6e3926c20d8c01f3ab2a91165b",
+      "archive_sha256": "7e07381553c0d7447afeaaba68e45e51b473612fa1f50ff6a92405786bc1d250"
+    },
+    {
+      "file": "history-authority-mutations-canonical/omit_final_resource_history-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/omit_final_resource_history-compile.log",
+      "source_sha256": "1874e0aedb1785ee3525d8ff8e3d87676a19e2aabcfe561db281ab0cf38bb44d",
+      "archive_sha256": "8f0a602c2156d67d96b42a113b6d467f05f5f5b55cca7c6f06a47ca2889ef668"
+    },
+    {
+      "file": "history-authority-mutations-canonical/omit_final_resource_history-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/omit_final_resource_history-test.log",
+      "source_sha256": "9747fe4c6ae494cec96b3f10a7d3e4dbc819c700e655b2a5d0df2ec139823c14",
+      "archive_sha256": "5793b520e82b04b291b817e0505a7e92b66a320b1e1393286e8c04bea8404a74"
+    },
+    {
+      "file": "history-authority-mutations-canonical/report.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/report.json",
+      "source_sha256": "14243f5d6399b2fb56b2575576efa77d3683114b6a46c9c90c2e08ef028eaab3",
+      "archive_sha256": "45dcb4f997a8768739dc43bebeb3139bdcae3bfc3f27956cb38868027f10967c"
+    },
+    {
+      "file": "history-authority-mutations-canonical/restored.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/restored.log",
+      "source_sha256": "0eb8d02309f84aa957682a3430f24d98db101a3064e4679f4de463cd3fcde591",
+      "archive_sha256": "14e176b00c85291cc55ba3ae9f54f6a13acc32c9088eef3b7956f18986bdaa8b"
+    },
+    {
+      "file": "history-authority-mutations-canonical/revalidate_current_worker_after_acceptance-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/revalidate_current_worker_after_acceptance-compile.log",
+      "source_sha256": "34afb1dd6b4d33a53eece7cf7a6ce14d4350a27813867d1fe644236c46dad077",
+      "archive_sha256": "89004d6786d7569aba8836e29c822379d70fc9ce84adc837dccadf37daf9764f"
+    },
+    {
+      "file": "history-authority-mutations-canonical/revalidate_current_worker_after_acceptance-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/revalidate_current_worker_after_acceptance-test.log",
+      "source_sha256": "c4f386d7f657c2221ce36d00d1e1054b79b77799dc747e30080069f90ccb08dd",
+      "archive_sha256": "db2b4359aa790e7d2a755ae4b9e458a2684a5f6a89dc3e1b780d5512496a7eff"
+    },
+    {
+      "file": "history-authority-mutations-canonical/skip_restored_recipe_validation-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/skip_restored_recipe_validation-compile.log",
+      "source_sha256": "86304112f0ea188d4e4c0b17bfe18db57feed203d2eca4d0190169ae210428a6",
+      "archive_sha256": "a61d61c8ae6ecee23cc238d040b733a5ecbd2c01a86d52270d767e717a998137"
+    },
+    {
+      "file": "history-authority-mutations-canonical/skip_restored_recipe_validation-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/skip_restored_recipe_validation-test.log",
+      "source_sha256": "2465a08351fe7338300afe7b0ee53563c05d42a63d7712615e5e7e99b4c4a321",
+      "archive_sha256": "76e8dd60ed6b0643ec01abd35f356df6315a34298ca634ac8648ebb4593a06de"
+    },
+    {
+      "file": "history-authority-mutations-canonical/spend_history_finalization_identity-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/spend_history_finalization_identity-compile.log",
+      "source_sha256": "0908094debe8f9a7d1e13cf0b06e68463864759b9e920d41092e60d9fe86641d",
+      "archive_sha256": "5109e77c06fce9f3415af9444cee128603b44124385082d2185bcdf8a46686da"
+    },
+    {
+      "file": "history-authority-mutations-canonical/spend_history_finalization_identity-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/spend_history_finalization_identity-test.log",
+      "source_sha256": "17f89515a84ce66f362e0b2654c5aab488c93e3a32dea5a3b7587c9ecab739ac",
+      "archive_sha256": "a309521b33cd58f7adaa62c1cb271425396b96f7df69346ec57ec57ec367caa5"
+    },
+    {
+      "file": "history-authority-mutations-canonical/wrong_digest_algorithm-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/wrong_digest_algorithm-compile.log",
+      "source_sha256": "7df45cecf91adb19e4a918c470730c06514e38f8dcc77739b2431416ab216a5e",
+      "archive_sha256": "eb34faa352b4ba2b380c6a698b72e9ee09547e6dc7ec27c4907983f5c3e52e2d"
+    },
+    {
+      "file": "history-authority-mutations-canonical/wrong_digest_algorithm-test.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutations-canonical/wrong_digest_algorithm-test.log",
+      "source_sha256": "5b48308e5b2afc78c84608d93f0afe1a36c53772a4d9e77cd01b5d257fb68e1b",
+      "archive_sha256": "fbdb22b9818c05a508451cd7d0abb8f6c29d2ab8294f84b97d8cdfd6ab27b6d7"
+    },
+    {
+      "file": "history-core-integrated-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-core-integrated-bazel.log",
+      "source_sha256": "857a5d0c597d3b62f3e6f63dacbf86ac370789aef384b88db7da0c91cb6415bc",
+      "archive_sha256": "672b6c1bc895696edc94dae4903dfa6fc315bf4cefbc6534d8ff53cbb5cca03e"
+    },
+    {
+      "file": "history-authority-mutation-driver.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutation-driver.log",
+      "source_sha256": "23f160f3ebe20199a4bf40bd87ff577fb2bffba18d25c5719d3fc0b0507e4178",
+      "archive_sha256": "dfa3e381fe3f77df1f6b7cf021757077eca2d9d8c2367049261e2d3f2654c1e7"
+    },
+    {
+      "file": "history-authority-mutation-canonical-driver.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-authority-mutation-canonical-driver.log",
+      "source_sha256": "23f160f3ebe20199a4bf40bd87ff577fb2bffba18d25c5719d3fc0b0507e4178",
+      "archive_sha256": "dfa3e381fe3f77df1f6b7cf021757077eca2d9d8c2367049261e2d3f2654c1e7"
+    },
+    {
+      "file": "nativelink-history-candidate-v1.patch.gz",
+      "source": "/tmp/nativelink-history-candidate-v1.patch",
+      "source_sha256": "2c1ce10e6a5327ecf2ec74451705810d71675eba4dafd5f01ee2790e970f9de1",
+      "archive_sha256": "2f7d049d1ed7097f742beafd05f70e587055824d2e6372ee6bbacdd7c7ac3ff9"
+    },
+    {
+      "file": "nativelink-history-candidate-v1-followup.patch.gz",
+      "source": "/tmp/nativelink-history-candidate-v1-followup.patch",
+      "source_sha256": "fefc9567d266a194f4ba364e8f52638118c44e066e2a570fc8acfa003b6464d8",
+      "archive_sha256": "a89f0d8703dd6b54a576a43481307a10b755c68d9f17120051942b510c8d0da7"
+    },
+    {
+      "file": "nativelink-history-candidate-v2.patch.gz",
+      "source": "/tmp/nativelink-history-candidate-v2.patch",
+      "source_sha256": "b33a762054ec3648d6e2a5dc0cdfb6592f27da756c3a1794090bfb80cde94df0",
+      "archive_sha256": "18ed1240f116c6b1e98a8fa16a7028dfce24e981d6932b92a73fa07a84647d77"
+    }
+  ]
+}

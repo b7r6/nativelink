@@ -1,0 +1,196 @@
+{
+  "recorded_at": "2026-10-23T23:42:31.829651+00:00",
+  "status": "SOURCE-ONLY PROPOSAL. No implementation, new tests, execution, or qualification claim. Existing sealed composition remains unchanged.",
+  "baseline_commit": "880ea7b8e2e47e9b1a5bc2b5ba73fe53c917f2df",
+  "elimination_plan_sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+  "source_inputs": [
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_owner.rs",
+      "sha256": "4c1e1afe4ab59cef2de7fd916428c0119e5d2540bf33c85e3ff9c34c771eb1cf",
+      "bytes": 14737
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_recovery.rs",
+      "sha256": "0123ddf0ec1722bdc129af1be14adfae15a542c291e3452bb9ba50c1c6f36cdc",
+      "bytes": 13334
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_clock.rs",
+      "sha256": "2e36d691fab0ccfd3b570da0bfb3d2c1f187ab1648754d319e89fdb988b03c06",
+      "bytes": 5747
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "sha256": "79f6b5fc379016aee0e3713b0c44c5c53decf696fa2c8ea6a9e1fe3c99890e80",
+      "bytes": 14704
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/canonical_binding.rs",
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff",
+      "bytes": 3272
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/journal.rs",
+      "sha256": "b2432bd2922de404d3b270c015948fdb90749559233bd9708de7bdfb3c5244f7",
+      "bytes": 124513
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/format.rs",
+      "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "bytes": 42037
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/types.rs",
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "bytes": 18199
+    },
+    {
+      "path": "nativelink-scheduler/Cargo.toml",
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "bytes": 3175
+    },
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+      "bytes": 90986
+    },
+    {
+      "path": "nativelink-service/Cargo.toml",
+      "sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "bytes": 3313
+    },
+    {
+      "path": "tools/canonical-filesystem/src/namespace.rs",
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "bytes": 8025
+    },
+    {
+      "path": "tools/canonical-filesystem/src/capability.rs",
+      "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "bytes": 17462
+    },
+    {
+      "path": "tools/canonical-filesystem/src/journal.rs",
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "bytes": 9482
+    },
+    {
+      "path": "tools/canonical-filesystem/src/lib.rs",
+      "sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "bytes": 11988
+    },
+    {
+      "path": "tools/canonical-store/src/lib.rs",
+      "sha256": "bc312571dfc907f454e891d592045dbaac4ac35473559faf4ef32e023674c3b1",
+      "bytes": 20261
+    },
+    {
+      "path": "tools/canonical-config/src/schema.rs",
+      "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "bytes": 9802
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/authority-canonical-binding.md",
+      "sha256": "9c0a5c8e07e321efd5005be6b8fb55ca72631dccc9577fbe3ba9bf2df75990bb",
+      "bytes": 4418
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/authority-clock-proposal.md",
+      "sha256": "a4a6221cac026a3f28f9631a548c618a6e9be55c2a3330a2d0cebf4c5253417a",
+      "bytes": 11728
+    }
+  ],
+  "recommendation": "Qualify a closed current fixed-layout synchronization capability, then the closed supervised cold bootstrap/seal protocol. These supply production-created sealed histories for later canonical driving. Keep canonical protocol driving and admitted feature/profile construction as explicit subsequent gates; do not adapt RecoveredCanonicalOwner to public Singleton.",
+  "observed_dependencies": [
+    {
+      "claim": "No production seal writer exists; prepare_cold remains Preparing and recover_sealed refuses it. Existing successful recovered fixtures synthesize sealed histories.",
+      "source": [
+        "nativelink-scheduler/src/authority/canonical_owner.rs:193",
+        "nativelink-scheduler/src/authority/canonical_recovery.rs:238",
+        "nativelink-scheduler/src/authority/canonical_binding.rs:51"
+      ]
+    },
+    {
+      "claim": "Namespace synchronization retains four locks and synchronizes ownership records/roots, but proves neither fixed child layout sync nor journal/object durability. FixedLayout::sync_layout returns (), and CanonicalStores::from_layout synchronizes layout but returns public store adapters without a matching opaque bootstrap proof.",
+      "source": [
+        "tools/canonical-filesystem/src/namespace.rs:31",
+        "tools/canonical-filesystem/src/capability.rs:186",
+        "tools/canonical-store/src/lib.rs:64"
+      ]
+    },
+    {
+      "claim": "The existing binding design requires namespace and layout sync, journal parent sync, singleton recovery and clock validation before the local seal; the seal is not serving readiness.",
+      "source": [
+        "nativelink-scheduler/design/categorical/authority-canonical-binding.md"
+      ]
+    },
+    {
+      "claim": "Canonical owner opens with JournalProfile=None. Journal defaults to ReaderCapabilities::Base; temporal audit explicitly requires ActiveFormat::base and Base decoder. No canonical admitted format registry or feature-bearing recovery exists.",
+      "source": [
+        "nativelink-scheduler/src/authority/canonical_owner.rs:297",
+        "nativelink-scheduler/src/authority/journal.rs:1537",
+        "nativelink-scheduler/src/authority/canonical_temporal.rs:170"
+      ]
+    },
+    {
+      "claim": "AuthorityService currently owns public Singleton, injectable now, generic Store inputs and fault controls. Its Driver owns event construction, read/write, initial deadline sweep, worker sessions, effect tasks and protocol outputs. Passing a raw Singleton out of recovered ownership would reopen all capabilities.",
+      "source": [
+        "nativelink-service/src/authority_server.rs:107",
+        "nativelink-service/src/authority_server.rs:225",
+        "nativelink-service/src/authority_server.rs:653"
+      ]
+    }
+  ],
+  "next_bounded_slice": {
+    "name": "Opaque synchronized fixed layout prerequisite",
+    "candidate_home": "tools/canonical-filesystem/src/capability.rs plus private namespace helper; choose exact names during tests-first review",
+    "construction": "A consuming or retained-Arc method on FixedLayout performs current ownership-record and attachment checks, synchronizes all six pinned children and both role parents, repeats current checks, and returns a nonconstructible/non-deserializable proof object retaining the actual layout/Ownership custody. A copied commitment is diagnostic only. No strings, booleans, arbitrary callbacks, or caller-authored hashes stand in for the proof.",
+    "identity": "Derive the commitment inside the filesystem crate from the same retained Ownership as both layout roles. Before bootstrap, match this proof to the PreparedCanonicalOwner namespace commitment; do not allow cross-namespace layout/scheduler assembly. Review whether exact same retained Ownership identity is required in addition to the existing cryptographic commitment.",
+    "limits": "Current sync at observed instants only; no historical acknowledgement, power-loss proof, hostile-writer exclusion, cold emptiness after later writes, or deployment readiness. Existing external aliases remain separately owned.",
+    "required_tests_before_runtime": [
+      "Actual child and parent sync ordering and injected current-stage EIO refusal; no token before completion.",
+      "Cancellation of async wrapper retains all locks and layout custody through blocking sync completion.",
+      "Foreign namespace/layout refused before bootstrap authority writes; caller raw commitment cannot construct proof.",
+      "Replaced ownership record/root attachment rejected at current checks; descriptor continuity limits remain stated.",
+      "External positive construction and negative private-field, clone/deserialize/raw conversion probes as dictated by final API; no test-count promise."
+    ]
+  },
+  "following_cold_bootstrap_slice": {
+    "input_boundary": "Consume a fresh PreparedCanonicalOwner with actual created=true and Preparing metadata plus matching opaque synchronized layout proof. A convenience cold constructor may enforce the entire order internally. Existing reopen never initializes or resumes Preparing implicitly.",
+    "fixed_order": [
+      "Retain journal, actual layout proof and designated cleanup reference in permanent supervisor outside caught startup/session. No public waiter can abort supervisor.",
+      "Audit exact Preparing identity, immutable contract, fixed limits and pristine cold authority state; reject previously initialized/reused artifacts before Raft::new.",
+      "Create actual Raft, store returned handle before later await, initialize exactly singleton membership from retained node identity, wait leader then actual ensure_linearizable application barrier. Never infer application from leader-only reads.",
+      "Complete validated consistent audit under Preparing and explicitly validate singleton membership/recovery. Existing temporal::audit skips validate_singleton_recovery for Preparing, so it cannot alone establish this post-initialization prerequisite.",
+      "Capture actual fixed monotonic origin after that completed audit and check actual first sample, keeping the clock and other resources under the same supervisor.",
+      "In a private serialized Immediate transaction revalidate exact identity/contract/Preparing and initialized applied facts, then change only local canonical_bootstrap to Sealed. No metadata setter or public phase selector.",
+      "Complete current namespace/journal-parent synchronization and required checks before offering any owner; a readable seal does not prove this attempt succeeded.",
+      "Arm returned owner before acceptance ACK and return without another await. Return the same closed recovered owner surface; no worker/listener/ingress/effect loop is started."
+    ],
+    "failure_and_recovery": "Before seal, error/cancellation leaves Preparing artifacts and drains actual Raft/background storage before acknowledgement. Do not erase, adopt, reinitialize or auto-resume partial cold state. After seal commit or failed later sync, readable Sealed may remain, but this attempt returns no successful owner. A separate explicit reopen must validate and synchronize current capabilities anew; it cannot retroactively acknowledge the failed attempt.",
+    "cleanup": "All retained layout/storage custody drops only after started I/O and actual final database destruction finish. Acknowledged closure must account for any new retained layout proof. Independent external aliases can still retain locks; tests must drop their observation aliases explicitly.",
+    "qualified_limits": "This creates a sealed Base-format authority with no runtime driving surface. It does not activate DirectScheduler, ReceiptRetirement or AcceptedHistory, certify process incarnation, authorize old-domain cutover, or mount listeners.",
+    "required_tests_before_runtime": [
+      "Real cold success then explicit shutdown/reopen/recovery without manually synthesizing seal; exact Base state and immutable binding preserved.",
+      "Before-seal cuts at layout sync, journal current sync, actual Raft initialization/application, complete read and clock capture leave Preparing and never return owner.",
+      "Actual held Base apply and free independent read queue; no premature seal or owner.",
+      "Actual held seal transaction and post-commit parent sync: cancellation/panic/error retain custody, return no success, preserve readable partial state, and explicit later reopen has its own current barrier.",
+      "Duplicate cold attempt, foreign layout proof, created provenance mismatch, already initialized Preparing state and altered immutable binding refuse without adoption.",
+      "Compiled controls separately remove application wait, move seal before audit/clock, skip seal/current sync acknowledgement, accept raw proof, and abort supervisor; count only actual reached semantic assertions.",
+      "External API closure: no seal setter, phase selector, rawhandle conversion, arbitrary event/time/format constructor or serving readiness."
+    ]
+  },
+  "subsequent_canonical_driver_gate": {
+    "ownership": "The scheduler-owned permanent supervisor retains Raft, Journal and Clock for the lifetime of the canonical driver. Move authority-facing decision logic there or expose a closed typed ingress capability whose implementation lives there. Service remains protocol decoding, authenticated boundary capture, transport and bounded observation; it never receives raw Raft/Journal/Singleton or a clock callback.",
+    "allowed_boundary": "Typed operations may submit validated immutable requests, observe/cancel/renew known operations, and carry authenticated worker/session reports plus exact effect completions. Identity allocation, all time observations, timer/expiry event generation, receipt issue rules and feature/profile selection stay inside the trusted coordinator. Do not expose Event/RecordedEvent/BatchedCommand, arbitrary closure execution, AdvanceTime, raw expiry, generic query or arbitrary completion payloads.",
+    "ordering": "Before any input/effect dispatch, sample fixed clock and finish the initial due-deadline sweep. Before first eligible Running grant, take a fresh post-receipt sample, commit it, finish due expiry, and preserve strict execution comparison versus independent progress policy. Readiness must be a separate acknowledged state after this gate; historical RecoveryDiagnostic cannot stand in for it.",
+    "format_prerequisite": "First qualify one fixed canonical executable admission/profile construction and feature recovery/activation path. Present canonical Base-only temporal audit cannot be loosened to accept direct/receipt/history states by simply switching readers. Retain exact admitted feature epochs, writer gates, snapshot-plus-suffix compatibility, rollback and old-format refusal evidence. No schema/config feature selector.",
+    "effect_lifecycle": "Typed effect executor must retain exact committed effect identity/payload; shutdown stops new inputs then joins or supervises required work before releasing authority custody. Do not copy experimental JoinSet abort behavior as a durability or cleanup proof.",
+    "qualification": "Reuse existing real protocol histories and timing regressions only after exact sources and intended equivalence are pinned. New closure, cancellation, actual clock and initial sweep oracles must exercise the new path. Keep generic experimental coordinator tests distinct from canonical serving claims."
+  },
+  "morning_residual_choices": [
+    "Partial Preparing bootstrap recovery remains intentionally unsupported in this next bounded proposal; preserve artifacts and require an explicit later recovery design rather than silent reset.",
+    "Root should select exact new proof API and whether same-Ownership identity must supplement commitment equality before runtime edits.",
+    "Canonical admitted feature profile and duration-policy scope need an explicit reviewed contract before production driving; current Base-only qualified slice remains closed."
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "scope": "Read-only observation of existing legacy-soak archived findings, 2026-10-22. No scripts, fleet controls, Redis queries, or network requests executed. These notes describe someone else's runs and multiple binary revisions; REV is not the revision of every documented binary. Neither a Lane B identification nor a new performance/capacity measurement. Root experimental runtime is not mounted and these observations do not qualify fixes in deployed legacy services.",
+  "records": [
+    {
+      "source": "/home/b7r6/soak/nl-oss-head-2026-10-22/REV",
+      "archived": "source-revision.gz",
+      "uncompressed_sha256": "f2223958522f1b3c18eeb112cddd3f870498f88756e5a6aa8d7b816f904d2887",
+      "gzip_sha256": "b0292ef942c570074ad8747ece63f3554873cf026e8252d8f04b0a40a055a9b5"
+    },
+    {
+      "source": "/home/b7r6/soak/nl-oss-head-2026-10-22/findings/redis-prefix-notes.md",
+      "archived": "redis-prefix-notes.gz",
+      "uncompressed_sha256": "19a9be7978714ab01be02ac93a0a43a8fa65d01c50c6e28ca7124d851978deb3",
+      "gzip_sha256": "7597a4352b0ec7567f2adcc82c728129eaa684c0a25c4e273cdc61f8966e1aa6"
+    },
+    {
+      "source": "/home/b7r6/soak/nl-oss-head-2026-10-22/findings/run1-stall/NOTES.md",
+      "archived": "run1-stall-notes.gz",
+      "uncompressed_sha256": "9183c1ff0e6b46cada288998ab42e183949b16beb3f4896f66dee17cec75dd52",
+      "gzip_sha256": "b17c040328931ace6fe265ace19cf66d18329152f1aaef995775680943eb956f"
+    },
+    {
+      "source": "/home/b7r6/soak/nl-oss-head-2026-10-22/findings/run3-upstream-debug/NOTES.md",
+      "archived": "run3-debug-notes.gz",
+      "uncompressed_sha256": "7c945eabb465ac13d6521d8fa43e4732591bca3f15b9ab76fb93315c39d26f1d",
+      "gzip_sha256": "86cb3b89cd3a598a6d8aa366bbe7f3e9a9af14bd0b22c93ed7107049a41dc5e6"
+    },
+    {
+      "source": "/home/b7r6/soak/nl-oss-head-2026-10-22/findings/kill-test.log",
+      "archived": "kill-test.gz",
+      "uncompressed_sha256": "cae999f8d1b7e7a815b9d215a29e4f7c8ae56e82c5f557e5b6075c22bacee12b",
+      "gzip_sha256": "45ccb230a981e74b651d8b285cff3bafbf82a612e79b927dd689d58cd6b84911"
+    }
+  ]
+}

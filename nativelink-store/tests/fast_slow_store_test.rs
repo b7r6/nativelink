@@ -2411,3 +2411,396 @@ async fn incomplete_slow_read_never_populates_memory_or_filesystem() -> Result<(
     }
     Ok(())
 }
+
+// Each read is controlled independently, so replacing a canceled loader can
+// replay an identical prefix before making any new physical progress.
+type ProgressChunk = Result<Bytes, Error>;
+
+#[derive(MetricsComponent)]
+struct ProgressGatedStore {
+    digest: DigestInfo,
+    reads: tokio::sync::mpsc::UnboundedSender<tokio::sync::mpsc::Sender<ProgressChunk>>,
+    written: AtomicU64,
+    write_ack: tokio::sync::watch::Receiver<bool>,
+}
+
+#[async_trait]
+impl StoreDriver for ProgressGatedStore {
+    async fn post_init(self: Arc<Self>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn has_with_results(
+        self: Pin<&Self>,
+        keys: &[StoreKey<'_>],
+        results: &mut [Option<u64>],
+    ) -> Result<(), Error> {
+        for (key, result) in keys.iter().zip(results) {
+            *result = (*key == self.digest.into()).then_some(self.digest.size_bytes());
+        }
+        Ok(())
+    }
+
+    async fn update(
+        self: Pin<&Self>,
+        _key: StoreKey<'_>,
+        mut reader: DropCloserReadHalf,
+        _size: UploadSizeInfo,
+    ) -> Result<u64, Error> {
+        let mut total = 0;
+        loop {
+            let bytes = reader.recv().await?;
+            if bytes.is_empty() {
+                break;
+            }
+            total += bytes.len() as u64;
+            self.written.store(total, Ordering::SeqCst);
+        }
+        let mut ack = self.write_ack.clone();
+        ack.wait_for(|done| *done)
+            .await
+            .map_err(|_| make_err!(Code::Unavailable, "write acknowledgment lost"))?;
+        Ok(total)
+    }
+
+    async fn get_part(
+        self: Pin<&Self>,
+        _key: StoreKey<'_>,
+        writer: &mut DropCloserWriteHalf,
+        offset: u64,
+        _length: Option<u64>,
+    ) -> Result<(), Error> {
+        assert_eq!(offset, 0);
+        let (send, mut receive) = tokio::sync::mpsc::channel(1);
+        self.reads.send(send).unwrap();
+        while let Some(chunk) = receive.recv().await {
+            let chunk = chunk?;
+            if chunk.is_empty() {
+                return writer.send_eof();
+            }
+            writer.send(chunk).await?;
+        }
+        Err(make_err!(Code::Unavailable, "read connection lost"))
+    }
+
+    fn inner_store(&self, _key: Option<StoreKey>) -> &'_ dyn StoreDriver {
+        self
+    }
+    fn as_any(&self) -> &(dyn core::any::Any + Sync + Send + 'static) {
+        self
+    }
+    fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
+        self
+    }
+    fn register_remove_callback(self: Arc<Self>, _callback: RemoveCallback) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+default_health_status_indicator!(ProgressGatedStore);
+
+async fn progress_after(
+    receiver: &mut tokio::sync::watch::Receiver<nativelink_util::work_progress::PhaseProgress>,
+    previous: u64,
+) -> u64 {
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        receiver.wait_for(|value| value.progress > previous),
+    )
+    .await
+    .unwrap()
+    .unwrap()
+    .progress
+}
+
+#[nativelink_test]
+async fn observed_shared_fill_followers_replay_prefix_and_replace_cancelled_leader() {
+    use nativelink_util::work_progress::{ProgressObserver, scope};
+    for observe_leader in [false, true] {
+        let digest = DigestInfo::try_new(VALID_HASH, 128).unwrap();
+        let (reads, mut requests) = tokio::sync::mpsc::unbounded_channel();
+        let slow = Arc::new(ProgressGatedStore {
+            digest,
+            reads,
+            written: AtomicU64::new(0),
+            write_ack: tokio::sync::watch::channel(true).1,
+        });
+        let store = FastSlowStore::new(
+            &FastSlowSpec {
+                fast: StoreSpec::Memory(MemorySpec::default()),
+                slow: StoreSpec::Memory(MemorySpec::default()),
+                fast_direction: StoreDirection::default(),
+                slow_direction: StoreDirection::default(),
+                bypass_dedup_threshold_bytes: 0,
+            },
+            Store::new(MemoryStore::new(&MemorySpec::default())),
+            Store::new(slow),
+        );
+        let first = ProgressObserver::new();
+        let second = ProgressObserver::new();
+        let mut first_view = first.subscribe();
+        let mut second_view = second.subscribe();
+        let first_store = store.clone();
+        let leader = tokio::spawn(scope(observe_leader.then_some(first), async move {
+            first_store.populate_fast_store(digest.into()).await
+        }));
+        let first_read = requests.recv().await.unwrap();
+        first_read.send(Ok(Bytes::from(vec![1; 32]))).await.unwrap();
+        let first_seen = if observe_leader {
+            progress_after(&mut first_view, 0).await
+        } else {
+            0
+        };
+        let second_store = store.clone();
+        let follower = tokio::spawn(scope(Some(second), async move {
+            second_store.populate_fast_store(digest.into()).await
+        }));
+        let second_seen = progress_after(&mut second_view, 0).await;
+        assert!(
+            requests.try_recv().is_err(),
+            "follower shares the physical fill"
+        );
+        first_read.send(Ok(Bytes::from(vec![2; 32]))).await.unwrap();
+        if observe_leader {
+            progress_after(&mut first_view, first_seen).await;
+        }
+        let second_seen = progress_after(&mut second_view, second_seen).await;
+        leader.abort();
+        assert!(leader.await.unwrap_err().is_cancelled());
+        let replacement = requests.recv().await.unwrap();
+        replacement
+            .send(Ok(Bytes::from(vec![1; 64])))
+            .await
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), second_view.changed())
+                .await
+                .is_err(),
+            "the replacement's replayed prefix must not renew the follower"
+        );
+        assert_eq!(second_view.borrow().progress, second_seen);
+        replacement
+            .send(Ok(Bytes::from(vec![3; 64])))
+            .await
+            .unwrap();
+        progress_after(&mut second_view, second_seen).await;
+        replacement.send(Ok(Bytes::new())).await.unwrap();
+        follower.await.unwrap().unwrap();
+        assert!(store.fast_store().has(digest).await.unwrap().is_some());
+    }
+}
+
+#[nativelink_test]
+async fn observed_upload_stops_advancing_while_commit_acknowledgment_is_lost() {
+    use nativelink_util::work_progress::{ProgressObserver, ProgressPhase, scope};
+    let digest = DigestInfo::try_new(VALID_HASH, 256 * 1024).unwrap();
+    let (reads, _requests) = tokio::sync::mpsc::unbounded_channel();
+    let (ack, write_ack) = tokio::sync::watch::channel(false);
+    let store = Arc::new(ProgressGatedStore {
+        digest,
+        reads,
+        written: AtomicU64::new(0),
+        write_ack,
+    });
+    let observer = ProgressObserver::new();
+    observer.set_phase(ProgressPhase::Uploading);
+    let mut view = observer.subscribe();
+    let writer_store = store.clone();
+    let writing = tokio::spawn(scope(Some(observer), async move {
+        let progress = ProgressObserver::store_object(
+            nativelink_util::work_progress::WorkKind::Write,
+            &digest.into(),
+        )
+        .unwrap();
+        Pin::new(writer_store.as_ref())
+            .update_oneshot(digest.into(), Bytes::from(vec![7; 256 * 1024]))
+            .await?;
+        progress.complete();
+        Ok::<_, Error>(())
+    }));
+    progress_after(&mut view, 0).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while store.written.load(Ordering::SeqCst) != digest.size_bytes() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let before = *view.borrow_and_update();
+    assert!(!writing.is_finished());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), view.changed())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        *view.borrow(),
+        before,
+        "waiting on an acknowledgment is not progress"
+    );
+    ack.send_replace(true);
+    writing.await.unwrap().unwrap();
+    assert!(
+        view.borrow().progress > before.progress,
+        "successful completion is new evidence once"
+    );
+}
+
+#[nativelink_test]
+async fn observed_partial_read_does_not_close_full_object_progress() {
+    use nativelink_util::work_progress::{ProgressObserver, scope};
+    let store = Store::new(MemoryStore::new(&MemorySpec::default()));
+    let digest = DigestInfo::try_new(VALID_HASH, 128).unwrap();
+    store
+        .update_oneshot(digest, Bytes::from(vec![1; 128]))
+        .await
+        .unwrap();
+    let observer = ProgressObserver::new();
+    let view = observer.subscribe();
+    scope(Some(observer), async {
+        assert_eq!(
+            store
+                .get_part_unchunked(digest, 0, Some(32))
+                .await
+                .unwrap()
+                .len(),
+            32
+        );
+        let prefix = view.borrow().progress;
+        assert_eq!(
+            prefix, 1,
+            "a partial read advances bytes but cannot mark completion"
+        );
+        assert_eq!(
+            store
+                .get_part_unchunked(digest, 0, None)
+                .await
+                .unwrap()
+                .len(),
+            128
+        );
+        assert!(view.borrow().progress > prefix);
+        let completed = view.borrow().progress;
+        store.get_part_unchunked(digest, 0, None).await.unwrap();
+        assert_eq!(
+            view.borrow().progress,
+            completed,
+            "a repeated complete read earns no credit"
+        );
+    })
+    .await;
+}
+
+#[nativelink_test]
+async fn observed_hashing_and_optimized_whole_file_upload_report_real_chunks() {
+    use nativelink_store::ac_utils::compute_buf_digest;
+    use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc};
+    use nativelink_util::work_progress::{ProgressObserver, ProgressPhase, WorkKind, scope};
+    let directory = make_temp_path("observed_whole_file");
+    std::fs::create_dir_all(&directory).unwrap();
+    let data = vec![8_u8; 1024 * 1024];
+    for algorithm in [DigestHasherFunc::Sha256, DigestHasherFunc::Blake3] {
+        let path = std::path::Path::new(&directory).join(format!("output-{algorithm}"));
+        std::fs::write(&path, &data).unwrap();
+        let observer = ProgressObserver::new();
+        observer.set_phase(ProgressPhase::Uploading);
+        let mut view = observer.subscribe();
+        let expected = compute_buf_digest(&data, &mut algorithm.hasher());
+        let file = fs::open_file(&path, 0, u64::MAX)
+            .await
+            .unwrap()
+            .into_inner();
+        let (digest, file) = scope(
+            Some(observer.clone()),
+            algorithm
+                .hasher()
+                .digest_for_file(&path, file, Some(data.len() as u64)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(digest, expected);
+        assert!(
+            view.borrow().progress > 32,
+            "both SHA256 and BLAKE3 must expose intermediate hash work"
+        );
+        let hashed = view.borrow().progress;
+        let replay_file = fs::open_file(&path, 0, u64::MAX)
+            .await
+            .unwrap()
+            .into_inner();
+        scope(
+            Some(observer.clone()),
+            algorithm
+                .hasher()
+                .digest_for_file(&path, replay_file, Some(data.len() as u64)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            view.borrow().progress,
+            hashed,
+            "rehashing the same completed output cannot renew"
+        );
+        let filesystem = FilesystemSpec {
+            content_path: format!("{directory}/content-{algorithm}"),
+            temp_path: format!("{directory}/temp-{algorithm}"),
+            ..FilesystemSpec::default()
+        };
+        let fast: Arc<FilesystemStore> = FilesystemStore::new(&filesystem).await.unwrap();
+        let (reads, _requests) = tokio::sync::mpsc::unbounded_channel();
+        let (ack, write_ack) = tokio::sync::watch::channel(false);
+        let slow = Arc::new(ProgressGatedStore {
+            digest,
+            reads,
+            written: AtomicU64::new(0),
+            write_ack,
+        });
+        let store = FastSlowStore::new(
+            &FastSlowSpec {
+                fast: StoreSpec::Filesystem(filesystem),
+                slow: StoreSpec::Memory(MemorySpec::default()),
+                fast_direction: StoreDirection::default(),
+                slow_direction: StoreDirection::default(),
+                bypass_dedup_threshold_bytes: 0,
+            },
+            Store::new(fast),
+            Store::new(slow.clone()),
+        );
+        let writer_store = store.clone();
+        let writing = tokio::spawn(scope(Some(observer), async move {
+            let progress = ProgressObserver::store_object(WorkKind::Write, &digest.into()).unwrap();
+            writer_store
+                .update_with_whole_file(
+                    digest,
+                    path.into_os_string(),
+                    file,
+                    UploadSizeInfo::ExactSize(digest.size_bytes()),
+                )
+                .await?;
+            progress.complete();
+            Ok::<_, Error>(())
+        }));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while slow.written.load(Ordering::SeqCst) != digest.size_bytes() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let before_ack = *view.borrow_and_update();
+        assert!(
+            before_ack.progress > hashed + 32,
+            "whole-file optimization must observe forwarded chunks"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), view.changed())
+                .await
+                .is_err()
+        );
+        ack.send_replace(true);
+        writing.await.unwrap().unwrap();
+        assert_eq!(view.borrow().progress, before_ack.progress + 1);
+        assert!(store.fast_store().has(digest).await.unwrap().is_some());
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}

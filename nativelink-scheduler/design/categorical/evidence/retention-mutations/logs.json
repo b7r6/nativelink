@@ -1,0 +1,38 @@
+[
+  {
+    "file": "acquire_into_closed_cohort.txt.gz",
+    "raw_bytes": 1884,
+    "raw_sha256": "d71101d76ddfdcc8582da68671eeab2de23759c2c4af44285954b2f7d53df967",
+    "gzip_sha256": "9b1a264323415a5e57c6c6156f2038d3a210eaf3ad267e70042a86e281d128dd"
+  },
+  {
+    "file": "baseline.txt.gz",
+    "raw_bytes": 1736,
+    "raw_sha256": "314d8d329a78e37b11bf31e327f44d40325cce8b292f322f290590875a3ae395",
+    "gzip_sha256": "64b5d3eba45a4457e16234c8176d1b42e22b14d6fb2012d3b099b4fd053da54a"
+  },
+  {
+    "file": "delete_success_forgets_unresolved_writes.txt.gz",
+    "raw_bytes": 3454,
+    "raw_sha256": "673647a700efd70803d2e91ddbe198a3c45e54bd6eebea32bb894af2828b0cc8",
+    "gzip_sha256": "34f3345382c51b02c7c4bc0cf8e85346bb93923bb910441c0723612f725bd706"
+  },
+  {
+    "file": "old_delete_ack_settles_new_orphan.txt.gz",
+    "raw_bytes": 1166,
+    "raw_sha256": "529cd74e1fa0883d8da21b892caffd9ac1e254613f9e5880087a02f7d704747a",
+    "gzip_sha256": "982183fb156e917123260b5e6ffe5c8910595ccae29f431b1b27a0f6ffeaa912"
+  },
+  {
+    "file": "release_erases_captured_manifest.txt.gz",
+    "raw_bytes": 3997,
+    "raw_sha256": "c8833cd61e08cebc2b5b067382ded314024a71233f68a2192ab78ac25614e715",
+    "gzip_sha256": "f51a5bec8a9c9146df215afe4b3e05ca439ef3680c3f59861af4ff98acf26cab"
+  },
+  {
+    "file": "renew_expired_root_without_reacquisition.txt.gz",
+    "raw_bytes": 1900,
+    "raw_sha256": "6e354a476586063333bd9c1c7d33ff001f0688f4d5c4b4998434dee3547fc00b",
+    "gzip_sha256": "bc3b492eb2310bddb90a2cbd005600df6eb0d2188fdae5fd2644fe9b3f001e34"
+  }
+]

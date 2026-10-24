@@ -1,0 +1,12 @@
+{
+  "source_commit": "092d570ab9708b360bb4514bfddeb96e121a5e4c",
+  "package_sha256": "7a1d27188d18383f086541054343b809033fcc3d29d61b25284372a078804d10",
+  "verification_sha256": "09b68e8c2ad43c3a1cf207b76eff1f9cb874ff9571a41475d7cfe0154b437ef8",
+  "receipts_sha256": "bb33334e2b5a1685a4186c8c117e2353aa488a8b5d5f5877c2978a3fe482e534",
+  "verifier_sha256": "f48cd6905d6383dbb483f718eb12676a0ef3321a6c9a8984456fceb448262869",
+  "package_verification_sha256": "9eea1a6c3f82a2dc923a4fc9d613196fdcd9dc9ad325ddccf1605cc1fec86164",
+  "archive_count": 22,
+  "total_archive_bytes": 191702134,
+  "largest_archive_bytes": 30687172,
+  "limits": "Selected artifacts and tracked input source copies only; full attempt 173 PASSED + 1 TIMEOUT, unchanged focused rerun PASSED. Source boundary092 predates cleanup helper and recovered clock."
+}

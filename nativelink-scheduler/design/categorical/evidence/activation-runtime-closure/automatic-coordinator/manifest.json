@@ -1,0 +1,21 @@
+{
+  "worktree": "/tmp/nativelink-categorical-runtime",
+  "patch": "/tmp/nativelink-automatic-coordinator.patch",
+  "patch_sha256": "b573338927299105722dc8e09de7a802c10f937d4ca7032516a433ba2069e234",
+  "logs_sha256": {
+    "rpc-fixture.log": "725a26b26654b0206ffb6d054809958c2cc7a141c36c9dd00d6a144b490a3280",
+    "payload-unit.log": "568f5371f51b6c37bc505219466d6f2f924cd7c414c1816127bae75139bdadfb",
+    "service-clippy.log": "a297504e36b3acb6046a61f358d552ad44aa90cc4f3b95ef16da4a2551e62b63",
+    "worker-clippy.log": "998913aeb4d8aec15fc5a18352d18332d65969b7d2f953ef12e88e4acc451f3e"
+  },
+  "claims": {
+    "rpc_tests": 5,
+    "rpc_seconds": 16.19,
+    "payload_unit_tests": 1,
+    "service_strict_clippy": true,
+    "worker_strict_clippy": true,
+    "production_construction": false,
+    "active_interest_renewal": false,
+    "namespaces_skipped": false
+  }
+}

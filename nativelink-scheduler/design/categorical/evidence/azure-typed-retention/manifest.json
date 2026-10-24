@@ -1,0 +1,300 @@
+{
+  "base_commit": "71bf0bd1b53285b22d8c87b9c95fb0495c394088",
+  "scope": "Actual Azurite SDK effects through the existing singleton typed-retention composition. No production policy, cloud deployment, cross-host durability, or M5 completion claim.",
+  "patch_sha256": "12a8734b0c58f6c732987ea8ee0dc26c72994a1941b6482dd366e0400d99c350",
+  "source_sha256": {
+    "nativelink-scheduler/BUILD.bazel": "96360168b583f1f4e2193c7090cc1d08e2a194759e6205bb64439b7ef89bf424",
+    "nativelink-scheduler/design/categorical/physical-azure.md": "f0c55b1201eae01183645f51760de664c1cef454f01279d29fcb6d2f22672b9e",
+    "nativelink-scheduler/design/categorical/typed-output-closure.md": "74ae57741fb261a813357c50551c1b76f02c72ccd2f7f59654c28053dd1fb6ad",
+    "nativelink-scheduler/design/categorical/typed-retention-bridge.md": "81c89046c10d6760ab199674a264980a3663d77846c92c07da82a87168619bd6",
+    "nativelink-scheduler/tests/retention/typed_bridge.rs": "852c04c9055443a63472a35ec89e32f474af77142cdc2c21c89c61a4bf2090bc",
+    "nativelink-store/BUILD.bazel": "00f123cb4fe0cd70eddfd87d4434c44a2ddb71776869a72c849555fadce50514",
+    "nativelink-store/src/physical_closure.rs": "e9f30662980529dee41e742045fff212ad11ff8490fd2f9fa308f87cf4168710",
+    "nativelink-store/tests/physical_azure_test.rs": "4cd1d14d9b4fd71dc9a0e75759b733905ce581b1be38d2e5bf30aa98d36e7a89",
+    "nativelink-store/tests/physical_azure/retention.rs": "de365338981bab273ddb44e642bb2be73c506c0731feacf62fc67d169cc82b36",
+    "Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+    "nativelink-scheduler/tests/retention/coarse.rs": "dfbe4d3701a510421be2425cef4e24b67aadd9a77e5be0e260ac2550f80042ad",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167",
+    "nativelink-scheduler/tests/typed_physical_retention_test.rs": "658c08a29bd699f79c2b06b7901f9164a78f3e4b6a1fc5417778ed16754dcb5f",
+    "nativelink-store/src/physical_filesystem.rs": "f0105d835138b1b40e8f75b9d39cd47fa6eaeb315b9296dfd2a21c87633c5e0d",
+    "nativelink-store/tests/physical_azure/adapter.rs": "d6041f7b807c94f52421c7adb113554c1571a5719a8abe3529e17d5bdef6f758",
+    "nativelink-store/tests/physical_closure_test.rs": "ee11125c57de9b6fd2f044e4891094595a9f765450b75d99ffefca57718798a6",
+    "nativelink-store/tests/azurite_runner/mod.rs": "c3f5c16a62b6cd9f34bdb1af580a0dd955654e81dd848d65d5812b6f92410f0e",
+    "nativelink-store/tests/azurite_runner/process.rs": "21b953703def938fa273447780efc8607b4840a8ec89cf7d45839c5c2ac1ac45",
+    "nativelink-store/tests/azurite_runner/sas.rs": "8659957a5b987e1e3d46bb93441eea7f4df09be96f8ac50adf75a3495e941d5a",
+    "nativelink-store/tests/azurite_runner/bun.lock": "2a418f7c526179761b000dc29b2a7b771864358f691f505d04172cfc7997434f"
+  },
+  "validation": [
+    "Actual provider fixture:33 SDK requests,3 conditional DELETE requests; head removal and reopen preserve Serving grant; expiry and wrong descriptor refuse before HTTP; real successful delete with lost acknowledgment leaves pending intent recoverable until absence reconciliation.",
+    "Original physical provider fixture:82 SDK requests; unchanged filesystem suites:14 closure and11 typed-retention tests pass. Six compiled causal mutants detected; restored baseline passes.",
+    "Integrated Bazel provider fixture passes in2.7s; original two filesystem targets pass in0.4s/0.8s.",
+    "The integrated scheduler BUILD additionally contains the independently frozen history reference target; Cargo.lock contains its already-resolved two direct dev-dependency edges. Candidate/provider source otherwise matches supplied hashes."
+  ],
+  "receipts": [
+    {
+      "file": "acknowledge-failed-delete-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/acknowledge-failed-delete-compile.log",
+      "source_sha256": "dd53ed2869c969f537152dfd0a754a96919aad1c1db5e595d12e0a712ca60e8b",
+      "archive_sha256": "6eebb25992d0fc5230f90e34769d5ecadf6fe8082f56d4c340d0d17bd7de8caa"
+    },
+    {
+      "file": "acknowledge-failed-delete-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/acknowledge-failed-delete-live.log",
+      "source_sha256": "532df38061e2e56ba843df14786cee0744fc8a85f15677c9a3a3489717e6b6e5",
+      "archive_sha256": "c3eb594e284b1b27561385515a739a6644d62854c57425c1da74b59f239ad998"
+    },
+    {
+      "file": "adapter-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/adapter-final.log",
+      "source_sha256": "55976b096625fbc92bc55ed8f86a4c8d5101a5c33aea903f6f51abcd66081ebb",
+      "archive_sha256": "0aa138867426038485fb49d77bee273efae505dacf329e78c04ce56dd685c775"
+    },
+    {
+      "file": "adapter-regression.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/adapter-regression.log",
+      "source_sha256": "2c5f024d8a3ce0b7b903b969d60d2f141ed30b2e78849ff28d555fdbdb7cba36",
+      "archive_sha256": "349274ac554cfae43e8d8463c3299c95b13700c710726a45d58682d01cf9a65b"
+    },
+    {
+      "file": "azure-typed-retention.patch.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/azure-typed-retention.patch",
+      "source_sha256": "12a8734b0c58f6c732987ea8ee0dc26c72994a1941b6482dd366e0400d99c350",
+      "archive_sha256": "70bcc22ec7389e963f8b0555f1a8b36539b7d4f04d0d724d863ee782e3e3ce9a"
+    },
+    {
+      "file": "buildifier-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/buildifier-final.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "buildifier.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/buildifier.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "clippy-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/clippy-final.log",
+      "source_sha256": "e9db191a67798091f06b59a8b7711ab608c1cbf2aa894ee4f47b9fa1c9d1f073",
+      "archive_sha256": "54ab6200f43c8e860510a258f2fc75dc588cbdd30e6c8cf1e7615d424f3805c9"
+    },
+    {
+      "file": "clippy.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/clippy.log",
+      "source_sha256": "3c06797e77daac990d36e95a43b221cc41de1eb7e057c3ee4425515aa37fd0d6",
+      "archive_sha256": "1e51d6b17a3229c7c66379dadcb29d4b3cb7fbf4d246d93e9cfd95a04c9460c1"
+    },
+    {
+      "file": "delete-without-etag-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/delete-without-etag-compile.log",
+      "source_sha256": "71214d237e1d674fa06c5facb1315e574ebe50b1b4a1d7bfb990b82d2703964a",
+      "archive_sha256": "90695cda9ec902acd36267879f430f964384486dac5760b0630621813c47eb2b"
+    },
+    {
+      "file": "delete-without-etag-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/delete-without-etag-live.log",
+      "source_sha256": "d8c29b8d250b40fb8265530d1967ceb377211c21ce4e7c6cb5bee0836c7b744e",
+      "archive_sha256": "abfe59c9d3c08d246f5549265637d4a6103c8ed59af7fca52ff08392ff0df5da"
+    },
+    {
+      "file": "filesystem-and-ordinary.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/filesystem-and-ordinary.log",
+      "source_sha256": "6db4255c8ecaa9f327a2c1ebd35c4fecb5c8db6e48cc361d4b97f5db1fd6cdc5",
+      "archive_sha256": "dc57c347a91020790d22c7984cf52f5d6d2078bd454a9343450baf3d24157f72"
+    },
+    {
+      "file": "first-provider.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/first-provider.log",
+      "source_sha256": "feb1a543dafe687f1a3f6eb5700d8fde256cc3e7a1b164fb69c5cc323d39ba72",
+      "archive_sha256": "edc71a25d741e90a239d57aaabe098122ff2fad8a9fc5e89e911a762a5544ea6"
+    },
+    {
+      "file": "fmt-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/fmt-final.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "ignore-manifest-member-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-manifest-member-compile.log",
+      "source_sha256": "d28251be22af23e2ef46c808434e5c6dcd3db426fd5bb192c590a3f2851a5923",
+      "archive_sha256": "57aae1d053d320917c29e53fd9f85276ef9418e480235face99c8fd260db1f99"
+    },
+    {
+      "file": "ignore-manifest-member-first-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-manifest-member-first-compile.log",
+      "source_sha256": "51856759ac1deca11f44dfb82108d232159e52fd9f6ba0a01e4d286207bd7774",
+      "archive_sha256": "79f9004e96e2df7f172f029b9cf7ce0996751d6d0c1cc3c05058c54b4db47bda"
+    },
+    {
+      "file": "ignore-manifest-member-first-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-manifest-member-first-live.log",
+      "source_sha256": "16aef13b4011a02c12bd706c86acccc527b3d2dcf9a037189957adc4645dd4c4",
+      "archive_sha256": "2523d54eb2d5c3445dca4dc06aa6fcccd41f1facb067b14ce91f6adf61e1d6cc"
+    },
+    {
+      "file": "ignore-manifest-member-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-manifest-member-live.log",
+      "source_sha256": "18e555d7c479f22190bcb82035e65849361af31254289328d28c1f59f4471d12",
+      "archive_sha256": "d279919fd7e91b0f402706cc4e2a42b72b93724693626b4a8057e6a025d4c729"
+    },
+    {
+      "file": "ignore-serving-expiry-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-serving-expiry-compile.log",
+      "source_sha256": "36277c0f81dca4ae531f4ee9348592b28ca2ebca263e0660cf6231a5c1e02622",
+      "archive_sha256": "720ff389fa7d17df036ae7c64f868352bce68fea1e925a3531c91d30979f69a9"
+    },
+    {
+      "file": "ignore-serving-expiry-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ignore-serving-expiry-live.log",
+      "source_sha256": "7f8440e1003f13da835317de67b5854fce0b1af15f71e55e302aa29344c0bb9b",
+      "archive_sha256": "a4dbfbc4778e0dc06971d632ef123a4e5c2de4f68c2b83492baa010fc0b64851"
+    },
+    {
+      "file": "integrated-bazel-filesystem.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/integrated-bazel-filesystem.log",
+      "source_sha256": "2f6c4f27b048d615600d6f170ed6711f1322dd99e2c8833b365723b00972b092",
+      "archive_sha256": "53f60f1b30ebf2a2c360ad63ed2c4c22cc707d13d1771c237a8b3f186ff9d729"
+    },
+    {
+      "file": "integrated-bazel-provider.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/integrated-bazel-provider.log",
+      "source_sha256": "72642dc1a6d6060fc2111c9c237e6b4f9d6205472076d840e24876bf832831b2",
+      "archive_sha256": "4fcda3c564dba29014dde8c2a11359132486f3b5731da8dfc41d33151957ffa9"
+    },
+    {
+      "file": "missing-emulator-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/missing-emulator-final.log",
+      "source_sha256": "6336fbfd18c50cb9edf372a01c5c6f93570c7772ae36b94f5adb67b79b316f8c",
+      "archive_sha256": "88c433640bf943b1eea4aed7fba440658ff980e66e6ceaee5da0113b15f11d97"
+    },
+    {
+      "file": "missing-emulator.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/missing-emulator.log",
+      "source_sha256": "111c0eb83feff0ab1c8388c9106070705706532dcbb9934947f6dd1520ab60af",
+      "archive_sha256": "bec2a39a7da4de1b3ca6926be56fb40ed1b60a0d4397c9f369029b65b9367b07"
+    },
+    {
+      "file": "mutation-baseline-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-baseline-compile.log",
+      "source_sha256": "563719963431166df9d01b8bfc1324b8724b4e530f59ae69a967e20abca7bbe8",
+      "archive_sha256": "4eda523f44576c7730020cd5963f42f69bb0b5e332de7dcb695ace462d4a8c38"
+    },
+    {
+      "file": "mutation-baseline-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-baseline-live.log",
+      "source_sha256": "5a0b1e5d5dad2e18b7ae5b5c138c19680622d55800393748644850c29b0bead4",
+      "archive_sha256": "6669e855fd3a360c2d5d50c82394b9a8b623d87d28afcc584299f3440077d75e"
+    },
+    {
+      "file": "mutation-restored-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-restored-compile.log",
+      "source_sha256": "36fc13599decd827259c1800ca492becbcd1cfe1cc508e63b5c1a5936919d544",
+      "archive_sha256": "66675e0d5f47e4ace2c0a44c3aab6cba2a3a3058dfc8fd92fb43148e9c0c2971"
+    },
+    {
+      "file": "mutation-restored-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-restored-live.log",
+      "source_sha256": "77376821066419c8a5cef8780ff742b98b6ab12a701cfe3b81317d6148033e18",
+      "archive_sha256": "c72358531ba15e5eac0581fc6f9243aef08d8247e1ffdd9db7a06fe0609f572e"
+    },
+    {
+      "file": "mutation-results.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-results.json",
+      "source_sha256": "0d82854e34899c43fe01eb13052bc94de2ed2480531ed019dc2969304e05e037",
+      "archive_sha256": "04a7fafa7970dfbfabf4b60c18a9491bdea6d61a4b6438ac75996386534f33ee"
+    },
+    {
+      "file": "mutation-resume.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-resume.log",
+      "source_sha256": "12329ba97bf8dd32bfef85af788d73ca415a3820d23e97ba6123bd87db37562d",
+      "archive_sha256": "7f0ffc87a8da628b1f80f0740c76d3e62ed96c676d980e743f0e040bfad5ae97"
+    },
+    {
+      "file": "mutation-run.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutation-run.log",
+      "source_sha256": "b28a45a4b096889231a3dc0047e32388c14dbe32f1198083f53c3f6d8281e757",
+      "archive_sha256": "99808d2ef381ee3e55dcc8db3edc034b0d9a4c46a7b88788f6a259f2547ebcad"
+    },
+    {
+      "file": "mutations.py.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/mutations.py",
+      "source_sha256": "fbd80f0b05d458640ce43ca872200d2322a851d230ff76dabb4b230a2d460e41",
+      "archive_sha256": "7ace71403aca1788fe9519e243225b7df7adeb21002ab5448ed7cef7f8cf5e70"
+    },
+    {
+      "file": "ordinary-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/ordinary-final.log",
+      "source_sha256": "5836926cd5d53c38036db3413a0204100ed36e7d9caa2f7b10a33ea4da61fe61",
+      "archive_sha256": "4bb9543d3593173d05e66dca8d1c08144cf560a045323864f2bb507f8dbeb369"
+    },
+    {
+      "file": "provider-baseline.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/provider-baseline.log",
+      "source_sha256": "7b52b72cea5e9b19aa11e052492c80d46cb963c59b03d3176419cbb316cc7567",
+      "archive_sha256": "cfe67a6815c5bbd97873f37eae0c2bcb0b5d0562539c12b858b54761bd52345f"
+    },
+    {
+      "file": "provider-qualified.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/provider-qualified.log",
+      "source_sha256": "a434faf4707290fdcc2e389434b6f3430fea09afa38e0c8b14528e1608561bd5",
+      "archive_sha256": "a36be4bb65180f55e7452b3fe91e8b231d9626c533957c7020a7560f1e0e1cad"
+    },
+    {
+      "file": "release-serving-with-head-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/release-serving-with-head-compile.log",
+      "source_sha256": "8e0b6ada8bb3f5d2f9f52f96348d803b219695026bcd44f68db600aad9c5e932",
+      "archive_sha256": "fa099fc7266d1bc84dab14cd3e026c35e3ce1709f81020cde0f53807fb55b141"
+    },
+    {
+      "file": "release-serving-with-head-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/release-serving-with-head-live.log",
+      "source_sha256": "caa71fa8631a642d5d97c8f63e82dfd515c59aaa35646f09103eccb75eea5fe5",
+      "archive_sha256": "45453bd7fdfab10dbef63e916fdbf6dbc2b6f3e611431acded954718f06a7439"
+    },
+    {
+      "file": "skip-blob-verification-compile.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/skip-blob-verification-compile.log",
+      "source_sha256": "7106c3a1fe30c3f64a159a08a7444fe13405a26bd57c369f44da3772eb5e70f0",
+      "archive_sha256": "4dc0eb87437201b5f9afda22929d55cba699170ed69d14e56c62f39296657774"
+    },
+    {
+      "file": "skip-blob-verification-live.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/skip-blob-verification-live.log",
+      "source_sha256": "ae5df2c9bc7691d4d53a4d7cb8e96820a1082cdcc06841f21dfc370c00c2b3df",
+      "archive_sha256": "a32e746ad2203b00a4bc4deb83b7a2f6e720ef6012c9ac886fa122684aa72a9a"
+    },
+    {
+      "file": "source-hashes.json.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/source-hashes.json",
+      "source_sha256": "eb967b55c1300ab2eaaf0dc225ea9dd3ed30fee266fd3d017a5f5859ca79913c",
+      "archive_sha256": "7726a2f2202db4cc0ac4a0ea6ac2d2f1658addcd18e3521ad4ca9f17ab284872"
+    },
+    {
+      "file": "typos-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/typos-final.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "typos.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/typos.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "vale-final.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/vale-final.log",
+      "source_sha256": "db0c4b7b71243cc1e4be4f60f76e59df988c549524ba98a6a6850cdd10ad88e3",
+      "archive_sha256": "578ba74105a0a4197ea1a4f851dd285e06959018b22330f0f1ec412f736b0eb2"
+    },
+    {
+      "file": "vale.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/azure-typed-retention/vale.log",
+      "source_sha256": "db0c4b7b71243cc1e4be4f60f76e59df988c549524ba98a6a6850cdd10ad88e3",
+      "archive_sha256": "578ba74105a0a4197ea1a4f851dd285e06959018b22330f0f1ec412f736b0eb2"
+    }
+  ]
+}

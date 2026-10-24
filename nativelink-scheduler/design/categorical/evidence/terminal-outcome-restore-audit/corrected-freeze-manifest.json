@@ -1,0 +1,73 @@
+{
+  "boundary": "corrected-independent-terminal-outcome-reference-v2",
+  "source_frozen_before_candidate_inspection": true,
+  "candidate_source_and_tests_read": false,
+  "baseline_source_saved_before_mutation_campaign": true,
+  "strict_clippy": "passed both targets -D warnings",
+  "expanded_audit_tests": 44,
+  "original_composition_assertions_unchanged": 22,
+  "inherited_m1_tests": 7,
+  "new_audit_tests": 15,
+  "original_frozen_reference_sha256": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+  "original_qualification": "29 passing tests / 12 compiled mutation kills; separate historical boundary",
+  "original_compiled_audit_failures": 8,
+  "snapshot_format": "independent-no-graph-terminals-v2; v1 refused; no invented migration",
+  "qualification_pending": "22 mutation campaign running; final formatted 29+44 tests and buildifier/rustfmt receipts pending",
+  "files": [
+    {
+      "path": "nativelink-scheduler/BUILD.bazel",
+      "sha256": "567e9e0bb3251ac401ddee12d9c0fc043f1c0892b15873bf1a7a7c64e8c1cde8",
+      "bytes": 18644
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome/reference.rs",
+      "sha256": "35909d9e1af651be089935a3821113c639ea667a913a4bbcc903d5128cb11c65",
+      "bytes": 44303
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome/types.rs",
+      "sha256": "c36082d9426adce123405a5a01a2856f32ce15d15239cd9e7b880cc465cc4032",
+      "bytes": 6244
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome/cases.rs",
+      "sha256": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+      "bytes": 43256
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome/restore_audit.rs",
+      "sha256": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60",
+      "bytes": 11336
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome_reference_test.rs",
+      "sha256": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+      "bytes": 941
+    },
+    {
+      "path": "nativelink-scheduler/tests/terminal_outcome_restore_audit_test.rs",
+      "sha256": "dd86c5de740ccffd8fff9d5543d617feb8270dde73e9dd387001a5d43feca0e0",
+      "bytes": 1185
+    },
+    {
+      "path": "nativelink-scheduler/tests/authority/reference.rs",
+      "sha256": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+      "bytes": 91660
+    },
+    {
+      "path": "nativelink-scheduler/tests/retention/protocol.rs",
+      "sha256": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+      "bytes": 5841
+    },
+    {
+      "path": "nativelink-scheduler/tests/retention/reference.rs",
+      "sha256": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167",
+      "bytes": 27332
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/terminal-outcome-restore-audit.md",
+      "sha256": "1a507ee80c1a3c364152deb369d4d95cd92b0352e2dfdc2222abcfee797aa877",
+      "bytes": 3914
+    }
+  ]
+}

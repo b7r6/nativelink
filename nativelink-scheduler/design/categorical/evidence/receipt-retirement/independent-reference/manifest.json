@@ -1,0 +1,73 @@
+{
+  "baseline": "c54260986c4f3b7a1197dc75dae017dbc0a09489",
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "receipt_retirement_reference_test",
+        "--",
+        "--nocapture"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-receipt-reference-target"
+      },
+      "log": "qualified-tests.log",
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "receipt_retirement_reference_test",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/tmp/nativelink-receipt-reference",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-receipt-reference-target"
+      },
+      "log": "qualified-clippy.log",
+      "returncode": 0
+    }
+  ],
+  "files_sha256": {
+    "baseline-compile.patch": "e69e0f73cfb9130fa2b7c31e3305a2936c4782b75a6714cf72cb9e97de04f2c9",
+    "initial-coverage-threshold-failure.log": "a7d6a70afade334ba445ed361ae687531619798df648a5e1dd5b6dcf0c388185",
+    "model.patch": "35e69e79c5c7a8866dbcc837521aa73a97f1b57b74ead78f5b514921a973a5e5",
+    "public-types.patch": "bf7dab40694bb2e51ab3b3612d44e8fd019baf1db2542162bd634c2d92fc0732",
+    "qualified-clippy.log": "9fae560df62fe103df348cfa85ae34ea670ab3b191c51aac0c3d77840ab8bbc9",
+    "qualified-tests.log": "f041edeba20b3fc87af29c445fbf0f24a230a9bb66f4799912b6edde871bffc0"
+  },
+  "independence": "Author used public types and agreed contract only; did not read receipt candidate reducer. Baseline compile patch only rejects two new events. No production State/helpers imported by reference.",
+  "initial_failure": "The initial depth8/action8 explorer reached70states528transitions but incorrectly asserted a minimum100states. No semantic invariant failed. Final domain adds two delayed-cancellation actions and depth9; actual739states6520transitions are reported.",
+  "scope": "Independent reference and generic differential adapter; real candidate adapter/equivalence is a separate gate",
+  "source_sha256": {
+    "nativelink-scheduler/tests/receipt_retirement/README.md": "2169cde291f2a35d3c133e839d688a9f540e7b2d1eaea9a3ffc8ec9720fc510d",
+    "nativelink-scheduler/tests/receipt_retirement/differential.rs": "fcda9769ecfd927ac5b455f71049a5796e1544a832168417888a21aa02aad34a",
+    "nativelink-scheduler/tests/receipt_retirement/reference.rs": "d8a485ff33ffb06a80d8146bf5d0601cd9ba22e5f3c6ee37f27dd7c2be555315",
+    "nativelink-scheduler/tests/receipt_retirement_reference_test.rs": "93f204c3a60ec2e762169b0add1375222beaf8a2c95592763173342dff906e26"
+  },
+  "tests": {
+    "actions": 10,
+    "depth": 9,
+    "failed": 0,
+    "passed": 7,
+    "states": 739,
+    "transitions": 6520
+  }
+}

@@ -1,0 +1,392 @@
+{
+  "scope": "Root integration of namespace resynchronization with bounded authority-read producer lifetime; supplements unchanged author manifest.",
+  "source_commit": "d1c304281bbbccb8408e1045e923581953450689",
+  "author_source_commit": "8c929fecd76acefcb0d3b0ddd9790cd87d8a67ac",
+  "author_manifest_sha256": "7759590655989257923c8ceead91f1cc251301f469d69fe7d43fcb5acae2ce8b",
+  "author_receipt_sha256": "2c676672db4db22cc329c474667915c6339b7b0a8fe47f6506bb399f010993ef",
+  "source_comparison": {
+    "source_manifest_sha256": "0540060d45c25b3d74e2aa9138519e037e1b1720932c4f14eb4cc9cafcdbfa5c",
+    "inputs": [
+      {
+        "path": "tools/canonical-filesystem/BUILD.bazel",
+        "author_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+        "root_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/Cargo.toml",
+        "author_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+        "root_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/Cargo.lock",
+        "author_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+        "root_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/README.md",
+        "author_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+        "root_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/src/lib.rs",
+        "author_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+        "root_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/src/namespace.rs",
+        "author_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+        "root_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/src/namespace_tests.rs",
+        "author_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+        "root_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/src/tests.rs",
+        "author_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+        "root_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-filesystem/fixtures/namespace-v1.hex",
+        "author_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+        "root_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+        "identical": true
+      },
+      {
+        "path": "tools/canonical-store/Cargo.lock",
+        "author_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+        "root_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+        "identical": true
+      }
+    ],
+    "identical_count": 10,
+    "input_count": 10
+  },
+  "shared_root_archive": {
+    "path": "../authority-bounded-read-lifetime/root-integration.tar.gz",
+    "sha256": "ba3853243aae4c5ad23b9c177e70ac28413204c959a01608884b12b6d565d627",
+    "bytes": 202627
+  },
+  "root_result": {
+    "source_commit": "d1c304281bbbccb8408e1045e923581953450689",
+    "unchanged_tracked_non_evidence_inputs": 1337,
+    "all_input_hashes_verified_against_git_commit": true,
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "--test_output=errors",
+      "--keep_going",
+      "--build_event_json_file=/tmp/nativelink-categorical-evidence/authority-bounded-read-lifetime-integration/events.jsonl",
+      "//nativelink-service:unit_test",
+      "//nativelink-service:integration_tests/authority_listener_test_test",
+      "//tools/canonical-store:canonical_store_test",
+      "//tools/canonical-filesystem:ownership_test",
+      "//tools/canonical-filesystem:journal_test",
+      "//tools/canonical-filesystem:journal_bridge_test",
+      "//nativelink-scheduler:unit_test",
+      "//nativelink-worker:integration_tests/authority_rpc_test_test",
+      "//:nativelink"
+    ],
+    "targets_passed": 8,
+    "targets_executed": 8,
+    "targets_cached": 0,
+    "rust_passes": 303,
+    "ignored": 1,
+    "server_build": "passed",
+    "elapsed_seconds": 61.204,
+    "input_scope": "Every git-tracked path except categorical/evidence; symlink target text hashed, not external target bytes. Dependency/toolchain content not exhaustively hashed by this manifest.",
+    "tests": [
+      {
+        "label": "//tools/canonical-filesystem:journal_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "8.818s",
+        "rust_results": {
+          "passed": 45,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "764522e7d1d9bd66bad5e9198a67d798d31eb2d2fdb7f6fce7c4f2d786f3d4d9"
+      },
+      {
+        "label": "//tools/canonical-filesystem:ownership_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "3.839s",
+        "rust_results": {
+          "passed": 35,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "076991b6f0ac3d965eea8d8ea8dd6829942efcef204a372eb6493755e2aff51b"
+      },
+      {
+        "label": "//tools/canonical-filesystem:journal_bridge_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "0.847s",
+        "rust_results": {
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "fa7be7e499cc9c620a17c3802fc46ed474173ea5523ebbef5dcb6b355bbf2ba1"
+      },
+      {
+        "label": "//nativelink-scheduler:unit_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "13.807s",
+        "rust_results": {
+          "passed": 107,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "5bc8f696f47c633746940303599c02aeef22eb8cf85e51a8ab13ac65b14c254e"
+      },
+      {
+        "label": "//tools/canonical-store:canonical_store_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "9.820s",
+        "rust_results": {
+          "passed": 24,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "d6455c29da2a0d433e4417beba9a324c5b2ede972fe1a9324521323e0aa3db88"
+      },
+      {
+        "label": "//nativelink-service:unit_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "15.141s",
+        "rust_results": {
+          "passed": 43,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "a71431be09f04a66763f0ae4cec228d7cca71fb3950a7ee07a27c74339925a20"
+      },
+      {
+        "label": "//nativelink-service:integration_tests/authority_listener_test_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "3.838s",
+        "rust_results": {
+          "passed": 15,
+          "failed": 0,
+          "ignored": 1,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "38c3de36ca02bf2ea17a289e27bd2f36edd750fed1e81e52f490e723a4c82838"
+      },
+      {
+        "label": "//nativelink-worker:integration_tests/authority_rpc_test_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "36.136s",
+        "rust_results": {
+          "passed": 22,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 6
+        },
+        "log_sha256": "bd2c483849f9c9e0e5e38364d0f5606bf15a3ce3ef482ca1059881ade5dda265"
+      }
+    ],
+    "source_comparison": {
+      "namespace": {
+        "source_manifest_sha256": "0540060d45c25b3d74e2aa9138519e037e1b1720932c4f14eb4cc9cafcdbfa5c",
+        "inputs": [
+          {
+            "path": "tools/canonical-filesystem/BUILD.bazel",
+            "author_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+            "root_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/Cargo.toml",
+            "author_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+            "root_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/Cargo.lock",
+            "author_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+            "root_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/README.md",
+            "author_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+            "root_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/lib.rs",
+            "author_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+            "root_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/namespace.rs",
+            "author_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+            "root_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/namespace_tests.rs",
+            "author_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+            "root_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/tests.rs",
+            "author_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+            "root_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/fixtures/namespace-v1.hex",
+            "author_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+            "root_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-store/Cargo.lock",
+            "author_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+            "root_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+            "identical": true
+          }
+        ],
+        "identical_count": 10,
+        "input_count": 10
+      },
+      "bounded_read": {
+        "source_manifest_sha256": "762fd145058a737558812ade571be2c074048fdaed55c7ff5dcf70769576c5fe",
+        "inputs": [
+          {
+            "path": "nativelink-service/src/authority_storage_read_tests.rs",
+            "author_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+            "root_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+            "identical": true
+          },
+          {
+            "path": "nativelink-service/src/authority_server.rs",
+            "author_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+            "root_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+            "identical": true
+          },
+          {
+            "path": "nativelink-service/BUILD.bazel",
+            "author_sha256": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+            "root_sha256": "681d1a14fc58b9bf6d7dc3d87a74757251b4ae362144e9cdb50b97dd18edf618",
+            "identical": false
+          },
+          {
+            "path": "nativelink-service/Cargo.toml",
+            "author_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+            "root_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+            "identical": true
+          },
+          {
+            "path": "nativelink-util/src/buf_channel.rs",
+            "author_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+            "root_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+            "identical": true
+          },
+          {
+            "path": "nativelink-util/src/store_trait.rs",
+            "author_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+            "root_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+            "identical": true
+          },
+          {
+            "path": "Cargo.lock",
+            "author_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+            "root_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+            "identical": true
+          },
+          {
+            "path": "Cargo.toml",
+            "author_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+            "root_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+            "identical": true
+          },
+          {
+            "path": "nativelink-scheduler/design/categorical/authority-storage-read-lifetime.md",
+            "author_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+            "root_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+            "identical": true
+          }
+        ],
+        "identical_count": 8,
+        "input_count": 9,
+        "integration_delta": "BUILD source list retains both existing authority_timeout_tests.rs and newly added authority_storage_read_tests.rs in sorted order. All runtime and fixture bytes match author."
+      }
+    },
+    "raw_bep": {
+      "external_path": "/tmp/nativelink-categorical-evidence/authority-bounded-read-lifetime-integration/events.jsonl",
+      "sha256": "daacda0abf62874bc131b09af3423a6635eb7e6b096a19fecaed90dbfc58347c",
+      "repository_packet": "Excluded raw environment/URI-bearing BEP; normalized summaries and all eight exact test logs included."
+    },
+    "limits": [
+      "Focused eight-target integration, not a full workspace run.",
+      "The 303 passes overlap author and older root checks; they are not 303 unique behaviors.",
+      "One normally ignored TLS fixture; no fresh explicit TLS execution at this source boundary.",
+      "Root EOF original-source baseline compiled and ran: four passed, missing-EOF case failed on empty first iteration; partial iteration not reached.",
+      "No production constructor or categorical gate closure."
+    ]
+  },
+  "preserved_author_executables": {
+    "path": "qualified-executables.tar.gz",
+    "sha256": "db35ab8dea2252e48d5b52d1ea5c9dfae79222c9ad34acbc16e887649cb6359b",
+    "bytes": 11122742,
+    "files": {
+      "default-features-test-binary": "d5a92b134eadeacd93817a41c1ebab80cd554a51d510f582845d1fb23aa8bedc",
+      "final-all-features-test-binary": "fa488f4215d3232a3fb8a7d45fe90029264d1df715580fdbbafb30b53e399e23",
+      "final-default-features-test-binary": "8212ed6ca8b5dacdd49596eea543f93cb88a35f19335078f169251e47a2f0cd8",
+      "mutants/omit-last-binding-check/test-binary": "bd63f42ffe17dd2b3caf099de6222fd285c257ce795d3301a9814a494dc041e2",
+      "mutants/omit-node/test-binary": "c44c50724fc1957390eee386989aaf519a5b31ca431a3c11cacc92e1f8121459",
+      "mutants/omit-parent-sync/test-binary": "a56faffb803c1d515801ce6e12da5cad8cec29a574fb5540f952682495225381",
+      "mutants/omit-record-sync/test-binary": "7b6ee58cfa08bf68805343baecba31400b9d2eb76f175c02e1aabd0066bc6e30",
+      "mutants/release-custody-before-sync/test-binary": "a2f06192a44c60c581d4dfb1c7aaba038dcc14fc4e61b89e4663ce513f84e216",
+      "mutants/weak-token-custody/test-binary": "a92b86a5797f480d67126069823f0ac448455f6668013fcf5aab5ab517431801",
+      "qualified-test-binary": "58aef6b2792056396c0005c4e4b812fafc3cfd6198cf83b388162fac248b4985",
+      "restored-all-features-test-binary": "58aef6b2792056396c0005c4e4b812fafc3cfd6198cf83b388162fac248b4985"
+    }
+  },
+  "executable_qualification": "All eleven binary hashes occur in sealed author JSON records; each archive member verified. Earlier mutation binaries remain bound to qualified-source; final textual-golden source has fresh strict lint, all-feature/default suites and ten actual syscall scenarios. This supplement does not relabel earlier binaries as final source.",
+  "limits": [
+    "Current exact namespace records, pinned roots and retained cooperative locks only.",
+    "No historical durability acknowledgement, journal barrier, bootstrap, serving permission or physical-generation fencing.",
+    "Descriptor/device-inode commitments do not establish hostile-writer exclusion."
+  ]
+}

@@ -29,6 +29,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 
 use crate::common::DigestInfo;
+use crate::work_progress::{ObjectProgress, ProgressObserver, WorkKind};
 use crate::{fs, spawn_blocking};
 
 static DEFAULT_DIGEST_HASHER_FUNC: OnceLock<DigestHasherFunc> = OnceLock::new();
@@ -199,10 +200,20 @@ pub trait DigestHasher {
     /// Utility function to compute a hash from a generic reader.
     fn compute_from_reader<R: AsyncRead + Unpin + Send>(
         &mut self,
+        reader: R,
+    ) -> impl Future<Output = Result<DigestInfo, Error>> {
+        self.compute_from_reader_observed(reader, None)
+    }
+
+    /// Chunked hashing with explicit absolute-offset observations.
+    fn compute_from_reader_observed<R: AsyncRead + Unpin + Send>(
+        &mut self,
         mut reader: R,
+        progress: Option<ObjectProgress>,
     ) -> impl Future<Output = Result<DigestInfo, Error>> {
         async move {
             let mut chunk = BytesMut::with_capacity(fs::DEFAULT_READ_BUFF_SIZE);
+            let mut offset = 0_u64;
             loop {
                 reader
                     .read_buf(&mut chunk)
@@ -212,9 +223,22 @@ pub trait DigestHasher {
                     break; // EOF.
                 }
                 DigestHasher::update(self, &chunk);
+                offset = offset.checked_add(chunk.len() as u64).ok_or_else(|| {
+                    nativelink_error::make_err!(
+                        Code::ResourceExhausted,
+                        "Hash progress offset exhausted"
+                    )
+                })?;
+                if let Some(progress) = &progress {
+                    progress.offset(offset);
+                }
                 chunk.clear();
             }
-            Ok(DigestHasher::finalize_digest(self))
+            let digest = DigestHasher::finalize_digest(self);
+            if let Some(progress) = progress {
+                progress.complete();
+            }
+            Ok(digest)
         }
     }
 }
@@ -277,6 +301,14 @@ impl DigestHasher for DigestHasherImpl {
         mut file: fs::FileSlot,
         size_hint: Option<u64>,
     ) -> Result<(DigestInfo, fs::FileSlot), Error> {
+        if let Some(progress) = ProgressObserver::path_object(WorkKind::Hash, file_path.as_ref()) {
+            // mmap has no incremental callback. Observed authority actions use
+            // chunked hashing for both algorithms; legacy keeps its fast path.
+            let digest = self
+                .compute_from_reader_observed(&mut file, Some(progress))
+                .await?;
+            return Ok((digest, file));
+        }
         let file_position = file
             .stream_position()
             .await

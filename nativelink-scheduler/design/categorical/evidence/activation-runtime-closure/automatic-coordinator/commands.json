@@ -1,0 +1,75 @@
+[
+  {
+    "name": "payload-unit",
+    "argv": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "authority_server::tests",
+      "--",
+      "--nocapture"
+    ],
+    "exit_code": 0,
+    "seconds": 4.347
+  },
+  {
+    "name": "rpc-fixture",
+    "argv": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "--nocapture"
+    ],
+    "exit_code": 0,
+    "seconds": 29.264
+  },
+  {
+    "name": "service-clippy",
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 15.876
+  },
+  {
+    "name": "worker-clippy",
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 5.54
+  }
+]

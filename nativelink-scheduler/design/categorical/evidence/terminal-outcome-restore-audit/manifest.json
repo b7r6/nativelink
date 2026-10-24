@@ -1,0 +1,147 @@
+{
+  "boundary": "independent-terminal-outcome-restore-correction-root-integration",
+  "parent_commit": "ec5f1f63733def76d2a8c95cd73054116b260459",
+  "original_oracle": {
+    "qualification": "29 passing cases and 12 compiled kills remain original historical boundary",
+    "compiled_new_probes": 8,
+    "failing_new_probes": 8,
+    "reference_sha256": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "failure_receipts": "frozen-evidence.tar.gz:before/"
+  },
+  "corrected_oracle": {
+    "author_freeze_manifest_sha256": "e79061b6240bd4d6219b644308c43cef937d7d87bc98a0dfb0a553dfd35ca1c0",
+    "author_final_manifest_sha256": "43fa839cebbecc27961faab2ac364c8f36d4e6e4937791c2d14acdbcece9e680",
+    "compiled_mutants": 22,
+    "killed_mutants": 22,
+    "mutations": "12 original reruns plus 10 corrective retained-evidence mutations",
+    "strict_clippy": "PASS both targets -D warnings",
+    "snapshot_format": "independent-no-graph-terminals-v2; v1 refused; no invented migration",
+    "new_rust_matches_author_freeze": true,
+    "existing_root_cases_unchanged": true,
+    "unique_cases": 44,
+    "case_composition": "22 unchanged original composition + 7 frozen M1 + 15 new audit",
+    "source_freeze_preceded_candidate_inspection": true
+  },
+  "root_bazel": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 //nativelink-scheduler:terminal_outcome_reference_test //nativelink-scheduler:terminal_outcome_restore_audit_test",
+    "exit_code": 0,
+    "elapsed_seconds": 7.494,
+    "results": [
+      {
+        "target": "//nativelink-scheduler:terminal_outcome_reference_test",
+        "rust_tests_passed": 29,
+        "failed": 0,
+        "ignored": 0,
+        "xml_successful_wrapper_cases": 1
+      },
+      {
+        "target": "//nativelink-scheduler:terminal_outcome_restore_audit_test",
+        "rust_tests_passed": 44,
+        "failed": 0,
+        "ignored": 0,
+        "xml_successful_wrapper_cases": 1
+      }
+    ]
+  },
+  "full_pre_commit": "PASS full configured hooks after exact receipt-log packaging; root-precommit.log",
+  "scope": "local retained-evidence consistency only; historical worker eligibility, candidate differential, production activation and categorical gates not claimed",
+  "source_hashes": {
+    "nativelink-scheduler/tests/terminal_outcome/reference.rs": "35909d9e1af651be089935a3821113c639ea667a913a4bbcc903d5128cb11c65",
+    "nativelink-scheduler/tests/terminal_outcome/types.rs": "c36082d9426adce123405a5a01a2856f32ce15d15239cd9e7b880cc465cc4032",
+    "nativelink-scheduler/tests/terminal_outcome/restore_audit.rs": "e69cc415baef78f7b1610a7fd2d8ce3808d5e97d7a1ec34736ad2673b2710b60",
+    "nativelink-scheduler/tests/terminal_outcome_restore_audit_test.rs": "dd86c5de740ccffd8fff9d5543d617feb8270dde73e9dd387001a5d43feca0e0",
+    "nativelink-scheduler/tests/terminal_outcome/cases.rs": "70ff34dd35ccfea5ffc6e225cd5520f5aa5e11594e4c2621f2e12da5dc4c63ff",
+    "nativelink-scheduler/tests/terminal_outcome_reference_test.rs": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167"
+  },
+  "receipt_files": [
+    {
+      "path": "README.md",
+      "sha256": "f3850593270e30fef0379cb6de50d4054e99ca7db3ca3f23525b551616c84715",
+      "bytes": 1442
+    },
+    {
+      "path": "author-manifest.json",
+      "sha256": "43fa839cebbecc27961faab2ac364c8f36d4e6e4937791c2d14acdbcece9e680",
+      "bytes": 25045
+    },
+    {
+      "path": "corrected-freeze-manifest.json",
+      "sha256": "e79061b6240bd4d6219b644308c43cef937d7d87bc98a0dfb0a553dfd35ca1c0",
+      "bytes": 2993
+    },
+    {
+      "path": "frozen-evidence.tar.gz",
+      "sha256": "a4d43b148f292c7862f9a3f4dba665a8eb3258e5d10ce122f0a8df9ebbffbfbe",
+      "bytes": 330601
+    },
+    {
+      "path": "mutation-results.json",
+      "sha256": "4bf13804464d68a9bb6eb58426522967afcab16a3af95168844bbaf5faf2d572",
+      "bytes": 10443
+    },
+    {
+      "path": "original-failing-probes-manifest.json",
+      "sha256": "b09f47b765da93b26a156db4455124784e18df610679ac4154d9cba6917e00d3",
+      "bytes": 1460
+    },
+    {
+      "path": "receipt-log-format-hook.log",
+      "sha256": "2add77a49227398594dd5fd7309eafb6dec84a74a09b2eefe699f279eb941b30",
+      "bytes": 2350
+    },
+    {
+      "path": "root-bazel.log.gz",
+      "sha256": "cc1c4af9fb9203de85ee636f9dbfeda27836a0d684eef0e6864a351e2d32b883",
+      "bytes": 550
+    },
+    {
+      "path": "root-precommit.log",
+      "sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "bytes": 2160
+    },
+    {
+      "path": "terminal_outcome_reference_test-test.log.gz",
+      "sha256": "48596e311fea04315c7f60b1446ce25e007088cd6b156bc9bd0a2660fe2e9429",
+      "bytes": 1209
+    },
+    {
+      "path": "terminal_outcome_reference_test-test.xml",
+      "sha256": "0ebab1969dd8824df4a2e1e67627a21ebbebe77aaecfad2790ff0e08b87d87fe",
+      "bytes": 3457
+    },
+    {
+      "path": "terminal_outcome_restore_audit_test-test.log.gz",
+      "sha256": "62daf0bc57898437cb8794c9104ab31437fea29db87ee28b8628f8e197ab9799",
+      "bytes": 1560
+    },
+    {
+      "path": "terminal_outcome_restore_audit_test-test.xml",
+      "sha256": "d04dacb6cf7fdb19739f61c3be66ca1a2ba9fc14c506ba393fb9f4bcf190ed4d",
+      "bytes": 4801
+    }
+  ],
+  "compressed_root_logs": [
+    {
+      "path": "root-bazel.log.gz",
+      "compressed_sha256": "cc1c4af9fb9203de85ee636f9dbfeda27836a0d684eef0e6864a351e2d32b883",
+      "raw_sha256": "b6b1ea89aeb486bcfab993fbdac30e684090cacb36824b27df300415ac64e3db",
+      "raw_bytes": 1362
+    },
+    {
+      "path": "terminal_outcome_reference_test-test.log.gz",
+      "compressed_sha256": "48596e311fea04315c7f60b1446ce25e007088cd6b156bc9bd0a2660fe2e9429",
+      "raw_sha256": "8a3b389e83374c3a05c4e7c7e023df50858a96984657bfe6f5e5d2d1265d9e0a",
+      "raw_bytes": 3019
+    },
+    {
+      "path": "terminal_outcome_restore_audit_test-test.log.gz",
+      "compressed_sha256": "62daf0bc57898437cb8794c9104ab31437fea29db87ee28b8628f8e197ab9799",
+      "raw_sha256": "fd4a1186f3ea754230a6b66e1571b5f867f5a38a7a173cdbf295e904141a2cb8",
+      "raw_bytes": 4355
+    }
+  ],
+  "receipt_log_packaging": "Plain root Bazel log triggered trailing-whitespace hook; exact original logs preserved as deterministic gzip. Failed hook retained separately. No Rust source changed."
+}

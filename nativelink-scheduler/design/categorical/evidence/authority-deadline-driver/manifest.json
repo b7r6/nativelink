@@ -1,0 +1,11 @@
+{
+  "archive": "author-evidence.tar.gz",
+  "archive_sha256": "65af36332e9d685a70b1842380a935f503ddbdc5a452e93a74a61ee6ab2e2aad",
+  "author_commit": "75685737e38057296d15ffde209566740120d7f7",
+  "embedded_manifest_sha256": "3daedcfb588c154874ccc4779e457ff3019c493ac8f78f4e0d8e5723682253b4",
+  "patch_sha256": "bb7f94f933719f47295ae4d4929a694192c8097c98fc24b6766140d8217be052",
+  "qualification_sha256": "b5cc836ce8232dafe6cf407bdd5a34684016f91220ca018de8c882825e720d63",
+  "root_commit": "4876ddd48c",
+  "schema_version": 1,
+  "scope": "Two reproduced coordinator deadline defects, unchanged final-fixture source-omission controls, focused repaired tests and explicit parent import validation overlay. Root workspace verification is separate."
+}

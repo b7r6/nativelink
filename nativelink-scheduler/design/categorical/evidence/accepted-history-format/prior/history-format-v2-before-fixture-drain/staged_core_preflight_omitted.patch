@@ -1,0 +1,19 @@
+--- nativelink-scheduler/src/authority/journal.rs
++++ nativelink-scheduler/src/authority/journal.rs
+@@ -749,14 +749,14 @@
+     };
+     for index in start..=last_feature_index {
+         if let Some(entry) = incoming.get(&index) {
+-            replay_state(&mut applied, &mut state, entry, reader)?;
++            let _ = &mut state; replay_format(&mut applied.format, &mut applied.membership, entry, reader)?;
+         } else {
+             let bytes = logs
+                 .get(index)
+                 .map_err(|e| failure(ErrorVerb::Read, e))?
+                 .ok_or_else(|| failure(ErrorVerb::Write, "feature append has no preceding log"))?;
+             let entry = decode_log(epoch, index, bytes.value())?;
+-            replay_state(&mut applied, &mut state, &entry, reader)?;
++            let _ = &mut state; replay_format(&mut applied.format, &mut applied.membership, &entry, reader)?;
+         }
+     }
+     Ok(())

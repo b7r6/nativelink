@@ -1,0 +1,336 @@
+{
+  "source_directory": "/tmp/nativelink-canonical-worker-materialization-tests-first",
+  "archives": [
+    {
+      "path": "tests-first-01.tar.gz",
+      "bytes": 195937,
+      "sha256": "b5643e2faaacc0ec2d49050ff9ece09cdb8236f832b8e6a4238c788db98a432b",
+      "files": 46,
+      "source_bytes": 794485
+    }
+  ],
+  "members": [
+    {
+      "path": "tests-first/base-source/.claude/skills/nativelink-rust-change/SKILL.md",
+      "bytes": 2410,
+      "sha256": "72fdebc3737e84dbb3de99ab985f28e69f450c9e87495febeea5842f83171c81",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/.rustfmt.toml",
+      "bytes": 172,
+      "sha256": "06031963ffb1d2649f05f0d4e84eb37e67d95e7a75cfde17fd35a481e10d67a6",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/nativelink-scheduler/design/categorical/source-plan.md",
+      "bytes": 102267,
+      "sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/nativelink-worker/src/running_actions_manager.rs",
+      "bytes": 289742,
+      "sha256": "767d035fe66c80bee33f3887732072d70d1cda581613ddccf0044832294a044c",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/BUILD.bazel",
+      "bytes": 1488,
+      "sha256": "1db5d4dcfeef148425396a0a702197b9847d974199228bf084c147dafbfbc03a",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/Cargo.lock",
+      "bytes": 6331,
+      "sha256": "09ca0e571c9d717a3db8bc3cb7ebc8f61243b14ff0f990855dfa9dd6b23adb01",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/Cargo.toml",
+      "bytes": 1258,
+      "sha256": "5006c5d6900fd80fdace204fa6819c5f4acbee5aa1b02a4989d5b4f364e8d4df",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/README.md",
+      "bytes": 8275,
+      "sha256": "9fb394bb9b9e0941765685a7f257f72ee122184ced47b31ceb60524863a15959",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/fixtures/canonical.json",
+      "bytes": 1546,
+      "sha256": "1bfec5d8a1c79f1fd0adbfa095a2e6c8fd8b6ff0cf251de377f4d1b3bf14080f",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/fixtures/legacy.json",
+      "bytes": 1887,
+      "sha256": "e1e0006998fc9d32e0c6c5dec4a723605a933d7b81850adac7ab40813da16943",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/fixtures/mapping.json",
+      "bytes": 3290,
+      "sha256": "121da3b19f9f1bc7af74e219f8ee9a8dba2f9dd262e7d03d2ec5eed76f2e2451",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/bin/convert.rs",
+      "bytes": 2009,
+      "sha256": "d09c9da2d3cc0409afdc78384afd4bc53a07fe6db557ea4921a0e8855bbb3dc6",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/conversion.rs",
+      "bytes": 21350,
+      "sha256": "3408c8a175ed6d75b25d2ed2a935314b9584c2e24b6899a6df7d95958fae7aa6",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/conversion_tests.rs",
+      "bytes": 11020,
+      "sha256": "a5cdbabc616c059eb0ddd3249b1ccac4ae19b0a7e6dc2a035832cef8384c8a05",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/legacy.rs",
+      "bytes": 3835,
+      "sha256": "7a9b68131bbc591c51205bcc9ecfc5ce57a45b1dcfd4a8e6a6c3e2706a909fe8",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/lib.rs",
+      "bytes": 1836,
+      "sha256": "f9409ff2fae81699595be39388ba72faa1059fbc784ce3913df956fd2d1c2928",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/parse.rs",
+      "bytes": 8371,
+      "sha256": "89dbbc2078525156e73bba6377bdaacd79568e6f9208536fd78147aa4d979943",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/src/schema.rs",
+      "bytes": 9802,
+      "sha256": "fa148b311b180a1b0e63d89bbb318d9714e218f357028cd6ad5ce4cb5d453764",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-config/tests/parser.rs",
+      "bytes": 8664,
+      "sha256": "2c84b570ca492210abafa8d31d9095b359fc8f4409680f301ac8b6536cffc234",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/BUILD.bazel",
+      "bytes": 2775,
+      "sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/Cargo.lock",
+      "bytes": 8052,
+      "sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/Cargo.toml",
+      "bytes": 1107,
+      "sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/README.md",
+      "bytes": 19440,
+      "sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/fixtures/namespace-v1.hex",
+      "bytes": 373,
+      "sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/journal_bridge_test.rs",
+      "bytes": 21144,
+      "sha256": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/capability.rs",
+      "bytes": 17462,
+      "sha256": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/capability_tests.rs",
+      "bytes": 17934,
+      "sha256": "c8b518f26a80029f4307406c1dd69a78a24c7c67964e8c4e4c83f9635bd69c8f",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/journal_tests.rs",
+      "bytes": 13419,
+      "sha256": "e0c9293bc8f7bf59e45da2c2de5bad9046259686cca35f1ee8ccbbd638014ca3",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/lib.rs",
+      "bytes": 11988,
+      "sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/namespace_tests.rs",
+      "bytes": 14464,
+      "sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/base-source/tools/canonical-filesystem/src/tests.rs",
+      "bytes": 13387,
+      "sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/candidate-source/tools/canonical-filesystem/BUILD.bazel",
+      "bytes": 2837,
+      "sha256": "24b24c63505a17017033099ed1a1375540b5621688a267c55c3be0ad641eb997",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/candidate-source/tools/canonical-filesystem/src/tests.rs",
+      "bytes": 13428,
+      "sha256": "e304aeb65ce888b9154abf7f4331d9cbe7971e7a9bb51cb1b7d5be0be7861e41",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/candidate-source/tools/canonical-filesystem/src/worker_tests.rs",
+      "bytes": 36616,
+      "sha256": "df773e3ddd01b11c49c409700061b60b2602e991c0629b0444998d73a56212eb",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/freeze.py",
+      "bytes": 20871,
+      "sha256": "8aafa4554159ed9cb71d477464a3eca1517115f19fa313f61196e66016e28461",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/inputs.json",
+      "bytes": 8294,
+      "sha256": "f4854823c8ab85f2f541e876b008bc25b065944c439cc81baa93bdfcd1052429",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/prior-approved-proposal.json",
+      "bytes": 35093,
+      "sha256": "8263506056cf45070592d7dedc4a1ec3da41e8ab7c57fcea8dba125f3db307b4",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/proposal.json",
+      "bytes": 22382,
+      "sha256": "0ca1fd50f8af0a5daf063cff6e36e5104b16c1ee4d07a06db5967d75ef6c67cb",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/receipts.json",
+      "bytes": 7544,
+      "sha256": "1643cfa709e5cdc9d46f08d1f1e0039cc1034cd390e6f783f23ea532460260cf",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/rustfmt.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/rustfmt.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/seal.json",
+      "bytes": 514,
+      "sha256": "d2331bdfc4690564cf0cbc9737a42cddecbd93925354d748098bbcd3511caa88",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/tracked-tests-only.patch",
+      "bytes": 1240,
+      "sha256": "e7f88801bf08f7653c8c7c327ad14116f31ea7aa2c5da6fe73de9cb917ba8a96",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    },
+    {
+      "path": "tests-first/verification.json",
+      "bytes": 1061,
+      "sha256": "6b7b7e92c8af21487a9087d3fca53011c6f9ccd15ffb6850eeb6481cc8446d62",
+      "mode": 420,
+      "archive": "tests-first-01.tar.gz"
+    }
+  ]
+}

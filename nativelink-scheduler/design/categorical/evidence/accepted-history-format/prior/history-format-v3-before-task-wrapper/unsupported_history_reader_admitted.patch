@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/format.rs
++++ nativelink-scheduler/src/authority/format.rs
+@@ -212,7 +212,7 @@
+             || usize::try_from(self.feature_epoch).map_or(true, |epoch| epoch > self.required.len())
+             || (self.feature_epoch == 0) != self.required.is_empty()
+             || (self.feature_epoch == 0) != self.activated_at.is_none()
+-            || !reader.supports(&self.required)
++            || (!reader.supports(&self.required) && !self.required.contains(&ACCEPTED_HISTORY))
+         {
+             return Err("reader cannot recover the activated authority format".into());
+         }

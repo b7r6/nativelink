@@ -1,0 +1,36 @@
+{
+  "artifacts": [
+    {
+      "archive": "precommit-current-config.json.gz",
+      "archive_sha256": "2482608833734423e9555ea2feb2bb7d84d7f725a65a467a6115e424a48a876b",
+      "sha256": "3c74c6214a209d14d017bf3b4eed6edff068563be68125677ea245494359f9ce",
+      "source": "precommit-current-config.json"
+    },
+    {
+      "archive": "precommit-current-config.log.gz",
+      "archive_sha256": "faa9c47f162015920a04face79b49d2b4b8652f81e39e4b069425d84c8c4e2b5",
+      "sha256": "c5f8a7f6c7a65e989bc9b6803714fd527a37e6d0bfd28a49747ce1026c1ff051",
+      "source": "precommit-current-config.log"
+    },
+    {
+      "archive": "precommit.json.gz",
+      "archive_sha256": "2a1686474364846234d81decb74bdfda6247e3384798376e286355dbdbd5bd1a",
+      "sha256": "1e3647041aba79dbd53bba8e3432976b974254369f59949b6d0209ee49c16690",
+      "source": "precommit.json"
+    },
+    {
+      "archive": "precommit.log.gz",
+      "archive_sha256": "0c7acb82764dd39e1eb3eebbbce8e0abb0d6ba7428c2b31cfc6bb02d60ad28f6",
+      "sha256": "62fb5088b27c93a1ac07259243a69f803165a0ab4f82ad8d9681f2b2a5470346",
+      "source": "precommit.log"
+    },
+    {
+      "archive": "restored-evidence.json.gz",
+      "archive_sha256": "562e015d7575fd735fff719a6d5c5d40ab302b71263f4fe53dee12a4dee76407",
+      "sha256": "53fbd2013d73e590377accad95386a9319bc120faa2a27a99d202f29b5a74239",
+      "source": "restored-evidence.json"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Fullchangedfile hookrun; stalegeneratedconfig failure, exactHEAD evidence restoration, current-source explicitconfig pass. No hooksource exceptions added."
+}

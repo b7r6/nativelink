@@ -1,0 +1,58 @@
+[
+  {
+    "label": "rpc-final",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "--nocapture"
+    ],
+    "exit": 0,
+    "seconds": 29.906145811080933
+  },
+  {
+    "label": "service-clippy-final",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 5.91960072517395
+  },
+  {
+    "label": "worker-clippy-final",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 6.898084402084351
+  }
+]

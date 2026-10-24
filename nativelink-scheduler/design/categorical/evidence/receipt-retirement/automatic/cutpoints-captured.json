@@ -1,0 +1,19 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--profile",
+    "smol",
+    "-p",
+    "nativelink-worker",
+    "--test",
+    "authority_rpc_test",
+    "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+    "--",
+    "--exact",
+    "--show-output"
+  ],
+  "exit": 0,
+  "seconds": 265.697689255001
+}

@@ -1,0 +1,127 @@
+{
+  "scope": "Focused experimental checkpoint. No production cutover or format freeze. Physical tests exercise process exit and declared local filesystem behavior, not power-loss certification. Listener evidence uses the real existing binary and ephemeral loopback topology, not the new coordinator or a deployed fleet. Earlier workspace receipts are not reattributed to this newer source.",
+  "base_commit": "86fc7d55fd9a3950946652710ce816bd97393288",
+  "source_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/BUILD.bazel": "6af28a11eabbb4c94ff534564b587303d7cf76263c470bd8f640422371159db1",
+    "nativelink-scheduler/src/authority/mod.rs": "cc8adcf6b4324e8d0e1c9991078fd5b2b08d77a1f2bdb5cc6b7dcd55d0829850",
+    "nativelink-scheduler/src/authority/tests.rs": "1c856f49659a34d27e7f5d155d87c548a7e8d73bdd864d54affef164b52c8465",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/tests/authority/reference.rs": "1218afe527460ee737bcc45947dae5a2376987d8774b0fffb71db0d1853b17b0",
+    "nativelink-scheduler/tests/physical_retention_test.rs": "80c8741c8fbde4d3f5ad4ec7c4ad27de479669bf4d454b4d60391ab9a56d86bd",
+    "nativelink-service/src/ac_server.rs": "c531b0f48260d446784e0bb2ec072fcf1b4f43853d80f9dc8454142844beac58",
+    "nativelink-service/src/bytestream_server.rs": "a8c0e91a45d3563609e1676cf2958d209fd2825f517fa0626b13540be762bcc9",
+    "nativelink-service/src/cas_server.rs": "43be3d75c7fc7b02735c45ee0408ff51f27c5d17189b32a9ce723bfc63942a1d",
+    "nativelink-store/BUILD.bazel": "308ca979a5c7750b3406fe05504edfa66fd24aeb27bf09a477e323ca5e16f84b",
+    "nativelink-store/src/lib.rs": "e9592c177e960736c65b96b340fdfc9ec4305a32b86c03ced881575d67dc295e",
+    "nativelink-store/src/physical_filesystem.rs": "75534e8779ae5d9e9eb1c53d60d80a037bbeae6ce32471f3fbc331e4810cc189",
+    "nativelink-store/tests/physical_filesystem_test.rs": "c6d84a21057174adf73503a973bc0c64f2d2a8454bedba4832cf9d4a0ed4ce93",
+    "src/bin/nativelink.rs": "84ec7247c5cce7674c4d7fdeabb35776ba4fdddfebadc56f2fe0ee404199bf6c",
+    "tools/test-authority-listener-boundary.py": "c44a6700bf214dc0678b60fba52308033b9c9473691265892981928366231d6a",
+    "tools/test-physical-mutations.py": "4d98ca7b0915477a1aa9fc7016e9ec6efa8307702831c182bd0a6e5cdee83cbd"
+  },
+  "logs": [
+    {
+      "file": "core5-identity-tests.log.gz",
+      "uncompressed_sha256": "80d65a2329bf954b9c3fdeb3dc5373da8012938932e9d22b78dfe87b3aabbc1c",
+      "archive_sha256": "979363b21961b3464c050c15b1d56079911d23ec9ff5b7a69410315a76e99e3c",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler --lib --test authority_test",
+      "result": "48 library tests and 68 independent harness tests passed"
+    },
+    {
+      "file": "core5-identity-clippy.log.gz",
+      "uncompressed_sha256": "20012341ffe2e5c0d7c2635a825a632d44111c59529878405b8ee85ac33ec4d0",
+      "archive_sha256": "f989afdb1fc74848cf9a65050ba7d93f5034ee26fc9e352d8a42d7b05266de4a",
+      "command": "cargo clippy --locked --offline --profile smol -p nativelink-scheduler --lib --tests -- -D warnings",
+      "result": "Passed"
+    },
+    {
+      "file": "physical-integrated-cargo.log.gz",
+      "uncompressed_sha256": "f173f612f9a8983b21c928fdb620944f060f24fa54d0f5b0d496470369abf758",
+      "archive_sha256": "bc8a80fce33154372133f2903ba9b933a2ad76302a33714d4a31dba3bbc7d27a",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-store --test physical_filesystem_test -p nativelink-scheduler --test physical_retention_test",
+      "result": "10 physical and 3 retention bridge tests passed"
+    },
+    {
+      "file": "core5-physical-bazel.log.gz",
+      "uncompressed_sha256": "587a1d31d273e667de83db34c4acd45d66378469534abb35f7c71375d3583490",
+      "archive_sha256": "02b15d9602d465062fbf5c5c7533136489d650086d673e030d5a15f0058eb929",
+      "command": "bazel test //nativelink-scheduler:unit_test //nativelink-scheduler:authority_test //nativelink-scheduler:physical_retention_test //nativelink-store:integration_tests/physical_filesystem_test_test --jobs=24 --test_output=errors",
+      "result": "4 targets passed"
+    },
+    {
+      "file": "listener-binary-build.log.gz",
+      "uncompressed_sha256": "db541c92d1cbd6a63f579d8cf64cc47f90e142b49a9c231a983e656640e3bce7",
+      "archive_sha256": "6f4e050d1e3ffffea2750e323742188f30e2044776fe61e9f2190f243fa7e820",
+      "command": "bazel build //:nativelink --jobs=24",
+      "result": "Passed"
+    },
+    {
+      "file": "listener-boundary-runner.log.gz",
+      "uncompressed_sha256": "95f8041ac45a5b8b82dad5352bebb34406cd32d50980649a64de3285f3491e4c",
+      "archive_sha256": "e3572e183c9ae8e07cbd73766c550480e2b7b2574f30e78fd801e59ce7bcd535",
+      "command": "python3 tools/test-authority-listener-boundary.py --binary bazel-bin/nativelink --output /tmp/nativelink-categorical-evidence/listener-boundary",
+      "result": "Isolated topology passes; 3 deliberately unsafe controls detected"
+    },
+    {
+      "file": "physical-mutations-runner.log.gz",
+      "uncompressed_sha256": "6adad254743b0e65f1298d3a5bedd60b5fad4b023cf4dbc507aac2b2686736b8",
+      "archive_sha256": "bc5831e5d30271b3c3310a035f3b99a6adf7c905201828ed865c3c039623cb77",
+      "command": "python3 tools/test-physical-mutations.py --output /tmp/nativelink-categorical-evidence/physical-mutations",
+      "result": "Baseline passed and all 3 semantic faults detected"
+    }
+  ],
+  "raw_receipts": [
+    {
+      "file": "physical-mutations/baseline.txt.gz",
+      "uncompressed_sha256": "1bed700f34435a7ff50922ec2ee3570aab99984b0a610a7846cce4324f7af847",
+      "archive_sha256": "fc68e041cb4779c174f940902f0cb1acdd1cb99abbe8481ca11dafbc1fb3808e"
+    },
+    {
+      "file": "physical-mutations/delete_foreign_incarnation.txt.gz",
+      "uncompressed_sha256": "9a762dfaf96ea4d1c5d639f6dc29479238d64ca78d6faa2b04c09d0448b9c193",
+      "archive_sha256": "417878fbdee697c075eb8b18168492f7a2f7a0225803cac32928ce4468cb56ff"
+    },
+    {
+      "file": "physical-mutations/expose_range_without_complete_digest_validation.txt.gz",
+      "uncompressed_sha256": "4b484314c8f91f6107ffb426154b0b5ff770912e98f5e4182d12329bccb6d6e7",
+      "archive_sha256": "743a577a5e4a2f92c7193bb4fe2c53eb176b333795299b2096f6e7903053611a"
+    },
+    {
+      "file": "physical-mutations/mutations.json",
+      "uncompressed_sha256": "2eda3b64c06b3783d06559b700963e9ef6a65fc6999d4c44369300f4cc04dbfe",
+      "archive_sha256": "2eda3b64c06b3783d06559b700963e9ef6a65fc6999d4c44369300f4cc04dbfe"
+    },
+    {
+      "file": "physical-mutations/overwrite_immutable_generation.txt.gz",
+      "uncompressed_sha256": "00483b8b1e92f1b63f6500777afe86928ca2061444e6f0776fb4528d857a683a",
+      "archive_sha256": "7ef1ae2d32854689444ebc2a4e6a6c9089d914ef085416e3d738129309dcdc85"
+    },
+    {
+      "file": "listener-boundary/manifest.json",
+      "uncompressed_sha256": "8e51d7d7bd7c7136b5797ef33ef1c26ac52877019cf7dad181bd376d669cbe92",
+      "archive_sha256": "8e51d7d7bd7c7136b5797ef33ef1c26ac52877019cf7dad181bd376d669cbe92"
+    },
+    {
+      "file": "listener-boundary/server-aliased-store.log.gz",
+      "uncompressed_sha256": "c135dc22a8c95ae58722a430b0a5797c018a3b453aa0b371ccfacbd7dd6b1f7a",
+      "archive_sha256": "77127a85179ea538046afd7d19bb0e16c6ef8c1c5ea186cf9df41fcdfd516569"
+    },
+    {
+      "file": "listener-boundary/server-isolated.log.gz",
+      "uncompressed_sha256": "ddb90bf1aad2491b900ef66c59d994b81ecca0584a110f3ff9628a55d0102740",
+      "archive_sha256": "b912dd85e4787defe0d2918276b48407aebe98d4d4fa6aa0a5d80c9714cbfe56"
+    },
+    {
+      "file": "listener-boundary/server-shared-trust.log.gz",
+      "uncompressed_sha256": "5c7c4610d0e425b65c03c9a2c5f034154225d0cdbcaf60baa34381dcc48ad836",
+      "archive_sha256": "346b8e80505c20c19dde707f11fe732adf603e04324a213250c9e305946cafed"
+    },
+    {
+      "file": "listener-boundary/server-worker-ac-route.log.gz",
+      "uncompressed_sha256": "dad19dcd17ee1ff63b5b246bae6bd70e1682db76175155f03040d733590e8641",
+      "archive_sha256": "2afe31ced117727fe0f35b33eeb63c708bf666ddc66331569f2d4e839ed84695"
+    }
+  ]
+}

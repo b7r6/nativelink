@@ -1,0 +1,172 @@
+{
+  "source_commit": "424c1f93b4c0563571cad94f763b1ae7ba7fcfdd",
+  "scope": "Persisted Limits exact equality before Journal admission registration and Singleton startup",
+  "archive": {
+    "path": "qualified-evidence.tar.gz",
+    "sha256": "eed356eba574a4131c119f58e2b1d5991c43d45b5327cafd1aa134394b76e580",
+    "bytes": 273778,
+    "files": {
+      "baseline-bridge.log": "a45b16a42107ba85ed3b1531f2ac38c836be4112e1c770cf94dabc807f93e10d",
+      "baseline-command.json": "e2899ff3c7f951b739d2ff36040ff48101e912055d834ecbac4c45d3aa1e63ba",
+      "baseline-head.txt": "63ce6eba5397260147e852eda6947b7b8c41eae49f2a17ba752e02497ea1cba8",
+      "baseline-source/nativelink-scheduler/src/authority/journal.rs": "21b53a041beffbebbdd5c4d40449293613c425044f0640bad44aadd07e7f06e8",
+      "baseline-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "6f964bcf4eab0f1332d6e4252ce0bea04ab5a2527d412cd668f751d015636c1f",
+      "baseline-source/tools/canonical-filesystem/journal_bridge_test.rs": "b7f5c6d8ee42679eedf73d01dce9329cde59dfabafd9a87e8a8851a879f8dfda",
+      "baseline-source.json": "33fdf83eb3d00558a0c0dea1592c7fbe579d2126b67f5a161e596508e16d6cf9",
+      "baseline-unit.log": "5c6b2e74e75a2d9773e07c092074cdd4994b60d7842715451c659bc8ad7ec7b0",
+      "baseline.log": "e8d5cc35a8ebeff3eceeb552949a8d9958c00e127cda025a84c0b7bcb03bf0d2",
+      "first-selection-mutants.json": "8db03ff18f98459029e6dbf29859804f6550b049234c62c4bb173a18c14355b3",
+      "first-selection-mutations.log": "a78b71bbc410e3d9f437d11e6938db7ac6abeab1ea72ee281a19ef830ea032f3",
+      "first-selection-run-mutants.py": "94994dd3286636686b2251303412f72bef3649fe3b1d884e4ddaea7f9d64599e",
+      "fixed-bridge.log": "eccfb387ef7ad65f922ce34c86999152a7f41e3c5fa61b75c92b89a5c66af564",
+      "fixed-journal.rs": "4e375e99ade8765ef132f9ee542b632d6f0f2b9e9922850966e409fe84ea20e6",
+      "fixed-unit.log": "07061a33ff6017cb6cd1f18b74840fe4a6f673993f7dcf72c135416d8749f2e6",
+      "fixed.log": "080de1ac1638b2deaa01ad2ea7d74e37dd5d764ba6f2f45c4bb2ded2571f05a0",
+      "mutants.json": "d5bbf203faadc6eb522c94e4f5bf7fc1a1fd00525b669dec9ff82a3b22a3b6bb",
+      "mutations.log": "d6e7af499defe07597e3275429c868f51eb168633435a925669db74fbbdbcae2",
+      "omit-applied-limits-singleton-test.log": "f65e6172cb3e7a9227d8b1238f4313fa1de6a68d6fde37ea40e2e581748a7c95",
+      "omit-applied-limits-singleton.log": "1dc57d47ba1e33e8a51fd74c226a535ccfde0e4fcb1d6aeb0d772d7760411592",
+      "omit-applied-limits-singleton.rs": "c640437b7e4eac6a6a5dd6d7eba248f911ba558b403d370cc5d08a274c005daf",
+      "omit-applied-limits-test.log": "54f0c3139de3f18c38590cfb339986c5c333f2366bc3169c4f3fce71e808487c",
+      "omit-applied-limits.log": "4edbd9ec3eaec5cdf8ef2be40e7f6b3761942b155d6bcd59b61ed684e213cea0",
+      "omit-applied-limits.rs": "c640437b7e4eac6a6a5dd6d7eba248f911ba558b403d370cc5d08a274c005daf",
+      "omit-snapshot-limits-test.log": "9d1465ee966ae93bcd92745d9b27f7a3f2a1b13b6fe54b225990978655f2c0cd",
+      "omit-snapshot-limits.log": "9d0f763d23c541198155bf8345a4a53191bc611c6165cda87646e11eb53283fb",
+      "omit-snapshot-limits.rs": "5325c5a66dd180b6ebaf563e226045f652ee9354caf046357c2d6ac097180778",
+      "restored-command.json": "2b63696f44ea9412a7f3d0201e5776392266c430176180e99f0bcbdb84d52822",
+      "restored-sources-after.json": "7773c9a6d1f371edd1074d947f8ad1879a13b1f5b54d169a6c88fd563cf33768",
+      "restored-sources-before.json": "7773c9a6d1f371edd1074d947f8ad1879a13b1f5b54d169a6c88fd563cf33768",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log": "e64f4d21bedc850afe90d42aad20f429c7991f3d79ade99a2c2da02221371d67",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log": "79567cb83e58779d6d4dac313ae29c9141254064b2007f5933d6faa8e0600d72",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log": "76a9c8bb2febb613894bb6c3271082fd8ace84873eff0a2188ef110b245fd979",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log": "a8a0c66fc698840efcaf29adc2a8e71faba048f1c79fdc2a12539b5a9756de87",
+      "restored-testlogs/nativelink-scheduler/unit_test/test.log": "ccd64ef38c721f8580d252bfee4ffdecf03be6e709d32bbb94b19f8866d09f66",
+      "restored-testlogs/nativelink-service/unit_test/test.log": "ff1de5f1de59a976c61ace5565a737a85a9f612b3244a1dfaa3c9cbbecbfd67f",
+      "restored-testlogs/nativelink-worker/authority_history_rpc_test/test.log": "f5dc02e180599b5975883b69ee1312007046f7fcadf41c2e1bb9c060299cff6c",
+      "restored-testlogs/nativelink-worker/authority_replicated_rpc_test/test.log": "253324122e30cee87b2d6f04ccb2f84c069536c83c3627f5a57a2a49bc814962",
+      "restored-testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "eccfb387ef7ad65f922ce34c86999152a7f41e3c5fa61b75c92b89a5c66af564",
+      "restored.log": "c786bfc121f2f9e1558b9ac8ab7305d4ff7528926c0a188d63e944f0cd2a7659",
+      "review-positive-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "6f964bcf4eab0f1332d6e4252ce0bea04ab5a2527d412cd668f751d015636c1f",
+      "review-source/nativelink-scheduler/design/categorical/descriptor-journal.md": "841a073aa64f5892b223e9a5878c2eb0c37cdf9118e95d18537c1fbb207dc2f3",
+      "review-source/nativelink-scheduler/src/authority/journal.rs": "4e375e99ade8765ef132f9ee542b632d6f0f2b9e9922850966e409fe84ea20e6",
+      "review-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "caedaabe3ab34719a8e2511907a44c4978524ff069d2fe43448b49ff6a868fe6",
+      "review-source/tools/canonical-filesystem/journal_bridge_test.rs": "b7f5c6d8ee42679eedf73d01dce9329cde59dfabafd9a87e8a8851a879f8dfda",
+      "root-independent-review.json": "50267d1f564c0b64c0cdc2887bd2d8e6f5705629dfef9fbdb5b981b3a0a006a1",
+      "root-positive-review.json": "9609bd7efb05aadaf01b6098448513fe2cee5abaee2e60afb01d4996a264e5e6",
+      "run-mutants.py": "d51210449af93c13d67fa1f9acaffd2f737ac3442ab1f586d7cf7129ed7b4329",
+      "run-restored.py": "6179ef6323fa62558789dfce032c4a81a05d0f0fc12c47e18681c2a002e65acb"
+    }
+  },
+  "qualification": {
+    "baseline": "baseline.log: 4 new unit failures and one descriptor bridge failure; 5 selected unit cases passed",
+    "fixed": "fixed.log: 89 scheduler units and 12 descriptor bridge cases passed",
+    "mutations": [
+      {
+        "name": "omit-applied-limits-singleton",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_reopen_refuses_changed_limits_before_startup",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "compiled": true,
+        "detected": true,
+        "exit_code": 3,
+        "sha256": "c640437b7e4eac6a6a5dd6d7eba248f911ba558b403d370cc5d08a274c005daf"
+      },
+      {
+        "name": "omit-snapshot-limits",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=reopen_refuses_limits_hidden_only_in_saved_snapshot",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "compiled": true,
+        "detected": true,
+        "exit_code": 3,
+        "sha256": "5325c5a66dd180b6ebaf563e226045f652ee9354caf046357c2d6ac097180778"
+      }
+    ],
+    "initial_surviving_selection": "Removing applied-state comparison survived the ambient fixture because its saved snapshot enforced the same caller limits. Preserved in first-selection-* and omit-applied-limits.*; retargeted to existing no-snapshot singleton fixture, which detected it.",
+    "restored": {
+      "passed_targets": 9,
+      "executed_targets": 8,
+      "cached_targets": 1,
+      "server_build": "//:nativelink",
+      "elapsed_seconds": 55.982,
+      "unchanged_inputs": 548,
+      "per_log": [
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log",
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log",
+          "passed": 28,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log",
+          "passed": 24,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/unit_test/test.log",
+          "passed": 89,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-service/unit_test/test.log",
+          "passed": 23,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-worker/authority_history_rpc_test/test.log",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-worker/authority_replicated_rpc_test/test.log",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/tools/canonical-filesystem/journal_bridge_test/test.log",
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0
+        }
+      ]
+    },
+    "review": "root-independent-review.json plus root-positive-review.json",
+    "clippy": "Bazel Clippy target checks; no separate Cargo execution for this exact root commit"
+  },
+  "limitations": [
+    "Reopen validates logical records; no claim physical database bytes cannot change on redb open/recovery.",
+    "Live snapshot installation, recover_admission, cluster-wide envelope binding, canonical clock and complete membership checks are separate.",
+    "No production activation or workload-size qualification."
+  ]
+}

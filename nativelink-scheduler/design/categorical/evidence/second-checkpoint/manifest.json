@@ -1,0 +1,97 @@
+{
+  "scope": "Experimental regression checkpoint, not production qualification or performance evidence. Exact source hashes captured after formatting. Full Cargo preceded final cluster response-fence and metrics reuse; focused logs cover both. Bazel used final sources. Backend fixtures may return early when external services are unavailable; five ignored Cargo tests remain ignored. Inventory is a manual Bazel target checked separately. Original 300-second timeout is retained; expanded generated campaign now has a declared long timeout with unchanged cases and assertions.",
+  "base_commit": "d03b9f94ecd0b7cd18c914e00ae27d4ebb929f3f",
+  "source_sha256": {
+    "Cargo.lock": "87b2c83a673c8f47c2e361db60947f1e98edcc9adddf521bbd6714b93544788c",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-config/BUILD.bazel": "52c2e66e3a108c26312cd7056fc8cdc9e52ba1777325449c236ac65d48f1bf6c",
+    "nativelink-config/examples/experimental_migration_inventory.rs": "9163301f451186d3a6252f3ae0a3a7b7c3dfccb25c58a788225d0b91890f2ebd",
+    "nativelink-config/examples/migration_inventory/mod.rs": "812ad40452efcf9abcda4227a9bb1899b15a21af15efe5d15673397458b4bfdf",
+    "nativelink-config/examples/migration_inventory/tests.rs": "9fdd25ef5fd55db4f7b2cc1fc44feffaa77c0b3a17257b1ed2d188cc40478699",
+    "nativelink-proto/com/github/trace_machina/nativelink/remote_execution/worker_api.proto": "8a839bfc8a2b7f3c251ca5d6e61e6071918a0a4d0b0bb7e2f11c056d61997557",
+    "nativelink-proto/genproto/com.github.trace_machina.nativelink.remote_execution.pb.rs": "861bcd527222a7a6068e3e31cae5f1070b940c2cba6288db86f5a106291acef4",
+    "nativelink-scheduler/BUILD.bazel": "90445b6cc0650f41b6fc1cedc78ac276eb7c9532f30f88546d2f60847e224753",
+    "nativelink-scheduler/examples/authority_budget.rs": "ce1f4e5d0a6ecb7d6197d28115e9ff1e5e5985f68392163f851c9870cd58cddc",
+    "nativelink-scheduler/src/authority/journal.rs": "390bf2332a95a18178f69dface4a12986323b379f52ff09b9cbc657a37b842f7",
+    "nativelink-scheduler/src/authority/mod.rs": "6054770d83dcfcd0049d6ed22ce1bd64a703324d109c1f59c1a491f5d82cb90e",
+    "nativelink-scheduler/src/authority/tests.rs": "7579b240f261cdeb14ab5760d1f5c18571d2d60913471f6edb5f586b477ef395",
+    "nativelink-scheduler/src/authority/types.rs": "7faf16f7e1fad3913156628b0c2d5e8ce1edd60ca18436579c0925350187712e",
+    "nativelink-scheduler/tests/authority/adversarial.rs": "20be4d4537bb176f0c469b289ecadadfac28c9bb650fd1241f7a37bcb85b1aa1",
+    "nativelink-scheduler/tests/authority/campaign.rs": "a52110a3dc0059b3c353fe30f8bacf560a0418668bf8864334720a1dd858e6b9",
+    "nativelink-scheduler/tests/authority/harness.rs": "d07acb81d110cbc10cc0bb2253655723d78f4fdee7ebbf262e4a4363b8cf69ab",
+    "nativelink-scheduler/tests/authority/reference.rs": "a1f138b6bfc5b21171911d246a8f3fccb5ae5e703e6ba903f76af2df976d4416",
+    "nativelink-scheduler/tests/authority_cluster_test.rs": "71e233581c8f3a0e1c85562917c5a31dc030d474e983d035c1924c9d571e2bf5",
+    "nativelink-scheduler/tests/authority_raft_test.rs": "b77763cb2885bfa9531ed05f8bb867caa92c46d46de9984a15e6e15462b0175e",
+    "nativelink-scheduler/tests/authority_reapi_test.rs": "d6d2e9ae9a397eac1ab413d37c1746fa3ce16245be63244cbb4bd7ec94c5a612",
+    "nativelink-scheduler/tests/authority_request_test.rs": "2313e875ec458aa6b53a0ec0915a2ce73d5c4265dd3aa9ce4c226f0e93fea5b7",
+    "nativelink-scheduler/tests/authority_volatile_test.rs": "86475a97a397de7286065cfa6a34a239da7d8971385e3840bf7b70bf4b07d286",
+    "nativelink-store/src/ac_utils.rs": "4e6ea1683301f895719932e9a44d02b91e687d46bb8afc2e65a58195b8c66cc4",
+    "nativelink-store/src/fast_slow_store.rs": "b3fdd0dbeb19cf29eca33bfa4d8c91e226f6501de5c0cbccab758484639c251e",
+    "nativelink-store/tests/fast_slow_store_test.rs": "96f7eb1e0a214ce1a69a8ea2c84877de5c94f138ebd65a0b564ab1e2fef8f09a",
+    "nativelink-util/BUILD.bazel": "e752f142e869e182bf34af2b431d8ad30b8e95c85b5d784f5c0657404e4cf548",
+    "nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d",
+    "nativelink-util/src/fs.rs": "7ab2f45cc0e58e14bf610e4389ec865600c875ef711e99b2651e798af9b12499",
+    "nativelink-util/src/lib.rs": "5cfdcc491b8e223237075040d4310babdcd5be4bddf512d5cb4fab556c161444",
+    "nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+    "nativelink-util/src/work_progress.rs": "e8cb10bb0dc2c82d21fbcb2c494494a34b875769f29a4264647fa7499d157e0a",
+    "nativelink-worker/src/authority_worker.rs": "a39bf106b8d1e1f4f72a2d21c9ccde3ca1860adfd19f672ffbff83f120b9fdd2",
+    "nativelink-worker/src/running_actions_manager.rs": "e461719a951b23b32cabf3ab3d597940e5f14471570cb8c4c77321f06865ccdc",
+    "nativelink-worker/tests/authority_scheduler_test.rs": "cd63679e22f88f971ce44a3c223eff005045d2ac2523864ad382ebe3bf4db317",
+    "nativelink-worker/tests/authority_worker_test.rs": "9ac9ba4c2caa17c32bee3ab5e41c9b204343d2f7fed18e2921a7db7b22689ba0",
+    "nativelink-worker/tests/running_actions_manager_test.rs": "c75d814d190854a161959766cc44536d0a909d2b26c0e578dafad6dd1e0ea0da",
+    "tools/test-authority-mutations.py": "d0fe936fce0339ef8093e1d4133f09d5dafbdf6ea31b1c067d6d204dbb0d3bda"
+  },
+  "logs": [
+    {
+      "file": "cargo-second-checkpoint-check.log.gz",
+      "command": "cargo check --locked --offline --all --profile smol -j 24",
+      "result": "Passed",
+      "uncompressed_sha256": "ff33e8a8a445b27f48d5d940fce20a994f86ee6afff750507bbe95daad3e96dd",
+      "gzip_sha256": "78805cc910717e90cc878bb6f63c438ecd0002b7a043949a6d210dac6d97430a"
+    },
+    {
+      "file": "cargo-second-checkpoint-tests.log.gz",
+      "command": "cargo test --locked --offline --all --profile smol -j 24",
+      "result": "1580 passed, 0 failed, 5 ignored across 143 summaries; final response-fence and harness measurement changes covered by focused runs",
+      "uncompressed_sha256": "d3cbcf0c82fcce9cb06baa6f9773ffd297039c462ec195ccdc87f24c12975074",
+      "gzip_sha256": "ad9e23cd2ea394392a3d9efe0a338f476d06d8e439e1c28d47a5f34862adbb43"
+    },
+    {
+      "file": "cluster-domain-response-tests.log.gz",
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler --test authority_cluster_test",
+      "result": "8 passed after final response fence",
+      "uncompressed_sha256": "62a5df0b2b46214a371373bbeaeada3290f59982472760b4414cbb81c30a32fb",
+      "gzip_sha256": "99a5a27960ed640eaf9a60da83e5cb79c3bd42e5655b79c689196b2a51be3162"
+    },
+    {
+      "file": "cluster-domain-response-clippy.log.gz",
+      "command": "cargo clippy --locked --offline --profile smol -p nativelink-scheduler --lib --tests -- -D warnings",
+      "result": "Passed",
+      "uncompressed_sha256": "c56535fa20de905835c19f4a842376c6264e8dc64cf9f63465526cec6dbd6a5b",
+      "gzip_sha256": "6024dcc62ac919e305770a8273c75bdc7c0f0d0c629bcb05e5ea082b7e4c8370"
+    },
+    {
+      "file": "bazel-second-checkpoint-tests-final.log.gz",
+      "command": "bazel test //... --jobs=32 --test_timeout=300 --test_output=errors",
+      "result": "135 passed; authority_test timed out at 300 seconds, preserved below",
+      "uncompressed_sha256": "1b973e56fd7d5deb516d26528a705a76dee51e938f507ab69cf96b9207f479eb",
+      "gzip_sha256": "123c9ffdfb2cdd62ec3ba3b68317c31d931214fa8a17771d948ad20a6be79dc5"
+    },
+    {
+      "file": "bazel-second-checkpoint-declared-timeouts.log.gz",
+      "command": "bazel test //... --jobs=32 --test_output=errors",
+      "result": "136 targets passed after target timeout moderate -> long; no coverage removed",
+      "uncompressed_sha256": "4ed6bf802eff4bc3134692c56b529a3db3c55cf038dd5ec018f39bc82e3d92fa",
+      "gzip_sha256": "715ddc423342e56a1f663ed21512cad3a49e669b3433921092fa5f921b7fc0ac"
+    },
+    {
+      "file": "second-checkpoint-precommit-final.log.gz",
+      "command": "pre-commit run --files <all changed and added files>",
+      "result": "All applicable hooks passed; later evidence and ledger checked by commit hook",
+      "uncompressed_sha256": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+      "gzip_sha256": "bc043ffa6279e6218ec2ccfb28e366abc53d4718d10c613f286084ccbc344f1d"
+    }
+  ],
+  "scheduler_review": "scheduler-review/command-manifest.json records exact commands, exits, receipts and hashes; .log files archived as deterministic gzip with unchanged uncompressed bytes. Inventory: 12 tests on Cargo/Bazel, strict Clippy; both CLI binaries deterministic refusal with unchanged input. Authority harness: 68 tests, strict Clippy, 16384 generated inputs, 55699 schedule steps, 22 event variants, exhaustive 408 states/2310 transitions, fair drain 130/130."
+}

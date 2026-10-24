@@ -1,0 +1,74 @@
+{
+  "scope": "Integrated second publication correction, physical composition, actual-State activation inventory original 16-case boundary and readonly principal accessor. Subsequent real-request binding and per-operation inventory correction are not included.",
+  "base_head": "4b11a964613b3b419fee13948146411fef8659d7",
+  "source_files": 431,
+  "source_unchanged_during_both_runs": true,
+  "cargo": {
+    "summaries": 164,
+    "passed": 1866,
+    "failed": 0,
+    "ignored": 10,
+    "all_ok": true,
+    "command": "cargo test --locked --offline --all --profile smol -j 8 -- --test-threads=8"
+  },
+  "bazel": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=8 //...",
+    "status": "PASS",
+    "targets": 160,
+    "executed": 55,
+    "cached": 105,
+    "elapsed_seconds": 302.805
+  },
+  "limitations": [
+    "Ten ignored Cargo cases do not qualify providers or manual/stress cases.",
+    "All categorical gates remain open; factories remain legacy.",
+    "Independent review found a joined original-request binding omission in this inventory boundary; subsequent explicit correction must be qualified separately."
+  ],
+  "receipts": [
+    {
+      "file": "bazel-all.log.gz",
+      "source_sha256": "ae96e2df2fcc459f698cc853076bc9a87a7f82137cb5c38b77e9e058dde18fba",
+      "archive_sha256": "554ebaf128bf6b84e38f4d6fac9ec4c331b8129193e3660a1dc9c9ff5d50e5c1"
+    },
+    {
+      "file": "cargo-all.log.gz",
+      "source_sha256": "095ef4ed02492c94b3e1ece4558ec89a99f2aebcf412a9c9a49c497f3d881b09",
+      "archive_sha256": "a9ebaecc756844d2dcae23846d9a82491e9d2387a5542ecc6a3bd4c3230e71d6"
+    },
+    {
+      "file": "cargo-summary.json.gz",
+      "source_sha256": "8691d03146cb3172dcb0cb384e4bc13164f7c601bf27012e2d805ca5516cad05",
+      "archive_sha256": "bad493663a47611ca016c18a9498791b03c8a51b0e4e590c8ea824bab06ecc25"
+    },
+    {
+      "file": "source-after.json.gz",
+      "source_sha256": "6312f8cd350333f52b504d6b41f0add7a735cb27d8cda4aa6112e3fe8f797ade",
+      "archive_sha256": "fd2813e0f5d412bf33c84b165d1a4dbfb031cafc4a6f7df39d916f6b84187252"
+    },
+    {
+      "file": "source-before.json.gz",
+      "source_sha256": "1bb71233c99e8ff0638d48e0d0ae9169628218abf77eddb581d7bb59d2e45d9c",
+      "archive_sha256": "6e1283a9097ef7166645c0064e5732b00df0d88d5228de11b18717cf36134646"
+    },
+    {
+      "file": "untracked-source/nativelink-scheduler/tests/activation_inventory/adapter.rs.gz",
+      "source_sha256": "87f90ba2d32d6aae57a6466d42d588255cfba1e8281d7538f34a70a81109d2b4",
+      "archive_sha256": "87f90ba2d32d6aae57a6466d42d588255cfba1e8281d7538f34a70a81109d2b4"
+    },
+    {
+      "file": "untracked-source/nativelink-scheduler/tests/activation_inventory_test.rs.gz",
+      "source_sha256": "f2be1c69d36854421bf9f5f9a342991bcc9674dfb4f028ea417e4b450fe397c8",
+      "archive_sha256": "f2be1c69d36854421bf9f5f9a342991bcc9674dfb4f028ea417e4b450fe397c8"
+    },
+    {
+      "file": "untracked-source/nativelink-scheduler/tests/publication_candidate/capacity.rs.gz",
+      "source_sha256": "0ca72e6d6405056a8538810d01f33fce084336a330b05feffbe1e469a488f11d",
+      "archive_sha256": "0ca72e6d6405056a8538810d01f33fce084336a330b05feffbe1e469a488f11d"
+    },
+    {
+      "file": "working.patch.gz",
+      "source_sha256": "3d71a2a54ab3cc9afc5b857696f2f92733da1013629e95da98692fd81ad28eb0",
+      "archive_sha256": "3d71a2a54ab3cc9afc5b857696f2f92733da1013629e95da98692fd81ad28eb0"
+    }
+  ]
+}

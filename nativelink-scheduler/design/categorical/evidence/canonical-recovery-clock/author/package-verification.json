@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-canonical-recovery-clock-package/packet.py"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"files\": 1495,\n  \"unique_blobs\": 343,\n  \"archives\": 8,\n  \"total_original_bytes\": 554653124,\n  \"result\": \"Every archive, blob, original path, size and mode mapping verified.\"\n}\n",
+  "stderr": ""
+}

@@ -1,0 +1,199 @@
+{
+  "base": "552aaa890c",
+  "opaque_core_patches": [
+    {
+      "path": "/tmp/nativelink-history-candidate-v1.patch",
+      "sha256": "2c1ce10e6a5327ecf2ec74451705810d71675eba4dafd5f01ee2790e970f9de1"
+    },
+    {
+      "path": "/tmp/nativelink-history-candidate-v1-followup.patch",
+      "sha256": "fefc9567d266a194f4ba364e8f52638118c44e066e2a570fc8acfa003b6464d8"
+    }
+  ],
+  "source_sha256": {
+    "nativelink-scheduler/src/authority/format.rs": "1ae8428d8954be0558338fa1e002b67f8630d70a436bb598dea1061e692d167a",
+    "nativelink-scheduler/src/authority/journal.rs": "86417d904797f8d838d44d7239629281b26c6cde4a99a82343a9851f4efaa5b9",
+    "nativelink-scheduler/tests/authority_format_test.rs": "ff81b8d2c0fcaaf782479df5647f2e17e78995ea461c9ef5264fc5119deb8e8a"
+  },
+  "core_dependency_sha256": {
+    "nativelink-scheduler/src/authority/mod.rs": "edd45433a4c0a913f40c5ecffd11e2b30118528233cfcc1829124a7785ac7514",
+    "nativelink-scheduler/src/authority/accepted_history.rs": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+    "nativelink-scheduler/src/authority/receipt_retirement.rs": "e2946bbf4a592f87577aa36b5f189596593ac984bbfdc5e67a3d99c4d47868f0",
+    "nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+  },
+  "mutants": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 9.092,
+      "log_sha256": "e4ab36cbbc8c9eec970f005db4ed90290648b37d8564403e0fb16da4f3c1a2ca",
+      "compressed_log": "admission_pause_disabled.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "admission_pause_disabled",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "history_prepare_pauses_before_enqueue_and_abort_releases_cancelled_callers",
+      "mutated_source_sha256": "4afe2c78959db1e221aa24e3b511d3af3a2a23f1b672fb401bd292a24cb4efbd",
+      "patch_sha256": "40443af6fd0e6d9eeccbadd853603d293d9e36579dc3db8bd668a760bf6bd9fa",
+      "killed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_committed_activation_waits_for_applied_epoch_before_enqueuing_work",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 9.434,
+      "log_sha256": "bed3069f6932fb574c89d381bd3f98738819ed38f1a43ec9fb2079445750c43d",
+      "compressed_log": "committed_applied_epoch_gate_disabled.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "committed_applied_epoch_gate_disabled",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_committed_activation_waits_for_applied_epoch_before_enqueuing_work",
+      "mutated_source_sha256": "ec92eedb920dfa9ec6270da9a83dd3424bfed05bea60dfb8a9251d03501ae16d",
+      "patch_sha256": "3569cd7c5a3b811c06ee05f5e476c9c7e99a16dd94ca26976df167f7a59c1aba",
+      "killed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 13.543,
+      "log_sha256": "ef9a02d32bb028e395609f8635801557061e08fd13d58cd336ad609272c055a3",
+      "compressed_log": "staged_core_preflight_omitted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "staged_core_preflight_omitted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_append_stages_preceding_work_and_refuses_infeasible_activation_atomically",
+      "mutated_source_sha256": "dfdd74c3c4cd883aa5bfd62c0bed4d6860d7076b030942453854f341994ddb84",
+      "patch_sha256": "60e26c4493fa90a6ddc63d0de340153203d96fb0f421823f8ecfb4b996c4f121",
+      "killed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 16.624,
+      "log_sha256": "07a7073711d6d6260251d233da8057a3450ec7a831192f11af980adce6d00630",
+      "compressed_log": "unsupported_history_reader_admitted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "unsupported_history_reader_admitted",
+      "file": "nativelink-scheduler/src/authority/format.rs",
+      "test": "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+      "mutated_source_sha256": "0a472a1071b80012386562fe3d54d78354e0fdfe2b516f8eb4994bec37e746c5",
+      "patch_sha256": "5cd3d13a91570f32e5fcd45fa95da2df27d077abc0fb8ece8b17c256f9d4cf77",
+      "killed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 10.014,
+      "log_sha256": "717bb4c6a8fd262cf23d64a1bfd6f7a75d4bc555aadd9f807bcab66a61f4ba45",
+      "compressed_log": "older_feature_epoch_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "older_feature_epoch_accepted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_commands_gate_append_apply_and_unapplied_activation_suffix",
+      "mutated_source_sha256": "2dd50bcf522f0225b82847860c1d33598e88d85d863ca602c21d1bb5c8170e5e",
+      "patch_sha256": "1666448484a1313ac175129563a93de48ef67a05e599bbc18e4c81ccf255cf50",
+      "killed": true
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "nativelink-scheduler",
+        "--test",
+        "authority_format_test",
+        "history_snapshot_component_and_namespace_mismatches_are_atomic",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 8.237,
+      "log_sha256": "ebebed1008b483c2a592c4cc1e601ef5c81ee01631dcc4db04150584e49b431c",
+      "compressed_log": "foreign_history_namespace_accepted.log.gz",
+      "compiled": true,
+      "semantic_failure": true,
+      "name": "foreign_history_namespace_accepted",
+      "file": "nativelink-scheduler/src/authority/journal.rs",
+      "test": "history_snapshot_component_and_namespace_mismatches_are_atomic",
+      "mutated_source_sha256": "f890408f371e4f61ba12f9b8d874d3d681272448c1ae878f0d68a373226f091a",
+      "patch_sha256": "9e5dcbe97caeb21b4f439176048fcb37f0d4f38d8c0a0dbc7fc0177119fe999e",
+      "killed": true
+    }
+  ],
+  "restored_source_sha256": {
+    "nativelink-scheduler/src/authority/format.rs": "1ae8428d8954be0558338fa1e002b67f8630d70a436bb598dea1061e692d167a",
+    "nativelink-scheduler/src/authority/journal.rs": "86417d904797f8d838d44d7239629281b26c6cde4a99a82343a9851f4efaa5b9",
+    "nativelink-scheduler/tests/authority_format_test.rs": "ff81b8d2c0fcaaf782479df5647f2e17e78995ea461c9ef5264fc5119deb8e8a"
+  },
+  "restored_run": {
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "nativelink-scheduler",
+      "--test",
+      "authority_format_test",
+      "--",
+      "--test-threads=4"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 23.668,
+    "log_sha256": "8add6dab7928590e010b8293a6902c1c3eec783c465c1b7136169682b5cf41fb",
+    "compressed_log": "restored_format.log.gz",
+    "compiled": true,
+    "semantic_failure": false
+  }
+}

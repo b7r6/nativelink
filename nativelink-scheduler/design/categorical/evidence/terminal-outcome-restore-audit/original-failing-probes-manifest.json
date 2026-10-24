@@ -1,0 +1,18 @@
+{
+  "compiled": true,
+  "tests": 8,
+  "failures": 8,
+  "inherited_filtered": 29,
+  "sources": {
+    "nativelink-scheduler/tests/terminal_outcome/reference.rs": "15be937da32345b173196fd1d1881506098f0e0b52bf178d716b651e2ed89afb",
+    "nativelink-scheduler/tests/terminal_outcome/types.rs": "1d6012f7465f567a49f597c0a0528167f56aa2111daa038aabaa8e933a3c6299",
+    "nativelink-scheduler/tests/terminal_outcome/cases.rs": "2ac449e23d2e67fa5b4c31bfc781b858b163d533528e911555f676b89df87165",
+    "nativelink-scheduler/tests/terminal_outcome_reference_test.rs": "89770d88cd2e663dc984928d7d376527709e24dc871a5e2c45ef6995a03f563f",
+    "nativelink-scheduler/tests/terminal_outcome_restore_audit_test.rs": "dd86c5de740ccffd8fff9d5543d617feb8270dde73e9dd387001a5d43feca0e0",
+    "nativelink-scheduler/tests/terminal_outcome/restore_audit.rs": "a95d99929602679692ec6d8a74890bb3a02876f2a5ec62bac08e8ee926c28b70",
+    "nativelink-scheduler/tests/authority/reference.rs": "6b9f1b6c59e39f9126fa8fa96027ad4404d136c40106a66ce957c9b3dc2969b4",
+    "nativelink-scheduler/tests/retention/reference.rs": "035239f0330b95c4758860b827723b5f3a96fc2899b51d79059a240dfe27b167",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67"
+  },
+  "description": "Seven canonical local-contradiction snapshots accepted; one missing report position/time witness. All seven M1 snapshots independently restore before outer check."
+}

@@ -1,0 +1,211 @@
+{
+  "base_commit": "0318e72abb0ea6973ec136868019cd50ef44e8b6",
+  "bazel_worker": {
+    "cached": 1,
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "//nativelink-worker/..."
+    ],
+    "executed": 16,
+    "source": "lint-corrected-source.json.gz",
+    "status": "PASS",
+    "targets": 17
+  },
+  "cargo_regression": {
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "running_actions_manager_test",
+      "--test",
+      "local_worker_test",
+      "--test",
+      "authority_worker_test",
+      "--test",
+      "authority_scheduler_test",
+      "--test",
+      "authority_rpc_test",
+      "--profile",
+      "smol",
+      "-j",
+      "8",
+      "--",
+      "--test-threads=4"
+    ],
+    "failed": 0,
+    "ignored": 0,
+    "passed": 163,
+    "source": "final-source.json.gz",
+    "suites": [
+      {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 15
+      },
+      {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 8
+      },
+      {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 18
+      },
+      {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 25
+      },
+      {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 97
+      }
+    ]
+  },
+  "focused_process_history": {
+    "algorithm_policy_combinations": 6,
+    "namespace_skip": false,
+    "receipt": "cargo-focused-complete.log.gz",
+    "source": "final-source.json.gz"
+  },
+  "limits": [
+    "Cargo totals include inherited cases, not unique semantic histories.",
+    "Authority construction is test-wired; production binary and legacy factory are unchanged.",
+    "No listener trust, arbitrary store alias, Operations RPC or memory-failure classification qualification.",
+    "All M0-M9 gates and production cutover remain open."
+  ],
+  "receipts": [
+    {
+      "archive_sha256": "5a23da9061f425264f231fe955f117448f13f235d8e0dd9e3be35f9e7f7fd62b",
+      "file": "cargo-focused-complete.json.gz",
+      "source_sha256": "19aa6fce284d5f16a48ab7e163616dbab4d5ceb8cce78e27734961ec86b6b5bf"
+    },
+    {
+      "archive_sha256": "977de12d7a96af718e54e7f310bf15829078da7344eb3631e285bd88b7508135",
+      "file": "cargo-focused-complete.log.gz",
+      "source_sha256": "daeb7d7cb1ea3f7979cd9907fe520f661b0ffa7764d860f488b39ed3302a9a93"
+    },
+    {
+      "archive_sha256": "9cadee111e8dc50f5126ea77bbcc47e2278eae22b193539cc980a958eb994666",
+      "file": "cargo-focused-first.json.gz",
+      "source_sha256": "1312a2b563372affe94759587671dd039b805715d7cd22cd890e657596b5bd2a"
+    },
+    {
+      "archive_sha256": "47d26b604859a83b3bebfd8c3195910dacbe4750af5c25c698a4af674d8240a9",
+      "file": "cargo-focused-first.log.gz",
+      "source_sha256": "1e69b8bf64f9a7b053073d1763983541bc0328b07278bfb3f58cc8c8fdf676da"
+    },
+    {
+      "archive_sha256": "4054069cc172b710bbd1156c2fb6eb7982de3d7c7c8ee578e2f000f8810c956c",
+      "file": "cargo-worker-regression.json.gz",
+      "source_sha256": "95770f99d5dbec4529bcc5d54407435db08704e911758def36e68c124c5091e0"
+    },
+    {
+      "archive_sha256": "2769b940ac4a28c6503e7b8d9b31f39129ea5835ab416e3bff905843d423672d",
+      "file": "cargo-worker-regression.log.gz",
+      "source_sha256": "1d98720d97e44a7fad8d2523f52c94ef4b2baff1ebe12922d2c62711153dcfda"
+    },
+    {
+      "archive_sha256": "481b7b99c4d73af506199682bff9f4093689c5741ef5eee8b051b13c4d64999a",
+      "file": "constructor-review.json.gz",
+      "source_sha256": "0affc5c856e2b84fd91a3c85bb8b2a41c699409fe38b2e4ea9646cca186090c9"
+    },
+    {
+      "archive_sha256": "62771b160771fc8ed2dc27ffb3e74b1262581ffbe32310375da099b7320e12c9",
+      "file": "final-source.json.gz",
+      "source_sha256": "6758de2ef2118d3abd78b4b9a492f0c05498e2786e0df00c682ea9e2038fbc83"
+    },
+    {
+      "archive_sha256": "974bc5c927f564b12e560db44179eb55c105b0771a677170eae96c3058222944",
+      "file": "final.patch.gz",
+      "source_sha256": "ad21c4da667a13ac9c0ead7597eca02b14e8cba18ee320b9e1880c4b1a2bfcbe"
+    },
+    {
+      "archive_sha256": "7b7b23adb1efd5fa0a991f034ff713047a019c070eef9dc2c044338ce274fa69",
+      "file": "initial-source.json.gz",
+      "source_sha256": "66628e9f42aba38651dc1337018b287b633c954ccbe61ba33dcafa1ff7e0e741"
+    },
+    {
+      "archive_sha256": "ed1179cdb8cbee87c29fc1e6f5171e56a7c77ebeb2ae91b2cc23741cbf38dc50",
+      "file": "initial.patch.gz",
+      "source_sha256": "4af22d4b2ece5b9ed3840351e71fcd00711edf90645d7d24f22d408440ec8b0f"
+    },
+    {
+      "archive_sha256": "a837ed4164447d60fedead892132b372dbe365885e1c47c1cccb96db09bb139f",
+      "file": "lint-corrected-source.json.gz",
+      "source_sha256": "2db55bc05a9383e2ebf0cf518429e37c3621ebc73bfcf78fe61aa0d32f99daa0"
+    },
+    {
+      "archive_sha256": "a99a21bec4e9e10ba0ae0875da9b8128af785d9c2d14163964284e5f75dcad8d",
+      "file": "lint-corrected.patch.gz",
+      "source_sha256": "687689775213ec80663ebb630a87790b449d6c3dc4f93d38b054c5d946b9c6dd"
+    },
+    {
+      "archive_sha256": "d7c3a7b5df205b3081830e30f70d21605ed5421506944af0edef06aaf3483df9",
+      "file": "root-bazel-worker-corrected.json.gz",
+      "source_sha256": "10c223ba61312fa2ddb671c86b1c78f9ce3e92747da5ac74f2af55483f345f36"
+    },
+    {
+      "archive_sha256": "4d5195f405e0ece1fb085f2cbf1c96c1962b352edf7ce838f2501911f1b5d211",
+      "file": "root-bazel-worker-corrected.log.gz",
+      "source_sha256": "028f35484cf517f568158c0b95c6fe15fcf7a64be8762e2fa35a32dfffc922ba"
+    },
+    {
+      "archive_sha256": "f1365f765d987e10c8db30dda807e3293375a6bce2f14e16f519092b7ca999a6",
+      "file": "root-bazel-worker.json.gz",
+      "source_sha256": "b63cd4fc39b4c3208fc90de1edbbb3a2fa8a373fa6eff891fcae70a754f0ca09"
+    },
+    {
+      "archive_sha256": "90650f5541d904924a1bbf88ef1efda561a1b3d95c45ca5dfee491eaef659663",
+      "file": "root-bazel-worker.log.gz",
+      "source_sha256": "35bff2f487f6f463baea1996de6a537d05e10892679f8e80b21548b9da79b0d8"
+    },
+    {
+      "archive_sha256": "a837ed4164447d60fedead892132b372dbe365885e1c47c1cccb96db09bb139f",
+      "file": "verified-source-after.json.gz",
+      "source_sha256": "2db55bc05a9383e2ebf0cf518429e37c3621ebc73bfcf78fe61aa0d32f99daa0"
+    },
+    {
+      "file": "precommit.log.gz",
+      "source_sha256": "311092357650ed98b0a0430337cf8f9858487013347e41b43ba89fcfd665bd70",
+      "archive_sha256": "a272c872409f29f9e61caa2e92bef6e3104bcb964dd354de577820e040cfa6ec"
+    },
+    {
+      "file": "precommit.json.gz",
+      "source_sha256": "f8416c14934fd7c9fecdea29f539c019d77dfd3e8774466d8771ca3627738a92",
+      "archive_sha256": "eecd46db142b4b6332dbef95eac7f6dc2ace4b79710a8599b30cfeee5a4f5eb4"
+    },
+    {
+      "file": "precommit-current-config.log.gz",
+      "source_sha256": "42fb8120dc00b035f41981e3afff7a827dd8209dfd11db7e5708d5a8fc932062",
+      "archive_sha256": "9eedbdfbf0ba77ea1c81a36f6450f90819f5d24942e85b47aac71bc69895281c"
+    },
+    {
+      "file": "precommit-current-config.json.gz",
+      "source_sha256": "a3b35359ea4ed85ebabe86b440df9dbb786c206ed89207ed91ca6e400023b8e4",
+      "archive_sha256": "a642b15531375db976acdb273c11d384cad69010e7abdfe393574e4e1ee6eddf"
+    }
+  ],
+  "review": "constructor-review.json.gz (read-only independent source review; no reviewer-executed tests)",
+  "scope": "Authority-only action manager construction; existing legacy publication path retained; no canonical production entry point.",
+  "source_boundaries": [
+    "initial-source is the first constructor plus four process histories.",
+    "final-source adds the two successful cacheable process histories; used for focused complete and broad Cargo runs.",
+    "lint-corrected-source replaces only the process marker debug formatting with explicit labels after first Bazel stopped on clippy::use_debug. Corrected Bazel passed all worker targets; source hashes match verified-source-after."
+  ],
+  "precommit": {
+    "status": "PASS",
+    "receipt": "precommit-current-config.log.gz",
+    "initial_failure": "Stale generated symlink did not include committed archive exclusions. Regenerated configuration from current Nix source; no hook skipped or source exception added."
+  }
+}

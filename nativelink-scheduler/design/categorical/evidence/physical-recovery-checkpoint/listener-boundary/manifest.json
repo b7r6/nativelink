@@ -1,0 +1,565 @@
+{
+  "scope": "Local real legacy listener/TLS stack only; no authority coordinator or deployed boundary claim.",
+  "binary_sha256": "c1119281876fd1f70594d47ce30677d3c885491cacba51784cb586bcf5186606",
+  "runner_sha256": "c44a6700bf214dc0678b60fba52308033b9c9473691265892981928366231d6a",
+  "openssl": "OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)",
+  "topologies": [
+    {
+      "topology": "isolated",
+      "violations": [],
+      "calls": [
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:42431\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:45483\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 76,
+          "stdout": "",
+          "stderr": "ERROR:\n  Code: Unimplemented\n  Message: unexpected HTTP status code received from server: 404 (Not Found); transport: received unexpected content-type \"text/plain; charset=utf-8\"\ndata: \"No route for https://127.0.0.1:36545/build.bazel.remote.execution.v2.ActionCache/UpdateActionResult\"\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ContentAddressableStorage/BatchUpdateBlobs",
+          "exit_code": 0,
+          "stdout": "{\n  \"responses\": [\n    {\n      \"digest\": {\n        \"hash\": \"0a5dc516788bea7f81b2de2b9009439725f8ed695a88126b1f2c036ea6820c22\",\n        \"sizeBytes\": \"2\"\n      },\n      \"status\": {}\n    }\n  ]\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "google.bytestream.ByteStream/Write",
+          "exit_code": 0,
+          "stdout": "{\n  \"committedSize\": \"2\"\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        }
+      ],
+      "server_log": "server-isolated.log"
+    },
+    {
+      "topology": "shared-trust",
+      "violations": [
+        "worker-can-write-client-route-1",
+        "worker-can-write-client-route-2"
+      ],
+      "calls": [
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 33\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 33\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 76,
+          "stdout": "",
+          "stderr": "ERROR:\n  Code: Unimplemented\n  Message: unexpected HTTP status code received from server: 404 (Not Found); transport: received unexpected content-type \"text/plain; charset=utf-8\"\ndata: \"No route for https://127.0.0.1:38381/build.bazel.remote.execution.v2.ActionCache/UpdateActionResult\"\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ContentAddressableStorage/BatchUpdateBlobs",
+          "exit_code": 0,
+          "stdout": "{\n  \"responses\": [\n    {\n      \"digest\": {\n        \"hash\": \"0a5dc516788bea7f81b2de2b9009439725f8ed695a88126b1f2c036ea6820c22\",\n        \"sizeBytes\": \"2\"\n      },\n      \"status\": {}\n    }\n  ]\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "google.bytestream.ByteStream/Write",
+          "exit_code": 0,
+          "stdout": "{\n  \"committedSize\": \"2\"\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        }
+      ],
+      "server_log": "server-shared-trust.log"
+    },
+    {
+      "topology": "aliased-store",
+      "violations": [
+        "cas-upload-mutates-ac",
+        "bytestream-upload-mutates-ac"
+      ],
+      "calls": [
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:37229\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:46945\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 76,
+          "stdout": "",
+          "stderr": "ERROR:\n  Code: Unimplemented\n  Message: unexpected HTTP status code received from server: 404 (Not Found); transport: received unexpected content-type \"text/plain; charset=utf-8\"\ndata: \"No route for https://127.0.0.1:42983/build.bazel.remote.execution.v2.ActionCache/UpdateActionResult\"\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ContentAddressableStorage/BatchUpdateBlobs",
+          "exit_code": 0,
+          "stdout": "{\n  \"responses\": [\n    {\n      \"digest\": {\n        \"hash\": \"0a5dc516788bea7f81b2de2b9009439725f8ed695a88126b1f2c036ea6820c22\",\n        \"sizeBytes\": \"2\"\n      },\n      \"status\": {}\n    }\n  ]\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 17\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "google.bytestream.ByteStream/Write",
+          "exit_code": 0,
+          "stdout": "{\n  \"committedSize\": \"2\"\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 17\n}\n",
+          "stderr": ""
+        }
+      ],
+      "server_log": "server-aliased-store.log"
+    },
+    {
+      "topology": "worker-ac-route",
+      "violations": [
+        "worker-listener-serves-ac"
+      ],
+      "calls": [
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:55171\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 8\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 2,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "Failed to dial target host \"127.0.0.1:33171\": remote error: tls: certificate required\n"
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 9\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 33\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "build.bazel.remote.execution.v2.ContentAddressableStorage/BatchUpdateBlobs",
+          "exit_code": 0,
+          "stdout": "{\n  \"responses\": [\n    {\n      \"digest\": {\n        \"hash\": \"0a5dc516788bea7f81b2de2b9009439725f8ed695a88126b1f2c036ea6820c22\",\n        \"sizeBytes\": \"2\"\n      },\n      \"status\": {}\n    }\n  ]\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/UpdateActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "worker",
+          "listener": 0,
+          "method": "google.bytestream.ByteStream/Write",
+          "exit_code": 0,
+          "stdout": "{\n  \"committedSize\": \"2\"\n}\n",
+          "stderr": ""
+        },
+        {
+          "role": "client",
+          "listener": 1,
+          "method": "build.bazel.remote.execution.v2.ActionCache/GetActionResult",
+          "exit_code": 0,
+          "stdout": "{\n  \"exitCode\": 7\n}\n",
+          "stderr": ""
+        }
+      ],
+      "server_log": "server-worker-ac-route.log"
+    }
+  ],
+  "passed": true
+}

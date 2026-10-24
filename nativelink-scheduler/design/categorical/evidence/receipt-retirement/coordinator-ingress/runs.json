@@ -1,0 +1,130 @@
+[
+  {
+    "label": "unit-baseline",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "authority_server::tests",
+      "--",
+      "--show-output"
+    ],
+    "exit": 0,
+    "seconds": 0.7468418139615096
+  },
+  {
+    "label": "physical-and-compatibility",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "--test",
+      "authority_worker_test",
+      "--test",
+      "authority_scheduler_test",
+      "--",
+      "--show-output",
+      "--test-threads=1"
+    ],
+    "exit": 0,
+    "seconds": 90.93928935501026
+  },
+  {
+    "label": "mutation-duplicate-notifications",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "authority_server::tests",
+      "--",
+      "--show-output"
+    ],
+    "exit": 101,
+    "seconds": 1.8120999379898421,
+    "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+    "replacement": {
+      "before": "    if pending.queued {\n        return None;\n    }",
+      "after": "    if pending.queued {\n        return Some(Input::WorkerSnapshots(session, snapshots.clone()));\n    }"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "mutation-report-barrier-overtaken",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "authority_server::tests",
+      "--",
+      "--show-output"
+    ],
+    "exit": 101,
+    "seconds": 1.9079439180204645,
+    "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+    "replacement": {
+      "before": "            *snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));",
+      "after": "            // Mutation: later observations overwrite the notification before Report."
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "unit-restored",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "authority_server::tests",
+      "--",
+      "--show-output"
+    ],
+    "exit": 0,
+    "seconds": 3.008480660035275
+  },
+  {
+    "label": "strict-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 9.995068352029193
+  }
+]

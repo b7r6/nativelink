@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-canonical-recovery-custody-package/packet.py"
+  ],
+  "started": "2026-10-23T21:50:40.409166+00:00",
+  "finished": "2026-10-23T21:50:41.764843+00:00",
+  "returncode": 0,
+  "result": {
+    "files": 340,
+    "unique_blobs": 115,
+    "archives": 10,
+    "total_original_bytes": 328987865,
+    "result": "Every archive, blob, original path, size and mode mapping verified."
+  },
+  "log_sha256": "fa0417238653a867e0f38d0243ed77f2d22e6f39a4bb8f07b2bc3487e665c150"
+}

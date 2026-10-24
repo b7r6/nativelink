@@ -43,6 +43,7 @@ use crate::common::DigestInfo;
 use crate::digest_hasher::{DigestHasher, DigestHasherFunc, default_digest_hasher_func};
 use crate::fs;
 use crate::health_utils::{HealthRegistryBuilder, HealthStatus, HealthStatusIndicator};
+use crate::work_progress::{ProgressObserver, WorkKind};
 
 static DEFAULT_DIGEST_SIZE_HEALTH_CHECK: OnceLock<usize> = OnceLock::new();
 /// Default digest size for health check data. Any change in this value
@@ -121,8 +122,10 @@ pub async fn slow_update_store_with_file<S: StoreDriver + ?Sized>(
         .err_tip(|| "Failed to rewind in upload_file_to_store")?;
     let (mut tx, rx) = make_buf_channel_pair();
 
+    let key = digest.into();
+    let progress = ProgressObserver::store_object(WorkKind::Write, &key);
     let update_fut = store
-        .update(digest.into(), rx, upload_size)
+        .update(key, rx, upload_size)
         .map(|r| r.err_tip(|| "Could not upload data to store in upload_file_to_store"));
     let read_data_fut = async move {
         loop {
@@ -137,6 +140,9 @@ pub async fn slow_update_store_with_file<S: StoreDriver + ?Sized>(
             tx.send(buf.freeze())
                 .await
                 .err_tip(|| "Failed to send in upload_file_to_store")?;
+            if let Some(progress) = &progress {
+                progress.offset(tx.get_bytes_written());
+            }
         }
         tx.send_eof()
             .err_tip(|| "Could not send EOF to store in upload_file_to_store")
@@ -740,9 +746,22 @@ pub trait StoreDriver:
 
         let data_len =
             u64::try_from(data.len()).err_tip(|| "Could not convert data.len() to u64")?;
+        let send_progress = ProgressObserver::store_object(WorkKind::Write, &key);
         let send_fut = async move {
             // Only send if we are not EOF.
-            if !data.is_empty() {
+            if let Some(progress) = &send_progress {
+                let mut position = 0;
+                while position < data.len() {
+                    let end = position
+                        .saturating_add(fs::DEFAULT_READ_BUFF_SIZE)
+                        .min(data.len());
+                    tx.send(data.slice(position..end))
+                        .await
+                        .err_tip(|| "Failed to write data in observed update_oneshot")?;
+                    position = end;
+                    progress.offset(position as u64);
+                }
+            } else if !data.is_empty() {
                 tx.send(data)
                     .await
                     .err_tip(|| "Failed to write data in update_oneshot")?;
@@ -755,6 +774,8 @@ pub trait StoreDriver:
             send_fut,
             self.update(key, rx, UploadSizeInfo::ExactSize(data_len))
         )?;
+        // Only the logical publication owner may mark completion. A nested
+        // tier's acknowledgment is not the complete composed operation.
         Ok(())
     }
 
@@ -793,15 +814,30 @@ pub trait StoreDriver:
         // that can take objects already fully in memory instead?
         let (mut tx, mut rx) = make_buf_channel_pair();
 
+        let progress = ProgressObserver::store_object(WorkKind::Read, &key);
+        let full_size = match &key {
+            StoreKey::Digest(digest) => Some(digest.size_bytes()),
+            StoreKey::Str(_) => None,
+        };
         let (data_res, get_part_res) = join!(
-            rx.consume(length_usize),
+            rx.consume_observed(length_usize, progress.as_ref(), offset),
             // We use a closure here to ensure that the `tx` is dropped when the
             // future is done.
             async move { self.get_part(key, &mut tx, offset, length).await },
         );
-        get_part_res
+        let result = get_part_res
             .err_tip(|| "Failed to get_part in get_part_unchunked")
-            .merge(data_res.err_tip(|| "Failed to read stream to completion in get_part_unchunked"))
+            .merge(
+                data_res.err_tip(|| "Failed to read stream to completion in get_part_unchunked"),
+            );
+        if let Ok(data) = &result
+            && offset == 0
+            && full_size.map_or_else(|| length.is_none(), |size| data.len() as u64 == size)
+            && let Some(progress) = progress
+        {
+            progress.complete();
+        }
+        result
     }
 
     /// See: [`StoreLike::check_health`] for details.

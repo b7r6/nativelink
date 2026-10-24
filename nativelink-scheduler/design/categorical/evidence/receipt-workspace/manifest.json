@@ -1,0 +1,56 @@
+{
+  "qualified_commit": "552aaa890c",
+  "scope": "Workspace regression at the immutable replicated/Azure/receipt checkpoint. No production deployment, workload capacity or new-history implementation qualification.",
+  "commands": [
+    {
+      "command": "cargo test --locked --offline --workspace --profile smol -j 8 -- --test-threads=8",
+      "exit_code": 0,
+      "result": "1690 passed,0 failed,8 ignored,154 summaries",
+      "log": "receipt-workspace-cargo.log.gz"
+    },
+    {
+      "command": "bazel test --jobs=8 --local_test_jobs=4 //...",
+      "exit_code": 3,
+      "result": "146/148 passed; format quorum read failed and running-actions suite timed out",
+      "log": "receipt-workspace-bazel.log.gz"
+    },
+    {
+      "command": "bazel test --jobs=8 --local_test_jobs=1 --test_arg=--test-threads=8 //nativelink-worker:integration_tests/running_actions_manager_test_test //nativelink-scheduler:integration_tests/authority_format_test_test",
+      "exit_code": 0,
+      "result": "both passed with original target timeouts;25.7s worker suite and3.8s format suite",
+      "log": "receipt-workspace-bazel-focused.log.gz"
+    }
+  ],
+  "receipts": [
+    {
+      "file": "receipt-workspace-cargo.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/receipt-workspace-cargo.log",
+      "source_sha256": "dbe99cfd76bda74cb838155a62932a2c96df5114432d8fcc81d241bce9c08fe6",
+      "archive_sha256": "468d5914a90f5422eddb1933601464e70e3937009ddcc2a5c501e6d9f8f67769"
+    },
+    {
+      "file": "receipt-workspace-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/receipt-workspace-bazel.log",
+      "source_sha256": "ecdcbbc552baf1a110276807e2e13219d3cb82a686289d8aa80a23fdb9cdc383",
+      "archive_sha256": "ff703f3e0f5ccebbf51467893af16d1fd85a1f8dae12e74d78facc44082a6f93"
+    },
+    {
+      "file": "receipt-workspace-format-failure.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/receipt-workspace-format-failure.log",
+      "source_sha256": "f7faaf683ea54e2ccafd81c1e8d46fcc4b889395db7ca43c4721c4e25f6a06d0",
+      "archive_sha256": "bf0473e07195c3a1330393b01607be3603822b11dd31ee186dfad0d4d92e6391"
+    },
+    {
+      "file": "receipt-workspace-running-actions-timeout.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/receipt-workspace-running-actions-timeout.log",
+      "source_sha256": "f501bdc99c8f83dd88956c8e949c586589d784a3b954ca69ab7fce9cb5cd0af9",
+      "archive_sha256": "64843d23aa88958ca5d506122120ec3527f1be6b5c9088f2434d0bc667b9630b"
+    },
+    {
+      "file": "receipt-workspace-bazel-focused.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/receipt-workspace-bazel-focused.log",
+      "source_sha256": "d7f9fc3643c1e8278e84f821418181d3f5ec9f4576d2b97a049fe07d22a2e128",
+      "archive_sha256": "733a4d8a9ab72e674a861761093936bc4400178bc237f19a5926716029eaa9e1"
+    }
+  ]
+}

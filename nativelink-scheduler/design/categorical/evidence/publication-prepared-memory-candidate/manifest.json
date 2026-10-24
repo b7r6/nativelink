@@ -1,0 +1,10 @@
+{
+  "archive": "author-evidence.tar.gz",
+  "archive_sha256": "f49df6137472babfb7d616a13039009ed3b2c72ab2370cc1d2868e4d71aaaa1c",
+  "author_commit": "1bccba3acb85e7153798ba2b29d264050584765c",
+  "embedded_manifest_sha256": "32cf4205d29471bd9b54e57c32f834e0e2dc09c6b97ec6aa913906a7db12029e",
+  "qualification_sha256": "80bcf9d9f45e56b0a2a61ed154a81f7d32480443627c3bcce74b9c85cfc7a8ea",
+  "root_commit": "52b0cb22ce",
+  "schema_version": 1,
+  "scope": "Private-v5 candidate72cases and strictClippy; exact frozen source before new independent oracle comparison. Bound2026948bytes; no production runtime routing, durable format, history activation or completed gate."
+}

@@ -53,7 +53,8 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
     Tree as ProtoTree, UpdateActionResultRequest,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
-    ActionResourceUsage, HistoricalExecuteResponse, Reservation, ResourceOutcome, StartExecute,
+    ActionResourceUsage, AuthorityResources, HistoricalExecuteResponse, Reservation,
+    ResourceOutcome, StartExecute,
 };
 use nativelink_store::ac_utils::{
     ESTIMATED_DIGEST_SIZE, compute_buf_digest, get_and_decode_digest, serialize_and_upload_message,
@@ -72,6 +73,7 @@ use nativelink_util::metrics::{INPUT_MOUNT_METRICS, record_input_relink, record_
 use nativelink_util::metrics_utils::{AsyncCounterWrapper, CounterWithTime};
 use nativelink_util::store_trait::{Store, StoreLike, UploadSizeInfo};
 use nativelink_util::task::JoinHandleDropGuard;
+use nativelink_util::work_progress::{self, ProgressObserver, ProgressPhase, WorkKind};
 use nativelink_util::{background_spawn, spawn, spawn_blocking};
 use parking_lot::Mutex;
 use prost::Message;
@@ -199,10 +201,15 @@ type SpawnedChild = crate::namespace_utils::MaybeNamespacedChild;
 type SpawnedChild = process::Child;
 
 /// SIGKILL through the child wrapper, which takes the whole process group
-/// with it, logged if it fails.
-async fn hard_kill(child: &mut SpawnedChild, why: &str) {
-    if let Err(err) = child.kill().await {
-        error!(?err, why, "Could not kill process in RunningActionsManager");
+/// with it, logged if it fails. True records procedure completion, not exclusive
+/// physical cause of exit or confirmed process-domain closure.
+async fn hard_kill(child: &mut SpawnedChild, why: &str) -> bool {
+    match child.kill().await {
+        Ok(()) => true,
+        Err(err) => {
+            error!(?err, why, "Could not kill process in RunningActionsManager");
+            false
+        }
     }
 }
 
@@ -1590,7 +1597,12 @@ async fn materialize_inline_nodes(
     let mut futures = Vec::with_capacity(nodes.len());
     for node in nodes {
         futures.push(async move {
-            match node {
+            let progress = match &node {
+                #[cfg(target_family = "unix")]
+                InlineNode::Symlink { dst, .. } => ProgressObserver::path_object(WorkKind::Materialize, Path::new(dst)),
+                InlineNode::File { dst, .. } => ProgressObserver::path_object(WorkKind::Materialize, Path::new(dst)),
+            };
+            let result = match node {
                 #[cfg(target_family = "unix")]
                 InlineNode::Symlink { target, dst } => fs::symlink(&target, &dst)
                     .await
@@ -1606,7 +1618,7 @@ async fn materialize_inline_nodes(
                         let _permit = acquire_download_permit(downloads).await?;
                         cas_store.populate_fast_store(digest.into()).await?;
                     }
-                    async move {
+                    async {
                         if is_zero_digest(digest) {
                             // Zero-digest files are never persisted by the
                             // FilesystemStore, so materialise them directly in
@@ -1633,8 +1645,26 @@ async fn materialize_inline_nodes(
                                 .get_file_path_locked(|src| async move { Ok(src) })
                                 .await?;
                             let spawned_dest = dest.clone();
+                            let copy_progress = progress.clone();
                             spawn_blocking!("download_to_directory_private_copy", move || {
-                                std::fs::copy(&src_path, &spawned_dest).map(|_| ()).map_err(|e| {
+                                let copy = || -> std::io::Result<()> {
+                                    let Some(progress) = copy_progress else {
+                                        return std::fs::copy(&src_path, &spawned_dest).map(|_| ());
+                                    };
+                                    let mut source = std::fs::File::open(&src_path)?;
+                                    let mut destination = std::fs::File::create(&spawned_dest)?;
+                                    let mut buffer = vec![0_u8; fs::DEFAULT_READ_BUFF_SIZE];
+                                    let mut offset = 0_u64;
+                                    loop {
+                                        let count = std::io::Read::read(&mut source, &mut buffer)?;
+                                        if count == 0 { return Ok(()); }
+                                        std::io::Write::write_all(&mut destination, &buffer[..count])?;
+                                        offset = offset.checked_add(count as u64)
+                                            .ok_or_else(|| std::io::Error::other("Copy offset exhausted"))?;
+                                        progress.offset(offset);
+                                    }
+                                };
+                                copy().map_err(|e| {
                                     make_err!(
                                         Code::Internal,
                                         "Failed to copy CAS blob into a private inode at {spawned_dest}: {e:?}"
@@ -1668,7 +1698,10 @@ async fn materialize_inline_nodes(
                     .await
                     .map_err(|e: Error| e.append(format!("for digest {digest}")))
                 }
-            }
+            };
+            if result.is_ok()
+                && let Some(progress) = progress { progress.complete(); }
+            result
         });
     }
     futures::stream::iter(futures)
@@ -1835,6 +1868,7 @@ async fn upload_file(
         .await
         .err_tip(|| format!("Failed to hash file in digest_for_file failed for {full_path:?}"))?;
 
+    let progress = ProgressObserver::store_object(WorkKind::Write, &digest.into());
     let digest_uploader = match digest_uploaders.lock().entry(digest) {
         std::collections::hash_map::Entry::Occupied(occupied_entry) => occupied_entry.get().clone(),
         std::collections::hash_map::Entry::Vacant(vacant_entry) => vacant_entry
@@ -1917,6 +1951,9 @@ async fn upload_file(
         })
         .await
         .err_tip(|| format!("for {full_path:?}"))?;
+    if let Some(progress) = progress {
+        progress.complete();
+    }
 
     let name = full_path
         .as_ref()
@@ -2242,9 +2279,164 @@ async fn do_cleanup(
     }
 }
 
+/// Immutable authority accounting and the optional sampled memory ceiling.
+/// The KiB ceiling rounds upward; it is a sampling threshold, not a hard OS cap.
+/// Legacy usage telemetry cannot replace the exact charged vector retained here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityResourceLimits {
+    /// Full original dispatch vector, without unit conversion or reconstruction.
+    pub charged: AuthorityResources,
+    /// Configured ceiling rounded upward to the sampler's KiB resolution.
+    /// Presence does not establish process coverage or an enforced OS limit.
+    pub memory_limit_kb: Option<u64>,
+}
+
+impl AuthorityResourceLimits {
+    fn capture(charged: AuthorityResources, memory: Option<&MemoryLimit>) -> Result<Self, Error> {
+        if charged.slots == 0 {
+            return Err(make_err!(
+                Code::InvalidArgument,
+                "authority grant requires a positive slot charge"
+            ));
+        }
+        let memory_limit_kb = if let Some(memory) = memory.filter(|_| charged.memory_bytes != 0) {
+            // Widen before multiplying so representable large byte grants do
+            // not fail merely because the percentage's intermediate is large.
+            let bytes = u128::from(charged.memory_bytes)
+                .checked_mul(100 + u128::from(memory.headroom_percent))
+                .map(|product| product.div_ceil(100))
+                .and_then(|bytes| u64::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    make_err!(
+                        Code::InvalidArgument,
+                        "authority memory headroom exceeds the byte range"
+                    )
+                })?;
+            Some(bytes.div_ceil(1024))
+        } else {
+            None
+        };
+        Ok(Self {
+            charged,
+            memory_limit_kb,
+        })
+    }
+
+    fn usage_reservation(self, legacy: Option<Reservation>) -> Reservation {
+        // These coarse legacy fields are diagnostics. The Rust grant retains
+        // fractional cores and individual bytes without this upward rounding.
+        Reservation {
+            cpu_count: self.charged.cpu_millis.div_ceil(1000),
+            memory_kb: self.charged.memory_bytes.div_ceil(1024),
+            // Disk remains a legacy platform diagnostic, outside the typed grant.
+            disk_kb: legacy.map_or(0, |reservation| reservation.disk_kb),
+        }
+    }
+}
+
+/// An observed authority memory-policy breach followed by a completed kill
+/// procedure. This does not establish the exclusive cause of exit, namespace
+/// quiescence, cleanup, successful output upload or authority acceptance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorityMemoryBreach {
+    charged: AuthorityResources,
+    limit_kb: u64,
+    observed_kb: u64,
+}
+
+impl AuthorityMemoryBreach {
+    pub const fn charged(self) -> AuthorityResources {
+        self.charged
+    }
+
+    pub const fn limit_kb(self) -> u64 {
+        self.limit_kb
+    }
+
+    pub const fn observed_kb(self) -> u64 {
+        self.observed_kb
+    }
+}
+
+/// First-stop selection is separate from legacy telemetry. A rejected live
+/// probe closes memory qualification without preventing a later cancellation.
+#[derive(Default)]
+struct AuthorityStopDecision {
+    selected: Option<KillReason>,
+    memory_blocked: bool,
+}
+
+struct PendingAuthorityMemoryBreach {
+    resources: AuthorityResourceLimits,
+    observed_kb: u64,
+}
+
+impl PendingAuthorityMemoryBreach {
+    fn finish(self, kill_completed: bool) -> Option<AuthorityMemoryBreach> {
+        kill_completed.then_some(AuthorityMemoryBreach {
+            charged: self.resources.charged,
+            limit_kb: self.resources.memory_limit_kb.expect("validated ceiling"),
+            observed_kb: self.observed_kb,
+        })
+    }
+}
+
+impl AuthorityStopDecision {
+    const fn select(&mut self, reason: KillReason) -> bool {
+        if self.selected.is_some() {
+            return false;
+        }
+        self.selected = Some(reason);
+        true
+    }
+
+    fn memory(
+        &mut self,
+        resources: AuthorityResourceLimits,
+        observed_kb: u64,
+        live_probe: &Result<Option<std::process::ExitStatus>, std::io::Error>,
+        cancelled: bool,
+    ) -> Option<PendingAuthorityMemoryBreach> {
+        if self.selected.is_some() || self.memory_blocked {
+            return None;
+        }
+        if cancelled
+            || resources.charged.memory_bytes == 0
+            || !resources
+                .memory_limit_kb
+                .is_some_and(|limit| limit > 0 && observed_kb > limit)
+            || !matches!(live_probe, Ok(None))
+        {
+            self.memory_blocked = true;
+            return None;
+        }
+        self.select(KillReason::Memory);
+        Some(PendingAuthorityMemoryBreach {
+            resources,
+            observed_kb,
+        })
+    }
+}
+
 pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     /// Returns the action id of the action.
     fn get_operation_id(&self) -> &OperationId;
+
+    /// Experimental authority adapter: observe an actual subprocess spawn.
+    /// Installing an observer does not authorize execution. Implementations
+    /// without this seam must refuse rather than fabricate a launch receipt.
+    fn observe_launch(&self, _observer: oneshot::Sender<u32>) -> Result<(), Error> {
+        Err(make_err!(
+            Code::Unimplemented,
+            "Process launch observation is unsupported"
+        ))
+    }
+
+    /// Trusted process-domain observation, separate from directory cleanup.
+    /// Unsupported domains and ambiguous termination must retain their charge.
+    fn process_domain_quiescent(&self) -> bool {
+        false
+    }
 
     /// Anything that needs to execute before the actions is actually executed should happen here.
     fn prepare_action(self: Arc<Self>) -> impl Future<Output = Result<Arc<Self>, Error>> + Send;
@@ -2264,6 +2456,16 @@ pub trait RunningAction: Sync + Send + Sized + Unpin + 'static {
     fn get_finished_result(
         self: Arc<Self>,
     ) -> impl Future<Output = Result<ActionResult, Error>> + Send;
+
+    /// Exact authority grant and its configured sampled ceiling, when present.
+    fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
+        None
+    }
+
+    /// Immutable observed memory policy receipt; closure and cleanup are separate.
+    fn authority_memory_breach(&self) -> Option<AuthorityMemoryBreach> {
+        None
+    }
 
     /// Returns worker-observed resource usage captured while this action ran.
     fn resource_usage(&self) -> Option<ActionResourceUsage>;
@@ -2415,6 +2617,10 @@ async fn upload_captured_output(
                 .update_oneshot(digest, data)
                 .await
                 .err_tip(|| format!("Uploading {what}"))?;
+            if let Some(progress) = ProgressObserver::store_object(WorkKind::Write, &digest.into())
+            {
+                progress.complete();
+            }
             Ok(digest)
         }
         CapturedOutput::Spilled { path, len, .. } => {
@@ -2435,6 +2641,10 @@ async fn upload_captured_output(
                 )
                 .await
                 .err_tip(|| format!("Uploading {what} from {}", path.display()))?;
+            if let Some(progress) = ProgressObserver::store_object(WorkKind::Write, &digest.into())
+            {
+                progress.complete();
+            }
             Ok(digest)
         }
     }
@@ -2451,6 +2661,8 @@ struct RunningActionImplExecutionResult {
 #[derive(Debug)]
 struct RunningActionImplState {
     command_proto: Option<ProtoCommand>,
+    launch_observer: Option<oneshot::Sender<u32>>,
+    process_domain_quiescent: bool,
     // TODO(palfrey) Kill is not implemented yet, but is instrumented.
     // However, it is used if the worker disconnects to destroy current jobs.
     kill_channel_tx: Option<oneshot::Sender<()>>,
@@ -2458,6 +2670,7 @@ struct RunningActionImplState {
     execution_result: Option<RunningActionImplExecutionResult>,
     action_result: Option<ActionResult>,
     resource_usage: Option<ActionResourceUsage>,
+    authority_memory_breach: Option<AuthorityMemoryBreach>,
     execution_metadata: ExecutionMetadata,
     // If there was an internal error, this will be set.
     // This should NOT be set if everything was fine, but the process had a
@@ -2478,6 +2691,9 @@ pub struct RunningActionImpl {
     /// `experimental_active_input_leases`; `None` leaves eviction untouched.
     input_lease: Option<Arc<ActionInputLease>>,
     timeout: Duration,
+    authority_request: bool,
+    authority_resources: Option<AuthorityResourceLimits>,
+    progress: Option<ProgressObserver>,
     running_actions_manager: Arc<RunningActionsManagerImpl>,
     /// Set on a kill; every phase that can wait watches it, so a kill ends
     /// a fetch or an upload as surely as it ends the command.
@@ -2514,14 +2730,20 @@ impl RunningActionImpl {
             action_info,
             input_lease,
             timeout,
+            authority_request: false,
+            authority_resources: None,
+            progress: None,
             running_actions_manager,
             state: Mutex::new(RunningActionImplState {
                 command_proto: None,
+                launch_observer: None,
+                process_domain_quiescent: true,
                 kill_channel_rx: Some(kill_channel_rx),
                 kill_channel_tx: Some(kill_channel_tx),
                 execution_result: None,
                 action_result: None,
                 resource_usage: None,
+                authority_memory_breach: None,
                 execution_metadata,
                 error: None,
                 input_mounts: None,
@@ -2541,6 +2763,21 @@ impl RunningActionImpl {
     )]
     fn metrics(&self) -> &Arc<Metrics> {
         &self.running_actions_manager.metrics
+    }
+
+    fn usage_reservation(
+        &self,
+        memory_property: Option<&str>,
+        disk_property: Option<&str>,
+    ) -> Option<Reservation> {
+        let legacy = reservation_of(
+            &self.action_info.platform_properties,
+            memory_property,
+            disk_property,
+        );
+        self.authority_resources.map_or(legacy, |resources| {
+            Some(resources.usage_reservation(legacy))
+        })
     }
 
     /// Prepares any actions needed to execute this action. This action will do the following:
@@ -3070,7 +3307,9 @@ impl RunningActionImpl {
         let program = self
             .canonicalise_path(args[0], &command_proto.working_directory)
             .err_tip(|| format!("Canonicalisation failure. Command={args:#?}"))?;
-        let requested_timeout = if self.action_info.timeout.is_zero() {
+        let requested_timeout = if self.authority_request {
+            self.timeout
+        } else if self.action_info.timeout.is_zero() {
             self.running_actions_manager.max_action_timeout
         } else {
             self.action_info.timeout
@@ -3233,11 +3472,7 @@ impl RunningActionImpl {
                                 peak_disk_kb: 0,
                                 outcome: outcome.into(),
                                 enforced,
-                                reserved: reservation_of(
-                                    &self.action_info.platform_properties,
-                                    memory_property,
-                                    disk_property,
-                                ),
+                                reserved: self.usage_reservation(memory_property, disk_property),
                             });
                             {
                                 let mut state = self.state.lock();
@@ -3309,6 +3544,10 @@ impl RunningActionImpl {
             command_builder.env(name, value);
         }
 
+        #[cfg(target_family = "unix")]
+        let authority_observer = self.state.lock().launch_observer.is_some();
+        #[cfg(target_os = "linux")]
+        let mut namespace_receipt = None;
         // Sandboxing of the command if we are running on Linux, this resolves issues where
         // children can spawn children and also provides better reproducibility.
         #[cfg(target_os = "linux")]
@@ -3347,16 +3586,29 @@ impl RunningActionImpl {
                     .map(|mounts| mounts.bind_mounts())
                     .transpose()?
                     .unwrap_or_default();
+                // The authority recipient needs proof about inner PID 1 even
+                // when the outer stub is hard-killed. Legacy callers retain
+                // their existing namespace setup and signal behavior.
+                let receipt_sender = if authority_observer {
+                    let (receiver, sender) =
+                        crate::namespace_utils::NamespaceQuiescenceReceipt::channel()
+                            .err_tip(|| "Creating namespace quiescence receipt channel")?;
+                    namespace_receipt = Some(receiver);
+                    Some(sender)
+                } else {
+                    None
+                };
                 // SAFETY: This function is specifically designed to operate in a async-signal-safe
                 // environment.
                 unsafe {
                     command_builder.pre_exec(move || {
-                        crate::namespace_utils::configure_namespace_with_input_mounts(
+                        crate::namespace_utils::configure_namespace_with_quiescence_receipt(
                             mount,
                             tmp_directory.as_deref(),
                             &root_action_directory,
                             &action_directory,
                             &bind_mounts,
+                            receipt_sender.as_ref(),
                         )
                     });
                 }
@@ -3374,8 +3626,22 @@ impl RunningActionImpl {
         let mut child_process = command_builder
             .spawn()
             .err_tip(|| format!("Could not execute command {args:?}"))?;
+        // Close the parent's copy of the receipt sender held by pre_exec.
+        drop(command_builder);
         // Ours until the wait below collects it; the reaper leaves it alone.
         let _owned_child = crate::reaper::OwnedChild::new(child_process.id());
+        self.state.lock().process_domain_quiescent = false;
+        if let Some(progress) = &self.progress {
+            progress.set_phase(ProgressPhase::Running);
+        }
+        // A lost receipt leaves the authority adapter uncertain; it neither
+        // retries this launch nor assumes the child failed to start. Legacy
+        // execution installs no observer and follows the same process path.
+        if let Some(observer) = self.state.lock().launch_observer.take()
+            && let Some(pid) = child_process.id()
+        {
+            let _receipt = observer.send(pid);
+        }
         let stdout_reader = child_process
             .stdout
             .take()
@@ -3398,24 +3664,30 @@ impl RunningActionImpl {
 
         // The reservation the scheduler placed this action by, if the
         // worker is asked to hold it to that number.
-        let memory_reservation = self
-            .running_actions_manager
-            .execution_configuration
-            .resource_enforcement
-            .as_ref()
-            .and_then(|enforcement| {
-                let memory = enforcement.memory.as_ref()?;
-                let reserved_kb = self
-                    .action_info
-                    .platform_properties
-                    .get(&memory.property_name)?
-                    .parse::<u64>()
-                    .ok()?;
-                (reserved_kb > 0).then(|| {
-                    let limit_kb = reserved_kb.saturating_mul(100 + memory.headroom_percent) / 100;
-                    (reserved_kb, limit_kb)
+        let memory_reservation = if let Some(resources) = self.authority_resources {
+            resources
+                .memory_limit_kb
+                .map(|limit_kb| (resources.charged.memory_bytes.div_ceil(1024), limit_kb))
+        } else {
+            self.running_actions_manager
+                .execution_configuration
+                .resource_enforcement
+                .as_ref()
+                .and_then(|enforcement| {
+                    let memory = enforcement.memory.as_ref()?;
+                    let reserved_kb = self
+                        .action_info
+                        .platform_properties
+                        .get(&memory.property_name)?
+                        .parse::<u64>()
+                        .ok()?;
+                    (reserved_kb > 0).then(|| {
+                        let limit_kb =
+                            reserved_kb.saturating_mul(100 + memory.headroom_percent) / 100;
+                        (reserved_kb, limit_kb)
+                    })
                 })
-            });
+        };
         // The disk reservation, held to only with `disk: soft`; disk is
         // measured whenever the enforcement names a disk property.
         let disk_enforcement = self
@@ -3523,6 +3795,7 @@ impl RunningActionImpl {
             .await
         });
         let mut kill_reason: Option<KillReason> = None;
+        let mut authority_stop = AuthorityStopDecision::default();
         let kill_grace = self
             .running_actions_manager
             .execution_configuration
@@ -3534,9 +3807,43 @@ impl RunningActionImpl {
 
         let timer = self.metrics().child_process.begin_timer();
         let mut sleep_fut = (self.running_actions_manager.callbacks.sleep_fn)(self.timeout).fuse();
+        let process_progress = self
+            .progress
+            .as_ref()
+            .map(|progress| progress.object(WorkKind::Process, b"owned-child"));
+        let mut progress_tick = tokio::time::interval(Duration::from_secs(5));
+        progress_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut progress_probe = 0_u64;
+        let mut progress_enabled = process_progress.is_some();
         loop {
             tokio::select! {
+                _ = progress_tick.tick(), if progress_enabled && kill_reason.is_none() && !*self.kill_token.borrow() => {
+                    match child_process_guard.try_wait() {
+                        Ok(None) => {
+                            if let Some(next) = progress_probe.checked_add(1) {
+                                progress_probe = next;
+                                if let Some(progress) = &process_progress { progress.offset(next); }
+                            } else {
+                                progress_enabled = false;
+                                warn!("Owned-child progress counter exhausted; renewal disabled");
+                            }
+                        }
+                        Ok(Some(_)) => {
+                            progress_enabled = false;
+                            authority_stop.memory_blocked = true;
+                        },
+                        Err(error) => {
+                            progress_enabled = false;
+                            authority_stop.memory_blocked = true;
+                            warn!(?error, "Owned-child progress probe failed; renewal disabled");
+                        }
+                    }
+                }
                 () = &mut sleep_fut => {
+                    if self.authority_request && !authority_stop.select(KillReason::Timeout) {
+                        grace_fut = stop_action(&mut child_process_guard, kill_grace, "timeout after earlier stop").await;
+                        continue;
+                    }
                     self.running_actions_manager.metrics.task_timeouts.inc();
                     kill_reason = Some(KillReason::Timeout);
                     grace_fut = stop_action(&mut child_process_guard, kill_grace, "action timeout").await;
@@ -3570,6 +3877,10 @@ impl RunningActionImpl {
                 },
                 Ok(over_limit) = &mut over_limit_fut => match over_limit {
                     OverLimit::Disk(observed_kb) => {
+                        if self.authority_request && !authority_stop.select(KillReason::Disk) {
+                            hard_kill(&mut child_process_guard, "disk breach after earlier stop").await;
+                            continue;
+                        }
                         self.running_actions_manager.metrics.disk_reservation_kills.inc();
                         kill_reason = Some(KillReason::Disk);
                         // The files are still being written; no grace here.
@@ -3603,10 +3914,32 @@ impl RunningActionImpl {
 
                     }
                     OverLimit::Memory(observed_kb) => {
+                        let pending_breach = if let Some(resources) = self.authority_resources {
+                            if authority_stop.selected.is_some() {
+                                // Keep termination responsive without replacing the first
+                                // result cause or minting a receipt from a later sample.
+                                hard_kill(&mut child_process_guard, "memory breach after earlier stop").await;
+                                continue;
+                            }
+                            let Some(pending) = authority_stop.memory(
+                                resources, observed_kb, &child_process_guard.try_wait(),
+                                *self.kill_token.borrow(),
+                            ) else {
+                                continue;
+                            };
+                            Some(pending)
+                        } else {
+                            None
+                        };
                         self.running_actions_manager.metrics.memory_reservation_kills.inc();
                         kill_reason = Some(KillReason::Memory);
                         // Memory is still growing; no grace here.
-                        hard_kill(&mut child_process_guard, "memory reservation").await;
+                        let kill_completed = hard_kill(&mut child_process_guard, "memory reservation").await;
+                        if let Some(pending) = pending_breach {
+                            // Persist before namespace wait, output drain and upload. Presence
+                            // records policy/kill-procedure facts, never those later obligations.
+                            self.state.lock().authority_memory_breach = pending.finish(kill_completed);
+                        }
                         let (reserved_kb, limit_kb) = memory_reservation.unwrap_or((0, 0));
                         let (property, headroom) = self
                             .running_actions_manager
@@ -3614,7 +3947,7 @@ impl RunningActionImpl {
                             .resource_enforcement
                             .as_ref()
                             .and_then(|e| e.memory.as_ref())
-                            .map_or(("", 0), |m| (m.property_name.as_str(), m.headroom_percent));
+                            .map_or(("", 0), |m| (if self.authority_resources.is_some() { "typed authority grant" } else { m.property_name.as_str() }, m.headroom_percent));
                         warn!(
                             operation_id = ?self.operation_id,
                             reserved_kb,
@@ -3639,6 +3972,26 @@ impl RunningActionImpl {
                     drop(ScopeGuard::<_, _>::into_inner(child_process_guard));
                     drop(over_limit_keepalive.take());
                     let exit_status = maybe_exit_status.err_tip(|| "Failed to collect exit code of process")?;
+                    #[cfg(target_os = "linux")]
+                    if let Some(receipt) = namespace_receipt.take() {
+                        // Waiting for outer SIGKILL alone is insufficient.
+                        // Bound receipt delivery and actual inner-domain exit;
+                        // any failure keeps the reservation charged.
+                        match tokio::time::timeout(
+                            self.running_actions_manager.max_cleanup_wait,
+                            receipt.close_and_wait(),
+                        ).await {
+                            Ok(Ok(())) => self.state.lock().process_domain_quiescent = true,
+                            result => warn!(?result, "Namespace quiescence remains unconfirmed"),
+                        }
+                    } else if !matches!(self.running_actions_manager.use_namespaces, UseNamespaces::No)
+                        && exit_status.code().is_some_and(|code| code != 255)
+                    {
+                        // Legacy outer-stub ordinary exit follows waitpid(PID1).
+                        // A signalled stub and its wait-error sentinel (255)
+                        // cannot prove that the inner namespace has exited.
+                        self.state.lock().process_domain_quiescent = true;
+                    }
                     // TODO(palfrey) We should implement stderr/stdout streaming to client here.
                     // If we get killed before the stream is started, then these will lock up.
                     let killed_action = kill_reason.is_some();
@@ -3653,8 +4006,16 @@ impl RunningActionImpl {
                     // the action would sit here until its timeout. The
                     // sandboxes Bazel runs locally end them the same way.
                     #[cfg(target_family = "unix")]
-                    let had_stragglers = action_pgid
-                        .is_some_and(|pgid| signal_process_group(pgid, libc::SIGKILL));
+                    let had_stragglers = if authority_observer {
+                        // The authority path closes a namespace by exact pidfd.
+                        // A reaped child's numeric PGID may have been reused,
+                        // so it must never receive a late signal. Unisolated
+                        // or unconfirmed domains still bound the output drain
+                        // and retain their original reservation.
+                        !self.state.lock().process_domain_quiescent
+                    } else {
+                        action_pgid.is_some_and(|pgid| signal_process_group(pgid, libc::SIGKILL))
+                    };
                     #[cfg(not(target_family = "unix"))]
                     let had_stragglers = false;
                     // An action that exited on its own with nothing left in
@@ -3775,11 +4136,7 @@ impl RunningActionImpl {
                         peak_disk_kb: sampled_usage.peak_disk_kb,
                         outcome: outcome.into(),
                         enforced,
-                        reserved: reservation_of(
-                            &self.action_info.platform_properties,
-                            memory_property,
-                            disk_property,
-                        ),
+                        reserved: self.usage_reservation(memory_property, disk_property),
                     });
 
                     // log something useful instead of repeating same ?arg
@@ -3807,6 +4164,10 @@ impl RunningActionImpl {
                     return Ok(self);
                 },
                 _ = &mut kill_channel_rx => {
+                    if self.authority_request && !authority_stop.select(KillReason::External) {
+                        grace_fut = stop_action(&mut child_process_guard, kill_grace, "cancel after earlier stop").await;
+                        continue;
+                    }
                     kill_reason = Some(KillReason::External);
                     grace_fut = stop_action(&mut child_process_guard, kill_grace, "scheduler kill").await;
                     {
@@ -4275,6 +4636,33 @@ impl RunningAction for RunningActionImpl {
         &self.operation_id
     }
 
+    fn observe_launch(&self, observer: oneshot::Sender<u32>) -> Result<(), Error> {
+        if self
+            .running_actions_manager
+            .execution_configuration
+            .persistent_workers
+            .enabled
+        {
+            return Err(make_err!(
+                Code::Unimplemented,
+                "Authority launch observation does not qualify persistent workers"
+            ));
+        }
+        let mut state = self.state.lock();
+        if state.launch_observer.is_some() || state.kill_channel_rx.is_none() {
+            return Err(make_err!(
+                Code::FailedPrecondition,
+                "Launch observation must be installed once before execution"
+            ));
+        }
+        state.launch_observer = Some(observer);
+        Ok(())
+    }
+
+    fn process_domain_quiescent(&self) -> bool {
+        self.state.lock().process_domain_quiescent
+    }
+
     async fn prepare_action(self: Arc<Self>) -> Result<Arc<Self>, Error> {
         let download_timeout = self.running_actions_manager.max_download_timeout;
         let operation_id = self.operation_id.clone();
@@ -4288,7 +4676,7 @@ impl RunningAction for RunningActionImpl {
         // fetching. A window too far out to represent leaves the retries
         // unbounded, as the timeout is.
         let action_timeout = self.action_info.timeout;
-        let retry_window = if action_timeout.is_zero() {
+        let retry_window = if self.authority_request || action_timeout.is_zero() {
             download_timeout
         } else {
             download_timeout.min(action_timeout)
@@ -4296,11 +4684,14 @@ impl RunningAction for RunningActionImpl {
         let download_deadline = Instant::now().checked_add(retry_window);
         // Boxed: the prepare state machine is large, and pinning it on the
         // stack next to the select below overflowed a test thread.
-        let mut prepare_fut = Box::pin(
-            metrics
-                .prepare_action
-                .wrap(Self::inner_prepare_action(self, download_deadline)),
-        );
+        let mut prepare_fut = Box::pin(work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                metrics
+                    .prepare_action
+                    .wrap(Self::inner_prepare_action(self, download_deadline)),
+            ),
+        ));
         // A fetch that never answers would otherwise hold the slot for good
         // while the worker's keepalives say it is fine: name it every minute
         // and give up at the timeout, so the scheduler can retry elsewhere.
@@ -4354,12 +4745,16 @@ impl RunningAction for RunningActionImpl {
     }
 
     async fn execute(self: Arc<Self>) -> Result<Arc<Self>, Error> {
-        let res = self
-            .metrics()
-            .clone()
-            .execute
-            .wrap(Self::inner_execute(self))
-            .await;
+        let res = work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                self.metrics()
+                    .clone()
+                    .execute
+                    .wrap(Self::inner_execute(self)),
+            ),
+        )
+        .await;
         if let Err(ref e) = res {
             warn!(?e, "Error during prepare_action");
         }
@@ -4376,9 +4771,17 @@ impl RunningAction for RunningActionImpl {
         );
         let metrics = self.metrics().clone();
         let kill_token = self.kill_token.clone();
-        let upload_fut = metrics
-            .upload_results
-            .wrap(Self::inner_upload_results(self));
+        if let Some(progress) = &self.progress {
+            progress.set_phase(ProgressPhase::Uploading);
+        }
+        let upload_fut = work_progress::scope(
+            self.progress.clone(),
+            Box::pin(
+                metrics
+                    .upload_results
+                    .wrap(Self::inner_upload_results(self)),
+            ),
+        );
 
         let stall_warn_fut = async {
             let mut elapsed_secs = 0u64;
@@ -4469,6 +4872,14 @@ impl RunningAction for RunningActionImpl {
             .await
     }
 
+    fn authority_resource_limits(&self) -> Option<AuthorityResourceLimits> {
+        self.authority_resources
+    }
+
+    fn authority_memory_breach(&self) -> Option<AuthorityMemoryBreach> {
+        self.state.lock().authority_memory_breach
+    }
+
     fn resource_usage(&self) -> Option<ActionResourceUsage> {
         self.state.lock().resource_usage.clone()
     }
@@ -4486,6 +4897,39 @@ pub trait RunningActionsManager: Sync + Send + Sized + Unpin + 'static {
         worker_id: String,
         start_execute: StartExecute,
     ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send;
+
+    /// Authority dispatch requires complete accepted platform facts, finite
+    /// execution deadlines and the exact immutable accounting grant.
+    /// Implementations must opt in explicitly; platform strings are not grants.
+    fn create_and_add_authority_action(
+        self: &Arc<Self>,
+        _worker_id: String,
+        _start_execute: StartExecute,
+        _reserved_resources: AuthorityResources,
+    ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
+        async {
+            Err(make_err!(
+                Code::Unimplemented,
+                "authority action creation is unsupported"
+            ))
+        }
+    }
+
+    /// Install a bounded observer before the initial Action CAS fetch.
+    fn create_and_add_authority_action_observed(
+        self: &Arc<Self>,
+        _worker_id: String,
+        _start_execute: StartExecute,
+        _reserved_resources: AuthorityResources,
+        _progress: ProgressObserver,
+    ) -> impl Future<Output = Result<Arc<Self::RunningAction>, Error>> + Send {
+        async {
+            Err(make_err!(
+                Code::Unimplemented,
+                "authority progress observation is unsupported"
+            ))
+        }
+    }
 
     fn cache_action_result(
         &self,
@@ -4555,7 +4999,8 @@ pub struct ResourceEnforcement {
 /// The reservation a memory ceiling is built from.
 #[derive(Debug, Clone)]
 pub struct MemoryLimit {
-    /// Platform property carrying the reservation in KiB.
+    /// Legacy platform property carrying the reservation in KiB. Authority
+    /// actions use their separate typed byte grant and never read this property.
     pub property_name: String,
     /// Percent above the reservation the action may reach.
     pub headroom_percent: u64,
@@ -4913,6 +5358,28 @@ pub enum UseNamespaces {
     },
 }
 
+/// Execution inputs for an authority-owned worker. This constructor vocabulary
+/// deliberately has no AC/history destinations, publication policies or response
+/// templates. Canonical runtime construction remains reachable through test wiring.
+#[derive(Debug)]
+pub struct AuthorityRunningActionsManagerArgs {
+    pub root_action_directory: String,
+    pub execution_configuration: ExecutionConfiguration,
+    pub cas_store: Arc<FastSlowStore>,
+    pub max_action_timeout: Duration,
+    pub max_upload_timeout: Duration,
+    pub max_download_timeout: Duration,
+    pub max_cleanup_wait: Duration,
+    pub max_cleanup_backoff: Duration,
+    pub timeout_handled_externally: bool,
+    pub directory_cache: Option<Arc<crate::directory_cache::DirectoryCache>>,
+    pub active_input_leases: bool,
+    #[cfg(target_os = "linux")]
+    pub readonly_input_mounts: Vec<String>,
+    #[cfg(target_os = "linux")]
+    pub use_namespaces: UseNamespaces,
+}
+
 #[derive(Debug)]
 pub struct RunningActionsManagerArgs<'a> {
     pub root_action_directory: String,
@@ -4937,6 +5404,29 @@ pub struct RunningActionsManagerArgs<'a> {
     pub readonly_input_mounts: Vec<String>,
     #[cfg(target_os = "linux")]
     pub use_namespaces: UseNamespaces,
+}
+
+impl RunningActionsManagerArgs<'_> {
+    fn into_execution(self) -> AuthorityRunningActionsManagerArgs {
+        let args = self;
+        AuthorityRunningActionsManagerArgs {
+            root_action_directory: args.root_action_directory,
+            execution_configuration: args.execution_configuration,
+            cas_store: args.cas_store,
+            max_action_timeout: args.max_action_timeout,
+            max_upload_timeout: args.max_upload_timeout,
+            max_download_timeout: args.max_download_timeout,
+            max_cleanup_wait: args.max_cleanup_wait,
+            max_cleanup_backoff: args.max_cleanup_backoff,
+            timeout_handled_externally: args.timeout_handled_externally,
+            directory_cache: args.directory_cache,
+            active_input_leases: args.active_input_leases,
+            #[cfg(target_os = "linux")]
+            readonly_input_mounts: args.readonly_input_mounts,
+            #[cfg(target_os = "linux")]
+            use_namespaces: args.use_namespaces,
+        }
+    }
 }
 
 /// The mark that an operation's directory is being cleaned; dropping it
@@ -4966,7 +5456,8 @@ pub struct RunningActionsManagerImpl {
     execution_configuration: ExecutionConfiguration,
     cas_store: Arc<FastSlowStore>,
     filesystem_store: Arc<FilesystemStore>,
-    upload_action_results: UploadActionResults,
+    // Authority construction retains no legacy publisher or destination handle.
+    upload_action_results: Option<UploadActionResults>,
     max_action_timeout: Duration,
     max_upload_timeout: Duration,
     max_download_timeout: Duration,
@@ -5047,6 +5538,34 @@ impl RunningActionsManagerImpl {
         args: RunningActionsManagerArgs<'_>,
         callbacks: Callbacks,
     ) -> Result<Self, Error> {
+        let config = args.upload_action_result_config;
+        let ac_store = args.ac_store.clone();
+        let historical_store = args.historical_store.clone();
+        Self::new_execution(args.into_execution(), callbacks, || {
+            UploadActionResults::new(config, ac_store, historical_store)
+                .err_tip(|| "During RunningActionsManagerImpl construction")
+                .map(Some)
+        })
+    }
+
+    /// Build the experimental authority worker without legacy publication
+    /// capabilities. No store placeholders or disabled upload policies are used.
+    pub fn new_authority(args: AuthorityRunningActionsManagerArgs) -> Result<Self, Error> {
+        Self::new_execution(
+            args,
+            Callbacks {
+                now_fn: SystemTime::now,
+                sleep_fn: |duration| Box::pin(tokio::time::sleep(duration)),
+            },
+            || Ok(None),
+        )
+    }
+
+    fn new_execution(
+        args: AuthorityRunningActionsManagerArgs,
+        callbacks: Callbacks,
+        create_publisher: impl FnOnce() -> Result<Option<UploadActionResults>, Error>,
+    ) -> Result<Self, Error> {
         #[cfg(target_os = "linux")]
         {
             crate::input_mounts::validate_paths(&args.readonly_input_mounts)?;
@@ -5084,12 +5603,7 @@ impl RunningActionsManagerImpl {
             input_pool_hint,
             cas_store: args.cas_store,
             filesystem_store,
-            upload_action_results: UploadActionResults::new(
-                args.upload_action_result_config,
-                args.ac_store,
-                args.historical_store,
-            )
-            .err_tip(|| "During RunningActionsManagerImpl construction")?,
+            upload_action_results: create_publisher()?,
             max_action_timeout: args.max_action_timeout,
             pod_memory_limit_kb: pod_memory_limit_kb(),
             max_upload_timeout: args.max_upload_timeout,
@@ -5262,11 +5776,18 @@ impl RunningActionsManagerImpl {
         &self,
         start_execute: StartExecute,
         queued_timestamp: SystemTime,
-    ) -> impl Future<Output = Result<ActionInfo, Error>> + '_ {
+        authority_request: bool,
+    ) -> impl Future<Output = Result<(ActionInfo, bool), Error>> + '_ {
         self.metrics.create_action_info.wrap(async move {
-            let execute_request = start_execute
+            let mut execute_request = start_execute
                 .execute_request
                 .err_tip(|| "Expected execute_request to exist in StartExecute")?;
+            // v1 authority fixes an omitted digest function to SHA256. It must
+            // not inherit the mutable legacy process default on this seam.
+            if authority_request && execute_request.digest_function == 0 {
+                execute_request.digest_function =
+                    DigestHasherFunc::Sha256.proto_digest_func().into();
+            }
             let action_digest: DigestInfo = execute_request
                 .action_digest
                 .clone()
@@ -5278,6 +5799,17 @@ impl RunningActionsManagerImpl {
                     .await
                     .err_tip(|| "During start_action")
                     .map_err(tag_missing_input)?;
+            let explicit_timeout = action.timeout.is_some();
+            if authority_request
+                && let Some(timeout) = action.timeout
+                && (!(0..=315_576_000_000).contains(&timeout.seconds)
+                    || !(0..1_000_000_000).contains(&timeout.nanos))
+            {
+                return Err(make_err!(
+                    Code::InvalidArgument,
+                    "invalid authority Action timeout"
+                ));
+            }
             let mut action_info = ActionInfo::try_from_action_and_execute_request(
                 execute_request,
                 action,
@@ -5292,7 +5824,24 @@ impl RunningActionsManagerImpl {
             // number the ledger charged. Off, the worker keeps reading the
             // client's copy as it always did, so an upgrade changes no
             // action's environment on its own.
-            if self.execution_configuration.resource_enforcement.is_some()
+            if authority_request {
+                let platform = start_execute.platform.ok_or_else(|| {
+                    make_err!(
+                        Code::InvalidArgument,
+                        "authority dispatch requires complete platform"
+                    )
+                })?;
+                let mut properties = HashMap::new();
+                for property in platform.properties {
+                    if properties.insert(property.name, property.value).is_some() {
+                        return Err(make_err!(
+                            Code::InvalidArgument,
+                            "duplicate authority platform property"
+                        ));
+                    }
+                }
+                action_info.platform_properties = properties;
+            } else if self.execution_configuration.resource_enforcement.is_some()
                 && let Some(platform) = start_execute.platform
             {
                 for property in platform.properties {
@@ -5301,7 +5850,7 @@ impl RunningActionsManagerImpl {
                         .insert(property.name, property.value);
                 }
             }
-            Ok(action_info)
+            Ok((action_info, explicit_timeout))
         })
     }
 
@@ -5471,14 +6020,25 @@ impl RunningActionsManagerImpl {
     }
 }
 
-impl RunningActionsManager for RunningActionsManagerImpl {
-    type RunningAction = RunningActionImpl;
-
-    async fn create_and_add_action(
+impl RunningActionsManagerImpl {
+    async fn create_and_add_action_impl(
         self: &Arc<Self>,
         worker_id: String,
         start_execute: StartExecute,
+        reserved_resources: Option<AuthorityResources>,
     ) -> Result<Arc<RunningActionImpl>, Error> {
+        let authority_request = reserved_resources.is_some();
+        let authority_resources = reserved_resources
+            .map(|charged| {
+                AuthorityResourceLimits::capture(
+                    charged,
+                    self.execution_configuration
+                        .resource_enforcement
+                        .as_ref()
+                        .and_then(|enforcement| enforcement.memory.as_ref()),
+                )
+            })
+            .transpose()?;
         self.metrics
             .create_and_add_action
             .wrap(async move {
@@ -5487,13 +6047,28 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 let capture_digest = start_execute.execute_request.as_ref()
                     .and_then(|request| request.action_digest.as_ref())
                     .map(|digest| digest.hash.clone()).unwrap_or_default();
-                let queued_timestamp = start_execute
-                    .queued_timestamp
-                    .and_then(|time| time.try_into().ok())
-                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                let queued_timestamp = if authority_request {
+                    let queued = start_execute.queued_timestamp.ok_or_else(|| make_err!(Code::InvalidArgument, "authority dispatch requires queued timestamp"))?;
+                    if !(-62_135_596_800..=253_402_300_799).contains(&queued.seconds) || !(0..1_000_000_000).contains(&queued.nanos) {
+                        return Err(make_err!(Code::InvalidArgument, "invalid authority queued timestamp"));
+                    }
+                    SystemTime::try_from(queued).map_err(|error| make_err!(Code::InvalidArgument, "invalid queued timestamp: {error}"))?
+                } else {
+                    start_execute.queued_timestamp.and_then(|time| time.try_into().ok()).unwrap_or(SystemTime::UNIX_EPOCH)
+                };
                 let operation_id = start_execute
                     .operation_id.as_str().into();
-                let action_info = self.create_action_info(start_execute, queued_timestamp).await?;
+                let action_info_future = self.create_action_info(start_execute, queued_timestamp, authority_request);
+                let (action_info, explicit_timeout) = if authority_request {
+                    tokio::time::timeout(self.max_download_timeout, action_info_future)
+                        .await.map_err(|_| make_err!(Code::DeadlineExceeded, "authority Action fetch exceeded download timeout"))??
+                } else {
+                    action_info_future.await?
+                };
+                let exceeds_worker_limit = action_info.timeout > self.max_action_timeout;
+                if authority_request && explicit_timeout && exceeds_worker_limit {
+                    return Err(make_err!(Code::InvalidArgument, "authority Action timeout exceeds worker maximum"));
+                }
                 debug!(
                     ?action_info,
                     "Worker received action",
@@ -5513,7 +6088,9 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                     output_upload_start_timestamp: SystemTime::UNIX_EPOCH,
                     output_upload_completed_timestamp: SystemTime::UNIX_EPOCH,
                 };
-                let timeout = if action_info.timeout.is_zero() || self.timeout_handled_externally {
+                let timeout = if authority_request && explicit_timeout {
+                    action_info.timeout
+                } else if action_info.timeout.is_zero() || self.timeout_handled_externally {
                     self.max_action_timeout
                 } else {
                     action_info.timeout
@@ -5531,14 +6108,18 @@ impl RunningActionsManager for RunningActionsManagerImpl {
                 } else {
                     timeout
                 };
-                let running_action = Arc::new(RunningActionImpl::new(
+                let mut running_action = RunningActionImpl::new(
                     execution_metadata,
                     operation_id.clone(),
                     action_directory,
                     action_info,
                     timeout,
                     self.clone(),
-                ));
+                );
+                running_action.authority_request = authority_request;
+                running_action.authority_resources = authority_resources;
+                running_action.progress = if authority_request { ProgressObserver::current() } else { None };
+                let running_action = Arc::new(running_action);
                 {
                     let mut running_actions = self.running_actions.lock();
                     // Check if action already exists and is still alive
@@ -5580,6 +6161,43 @@ impl RunningActionsManager for RunningActionsManagerImpl {
             })
             .await
     }
+}
+
+impl RunningActionsManager for RunningActionsManagerImpl {
+    type RunningAction = RunningActionImpl;
+
+    async fn create_and_add_action(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        self.create_and_add_action_impl(worker_id, start_execute, None)
+            .await
+    }
+
+    async fn create_and_add_authority_action(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+        reserved_resources: AuthorityResources,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        self.create_and_add_action_impl(worker_id, start_execute, Some(reserved_resources))
+            .await
+    }
+
+    async fn create_and_add_authority_action_observed(
+        self: &Arc<Self>,
+        worker_id: String,
+        start_execute: StartExecute,
+        reserved_resources: AuthorityResources,
+        progress: ProgressObserver,
+    ) -> Result<Arc<RunningActionImpl>, Error> {
+        work_progress::scope(
+            Some(progress),
+            self.create_and_add_action_impl(worker_id, start_execute, Some(reserved_resources)),
+        )
+        .await
+    }
 
     async fn cache_action_result(
         &self,
@@ -5587,13 +6205,15 @@ impl RunningActionsManager for RunningActionsManagerImpl {
         action_result: &mut ActionResult,
         hasher: DigestHasherFunc,
     ) -> Result<(), Error> {
+        let publisher = self.upload_action_results.as_ref().ok_or_else(|| {
+            make_err!(
+                Code::FailedPrecondition,
+                "Authority workers cannot publish action cache or accepted history results"
+            )
+        })?;
         self.metrics
             .cache_action_result
-            .wrap(self.upload_action_results.cache_action_result(
-                action_info,
-                action_result,
-                hasher,
-            ))
+            .wrap(publisher.cache_action_result(action_info, action_result, hasher))
             .await
     }
 
@@ -5729,6 +6349,102 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    fn authority_test_limits() -> AuthorityResourceLimits {
+        AuthorityResourceLimits {
+            charged: AuthorityResources {
+                cpu_millis: 1234,
+                memory_bytes: 102_400,
+                slots: 1,
+            },
+            memory_limit_kb: Some(100),
+        }
+    }
+
+    #[test]
+    fn authority_memory_first_stop_wins_without_relabeling() {
+        for reason in [KillReason::Timeout, KillReason::External, KillReason::Disk] {
+            let mut stop = AuthorityStopDecision::default();
+            assert!(stop.select(reason));
+            assert!(
+                stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                    .is_none()
+            );
+            assert!(!stop.select(KillReason::Memory));
+        }
+        let mut stop = AuthorityStopDecision::default();
+        let pending = stop
+            .memory(authority_test_limits(), 110, &Ok(None), false)
+            .unwrap();
+        for reason in [KillReason::Timeout, KillReason::External, KillReason::Disk] {
+            assert!(!stop.select(reason));
+        }
+        assert!(
+            stop.memory(authority_test_limits(), 120, &Ok(None), false)
+                .is_none()
+        );
+        let receipt = pending.finish(true).unwrap();
+        assert_eq!(receipt.charged(), authority_test_limits().charged);
+        assert_eq!(receipt.limit_kb(), 100);
+        assert_eq!(receipt.observed_kb(), 110);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn authority_memory_requires_a_live_probe_and_preserves_later_cancel() {
+        use std::os::unix::process::ExitStatusExt;
+        for probe in [
+            Ok(Some(std::process::ExitStatus::from_raw(0))),
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+        ] {
+            let mut stop = AuthorityStopDecision::default();
+            assert!(
+                stop.memory(authority_test_limits(), 110, &probe, false)
+                    .is_none()
+            );
+            assert!(
+                stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                    .is_none()
+            );
+            assert!(
+                stop.select(KillReason::External),
+                "a rejected memory observation must not swallow cancellation"
+            );
+        }
+    }
+
+    #[test]
+    fn authority_memory_requires_grant_breach_no_cancel_and_completed_kill() {
+        for (memory, ceiling, observed, cancelled) in [
+            (102_400, Some(100), 100, false),
+            (102_400, Some(100), 99, false),
+            (102_400, Some(100), 110, true),
+            (0, Some(100), 110, false),
+            (102_400, None, 110, false),
+            (102_400, Some(0), 110, false),
+        ] {
+            let mut limits = authority_test_limits();
+            limits.charged.memory_bytes = memory;
+            limits.memory_limit_kb = ceiling;
+            assert!(
+                AuthorityStopDecision::default()
+                    .memory(limits, observed, &Ok(None), cancelled)
+                    .is_none()
+            );
+        }
+        let mut stop = AuthorityStopDecision::default();
+        let pending = stop
+            .memory(authority_test_limits(), 110, &Ok(None), false)
+            .unwrap();
+        assert!(
+            pending.finish(false).is_none(),
+            "a failed kill procedure cannot mint a receipt"
+        );
+        assert!(
+            stop.memory(authority_test_limits(), 110, &Ok(None), false)
+                .is_none()
+        );
+    }
 
     fn test_digest(first_byte: u8) -> DigestInfo {
         let mut hash = [0u8; 32];

@@ -1,0 +1,84 @@
+{
+  "artifacts": [
+    {
+      "archive": "authority-rpc-test.log.gz",
+      "archive_sha256": "3dc40e2d830f9c4bdd787ea71e48e430188135a014b83491f04a43b1ac83d740",
+      "sha256": "9930ac2e80b9f1dab987a330299f1fa2c22488fda996e0ded35973f5a6454ef1",
+      "source": "authority-rpc-test.log"
+    },
+    {
+      "archive": "cargo-totals.json.gz",
+      "archive_sha256": "941670914d454bbb96599bfae5aa2773b36bdb1a19e6ace4141c858f314c3b72",
+      "sha256": "932013910168c609e21c0fcc5908496645349d11d31ca31c9ca79a5b528c00d4",
+      "source": "cargo-totals.json"
+    },
+    {
+      "archive": "cargo-workspace.json.gz",
+      "archive_sha256": "52465f073b29d2c0114dd902e302eeb6da3c76be20efae98cd69cbcbe6f6a2c6",
+      "sha256": "52397f989716e1e97c2084ec876a6a11a371546d55118e375d289197b6166481",
+      "source": "cargo-workspace.json"
+    },
+    {
+      "archive": "cargo-workspace.log.gz",
+      "archive_sha256": "414115a00a2dbeaa799deb17644055e447c281336bd7d90cb4d36ae806ca7dc2",
+      "sha256": "b16d68f89ea39a0d30f01b633af5fd42803b35076e9bf8001bf95dc39e080ce4",
+      "source": "cargo-workspace.log"
+    },
+    {
+      "archive": "listener-test.log.gz",
+      "archive_sha256": "5b4ed73b212ffb04712406beda02ef5283a8ca0b5715a0d44746a440a4e81c9e",
+      "sha256": "389808ceebc0e0bb644e3f793d39143a3a856c151f923248beb7437dd5d66a39",
+      "source": "listener-test.log"
+    },
+    {
+      "archive": "root-bazel-workspace.json.gz",
+      "archive_sha256": "74b96202e7cbb3f2ef0b30618498d630c12d21a574353a13f824170229d2905f",
+      "sha256": "7ee6ef0eb483ff1fac8a1eb68d93bb18e5339fd41c55b392462d6b795fc7fc93",
+      "source": "root-bazel-workspace.json"
+    },
+    {
+      "archive": "root-bazel-workspace.log.gz",
+      "archive_sha256": "fd98e0f5b74ad7bab2ebbe7c68584bc41e83f0cb23f271945d88a73ee3c086a3",
+      "sha256": "79603efbba1d1fed5474354ab42ad972371cb0e9f8ae6c9b788a772eea619a50",
+      "source": "root-bazel-workspace.log"
+    },
+    {
+      "archive": "service-unit-test.log.gz",
+      "archive_sha256": "602a5d3912e23ffe2fa091a7049a6ffdc970bb3ec8f7a59b2d64f9d5786a3c5d",
+      "sha256": "7c4fb351df4eb6c855589fde95b3bbe07804bf7324a09f710b1b385c2704107f",
+      "source": "service-unit-test.log"
+    },
+    {
+      "archive": "source-after.json.gz",
+      "archive_sha256": "feaa1e57373d357ffa7ee81a4eb23aaab75acf7b84156dee2e0c3b0623b22a01",
+      "sha256": "a2ec25ca977925e9eaf75ff0a1db5dbbba7c55e4a5d8cf9346900ca9a7237e03",
+      "source": "source-after.json"
+    },
+    {
+      "archive": "source-before.json.gz",
+      "archive_sha256": "01931c8569c4b593eb279a961b2fd18bde2b2322f862c2414193fe76fb04ed7f",
+      "sha256": "314efd6f0d351fa23864a629f63334e9099cb459b94e385d99d2e315b0e73027",
+      "source": "source-before.json"
+    },
+    {
+      "archive": "tls/manifest.json.gz",
+      "archive_sha256": "06b1632b7ea1cc18f87aa07c3a092524fd835d173aadd76d73576dc14427c111",
+      "sha256": "aa8076047d95388a398d2ee3a3f6ef401be9c842b644bf1c5d2385b12469707f",
+      "source": "tls/manifest.json"
+    },
+    {
+      "archive": "tls/observations.json.gz",
+      "archive_sha256": "fde948d54c03df9589636464643f696cec5e315bf34c714e3e01f55b76867844",
+      "sha256": "906c91c2c76dcf885d65466d529569768de8765b23c0cb03f635d9f3dd2b60de",
+      "source": "tls/observations.json"
+    },
+    {
+      "archive": "tls/test.log.gz",
+      "archive_sha256": "2fddeff2bf1ccf729cdced403681abaa15406d6ca139bfce3a7781e18e5b00f8",
+      "sha256": "e2463753837decbc12ddae755e1e220a76d6339bc81c206ac3d76bc97a387cb6",
+      "source": "tls/test.log"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Full root Cargo 2007 passed/11 ignored, full Bazel including manual canonical config 166 targets passed, explicit four-case mTLS; source at4876ddd48c"
+}

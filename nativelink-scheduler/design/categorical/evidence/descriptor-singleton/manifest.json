@@ -1,0 +1,140 @@
+{
+  "archive": {
+    "bytes": 271657,
+    "file_count": 34,
+    "files_sha256": {
+      "baseline-sources.json": "d19e9325b7e52982fc9da46948d8bbe4780f74cfd9518b2b1ebf9bb87402daec",
+      "baseline/nativelink-scheduler/design/categorical/descriptor-journal.md": "ec4f64ca4c4a471e13790796e59522472feef442817249b0d0f456394e429e28",
+      "baseline/nativelink-scheduler/src/authority/journal.rs": "21b53a041beffbebbdd5c4d40449293613c425044f0640bad44aadd07e7f06e8",
+      "baseline/nativelink-scheduler/src/authority/journal_factory_tests.rs": "637ad0f801f42030d48829248214ca159f2d104129f174afd4a8eb673892a551",
+      "baseline/tools/canonical-filesystem/journal_bridge_test.rs": "f655c442afa309583118bf20f9e11e57aaade2304a5e7f9be72e5d76190c5657",
+      "commands.json": "59ff8246d08785a76ed839ae51fb972f01e8bdfeeed0519be279849862805089",
+      "dependencies/Cargo.lock": "6034c21ec6af9e9fb77a0af5437d8df4a13050c6ac559fd33a815856703adc2e",
+      "dependencies/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "dependencies/nativelink-scheduler/BUILD.bazel": "7bb60e4d0df7906274970646380dabbff5fa6b10b2def0bb88a3adb0d3939d81",
+      "dependencies/nativelink-scheduler/Cargo.toml": "3f052d46b38150ff24502ecadf44119dc4eec867cc9a41ca2723a2f9ef138b0d",
+      "dependencies/tools/canonical-filesystem/BUILD.bazel": "c38ef1530ddb81f73da59dd9e8dd5e4ff7c3df7291b23b6f37a1acd8844dbd1f",
+      "dependencies/tools/canonical-filesystem/Cargo.lock": "d56907b86b7405e9a1eb17d1a26f141d7345e2c6505139f217eaab2c96d7e58e",
+      "dependencies/tools/canonical-filesystem/Cargo.toml": "44fb6630fd5539d71152d44cef5628aecc92f00871c78b9eefbcc96141b53a3d",
+      "dependencies/tools/canonical-filesystem/src/capability.rs": "4b1aa0311624ed5c25f121f50df8320d15c62a1fa27e6cc2e3d33760bcfed773",
+      "dependencies/tools/canonical-filesystem/src/journal.rs": "dbfffe56055b4f74e529955f3ca38a7114ffb77406444ebeff0a2859439b8899",
+      "dependencies/tools/canonical-filesystem/src/lib.rs": "aed4e290e0373afa7bc55cb43ee85e0fdafc3f9d17d5193c1d21f86592496f52",
+      "mutation-no-ack-wait.log": "5635ce70d5b9358be506368f729faf308af060a599205cc05c76fe2bff6d042b",
+      "mutation-no-ack-wait.patch": "ce5bd9fa1c8051b8689daba8538ff8ddc2009de5fc6472b1a75b78142d25fc5d",
+      "mutation-no-ack-wait.rs": "1889db4443a39b34434dcb3f9e2b59f11f41776ae4243c1a350fa93ccc72f044",
+      "mutation-no-shutdown.log": "7980325af0e45d52de4910ebb36723189e0707f701f5f216e491155e19725fc8",
+      "mutation-no-shutdown.patch": "cb793febe69faeccb0777dcc9c5192caf4c9b7ff9ef1bfff1b649ae6754dc2db",
+      "mutation-no-shutdown.rs": "bfec825078a4489a30a654f7d83e82f152efe70216c2a6b4e5f10e44aceed556",
+      "mutation-results.json": "3836e710fe60241ddc18abbef5a54c82d94935a11f145e970db042e7e9d2ca59",
+      "nativelink-singleton-factory-clippy.log": "764d7ffc9e6ceacc0c0b252b2fc13662e94ee1400f4799bf8962052b9649adca",
+      "nativelink-singleton-full-unit.log": "8bd081e73533a679903c5d114b6e318d4bd291c7e472f995fec12d9e067bc647",
+      "restored-unit.log": "5a568eee3bf84197e0cf069401745406ee42a11b4033ca5059a792d1627d5a99",
+      "root-independent-review.json": "55e7c026878e19a23945a972c527ec79a505f34e5013df8672f257da517944ca",
+      "root-integration/bazel.log": "eeb56e726c4cd2e9f83c6971677845f769bd4a9e70e1455425b81821f4d86af0",
+      "root-integration/bridge.log": "0a8185cb14e3210625c9d577ff96299c0f6ac6f424eaad7ded0021903fe88d0b",
+      "root-integration/head.txt": "daaf74382a5cae5e36a72162471def6d435ae0be7c866450a51dfd00faaecbed",
+      "root-integration/scheduler.log": "f4142ea833b32c0a66e22b175ec022a8d643a66ab91f4fe9c8b1a634e9429c7d",
+      "root-integration/sources-after.json": "1ac855a696765d3d9b4e9d7f5e30a8d4fd8374c8914bc692ed9ffbfef7d61354",
+      "root-integration/sources-before.json": "1ac855a696765d3d9b4e9d7f5e30a8d4fd8374c8914bc692ed9ffbfef7d61354",
+      "source-commit.patch": "d7022a51e1ea85ece893aa68a8ddb2c279a9dea0b2609c59e66c141a7f29e538"
+    },
+    "path": "qualified-evidence.tar.gz",
+    "sha256": "b607b8900ae7f67b2d933a1e3487d8bfc5ff345bcac8a2298c7bd06001113ad1"
+  },
+  "limitations": [
+    "No canonical bootstrap compatibility binding, format freeze, production entrypoint, or persisted limit-envelope certification.",
+    "Existing singleton membership checks and leader wait are reused; no certification of exact singleton or joint/foreign recovered membership.",
+    "Closed-member admission recovery still uses the existing separate path and is not qualified here.",
+    "No production clock, worker materialization, namespace generation continuity, fencing, or complete cutover claim.",
+    "Only the new factory entrypoint owns preparation after first poll; ambient constructors retain their previous cancellation behavior.",
+    "The caller accepting a Singleton remains responsible for explicit shutdown. No Singleton Drop implementation is added.",
+    "Factory custody depends on its trusted backend contract; the descriptor backend supplies the qualified concrete implementation.",
+    "Never-polled futures, panics, process death, runtime destruction and exhaustive scheduling are outside these cancellation witnesses.",
+    "Two selected compiled faults are not a general mutation score. No new syscall-injection or power-loss qualification is claimed."
+  ],
+  "new_witnesses": [
+    "Binding node/epoch/namespace and invalid limits refuse before a counted factory invocation.",
+    "Successful constructor handoff commits AdvanceTime(17) and reads it through real Raft.",
+    "Canceled receiver during a private per-construction gate after Raft::new explicitly stops Raft after the gate releases, even with another Raft handle alive.",
+    "A result received without the private handoff acknowledgment explicitly stops Raft while the received Singleton remains alive. Public receive/ack/return has no intervening await.",
+    "Descriptor create/write/read/shutdown/reopen after root rename preserves the ambient replacement and retains all four actual directory locks.",
+    "Caller cancellation during held factory and held parent sync retains all four locks, then releases custody after owned startup/shutdown; initialized Singleton reopen succeeds.",
+    "Existing metadata-only journal is refused by Singleton reopen rather than adopted as new membership."
+  ],
+  "qualification": {
+    "author_cargo_unit": {
+      "log": "nativelink-singleton-full-unit.log",
+      "passed": 84
+    },
+    "author_strict_clippy": {
+      "log": "nativelink-singleton-factory-clippy.log",
+      "scope": "scheduler library and all tests",
+      "warnings_denied": true
+    },
+    "compiled_selected_faults": [
+      {
+        "compiled": true,
+        "detected": true,
+        "exit_code": 101,
+        "failure": "10-second timeout awaiting Shutdown while independent Raft handle remains alive",
+        "name": "no-ack-wait",
+        "source_sha256": "1889db4443a39b34434dcb3f9e2b59f11f41776ae4243c1a350fa93ccc72f044",
+        "test": "unacknowledged_singleton_handoff_explicitly_stops_raft"
+      },
+      {
+        "compiled": true,
+        "detected": true,
+        "exit_code": 101,
+        "failure": "10-second timeout awaiting Shutdown while independent Raft handle remains alive",
+        "name": "no-shutdown",
+        "source_sha256": "bfec825078a4489a30a654f7d83e82f152efe70216c2a6b4e5f10e44aceed556",
+        "test": "canceled_singleton_startup_explicitly_stops_raft_after_gate"
+      }
+    ],
+    "exact_restoration": {
+      "log": "restored-unit.log",
+      "passed": 84
+    },
+    "independent_review": {
+      "file": "root-independent-review.json",
+      "findings": [],
+      "scope": "source-only",
+      "sha256": "55e7c026878e19a23945a972c527ec79a505f34e5013df8672f257da517944ca"
+    },
+    "root_bazel": {
+      "both_targets_executed": true,
+      "directory": "root-integration",
+      "elapsed_seconds": 19.19,
+      "passed": [
+        84,
+        11
+      ],
+      "targets": [
+        "//nativelink-scheduler:unit_test",
+        "//tools/canonical-filesystem:journal_bridge_test"
+      ],
+      "unchanged_source_inputs": 546
+    }
+  },
+  "root_cherry_pick": "ea3d63770e",
+  "scope": "Experimental descriptor-backed Journal to existing real Singleton Raft constructor; cancellation after first poll, explicit result handoff, custody through shutdown.",
+  "source_commit": "790de17cd2592a501b5190952ef56b39f34fd2ab",
+  "sources": [
+    {
+      "path": "nativelink-scheduler/src/authority/journal.rs",
+      "sha256": "21b53a041beffbebbdd5c4d40449293613c425044f0640bad44aadd07e7f06e8"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/journal_factory_tests.rs",
+      "sha256": "637ad0f801f42030d48829248214ca159f2d104129f174afd4a8eb673892a551"
+    },
+    {
+      "path": "tools/canonical-filesystem/journal_bridge_test.rs",
+      "sha256": "f655c442afa309583118bf20f9e11e57aaade2304a5e7f9be72e5d76190c5657"
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/descriptor-journal.md",
+      "sha256": "ec4f64ca4c4a471e13790796e59522472feef442817249b0d0f456394e429e28"
+    }
+  ]
+}

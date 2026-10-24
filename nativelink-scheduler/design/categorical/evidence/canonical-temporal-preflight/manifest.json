@@ -1,0 +1,1834 @@
+{
+  "scope": "Private read-only temporal storage admission for inert PreparedCanonicalOwner; no clock or Raft startup, production seal, request ingress, serving, or lifetime-expiry guarantee.",
+  "source_commit": "694f67741c3150247548236bcedef586b554aeac",
+  "tests_first_commit": "92a7b78939f2d0bf4affe479881a89e5184b524c",
+  "author_receipt_sha256": "c31d31434bb6cb9c4ac2464e90dcf05dca1345dbb3e307a68d167c352a70a864",
+  "archive": "qualified-evidence.tar.gz",
+  "archive_sha256": "57f022a25f295de5549e091084d0b1fe058b82f5e7574178f766766218e1b3bd",
+  "archive_bytes": 2329543,
+  "members": [
+    {
+      "path": "author-receipt.json",
+      "bytes": 77885,
+      "sha256": "c31d31434bb6cb9c4ac2464e90dcf05dca1345dbb3e307a68d167c352a70a864"
+    },
+    {
+      "path": "baseline-expectations.json",
+      "bytes": 5195,
+      "sha256": "96943998e1b33af465f2ae3ec2520a5083b05d1e6128d42b04e72acbeb8e1c03"
+    },
+    {
+      "path": "capture-restoration.py",
+      "bytes": 2444,
+      "sha256": "57363435096f3caef5308e44340e577841391af321b416bd6cbe93bd5280c5f0"
+    },
+    {
+      "path": "compiled-mutation-summary.json",
+      "bytes": 7467,
+      "sha256": "eff507ab4a445f4b287dea583bb148cee763278f9ce9afdcb547344ab014e220"
+    },
+    {
+      "path": "fixed-focused-initial.json",
+      "bytes": 5435,
+      "sha256": "32e59821e0c2702aa1eb5d666d94fe9580465a5f171ec8f9234387d38df53199"
+    },
+    {
+      "path": "fixed-focused-initial.log",
+      "bytes": 460496,
+      "sha256": "9ee516cfcf82b90cb353af5f93c694820936e756978867f8843f8e60c233d1b0"
+    },
+    {
+      "path": "fixed-regression.json",
+      "bytes": 5945,
+      "sha256": "a9105619c17c45c9ff6343f473dc28f7cf93aa6877f595ea0202f0f2e575049e"
+    },
+    {
+      "path": "fixed-regression.log",
+      "bytes": 475232,
+      "sha256": "58ad5be11fdfe4cc2fd261332ef78a7d48863b0e66a70482a35880a307e395e4"
+    },
+    {
+      "path": "independent-owner-runtime-review/original-baseline-observations.json",
+      "bytes": 7717,
+      "sha256": "3e41a72f053ade375f84c174cb5fc4d6f9c8a90fb342c0b9e5f5c707d6c590d3"
+    },
+    {
+      "path": "independent-owner-runtime-review/original.json",
+      "bytes": 858,
+      "sha256": "ba21d636339bc4f465bc800cc168b3d2584646fa4815db606c792cb43a3ec051"
+    },
+    {
+      "path": "independent-owner-runtime-review/original.log",
+      "bytes": 470347,
+      "sha256": "b92015cc7d8d75b8d9f005a9812ef29c17cb5db1901c9c54659c688a7c160d32"
+    },
+    {
+      "path": "independent-owner-runtime-review/precompile.json",
+      "bytes": 5258,
+      "sha256": "cadaf2fc21ac9fc4a76e55b0d4c806a04787c99bd4cafe8571292932ab51b14a"
+    },
+    {
+      "path": "independent-owner-runtime-review/review.json",
+      "bytes": 7376,
+      "sha256": "6bd4eec05a3a2b32e84c5c817e9e1aed948ef383812b495851b4995e7bb8658c"
+    },
+    {
+      "path": "independent-owner-runtime-review/runtime-candidate.json",
+      "bytes": 2153,
+      "sha256": "13f85ba96ae0d55812c7decfdcd772b823014095f739132cdd6720b8ea493003"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3360,
+      "sha256": "f3a6506b0e00b818731353b5e5a8814eafd993441194060e89ad0153a562b25b"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 32868,
+      "sha256": "def20ee3a19c9c1b01f61fdc56b2be5389e43da6ea0aa84f30b85543678f6460"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "independent-owner-runtime-review/source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "independent-owner-tests-review/baseline-expectations.json",
+      "bytes": 5195,
+      "sha256": "96943998e1b33af465f2ae3ec2520a5083b05d1e6128d42b04e72acbeb8e1c03"
+    },
+    {
+      "path": "independent-owner-tests-review/proposed-runtime-delta.json",
+      "bytes": 2757,
+      "sha256": "83436b607cfbaf6eddb1893640130fbab8249cf4046c249ebaa8cd0b00f2111d"
+    },
+    {
+      "path": "independent-owner-tests-review/review.json",
+      "bytes": 8863,
+      "sha256": "1195f8b95d5d1fc01bb2794f36b2e208b54eb7efda45271a7db18228b5506a4c"
+    },
+    {
+      "path": "independent-owner-tests-review/source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "independent-owner-tests-review/source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 29523,
+      "sha256": "c039d05e2731dd1ce38325c2b8ae946ea1e6165238d02076ce731d298aca79ca"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "independent-owner-tests-review/source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "independent-owner-tests-review/source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "independent-owner-tests-review/source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "independent-owner-tests-review/temporal-invariants-review.json",
+      "bytes": 6457,
+      "sha256": "950b8ea76341304bc58bb8518767d2bcded29d1efd0b4bf4efb94c90241bbd0f"
+    },
+    {
+      "path": "independent-owner-tests-review/tests-commit.json",
+      "bytes": 307,
+      "sha256": "aa08cf49df6ae1e0bd0fe277a8453cc2a33b24d6a15af5ea4c343871216a7041"
+    },
+    {
+      "path": "independent-owner-tests-review/tests-corrected.json",
+      "bytes": 5327,
+      "sha256": "0780b597aeecaac2c4f857c57402e2ccf12f53271984e93bdf1d7c21fbf67b98"
+    },
+    {
+      "path": "independent-root-review/original-baseline-observations.json",
+      "bytes": 7717,
+      "sha256": "3e41a72f053ade375f84c174cb5fc4d6f9c8a90fb342c0b9e5f5c707d6c590d3"
+    },
+    {
+      "path": "independent-root-review/precompile.json",
+      "bytes": 5258,
+      "sha256": "cadaf2fc21ac9fc4a76e55b0d4c806a04787c99bd4cafe8571292932ab51b14a"
+    },
+    {
+      "path": "independent-root-review/proposal-copy-addendum.json",
+      "bytes": 377,
+      "sha256": "9396605ac8499f7d0134e0fba37a602a9bf26bbe945351d4b8aa71aa25a38b0e"
+    },
+    {
+      "path": "independent-root-review/proposed-runtime-delta.json",
+      "bytes": 2757,
+      "sha256": "83436b607cfbaf6eddb1893640130fbab8249cf4046c249ebaa8cd0b00f2111d"
+    },
+    {
+      "path": "independent-root-review/review.json",
+      "bytes": 6067,
+      "sha256": "5eeba31f1cf0275c2cd6706a8f168aaae274ab930d7912de81c2971fd7b432e8"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 29541,
+      "sha256": "126f9cb426e8b7dc7de398c8d95725de4e83a7ab4f20ec642f2d3c1330688996"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "independent-root-review/reviewed-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "independent-root-review/runtime-candidate.json",
+      "bytes": 2153,
+      "sha256": "13f85ba96ae0d55812c7decfdcd772b823014095f739132cdd6720b8ea493003"
+    },
+    {
+      "path": "independent-root-review/runtime-review.json",
+      "bytes": 4999,
+      "sha256": "75b80f1fdefb5efe2a234df7bc230025c4ac14207f9323df809ab465cc30d974"
+    },
+    {
+      "path": "independent-root-review/runtime-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "independent-root-review/runtime-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3360,
+      "sha256": "f3a6506b0e00b818731353b5e5a8814eafd993441194060e89ad0153a562b25b"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 32868,
+      "sha256": "def20ee3a19c9c1b01f61fdc56b2be5389e43da6ea0aa84f30b85543678f6460"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "independent-root-review/runtime-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "independent-root-review/runtime-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "independent-root-review/runtime-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "independent-root-review/temporal-invariants-review.json",
+      "bytes": 6457,
+      "sha256": "950b8ea76341304bc58bb8518767d2bcded29d1efd0b4bf4efb94c90241bbd0f"
+    },
+    {
+      "path": "independent-root-review/tests-corrected.json",
+      "bytes": 5327,
+      "sha256": "0780b597aeecaac2c4f857c57402e2ccf12f53271984e93bdf1d7c21fbf67b98"
+    },
+    {
+      "path": "independent-root-review/tests-review.json",
+      "bytes": 5063,
+      "sha256": "a7f849ee12061a19a2e3c75671ac6bcbd3127000cd87c387f3d104a6184ca478"
+    },
+    {
+      "path": "mutant-candidates/drop-io-queue-guard/mutation.diff",
+      "bytes": 519,
+      "sha256": "662658df4e52ae5faff2859f57736b728000faf87dc8b3f4650658736374a68a"
+    },
+    {
+      "path": "mutant-candidates/drop-io-queue-guard/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122669,
+      "sha256": "b381272a1363e80a56fc6ad0a33a36828e6e73dc0107a72f58d5e3c3971d2f9b"
+    },
+    {
+      "path": "mutant-candidates/omit-omitted-sentinel/mutation.diff",
+      "bytes": 643,
+      "sha256": "6f58d05f9b2486acd94be41b71fe492d8d1552402245a0581d395a513b9013c6"
+    },
+    {
+      "path": "mutant-candidates/omit-omitted-sentinel/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14070,
+      "sha256": "b6bf1e89d813071b387faf89b89c0e46f08e6e91e66298080a1527ed208cb440"
+    },
+    {
+      "path": "mutant-candidates/raise-clock-cutoff/mutation.diff",
+      "bytes": 351,
+      "sha256": "d62e9e7ae2bd2911022b7da5e18c361622d14360a32f43f321625472c76337d8"
+    },
+    {
+      "path": "mutant-candidates/raise-clock-cutoff/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14244,
+      "sha256": "52048063232a4279dc7d9af68c5de58166a50791f2d2fc506df5f64e5b174680"
+    },
+    {
+      "path": "mutant-candidates/redundant-finite-max-guard/mutation.diff",
+      "bytes": 586,
+      "sha256": "8832b6fec8eb8b233c86df0a5bf2f3086b654c84d01c3882ceef2776ac00a2bf"
+    },
+    {
+      "path": "mutant-candidates/redundant-finite-max-guard/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14074,
+      "sha256": "ae41435ecee41dd322b77f854e3acd8575fbc83ff15a746dcc614a0cb44cae39"
+    },
+    {
+      "path": "mutant-candidates/redundant-intermediate-state/mutation.diff",
+      "bytes": 594,
+      "sha256": "f916b0ae9930ba695bd347f21da61fd525f9aa2efc420f6d2ad7cca026235c2f"
+    },
+    {
+      "path": "mutant-candidates/redundant-intermediate-state/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14268,
+      "sha256": "6cbf4dccabac8e7fc27efa32ba7b5dce0432b97541607556e66c1e155e673452"
+    },
+    {
+      "path": "mutant-candidates/redundant-stateless-submit/mutation.diff",
+      "bytes": 391,
+      "sha256": "92fe3d0c23243b9f6545ffa40bc23e5703c3fa25e9586886ffa0f9da440445e6"
+    },
+    {
+      "path": "mutant-candidates/redundant-stateless-submit/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14216,
+      "sha256": "056f8102f5c8b7c397575195b33ca4c87f28d5ec0e781afcfe391826414be0fe"
+    },
+    {
+      "path": "mutant-candidates/skip-attempt-interval/mutation.diff",
+      "bytes": 469,
+      "sha256": "00400831941789aea3a5fd610fd93d0b98cac85bf7dc1a129e3f7be0faa2923b"
+    },
+    {
+      "path": "mutant-candidates/skip-attempt-interval/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14207,
+      "sha256": "3fe2a9da7eb406d09b79902063a005cffdbe9a08122f0ba31da3ba38ac669ffa"
+    },
+    {
+      "path": "mutant-candidates/skip-cooldown-interval/mutation.diff",
+      "bytes": 464,
+      "sha256": "3f24db9958bf0962b52c39e25229adceeef66ec3f1f0dac5140e353e68c43938"
+    },
+    {
+      "path": "mutant-candidates/skip-cooldown-interval/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14209,
+      "sha256": "c45c1bca561d8465a75024cfba09bcff63cdb700be1b363a317c25cc3e2a4f6c"
+    },
+    {
+      "path": "mutant-candidates/skip-covered-log-events/mutation.diff",
+      "bytes": 624,
+      "sha256": "a2830d39dd1d48ca775a8fd7109a38198421adaed36e3e899d3a990f8d024df2"
+    },
+    {
+      "path": "mutant-candidates/skip-covered-log-events/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14375,
+      "sha256": "8f4b04be80f95a0b42cf3f17c59f6aee06c27f2c434d6ff5d0e24dd10fe1e8f4"
+    },
+    {
+      "path": "mutant-candidates/skip-execution-payload/mutation.diff",
+      "bytes": 453,
+      "sha256": "564608deb10b58c43efbb429d390aba9f1e069bee1b92ffb33ccf6346284c392"
+    },
+    {
+      "path": "mutant-candidates/skip-execution-payload/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14255,
+      "sha256": "b9fd5a6c372d36d336fa0f147fab4383d6e40fd0a185d6b41a585fe89cbb9100"
+    },
+    {
+      "path": "mutant-candidates/skip-finite-running-anchor/mutation.diff",
+      "bytes": 394,
+      "sha256": "ac8c783c6c7dd7a5e3826028874915278a57e493f09dd2a755547cef79853c76"
+    },
+    {
+      "path": "mutant-candidates/skip-finite-running-anchor/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "f05ceaaa8fb96ac1633bc231ad72985523ed40a08a7dd784e4ad4b8c0c8a6579"
+    },
+    {
+      "path": "mutant-candidates/skip-interest-interval/mutation.diff",
+      "bytes": 524,
+      "sha256": "9a9a2e46801f633cb5fcf3eb3be55ef298dc49beff6f3a70dc22150e27736ba5"
+    },
+    {
+      "path": "mutant-candidates/skip-interest-interval/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14153,
+      "sha256": "a844c74be1fab80ec11005c43b13738eede767a2f4ce300c0dc921674ff8bf03"
+    },
+    {
+      "path": "mutant-candidates/skip-operation-payload/mutation.diff",
+      "bytes": 408,
+      "sha256": "5efe0582e8a6a1ea6e25b24e71f262df0ec1e32873435c9ebe3537e8b5ab9f7e"
+    },
+    {
+      "path": "mutant-candidates/skip-operation-payload/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14246,
+      "sha256": "e3ee4231355a436969f8dd7b2adf3d09d108e401b81a874c29fcfe18422bada4"
+    },
+    {
+      "path": "mutant-candidates/skip-snapshot-temporal/mutation.diff",
+      "bytes": 611,
+      "sha256": "aa01fdb18f9addb1bf55f2161ebfbbda942723911b9a17dae409ba7d2007dc8d"
+    },
+    {
+      "path": "mutant-candidates/skip-snapshot-temporal/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14241,
+      "sha256": "34eaae840c8352dc44e1cde784e5e18b8c29d4d0a0d21363484dc34c8e21a55b"
+    },
+    {
+      "path": "mutant-candidates/skip-stateless-submit/mutation.diff",
+      "bytes": 391,
+      "sha256": "92fe3d0c23243b9f6545ffa40bc23e5703c3fa25e9586886ffa0f9da440445e6"
+    },
+    {
+      "path": "mutant-candidates/skip-stateless-submit/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14216,
+      "sha256": "056f8102f5c8b7c397575195b33ca4c87f28d5ec0e781afcfe391826414be0fe"
+    },
+    {
+      "path": "mutant-candidates/skip-uncommitted-log-rows/mutation.diff",
+      "bytes": 646,
+      "sha256": "9d8f0797365888c86da531cf6c3f8918a21869aa7b7d9d9c1f2ec7ab59e32f02"
+    },
+    {
+      "path": "mutant-candidates/skip-uncommitted-log-rows/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14378,
+      "sha256": "6a282ad02e454e310f1b1610b518548a68f9603207e6ee5d22767c800d5cbe5b"
+    },
+    {
+      "path": "mutant-candidates-corrected/skip-cooldown-interval/correction.diff",
+      "bytes": 309,
+      "sha256": "67d1504f4f70375ccd6b845396ef4d01c120bd60e9613451c27b99be5b2766df"
+    },
+    {
+      "path": "mutant-candidates-corrected/skip-cooldown-interval/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14197,
+      "sha256": "2aea023014ccccd3f4b7490b310ef7246d70aed9cfb31f7d7d627c22f0d7d2e4"
+    },
+    {
+      "path": "mutant-candidates-corrected/skip-interest-interval/correction.diff",
+      "bytes": 311,
+      "sha256": "88bba037f0d9414c983c94754e5e3200dc64b3d15f75bfe94fb0596d7968c6c1"
+    },
+    {
+      "path": "mutant-candidates-corrected/skip-interest-interval/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14144,
+      "sha256": "03ff54ab10b2bef5e2001e869c96821097d6406427a67f1cf3b63cafa60f1eff"
+    },
+    {
+      "path": "mutant-driver-corrected.log",
+      "bytes": 51087,
+      "sha256": "c86a9ef728a945e3fa0f679c7f8f4e572b8f7f5fcca571af07836c4184a59af5"
+    },
+    {
+      "path": "mutant-driver-resumed.log",
+      "bytes": 28026,
+      "sha256": "7725ae8f7aa5e5ad3d67f1142ed5daf026a4f6094d1b65344743fce6a78923f7"
+    },
+    {
+      "path": "mutant-driver.log",
+      "bytes": 17314,
+      "sha256": "6fb2930b4ee878b568480cf69ea59fa429fc5e593199580db71e3557d671e036"
+    },
+    {
+      "path": "mutant-drop-io-queue-guard-observation.json",
+      "bytes": 1635,
+      "sha256": "4b3d8e0a66b43cad1c4c085acac16d1f8c334de4d7b3ed9484917a6a195e6303"
+    },
+    {
+      "path": "mutant-drop-io-queue-guard.json",
+      "bytes": 5504,
+      "sha256": "d27ff64b7a199b693f8f790e0d77dd19dece9f22082f461be46e27f94b2da92e"
+    },
+    {
+      "path": "mutant-drop-io-queue-guard.log",
+      "bytes": 457037,
+      "sha256": "ea3a498c0b75e041abb9538e68121d28227a3f3079b5ca317ec0ad705a4fbd4a"
+    },
+    {
+      "path": "mutant-omit-omitted-sentinel-observation.json",
+      "bytes": 1501,
+      "sha256": "f0e127701e47b96a5bec8dafbcdff87bae88e7695fab636e829731f814150080"
+    },
+    {
+      "path": "mutant-omit-omitted-sentinel.json",
+      "bytes": 5515,
+      "sha256": "7be2482e8c7f8438b7899d1c4ce6a0065917ebcac939da7e33320aa5079685d8"
+    },
+    {
+      "path": "mutant-omit-omitted-sentinel.log",
+      "bytes": 456910,
+      "sha256": "111fbc51627defb0c89b368a07904ca51efa1bc6349a4a0c8af515f0ce8092ee"
+    },
+    {
+      "path": "mutant-plan-corrected.json",
+      "bytes": 9932,
+      "sha256": "117c604a242db8f0c7c60989ee1b4e16e3cb9904c6346bf9fecfd0b3b447038c"
+    },
+    {
+      "path": "mutant-plan-qualified.json",
+      "bytes": 9233,
+      "sha256": "0be8b9cccc991101f9c3065ee5acb8c0b6f529cbc6a7e47f00bb6bd94a3e431f"
+    },
+    {
+      "path": "mutant-plan.json",
+      "bytes": 7424,
+      "sha256": "ab80cf924863b41e2fff80730fdde58992369cfc727a50fc433426bbd84def75"
+    },
+    {
+      "path": "mutant-raise-clock-cutoff-observation.json",
+      "bytes": 1437,
+      "sha256": "bae501b14332f65aab3b2ab116166ef8f1dffce2de53945a218b6716766af906"
+    },
+    {
+      "path": "mutant-raise-clock-cutoff.json",
+      "bytes": 5489,
+      "sha256": "9adbd59d8c8a04e2df70ece0be1b5fc90f78948b73de767cbccd515e5168fdff"
+    },
+    {
+      "path": "mutant-raise-clock-cutoff.log",
+      "bytes": 456849,
+      "sha256": "24c17f688b6e78686f60c0adb4979e87ff53c77d1c0730e4c9a7c725a4e27759"
+    },
+    {
+      "path": "mutant-redundant-finite-max-guard-observation.json",
+      "bytes": 788,
+      "sha256": "1956ff5860e86afee206a76a2a36451528db0445e72ec649a96456cc234510a4"
+    },
+    {
+      "path": "mutant-redundant-finite-max-guard.json",
+      "bytes": 5505,
+      "sha256": "58590998f256f05a212cf927b6fc09c70415d007ad8112db31743972db428d16"
+    },
+    {
+      "path": "mutant-redundant-finite-max-guard.log",
+      "bytes": 456318,
+      "sha256": "2c8288f96f1563a6b4cfd329addce2fa7fbcee5200e17436d7e8429f58086b52"
+    },
+    {
+      "path": "mutant-redundant-intermediate-state-observation.json",
+      "bytes": 788,
+      "sha256": "8cc7696009b2d93942a009e24bf5300416759d779aa68bc21958406b00914036"
+    },
+    {
+      "path": "mutant-redundant-intermediate-state.json",
+      "bytes": 5521,
+      "sha256": "433571fd34d8c552ebaa33b2c53871b90ef9e4b33b7a917f1dd98e3cea7892db"
+    },
+    {
+      "path": "mutant-redundant-intermediate-state.log",
+      "bytes": 456328,
+      "sha256": "061c5697d61025081e1cfb3b43a156a4af01dfc07c0bf407c3cf0b42bdb5a58b"
+    },
+    {
+      "path": "mutant-redundant-stateless-submit-observation.json",
+      "bytes": 800,
+      "sha256": "a4ebe855c85fc03e0ae971a1d8b3b382aed9fe74cf446b165e15ceed5327d9ec"
+    },
+    {
+      "path": "mutant-redundant-stateless-submit.json",
+      "bytes": 5516,
+      "sha256": "abf4ee8ba55dc84735eb504a110c135b3f4cafb95040ae76d0456a8111ce2178"
+    },
+    {
+      "path": "mutant-redundant-stateless-submit.log",
+      "bytes": 456327,
+      "sha256": "3da69109f678232b28acc9134c87802ab2a6ce9fc263ad8552d23148114b7660"
+    },
+    {
+      "path": "mutant-skip-attempt-interval-observation.json",
+      "bytes": 1485,
+      "sha256": "b678f24da067585fa80faa75d93d39ada4ca6cf6ff2d9713bed9977882d768e2"
+    },
+    {
+      "path": "mutant-skip-attempt-interval.json",
+      "bytes": 5509,
+      "sha256": "34747c5337434b55677ab16c3a7c0f62252a3607bf0a33f04383b7a61a418606"
+    },
+    {
+      "path": "mutant-skip-attempt-interval.log",
+      "bytes": 456894,
+      "sha256": "3ff5f384fa6f68951850df72777f892673e6be2bc35ea321ddb056d572ed76be"
+    },
+    {
+      "path": "mutant-skip-cooldown-interval-observation.json",
+      "bytes": 1619,
+      "sha256": "510cfa9eb715b8cc28ffab864cabb9f3b2e03f95115fbe3c13969607ff1b20e7"
+    },
+    {
+      "path": "mutant-skip-cooldown-interval.json",
+      "bytes": 5507,
+      "sha256": "35df031faf82b3114eac85b69d11d8474e7cde2c77f6bc03ac98cd630068bef2"
+    },
+    {
+      "path": "mutant-skip-cooldown-interval.log",
+      "bytes": 456877,
+      "sha256": "c93a3c4bfa04c287851c56c87c74dc8c0acd415608965eddb55f7e43340dedad"
+    },
+    {
+      "path": "mutant-skip-covered-log-events-observation.json",
+      "bytes": 1484,
+      "sha256": "4160ca507875492689154f1896cf53b816e2cf7d322ff44399402818ff1ae7cb"
+    },
+    {
+      "path": "mutant-skip-covered-log-events.json",
+      "bytes": 5513,
+      "sha256": "3edc063013383b973c213281fd2fe90947c5266f72386ac2a40b8a97015c906e"
+    },
+    {
+      "path": "mutant-skip-covered-log-events.log",
+      "bytes": 457099,
+      "sha256": "a0c5c94a52c932532bb6f6c7279ae97a506f09dd780b79d1b1a880f426a2cdb0"
+    },
+    {
+      "path": "mutant-skip-execution-payload-observation.json",
+      "bytes": 1049,
+      "sha256": "2906ff8b69ee32f1a34571e4b94a7ed1d3b2d9bf3ce47a9f7475f149d415021a"
+    },
+    {
+      "path": "mutant-skip-execution-payload.json",
+      "bytes": 5496,
+      "sha256": "05241b28b08aa0875630c61ed3945e5af4ff8fb0121a0de6e32e51a0e9bdf5b7"
+    },
+    {
+      "path": "mutant-skip-execution-payload.log",
+      "bytes": 456315,
+      "sha256": "a4c38cb05bcd2fc6deeb0037aee6af38de543b74a22f1e3ce08f7743126d50de"
+    },
+    {
+      "path": "mutant-skip-finite-running-anchor-observation.json",
+      "bytes": 1504,
+      "sha256": "5ac3b98eef6fafb63cc49f9b703f26d3e9358f36ce06012660c7296d11f33956"
+    },
+    {
+      "path": "mutant-skip-finite-running-anchor.json",
+      "bytes": 5527,
+      "sha256": "9898501a364e45724319baf7ea19a201ed9d5bead2633bacebb8e8f6a3638c91"
+    },
+    {
+      "path": "mutant-skip-finite-running-anchor.log",
+      "bytes": 456907,
+      "sha256": "29b3d534c0be99c70fc6ab9192d864c31ad794ded2003b166bd1d7e7c8db81f2"
+    },
+    {
+      "path": "mutant-skip-interest-interval-corrected-observation.json",
+      "bytes": 1689,
+      "sha256": "08baeb1b8b8aa8c342759e05c8c33c4e58f1863622bc6733c10f29780f5baa9a"
+    },
+    {
+      "path": "mutant-skip-interest-interval-corrected.json",
+      "bytes": 5529,
+      "sha256": "dae8de0ab268dfb3a2e57c1a3797ffa22480b4c8db15103ce2b321c594985808"
+    },
+    {
+      "path": "mutant-skip-interest-interval-corrected.log",
+      "bytes": 456881,
+      "sha256": "4a73bc47bc87e9ef9fca3acac8cc3b990e86c9a319f5f73b65f253cb8d8f54ff"
+    },
+    {
+      "path": "mutant-skip-interest-interval.json",
+      "bytes": 4758,
+      "sha256": "ab6c60fac3177213ea624e974c5a9cff9b09833450f7b2e3440577ddfebd362b"
+    },
+    {
+      "path": "mutant-skip-interest-interval.log",
+      "bytes": 457255,
+      "sha256": "9b2cd1358d4b464e173095670179fdc5276bebbda307a05ddb843677f196ba2e"
+    },
+    {
+      "path": "mutant-skip-operation-payload-observation.json",
+      "bytes": 1487,
+      "sha256": "d5acb152feabd17ff6a889c55edb4432703fb75937de26a405e39ec83462fa51"
+    },
+    {
+      "path": "mutant-skip-operation-payload.json",
+      "bytes": 5511,
+      "sha256": "9abd18c6458dec00f990d34168d44752ce04872f037a18a32dca2d856e255a43"
+    },
+    {
+      "path": "mutant-skip-operation-payload.log",
+      "bytes": 456895,
+      "sha256": "7d7cb2352f0cbca72f26461566782a510b08082c2ae6b571e20bf679ae6363c9"
+    },
+    {
+      "path": "mutant-skip-snapshot-temporal-observation.json",
+      "bytes": 1512,
+      "sha256": "967996eeb47eb4982288acb8a1895b9f2fdbd6ea03e9308633a5f04f16b9768f"
+    },
+    {
+      "path": "mutant-skip-snapshot-temporal.json",
+      "bytes": 5518,
+      "sha256": "4b06fa9d5e3b1639df197927faf3ac0d2e429a98d844b91ae8c7f201a067a65c"
+    },
+    {
+      "path": "mutant-skip-snapshot-temporal.log",
+      "bytes": 457076,
+      "sha256": "4b88b121c6c12aa37fe07f440788e89dcde9fe8a9f1ee2a8989eff8b47621273"
+    },
+    {
+      "path": "mutant-skip-stateless-submit-observation.json",
+      "bytes": 1506,
+      "sha256": "612bc9c9a49f60c49bada56719ea4aa575b873d7c020e7a99fc975ba3b36f43d"
+    },
+    {
+      "path": "mutant-skip-stateless-submit.json",
+      "bytes": 5514,
+      "sha256": "634a71d07caec49b28ceaf4323fcf7d5469a1127bf8750200382f0d324f07587"
+    },
+    {
+      "path": "mutant-skip-stateless-submit.log",
+      "bytes": 456915,
+      "sha256": "28d54d8d2fea5dfbd623e649032eaa4e1a7e3e9a974d22b4add4a6a85b9e1a50"
+    },
+    {
+      "path": "mutant-skip-uncommitted-log-rows-observation.json",
+      "bytes": 1474,
+      "sha256": "1a119bf45124dcc375ba487463eb0af41cacb51739085d8f01b89b498faf13f0"
+    },
+    {
+      "path": "mutant-skip-uncommitted-log-rows.json",
+      "bytes": 5520,
+      "sha256": "7724392e1e2e2c2fbde42e66ec681c0079074636db95bd4f785984b0b3951856"
+    },
+    {
+      "path": "mutant-skip-uncommitted-log-rows.log",
+      "bytes": 456879,
+      "sha256": "9f5c1e7c888aad4f79969b827914e7170af987ac9bad251199abf46aab1308f1"
+    },
+    {
+      "path": "mutant-survival-addendum.json",
+      "bytes": 909,
+      "sha256": "6ebee78c53bfc2b7b557959ca79213069229116f3e7f06be09f7fe16f0e0b61c"
+    },
+    {
+      "path": "original-baseline-observations.json",
+      "bytes": 7717,
+      "sha256": "3e41a72f053ade375f84c174cb5fc4d6f9c8a90fb342c0b9e5f5c707d6c590d3"
+    },
+    {
+      "path": "original-run-cargo.py",
+      "bytes": 1662,
+      "sha256": "20e3d67828d42a04e5b50d0b3c5c4a4f04d4d807d47c5a2e5acaf0a6ed7d2ea7"
+    },
+    {
+      "path": "original.json",
+      "bytes": 858,
+      "sha256": "ba21d636339bc4f465bc800cc168b3d2584646fa4815db606c792cb43a3ec051"
+    },
+    {
+      "path": "original.log",
+      "bytes": 470347,
+      "sha256": "b92015cc7d8d75b8d9f005a9812ef29c17cb5db1901c9c54659c688a7c160d32"
+    },
+    {
+      "path": "package.py",
+      "bytes": 9668,
+      "sha256": "6ac4d24df1f5c0fb9a1b20096f3b6f89e8b88efdfe2be2ab3b9fa9780c1840ca"
+    },
+    {
+      "path": "post-clippy-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "post-clippy-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3671,
+      "sha256": "c04aaa35700089553e6eff964f6b7f0cde99060517ba74480446726b6ad3b638"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 33176,
+      "sha256": "47cd9b6c0af144db49f05c363be4ebfe5dabdfe5c178952ed30b609eb21cdf44"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/format.rs",
+      "bytes": 42037,
+      "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "post-clippy-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "post-clippy-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "post-clippy-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "post-clippy.json",
+      "bytes": 2434,
+      "sha256": "6864eac870070cd932ad30068aa035d9f72f2b1325cc54042bada94d5ee740e5"
+    },
+    {
+      "path": "precompile-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "precompile-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 29541,
+      "sha256": "126f9cb426e8b7dc7de398c8d95725de4e83a7ab4f20ec642f2d3c1330688996"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "precompile-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "precompile-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "precompile-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "precompile.json",
+      "bytes": 5258,
+      "sha256": "cadaf2fc21ac9fc4a76e55b0d4c806a04787c99bd4cafe8571292932ab51b14a"
+    },
+    {
+      "path": "prepare-mutants.py",
+      "bytes": 5589,
+      "sha256": "19ccb5ba68d82f1762fd77b2c307c0577541c3ff92f1f918ce30fd418b9d89c6"
+    },
+    {
+      "path": "proposed-runtime-delta.json",
+      "bytes": 2757,
+      "sha256": "83436b607cfbaf6eddb1893640130fbab8249cf4046c249ebaa8cd0b00f2111d"
+    },
+    {
+      "path": "qualified-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "qualified-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3671,
+      "sha256": "c04aaa35700089553e6eff964f6b7f0cde99060517ba74480446726b6ad3b638"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 33176,
+      "sha256": "47cd9b6c0af144db49f05c363be4ebfe5dabdfe5c178952ed30b609eb21cdf44"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/format.rs",
+      "bytes": 42037,
+      "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "qualified-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "qualified-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "qualified-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "qualified-source.json",
+      "bytes": 2498,
+      "sha256": "46dc04dd6d6af8db33848f8b57aecb19a4449f7f90f1efdb86f9547cff1303e1"
+    },
+    {
+      "path": "restored-regression-driver.log",
+      "bytes": 5955,
+      "sha256": "7f6bb4b2bb4d56b97455009089a7353647a320ce966446ba3f8e159117353ca6"
+    },
+    {
+      "path": "restored-regression.json",
+      "bytes": 5955,
+      "sha256": "7f6bb4b2bb4d56b97455009089a7353647a320ce966446ba3f8e159117353ca6"
+    },
+    {
+      "path": "restored-regression.log",
+      "bytes": 475232,
+      "sha256": "ef2ab0bb156e3cceb0020336ff5df0f2e498ff803543e49f50816dd9e670b452"
+    },
+    {
+      "path": "restored-strict-driver.log",
+      "bytes": 4657,
+      "sha256": "ea74ff9efb5ca813474a4c7c9cb844eacf3eef3db323be818e5b519d4b177b26"
+    },
+    {
+      "path": "restored-strict.json",
+      "bytes": 4657,
+      "sha256": "ea74ff9efb5ca813474a4c7c9cb844eacf3eef3db323be818e5b519d4b177b26"
+    },
+    {
+      "path": "restored-strict.log",
+      "bytes": 455857,
+      "sha256": "812dd90c36b80286fe5ab7366ee8d07b897f373fc3b0b71f2dfcb4842d2588f2"
+    },
+    {
+      "path": "run-cargo.py",
+      "bytes": 2400,
+      "sha256": "7f5c35d92fd3be11b721bca39ce22058e74ed9d64224d4c18457e2561ae01320"
+    },
+    {
+      "path": "run-mutants-original.py",
+      "bytes": 2374,
+      "sha256": "09512aef73e41c7c2f87c7856f8eb1cc27b3881b9940a78c5cb96fb24cd0d450"
+    },
+    {
+      "path": "run-mutants-survival-resume.py",
+      "bytes": 2416,
+      "sha256": "d0410d423163987d814a8abe7d40ae1fd1d394a8a25b0e61f3010a653d621278"
+    },
+    {
+      "path": "run-mutants.py",
+      "bytes": 2471,
+      "sha256": "54cb82ee019c35babab8375a850e4bcbd3e3b4126e79e5a590b2acd19f9e4a30"
+    },
+    {
+      "path": "runtime-candidate-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "runtime-candidate-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3360,
+      "sha256": "f3a6506b0e00b818731353b5e5a8814eafd993441194060e89ad0153a562b25b"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 32868,
+      "sha256": "def20ee3a19c9c1b01f61fdc56b2be5389e43da6ea0aa84f30b85543678f6460"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "runtime-candidate-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "runtime-candidate-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "runtime-candidate-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "runtime-candidate.json",
+      "bytes": 2153,
+      "sha256": "13f85ba96ae0d55812c7decfdcd772b823014095f739132cdd6720b8ea493003"
+    },
+    {
+      "path": "runtime-precompile-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "runtime-precompile-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25129,
+      "sha256": "451ab259710691315b57418c70ba5e2e7df69349d1452e5a90bc13009ee5307a"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/design/categorical/canonical-temporal-preflight.md",
+      "bytes": 3671,
+      "sha256": "c04aaa35700089553e6eff964f6b7f0cde99060517ba74480446726b6ad3b638"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 10255,
+      "sha256": "7808ea1c64599cce490c057e52df213a2f1a32ca52787dcf8359ec3e40819b00"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22228,
+      "sha256": "4e94f90191543fd895e7eba23028631fb9f2d8c8e43e6e97c8bedcc9832c5b29"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/canonical_temporal.rs",
+      "bytes": 14240,
+      "sha256": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 33139,
+      "sha256": "55f5aa1019e2666d274da9ab4002b7ccb9b08732c66cfa903c294db0c34b46f7"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/format.rs",
+      "bytes": 42037,
+      "sha256": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "runtime-precompile-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "runtime-precompile-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "runtime-precompile-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "runtime-precompile.json",
+      "bytes": 2458,
+      "sha256": "5456cede34f6b74b44617b9309ff03e2766f4e7acbdf4d8797a50ec581cfd1bb"
+    },
+    {
+      "path": "source-commit.json",
+      "bytes": 341,
+      "sha256": "cbc8f763e3786b2fd26f729284979af8d3c03ec9e039b05f8ff45124b2313bdb"
+    },
+    {
+      "path": "source-commit.log",
+      "bytes": 2496,
+      "sha256": "b1165be0dbe053e1be0540976f4e0748a8e7c980e4eebdbfc7380331b56ace72"
+    },
+    {
+      "path": "source-restoration.json",
+      "bytes": 9373,
+      "sha256": "c574488a98934bcb1324be05d0ed893a8405a3a06b9e2aa6310409f6c6a896b9"
+    },
+    {
+      "path": "strict-corrected.json",
+      "bytes": 4657,
+      "sha256": "11784022f27ac2b20bc8b9e5096d132e2cbed505f4769f0b09360864ea2fc15e"
+    },
+    {
+      "path": "strict-corrected.log",
+      "bytes": 455841,
+      "sha256": "748943eac48f8f7dab7ff9aa3b772034a9f8bc2b72883314f0a9a85ae7121caa"
+    },
+    {
+      "path": "strict-fixture-correction.patch",
+      "bytes": 631,
+      "sha256": "a1c8518ccdb09229b0d5205e6bc49085604044cc279e5d05db318be532aa107e"
+    },
+    {
+      "path": "strict-initial.json",
+      "bytes": 4659,
+      "sha256": "6c2d9197a59ed0a3cfa2abf1095c5e472e1a0e94d053705178922cdc6484489d"
+    },
+    {
+      "path": "strict-initial.log",
+      "bytes": 426854,
+      "sha256": "9f2c7fdf079b6540951d5b63682709a69ba4b98941a0efc07b93d985cd799a61"
+    },
+    {
+      "path": "temporal-invariants-review.json",
+      "bytes": 6457,
+      "sha256": "950b8ea76341304bc58bb8518767d2bcded29d1efd0b4bf4efb94c90241bbd0f"
+    },
+    {
+      "path": "temporal-invariants.json",
+      "bytes": 6105,
+      "sha256": "399fc0837ae88a0df9ecdc4a9ab141188c5c98c6da02da9cbc52e4a3c9bc9462"
+    },
+    {
+      "path": "tests-commit.json",
+      "bytes": 307,
+      "sha256": "aa08cf49df6ae1e0bd0fe277a8453cc2a33b24d6a15af5ea4c343871216a7041"
+    },
+    {
+      "path": "tests-corrected-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "tests-corrected-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 29523,
+      "sha256": "c039d05e2731dd1ce38325c2b8ae946ea1e6165238d02076ce731d298aca79ca"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "tests-corrected-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "tests-corrected-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "tests-corrected-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "tests-corrected.json",
+      "bytes": 5327,
+      "sha256": "0780b597aeecaac2c4f857c57402e2ccf12f53271984e93bdf1d7c21fbf67b98"
+    },
+    {
+      "path": "tests-first-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "tests-first-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 26721,
+      "sha256": "18ab7d24cd53a6676ee4aa73207f285e0348f711414bcb2d40740b74a7ddf2c0"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "tests-first-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "tests-first-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "tests-first-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "tests-first.json",
+      "bytes": 4763,
+      "sha256": "341ed834b960c211af070b27c60bc535b07907d4e3aa36f1b3b80ca5849c6bc8"
+    },
+    {
+      "path": "tests-review-source/Cargo.lock",
+      "bytes": 160242,
+      "sha256": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d"
+    },
+    {
+      "path": "tests-review-source/Cargo.toml",
+      "bytes": 7489,
+      "sha256": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/BUILD.bazel",
+      "bytes": 25082,
+      "sha256": "7ecedd850941913a61b67df11d4b0644cdbc4856ec72742c8646aa39dbdbc37d"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/Cargo.toml",
+      "bytes": 3175,
+      "sha256": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/canonical_binding.rs",
+      "bytes": 3272,
+      "sha256": "43cf6fc09e7e391bdd220d906932fec1df3b13d2fcdf64bc7623686de25365ff"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/canonical_owner.rs",
+      "bytes": 9946,
+      "sha256": "71ee6ff3843a500bbc71eb4ec0fd5a4948ab2106a258a780eeea66e8b46f9735"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs",
+      "bytes": 22169,
+      "sha256": "7410d762efb65aa0268cdccce46d91a8358bde1e0d1b17631ce49e54b8662ac4"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs",
+      "bytes": 29054,
+      "sha256": "75cb03031cbaeaa456acd57a27ab431ff83451571d52b3f16f02dbfc93a914d0"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/journal.rs",
+      "bytes": 122676,
+      "sha256": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/mod.rs",
+      "bytes": 81269,
+      "sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/request.rs",
+      "bytes": 19865,
+      "sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d"
+    },
+    {
+      "path": "tests-review-source/nativelink-scheduler/src/authority/types.rs",
+      "bytes": 18199,
+      "sha256": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d"
+    },
+    {
+      "path": "tests-review-source/tools/canonical-filesystem/src/journal.rs",
+      "bytes": 9482,
+      "sha256": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9"
+    },
+    {
+      "path": "tests-review-source/tools/canonical-filesystem/src/namespace.rs",
+      "bytes": 8025,
+      "sha256": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43"
+    },
+    {
+      "path": "tests-review.json",
+      "bytes": 5063,
+      "sha256": "a7f849ee12061a19a2e3c75671ac6bcbd3127000cd87c387f3d104a6184ca478"
+    }
+  ],
+  "external_executables": [
+    {
+      "path": "fixed-focused-initial-test-binary",
+      "bytes": 13389608,
+      "sha256": "8883076434e0b4de0649c9ff05993b0a19c12d08b92956839cdfa1e281c57169"
+    },
+    {
+      "path": "fixed-regression-canonical_owner_api_test-test-binary",
+      "bytes": 8421648,
+      "sha256": "f6836e2c544e7d4b32493bab83bf6ada67d1d56a1aa33f2567b1fdf235f33f2b"
+    },
+    {
+      "path": "fixed-regression-test-binary",
+      "bytes": 13389608,
+      "sha256": "2dc1dde815e6c0a938357c203b2bf6f780b8a64647962e70d161389fd13dac4a"
+    },
+    {
+      "path": "mutant-drop-io-queue-guard-test-binary",
+      "bytes": 13389032,
+      "sha256": "c66ff38c3275b2671c94dd927b7cf8ac110e985ebc11df81370addb84ee6ea86"
+    },
+    {
+      "path": "mutant-omit-omitted-sentinel-test-binary",
+      "bytes": 13389992,
+      "sha256": "0377401f3e55b64a4c15fdc675c10fd0ad2d45bb61f98025c0a8869f7bdfa4ad"
+    },
+    {
+      "path": "mutant-raise-clock-cutoff-test-binary",
+      "bytes": 13389608,
+      "sha256": "90987fb1825463571a078565f3cf87df3ae9d7fd9eb21218b5c26ec6f8f61bb3"
+    },
+    {
+      "path": "mutant-redundant-finite-max-guard-test-binary",
+      "bytes": 13389608,
+      "sha256": "76d93be2c10373251b3babdd1e07ddc5e4861715896f4ba443c5e1008a4df24c"
+    },
+    {
+      "path": "mutant-redundant-intermediate-state-test-binary",
+      "bytes": 13390280,
+      "sha256": "f4c818242ae781b3152fbad64d8420672fc99d8128b22f8a670368ef94d69d41"
+    },
+    {
+      "path": "mutant-redundant-stateless-submit-test-binary",
+      "bytes": 13389608,
+      "sha256": "a081ab1d6f5a179a3b5fb0da5df68e4e0ed8f8204e3d59ca24e78c3d549d9bd4"
+    },
+    {
+      "path": "mutant-skip-attempt-interval-test-binary",
+      "bytes": 13390088,
+      "sha256": "50c88d053e70ad444653e1413f9930c177d76bec26d6c6877173aa5ac3872294"
+    },
+    {
+      "path": "mutant-skip-cooldown-interval-test-binary",
+      "bytes": 13390280,
+      "sha256": "55cef54893830ffff6cbc8c579a1cb1e50e9ce61ac13656ebc443ac5dc23d97f"
+    },
+    {
+      "path": "mutant-skip-covered-log-events-test-binary",
+      "bytes": 13389768,
+      "sha256": "7a2cbf746da66a5ea8fd802bcac4d5554eb54547358be5219795c3d5d6f9a33d"
+    },
+    {
+      "path": "mutant-skip-execution-payload-test-binary",
+      "bytes": 13390088,
+      "sha256": "dc11052530ddf6845db5c04c69bbd9572f7f4e6afc0e951d0a6ceef3fc8b1cb8"
+    },
+    {
+      "path": "mutant-skip-finite-running-anchor-test-binary",
+      "bytes": 13390088,
+      "sha256": "cc7c67c6154842863e5615b7f39dec24688555516559bb02646905cd403a520d"
+    },
+    {
+      "path": "mutant-skip-interest-interval-corrected-test-binary",
+      "bytes": 13390152,
+      "sha256": "9b524d650627269cc883e79e63f0400fd698d1447610622445802fdd2a186bf6"
+    },
+    {
+      "path": "mutant-skip-operation-payload-test-binary",
+      "bytes": 13390152,
+      "sha256": "1e99bb1fa9ee3a51832eed2aff4bbcb96f04d4c7178a77f4455b6887a5ef8401"
+    },
+    {
+      "path": "mutant-skip-snapshot-temporal-test-binary",
+      "bytes": 13389768,
+      "sha256": "47f6637377aab2925cb07aa242081a405d6a591d3ed1bd9b4cd9e98053610734"
+    },
+    {
+      "path": "mutant-skip-stateless-submit-test-binary",
+      "bytes": 13389608,
+      "sha256": "a081ab1d6f5a179a3b5fb0da5df68e4e0ed8f8204e3d59ca24e78c3d549d9bd4"
+    },
+    {
+      "path": "mutant-skip-uncommitted-log-rows-test-binary",
+      "bytes": 13390024,
+      "sha256": "d75ec6162dc8a67de627dbc7563895b3b91a0ecfdc184b54e0e87186ee983cb8"
+    },
+    {
+      "path": "original-test-binary",
+      "bytes": 13309488,
+      "sha256": "f2308919edd676fb557d5e7e25341554bcdac52e51c6fa722caee178e0252d3d"
+    },
+    {
+      "path": "restored-regression-canonical_owner_api_test-test-binary",
+      "bytes": 8421648,
+      "sha256": "f6836e2c544e7d4b32493bab83bf6ada67d1d56a1aa33f2567b1fdf235f33f2b"
+    },
+    {
+      "path": "restored-regression-test-binary",
+      "bytes": 13389608,
+      "sha256": "2dc1dde815e6c0a938357c203b2bf6f780b8a64647962e70d161389fd13dac4a"
+    }
+  ],
+  "distinct_external_executable_sha256_count": 19
+}

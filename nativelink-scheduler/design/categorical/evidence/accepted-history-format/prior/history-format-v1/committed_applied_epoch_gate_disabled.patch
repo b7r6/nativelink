@@ -1,0 +1,11 @@
+--- nativelink-scheduler/src/authority/journal.rs
++++ nativelink-scheduler/src/authority/journal.rs
+@@ -1814,7 +1814,7 @@
+                 }
+                 continue;
+             }
+-            if active.required != required || active.freezes_proposals() {
++            if false && (active.required != required || active.freezes_proposals()) {
+                 // SaveCommitted may have resolved the registry before Apply
+                 // installs its state. Do not stamp the preceding feature epoch.
+                 drop(proposal);

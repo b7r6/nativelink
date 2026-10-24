@@ -1,0 +1,153 @@
+{
+  "base": "0318e72abb0ea6973ec136868019cd50ef44e8b6",
+  "commit": "2736bd732b06ff7229ad9486e001aa528faf8ad6",
+  "cwd": "/tmp/nativelink-snapshot-boundary",
+  "scope": "Private PublicationAuthority outer restore validation and source-derived snapshot bound; caps and byte guard unchanged.",
+  "baseline": {
+    "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-scheduler --test publication_candidate_test snapshot_boundary_tests",
+    "exit_code": 101,
+    "passed": 1,
+    "failed": 3,
+    "log": "baseline.log",
+    "observation": "Original validation accepted actual valid Coarse Sealed, Closed-with-captures, Closed-with-marks, and expired Closed-without-captures snapshots. Before and after Mark both returned Ok(()).",
+    "source_note": "Baseline validator bytes are pinned to base and copied. Harness received formatting-only edits after baseline; no pre-baseline harness freeze is claimed. baseline_initial.log precedes combining both Mark observations into one assertion."
+  },
+  "repaired": {
+    "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo test --locked --offline --profile smol -j8 -p nativelink-scheduler --test publication_candidate_test",
+    "exit_code": 0,
+    "passed": 58,
+    "failed": 0,
+    "log": "repaired.log"
+  },
+  "clippy": {
+    "command": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03/target cargo clippy --locked --offline --profile smol -j8 -p nativelink-scheduler --test publication_candidate_test -- -D warnings",
+    "exit_code": 0,
+    "log": "clippy.log"
+  },
+  "checks": [
+    "rustfmt --edition 2024 --check (stable toolchain emits unsupported-nightly-option warnings)",
+    "buildifier 10.1.0 -mode=check",
+    "typos 1.49.0",
+    "Vale: zero errors, warnings or suggestions",
+    "Ruff format --check and check",
+    "git diff --check",
+    "python3 nativelink-scheduler/design/categorical/publication_snapshot_bound.py"
+  ],
+  "bound": {
+    "scheduler_rows": {
+      "operation": {
+        "count": 16,
+        "fixed_encoded_bytes": 1179
+      },
+      "execution": {
+        "count": 8,
+        "fixed_encoded_bytes": 1756
+      },
+      "worker": {
+        "count": 8,
+        "fixed_encoded_bytes": 1786
+      },
+      "hold": {
+        "count": 8,
+        "fixed_encoded_bytes": 603
+      },
+      "attempt": {
+        "count": 24,
+        "fixed_encoded_bytes": 1349
+      },
+      "reservation": {
+        "count": 24,
+        "fixed_encoded_bytes": 899
+      },
+      "effect": {
+        "count": 24,
+        "fixed_encoded_bytes": 1269
+      }
+    },
+    "scheduler_fixed_with_header": 140528,
+    "scheduler_variables": 917504,
+    "scheduler": 1058032,
+    "retention_parts": {
+      "cohorts": 20608,
+      "generations": 44480,
+      "roots": 108560,
+      "writes": 36352,
+      "header": 4096
+    },
+    "retention": 214096,
+    "metadata_rows": {
+      "namespace": {
+        "count": 64,
+        "fixed_bytes": 197
+      },
+      "physical": {
+        "count": 64,
+        "fixed_bytes": 437
+      },
+      "credit": {
+        "count": 8,
+        "fixed_bytes": 152
+      },
+      "stage": {
+        "count": 8,
+        "fixed_bytes": 10988
+      },
+      "accepted": {
+        "count": 8,
+        "fixed_bytes": 169
+      },
+      "operation": {
+        "count": 16,
+        "fixed_bytes": 1709
+      },
+      "grant": {
+        "count": 16,
+        "fixed_bytes": 102
+      },
+      "authorization": {
+        "count": 8,
+        "fixed_bytes": 1652
+      },
+      "report": {
+        "count": 24,
+        "fixed_bytes": 2112
+      },
+      "no_graph": {
+        "count": 8,
+        "fixed_bytes": 1911
+      }
+    },
+    "metadata_fixed": 239216,
+    "metadata_extra": 78300,
+    "metadata_payloads": 294912,
+    "metadata_raw_results": 131080,
+    "metadata_retry_slack": 6144,
+    "metadata": 749652,
+    "outer_envelope_allowance": 1024,
+    "total": 2022804,
+    "limit": 2097152,
+    "headroom": 74348
+  },
+  "mutation_scope": "No new byte-guard mutant executed or claimed killed. Existing survival receipts are unchanged. The bound explains guard redundancy only for the reviewed finite schema plus repaired restore premise.",
+  "limits": [
+    "No production activation, collector or persistent migration claimed.",
+    "No extra retry-stage reservation proved.",
+    "Calculator checks struct field inventory and cap constants; semantic invariants and enum/type changes still require review.",
+    "No Bazel execution in this isolated worktree; Cargo test and strict Clippy completed."
+  ],
+  "changed_files": [
+    "nativelink-scheduler/BUILD.bazel",
+    "nativelink-scheduler/design/categorical/publication-snapshot-bound.md",
+    "nativelink-scheduler/design/categorical/publication_snapshot_bound.py",
+    "nativelink-scheduler/tests/publication_candidate/README.md",
+    "nativelink-scheduler/tests/publication_candidate/cases.rs",
+    "nativelink-scheduler/tests/publication_candidate/snapshot_boundary_tests.rs",
+    "nativelink-scheduler/tests/publication_candidate/validation.rs"
+  ],
+  "integrated_commit": "13750389c9",
+  "archive": {
+    "file": "nativelink-snapshot-boundary-evidence.tar.gz",
+    "sha256": "875451e5566598153d7646fa9cc85e1e7b43ed13079399e14c3f7b887a12c480"
+  },
+  "root_verification": "../construction-integration/manifest.json"
+}

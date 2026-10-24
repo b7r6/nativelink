@@ -1,0 +1,115 @@
+{
+  "scope": "Independent adapter adds captured SHA256/BLAKE3 request histories to unchanged head oracle and actual-State/Coarse candidate. One trusted context, opaque reference action labels, trusted physical readiness, no direct real-client or provider claim.",
+  "source_sha256": {
+    "nativelink-scheduler/tests/publication_differential_test.rs": "b6abd2c6ca68dc7107abc4714ea9a8f87fb71e30e6b0d380674eff3aaefa926f",
+    "nativelink-scheduler/tests/publication_differential/real_requests.rs": "53714c07bd2ccfd4e2204d1ce206855195378dbad70892ae6340e3d404ad1bb1",
+    "nativelink-scheduler/BUILD.bazel": "dab811739cb95d8be6238672348352d0d7f709b6779019615241d4e5f5d324f0",
+    "nativelink-scheduler/tests/publication_candidate/types.rs": "32948341c3c71a884c6d0f0d447083fce8afc82395de5936ba959e500af68aab",
+    "nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "8f5c9a4cfe016998629a1775eb729dc015c37d2b064539685836a508bf06dc99",
+    "nativelink-scheduler/tests/publication_candidate/engine.rs": "c667458611759b16caa31f3a102d1efa16714c940c533517dd8c01255eae3067",
+    "nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "nativelink-scheduler/tests/publication_candidate/validation.rs": "a3d12a6ab61981ba6f1e50c875426c879e0f1902286b07550a7610c49342a0aa",
+    "nativelink-scheduler/tests/publication_candidate/cases.rs": "31cde8af71148731105dcc7e5c3ebf2e62c63ce8ee3b7799b464a49fb2926cae",
+    "nativelink-scheduler/tests/publication_head/reference.rs": "9c4a4c45acb37d04659296888f07c84b66026ca6adca2a368658ca23baa3bcab",
+    "nativelink-scheduler/tests/publication_head/types.rs": "25e7d82dc5d0d1cd38e2f00b5c94d78c6e98aa367d14c150c28a9c913e926610"
+  },
+  "validation": [
+    {
+      "command": "cargo test --locked --offline --profile smol -j 8 -p nativelink-scheduler --test publication_differential_test",
+      "status": "PASS",
+      "tests": 8,
+      "boundary": "initial semantic source before Timestamp default spelling and formatting correction"
+    },
+    {
+      "command": "cargo clippy --locked --offline --profile smol -j 8 -p nativelink-scheduler --test publication_differential_test -- -D warnings",
+      "status": "PASS",
+      "boundary": "final source"
+    },
+    {
+      "command": "bazel test --jobs=8 --local_test_jobs=2 //nativelink-scheduler:publication_differential_test",
+      "status": "PASS",
+      "tests": 8,
+      "boundary": "final source"
+    }
+  ],
+  "initial_failure": "Clippy default_trait_access rejected Default::default() for Timestamp; explicit Timestamp::default(), direct Bazel prost-types dependency and pinned formatting corrected it. Original sources and both failed check logs retained.",
+  "receipts": [
+    {
+      "file": "final-bazel.log.gz",
+      "source_sha256": "eaa2cdf9ee53d76967ed06576990319073a8494ea94524eb8abccde76c7c5a54",
+      "archive_sha256": "f0c7f49bac9db2afb0a707f309fe3ca94b8b347ecc2e92528dcd39c6602c9810"
+    },
+    {
+      "file": "final-clippy.log.gz",
+      "source_sha256": "983947f1f5004efeda879f1238377b3a07f611325edfa61c59d9e6547692100c",
+      "archive_sha256": "484c118ffd4287e0875be878e2455b5733e10dbdee8ee53059326d01714fa902"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "d2042f8a369593113c6915d47803eb41813ab8fb9a54d8295a5909434f9daaae",
+      "archive_sha256": "d2042f8a369593113c6915d47803eb41813ab8fb9a54d8295a5909434f9daaae"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/publication_differential/real_requests.rs.gz",
+      "source_sha256": "bbc02a2d192b0a5603f853896f2ee8017b488c69ff46ea83d74d5388347bfaa0",
+      "archive_sha256": "bbc02a2d192b0a5603f853896f2ee8017b488c69ff46ea83d74d5388347bfaa0"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/publication_differential_test.rs.gz",
+      "source_sha256": "6efb130039b83db61d57eef21d3b6fc705923c200a64107160379bbc7fa5ba54",
+      "archive_sha256": "6efb130039b83db61d57eef21d3b6fc705923c200a64107160379bbc7fa5ba54"
+    },
+    {
+      "file": "initial-bazel.log.gz",
+      "source_sha256": "dd22a83b42d98c58131ef64a0bc9ba6ec46f09c86a48af060260628d79f27dd3",
+      "archive_sha256": "e9dac503ca4f1fe178c5a0b098584742c8fe88a6276edd6d9ebf65c0e7363484"
+    },
+    {
+      "file": "initial-cargo.log.gz",
+      "source_sha256": "0b7bca16e3f23785b90f229b2ca296168120b78c5348279546a67b956fe5f578",
+      "archive_sha256": "8860ad8b9128511f89de6e877af9801850f585ed71d7c16d4a438672c5c42516"
+    },
+    {
+      "file": "initial-clippy.log.gz",
+      "source_sha256": "38a1857ea7a4a560e5b47d69bb3bb7b63fc2fd55b01fbf92b3372e1dd75d543c",
+      "archive_sha256": "e6add4f048891378e1b690cedbf26552e0f2e18392d17a75644643b1bd766881"
+    },
+    {
+      "file": "initial-source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "47a6029e02d662dfc1ab2a4cfe2c7b12bdf3e7a51872900eedbd8878f6356bc1",
+      "archive_sha256": "47a6029e02d662dfc1ab2a4cfe2c7b12bdf3e7a51872900eedbd8878f6356bc1"
+    },
+    {
+      "file": "initial-source/nativelink-scheduler/tests/publication_differential/real_requests.rs.gz",
+      "source_sha256": "b9ea802076d8f8086f4cb77762cbd415cdc6a7e781f9efb5f98111457949fec8",
+      "archive_sha256": "b9ea802076d8f8086f4cb77762cbd415cdc6a7e781f9efb5f98111457949fec8"
+    },
+    {
+      "file": "initial-source/nativelink-scheduler/tests/publication_differential_test.rs.gz",
+      "source_sha256": "6efb130039b83db61d57eef21d3b6fc705923c200a64107160379bbc7fa5ba54",
+      "archive_sha256": "6efb130039b83db61d57eef21d3b6fc705923c200a64107160379bbc7fa5ba54"
+    },
+    {
+      "file": "initial-source-hashes.json.gz",
+      "source_sha256": "65ce188c960c11d0f89eac338fbced4538b714141e6fd21d2a795cef73509f24",
+      "archive_sha256": "a67d038bf08e81f0d830e2b7106489ea8bbb96935efb3884b82a88a0d48526b1"
+    },
+    {
+      "file": "root-test.log.gz",
+      "source_sha256": "dde95079182c7f48bdc7b0db51c3a082bbf5d79dab219e6e4146427edbfbdd94",
+      "archive_sha256": "45eabc8569989700d9e4be2932123df1e6178811824d2a6dc043acfbccfa5d9f"
+    },
+    {
+      "file": "root-test.xml.gz",
+      "source_sha256": "51c4a0ca10bed0857a84e7d2ae3600aaf29da044117e50ed334922d2fc655102",
+      "archive_sha256": "11dd8e73b889e4fa298138ae997ce44091a380cebcb61f3d7d77e68a0761e06b"
+    },
+    {
+      "file": "tracked.patch.gz",
+      "source_sha256": "452ea88f928b3c94aaf663920f3e37796f0d434167749b3635a210a244a14c4f",
+      "archive_sha256": "4969483f0672b8b21f380dbd27a2427c7c16d7964cfe371b95d5999f17baadee"
+    }
+  ]
+}

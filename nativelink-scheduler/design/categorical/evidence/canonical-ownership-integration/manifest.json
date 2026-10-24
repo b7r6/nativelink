@@ -1,0 +1,78 @@
+{
+  "artifacts": [
+    {
+      "archive": "corrected-source-after.json.gz",
+      "archive_sha256": "ecb5145b1a9d24a71c800a056dd3525742d7597cf71db15970a2d97313d53ad0",
+      "sha256": "fb9abd2f5f8fb4d330d79888db6a15fd5abc21089bdc69e60d18f09b8ef3d9a6",
+      "source": "corrected-source-after.json"
+    },
+    {
+      "archive": "corrected-source-before.json.gz",
+      "archive_sha256": "07bf31a487a2931c52782f51fa9a2940e232a76c1463cedd0048ac4aeebf677c",
+      "sha256": "cb01cc90b703c18517fd9ee6207479f903f7303d6ee53fef88b09c8c82e59417",
+      "source": "corrected-source-before.json"
+    },
+    {
+      "archive": "root-bazel-test-corrected.json.gz",
+      "archive_sha256": "c847703a41f04af6688b7ad1d6b8019bf856f2a8330026f65faccea2a736493d",
+      "sha256": "e504129da9f8d61cc0ae6d00a4946f097d47a5a84f35c8aa029452cdc54dd2fd",
+      "source": "root-bazel-test-corrected.json"
+    },
+    {
+      "archive": "root-bazel-test-corrected.log.gz",
+      "archive_sha256": "ab4cd0398439c11de41a675b9a19fec784584ca8fa75ec06c6a7f5ceb4676862",
+      "sha256": "cb20940ea24a54ccd3697f2db66df8dd93e9aa969ca9eb80933e89d00401401b",
+      "source": "root-bazel-test-corrected.log"
+    },
+    {
+      "archive": "root-bazel-test.json.gz",
+      "archive_sha256": "fb34b70075ffc6f62a05e06c4999b6953b3b46cf9aee34c81bd29ac9dcc3de80",
+      "sha256": "5c6f4e5504332d731ada43d93be920620e1717f6f4e311b888aad1b6dc66ba6f",
+      "source": "root-bazel-test.json"
+    },
+    {
+      "archive": "root-bazel-test.log.gz",
+      "archive_sha256": "a5e49901713e60614bd301fe8d0811e5a467417d6d17cd13f4845393b4fa0542",
+      "sha256": "2207e0ecb25129cb267fc1fa2b3ad85e7cb5c7f9a9d68f24ae1e96c014eb2ec3",
+      "source": "root-bazel-test.log"
+    },
+    {
+      "archive": "source-after.json.gz",
+      "archive_sha256": "547304bdd78a1d737e50aba66c3c7bcc8a7de9d254ab8ac1cd0d08cff677dd3a",
+      "sha256": "25859b45617d6f1682a6008758eb6a4b6bceb4d6f97223844aa737bb1696efe2",
+      "source": "source-after.json"
+    },
+    {
+      "archive": "source-before.json.gz",
+      "archive_sha256": "575a2c7fd852a5f3812947257e2e63721f6434e8706487c68532a069c7aae809",
+      "sha256": "0389c0ed93fae6f3579e3704a3fad514ac88c099252006be4c73d3d7259873fd",
+      "source": "source-before.json"
+    },
+    {
+      "archive": "parser-test.log.gz",
+      "archive_sha256": "86e4cb7528b25cab531e42d93dce36e27115e6aa38c1c1585faed701cd132d1e",
+      "sha256": "8c5dc5ffbcc9e0bb8b6436e6eebfe69ed788be7f214c0023cc53eff033b885fb",
+      "source": "parser-test.log"
+    },
+    {
+      "archive": "converter-test.log.gz",
+      "archive_sha256": "36b07de22058c91fbbadc1bf1c5dd8e0e4edf070099a48a6db807e6ebb0c0aeb",
+      "sha256": "df431e0ce53b3d16e8cde3c2fcac52fa46615c26dfd1a8563d54bcfcd0694a56",
+      "source": "converter-test.log"
+    },
+    {
+      "archive": "ownership-test.log.gz",
+      "archive_sha256": "7da4cd9c092e017acafa27745076e17d27707a5bf05d6f1f4f963c7c58dc34de",
+      "sha256": "e0bd9e633536e05e03b28e1474eabfa8b3bcefa349140824c1231fd17c583a3f",
+      "source": "ownership-test.log"
+    },
+    {
+      "archive": "build-fix.patch.gz",
+      "archive_sha256": "650f9946544969e4cd17d83ab0858f63012125e15cfc292d2d9ed91adb61f83d",
+      "sha256": "722bc6115272405066d8ed12985c4d40368d1235a2c5bcd76defd56329bad770",
+      "source": "build-fix.patch"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Integrated19 canonical config and13 namespace ownership cases via manualBazel targets; initialBUILD analysis failure and correctedbuild kept; no runtime ownership claim"
+}

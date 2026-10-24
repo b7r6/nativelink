@@ -1,0 +1,97 @@
+--- a/nativelink-scheduler/src/authority/format.rs
++++ b/nativelink-scheduler/src/authority/format.rs
+@@ -49,10 +49,10 @@
+ }
+
+ impl ReaderCapabilities {
++    // The frozen executable can describe peer advertisements in known controls,
++    // but cannot recover or produce any activated feature representation.
+     pub fn supports(self, features: &Features) -> bool {
+-        features
+-            .iter()
+-            .all(|feature| self == Self::DirectScheduler && *feature == DIRECT_SCHEDULER)
++        features.is_empty()
+     }
+ }
+
+--- a/nativelink-scheduler/src/authority/journal.rs
++++ b/nativelink-scheduler/src/authority/journal.rs
+@@ -56,7 +56,7 @@
+ use tokio::sync::Mutex;
+
+ use super::format::{
+-    ActiveFormat, AdmissionRegistry, AuthorityDomain, DIRECT_SCHEDULER, Features, FormatControl,
++    ActiveFormat, AdmissionRegistry, AuthorityDomain, Features, FormatControl,
+     FormatDecision, JournalProfile, MAX_FORMAT_BYTES, MAX_FORMAT_MEMBERS, MemberLease,
+     ReaderCapabilities, RecoveryEvidence,
+ };
+@@ -424,49 +424,27 @@
+     format: ActiveFormat,
+ }
+
+-/// Both profiles recognize the base control structure. Only the upgraded
+-/// profile can recover an activated direct scheduler section.
++/// Frozen Base grammar: a scheduler object is not a supported representation.
+ #[derive(Clone, Debug, Deserialize, Serialize)]
+ #[serde(untagged)]
+ enum SchedulerSection {
+     String(String),
+-    Direct(serde_json::Value),
+ }
+
+ impl SchedulerSection {
+     fn bytes(&self) -> Result<Vec<u8>> {
+-        match self {
+-            Self::String(value) => {
+-                if value.len() > super::MAX_STATE_BYTES {
+-                    return Err(failure(
+-                        ErrorVerb::Read,
+-                        "scheduler section exceeds byte bound",
+-                    ));
+-                }
+-                Ok(value.as_bytes().to_vec())
+-            }
+-            Self::Direct(value) => {
+-                let mut size = BoundedEncodedSize {
+-                    used: 0,
+-                    limit: super::MAX_STATE_BYTES,
+-                };
+-                serde_json::to_writer(&mut size, value).map_err(|e| failure(ErrorVerb::Read, e))?;
+-                serde_json::to_vec(value).map_err(|e| failure(ErrorVerb::Read, e))
+-            }
+-        }
++        let Self::String(value) = self;
++        if value.len() > super::MAX_STATE_BYTES {
++            return Err(failure(ErrorVerb::Read, "scheduler section exceeds byte bound"));
++        }
++        Ok(value.as_bytes().to_vec())
+     }
+
+     fn from_state(state: &State, format: &ActiveFormat) -> Result<Self> {
+-        let bytes = state.snapshot().map_err(|e| failure(ErrorVerb::Write, e))?;
+-        if format.required.contains(&DIRECT_SCHEDULER) {
+-            Ok(Self::Direct(
+-                serde_json::from_slice(&bytes).map_err(|e| failure(ErrorVerb::Write, e))?,
+-            ))
+-        } else {
+-            Ok(Self::String(
+-                String::from_utf8(bytes).map_err(|e| failure(ErrorVerb::Write, e))?,
+-            ))
+-        }
++        if !format.required.is_empty() {
++            return Err(failure(ErrorVerb::Write, "frozen Base writer cannot encode active features"));
++        }
++        Ok(Self::String(state_json(state)?))
+     }
+ }
+
+@@ -492,8 +470,7 @@
+                 .format
+                 .decision
+                 .is_some_and(|decision| Some(decision.position) > self.last_applied)
+-            || matches!(self.scheduler, SchedulerSection::Direct(_))
+-                != self.format.required.contains(&DIRECT_SCHEDULER)
++            || !self.format.required.is_empty()
+         {
+             return Err(failure(
+                 ErrorVerb::Read,

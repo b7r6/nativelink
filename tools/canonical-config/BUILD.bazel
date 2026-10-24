@@ -1,0 +1,67 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+exports_files(["fixtures/canonical.json"])
+
+rust_library(
+    name = "nativelink-canonical-config",
+    srcs = [
+        "src/lib.rs",
+        "src/parse.rs",
+        "src/schema.rs",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:serde_json5",
+    ],
+)
+
+rust_binary(
+    name = "experimental-canonical-convert",
+    srcs = [
+        "src/bin/convert.rs",
+        "src/conversion.rs",
+        "src/legacy.rs",
+    ],
+    crate_root = "src/bin/convert.rs",
+    tags = ["manual"],
+    deps = [
+        ":nativelink-canonical-config",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "parser_test",
+    srcs = ["tests/parser.rs"],
+    compile_data = ["fixtures/canonical.json"],
+    tags = ["manual"],
+    deps = [
+        ":nativelink-canonical-config",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "conversion_test",
+    srcs = [
+        "src/bin/convert.rs",
+        "src/conversion.rs",
+        "src/conversion_tests.rs",
+        "src/legacy.rs",
+    ],
+    compile_data = [
+        "fixtures/legacy.json",
+        "fixtures/mapping.json",
+    ],
+    crate_root = "src/bin/convert.rs",
+    tags = ["manual"],
+    deps = [
+        ":nativelink-canonical-config",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)

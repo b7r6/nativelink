@@ -1,0 +1,108 @@
+{
+  "recorded_at": "2026-10-23T21:49:30.692083+00:00",
+  "source_commit": "f2ae7427ee304bd8ce870c46064c0c22fd86771d",
+  "tests_first_commits": [
+    "2ce1882086aa8a3bb446779f458efd9ac0891633",
+    "7ab7eaf4d4fdc491973720d55abb66c45d7a36fc"
+  ],
+  "production_base": "ff89311887ed9de14b8066094aa5631742a2bcaa",
+  "status": "Qualified staged private database custody helper; no production caller yet.",
+  "scope": {
+    "actual_existing_counterexamples": 2,
+    "original_existing_api_controls": 6,
+    "added_real_helper_tests": 6,
+    "helper_test_actual_tasks": 2,
+    "helper_test_private_or_blocking_controls": 4,
+    "runtime_change": "Atomic last-database ownership transfer, asynchronous retry outside queues, awaited blocking destruction. Private staged module only.",
+    "unchanged": "PreparedCanonicalOwner::release, Singleton::shutdown, public API and all existing runtime bodies; owner module declaration only."
+  },
+  "source_freeze": {
+    "path": "helper-corrected-source-freeze.json",
+    "sha256": "1fe38d6b99495a430312ed2909883202b6b6e4d289e3bcbfc4ff540db9de7f01",
+    "input_count": 19,
+    "all_committed_current_and_copied_inputs_exact": true
+  },
+  "original_baseline": {
+    "receipt": "baseline-observation.json",
+    "passed": 6,
+    "semantic_regression_failures": 0,
+    "classification": "Two positive real-task custody counterexamples and four reference/I/O/destruction controls; no missing-API failures counted."
+  },
+  "positive_corrected_helper": {
+    "receipt": "helper-corrected-twelve-observation.json",
+    "passed": 12,
+    "failed": 0
+  },
+  "compiled_mutation_qualification": {
+    "receipt": "compiled-mutation-summary.json",
+    "sha256": "2570d3125b04abb38b9d46be50ccccc5d3c4fa71986a0bb2961bad84d9f7d795",
+    "logical_faults": 2,
+    "caught_by_direct_assertion": 2,
+    "survivors": 0,
+    "compiler_or_stage_timeout_failures_counted": 0,
+    "secondary_panic": "Omit-drain cancelled-I/O fixture logs Disconnected after primary assertion unwinds/drops its release gate; retained, not counted separately."
+  },
+  "restored": {
+    "regression_receipt": "restored-regression-observation.json",
+    "library_pass": 128,
+    "existing_ignored_tests": [
+      "authority::journal::canonical_owner::tests::syscall_witness"
+    ],
+    "external_api_pass": 1,
+    "failed": 0,
+    "strict_receipt": "restored-strict.json",
+    "strict_all_targets_D_warnings_pass": true,
+    "hooks_receipt": "restored-hooks.json",
+    "full_manual_hooks_pass": true,
+    "source_and_binary_receipt": "restored-source-and-binary.json",
+    "fresh_scheduler_elf_matches_corrected_positive": true,
+    "scheduler_elf_sha256": "89a2dda7dd32ef8b5e250aa778fac6a152b6128bc6aaadc7de1e823a94a92313",
+    "git_clean": true
+  },
+  "preserved_nonsemantic_failures": [
+    {
+      "receipt": "baseline-six.json",
+      "reason": "Unused ReadableTable import in initial test fixture; zero tests executed."
+    },
+    {
+      "receipt": "helper-strict.json",
+      "reason": "Two strict lint prerequisites: explicit unit pattern in test-only hook and OpenRaft doc backticks; no behavior change."
+    }
+  ],
+  "independent_reviews": [
+    {
+      "path": "independent-root-review/review.json",
+      "sha256": "c4e8cf32b62c351ea42952bf86237bf456071d0bd547459b3a667a1b693d3417"
+    },
+    {
+      "path": "independent-root-review/baseline/review.json",
+      "sha256": "3976f00c64e6c874ddc657c73483fb201dc8d0f3027bf2b6a1b4f2956f84bae5"
+    },
+    {
+      "path": "independent-root-review/helper/review.json",
+      "sha256": "8a5833d3e18714990e99b926c2594c2c072675e64dfe41f4ad0df4e59c717bb4"
+    },
+    {
+      "path": "independent-storage-review/source-review.json",
+      "sha256": "db8b9655939b45553443a2c444f139871c5322e9a7b64e097bf734658433bd2d"
+    },
+    {
+      "path": "independent-storage-review/compiled-controls-review.json",
+      "sha256": "1d443b4754b3f168825098b25e4eabdf9274178302a50bc1cb72d86ccbb94dd4"
+    },
+    {
+      "path": "independent-storage-review/final-restoration-review.json",
+      "sha256": "a6f07c51b25abfb9e742aa32eb17c8b964302f8de294ecca081aa7f45b9e6820"
+    }
+  ],
+  "limits": [
+    "Caller must first stop core/tick and drop all local Journal/Raft holders except designated cleanup database Arc.",
+    "Caller must retain helper future in a supervisor immune to public waiter cancellation. This stage does not establish supervision, acceptance handshake, panic handling, or runtime teardown.",
+    "No recover_sealed public API, temporal A integration, clock origin/sample/cutoff, serving, admission, or cold seal writer is qualified here.",
+    "Blocking work can keep cleanup pending; a timeout does not establish completion.",
+    "Database Drop completion is not a durability acknowledgement and does not release external Ownership aliases.",
+    "Actual SM fixture uses existing experimental AcceptedHistory profile to reach existing apply gate; it does not admit those features in canonical Base.",
+    "Final drop gate is immediately before actual helper Database destruction, not inside backend destructor and not an OS durability observation.",
+    "Bazel integration belongs to root; author qualification here uses the recorded Cargo commands."
+  ]
+}

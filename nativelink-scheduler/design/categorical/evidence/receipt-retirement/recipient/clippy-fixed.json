@@ -1,0 +1,23 @@
+{
+  "command": [
+    "cargo",
+    "clippy",
+    "--locked",
+    "--profile",
+    "smol",
+    "-p",
+    "nativelink-worker",
+    "--lib",
+    "--test",
+    "authority_worker_test",
+    "--test",
+    "authority_rpc_test",
+    "--test",
+    "authority_scheduler_test",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "exit": 0,
+  "seconds": 2.11991626303643
+}

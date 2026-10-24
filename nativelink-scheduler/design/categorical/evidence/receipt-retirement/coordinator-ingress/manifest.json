@@ -1,0 +1,317 @@
+{
+  "artifact": "coordinator-ingress-snapshot-backlog-fix",
+  "recorded_utc": "2026-10-23T01:51:03.354980+00:00",
+  "patch": {
+    "path": "/tmp/nativelink-coordinator-ingress.patch",
+    "sha256": "97c78572fc2ceb710e6d9b4b6fe74adbe1417e1581215a77fab5c9357a0eb050"
+  },
+  "sources": [
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "before_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+      "after_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d"
+    },
+    {
+      "path": "nativelink-scheduler/design/categorical/automatic-coordinator.md",
+      "before_sha256": "322e0c627dc5b0128531c2b20b4c8c3153d0bb32bca53d815a520cbbd8e7fa62",
+      "after_sha256": "ced1e5bf0dacef16a77a83a053db5e9a2ba3dc192982281134736d0e616a9ae4"
+    }
+  ],
+  "source_restored": true,
+  "original_failure": {
+    "log": "original-bazel-failure.log",
+    "detail": "Root dedicated Bazel receipt fixture failed after167s at unchanged20s operation observation wait. Recipient attempt16 was Quiescent with result and sequence7; authority attempt16 remained authorized Uploading; old active hole was Running and negotiated session4 remained current. Coordinator Raft writes continued throughout the final20s. Previous successful Cargo qualification was insufficient to close this liveness failure."
+  },
+  "diagnosis": "The worker coalesced before tonic, but coordinator ingress materialized every received full inventory into its64-input FIFO. Repeated old reports, unchanged capacity and receipt delivery retries amplified serial durable writes. Slow journal work could put a completed candidate behind obsolete inventories. A new deterministic stopped-consumer test delivers256 successive inventory/capacity pairs and requires the final candidate, old active receipt and exact certificate in one notification. The original failed run did not record per-message ingress timestamps, so this is the verified backlog mechanism and corrective qualification rather than a claim to have reconstructed every original transport event.",
+  "changes": [
+    "Each session retains latest complete reconciliation and capacity at ingress with one pending notification per segment; snapshot replacement, take, and queued flag share one mutex.",
+    "Taking clears the flag before awaits, so updates arriving during commit schedule another turn. Standalone Report rotates the mailbox, sealing earlier snapshots and preserving its ordering barrier against later capacity/inventory.",
+    "WorkerAccepted is proposed only for a Dispatching attempt. Duplicate same-phase progress and same-tick identical capacity skip durable no-op proposals; changed capacity and later-clock heartbeat still commit.",
+    "No candidate/core reducer or oracle implementation was inspected or changed. No20s fixture wait, process allowance, test count, or namespace requirement changed."
+  ],
+  "environment": {
+    "CARGO_BUILD_JOBS": "8",
+    "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+  },
+  "runs": [
+    {
+      "label": "unit-baseline",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 0,
+      "seconds": 0.7468418139615096
+    },
+    {
+      "label": "physical-and-compatibility",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-worker",
+        "--test",
+        "authority_rpc_test",
+        "--test",
+        "authority_worker_test",
+        "--test",
+        "authority_scheduler_test",
+        "--",
+        "--show-output",
+        "--test-threads=1"
+      ],
+      "exit": 0,
+      "seconds": 90.93928935501026
+    },
+    {
+      "label": "mutation-duplicate-notifications",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 1.8120999379898421,
+      "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+      "replacement": {
+        "before": "    if pending.queued {\n        return None;\n    }",
+        "after": "    if pending.queued {\n        return Some(Input::WorkerSnapshots(session, snapshots.clone()));\n    }"
+      },
+      "compiled": true,
+      "killed": true
+    },
+    {
+      "label": "mutation-report-barrier-overtaken",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 1.9079439180204645,
+      "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+      "replacement": {
+        "before": "            *snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));",
+        "after": "            // Mutation: later observations overwrite the notification before Report."
+      },
+      "compiled": true,
+      "killed": true
+    },
+    {
+      "label": "unit-restored",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 0,
+      "seconds": 3.008480660035275
+    },
+    {
+      "label": "strict-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 9.995068352029193
+    }
+  ],
+  "mutations": [
+    {
+      "label": "mutation-duplicate-notifications",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 1.8120999379898421,
+      "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+      "replacement": {
+        "before": "    if pending.queued {\n        return None;\n    }",
+        "after": "    if pending.queued {\n        return Some(Input::WorkerSnapshots(session, snapshots.clone()));\n    }"
+      },
+      "compiled": true,
+      "killed": true
+    },
+    {
+      "label": "mutation-report-barrier-overtaken",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-service",
+        "--lib",
+        "authority_server::tests",
+        "--",
+        "--show-output"
+      ],
+      "exit": 101,
+      "seconds": 1.9079439180204645,
+      "source_sha256": "16f6fd67f96dd6b8c30ff97936d0f65fde96a77a70f24f5693963a0c2954082d",
+      "replacement": {
+        "before": "            *snapshots = Arc::new(Mutex::new(WorkerSnapshots::default()));",
+        "after": "            // Mutation: later observations overwrite the notification before Report."
+      },
+      "compiled": true,
+      "killed": true
+    }
+  ],
+  "exclusions": [
+    "Production latency/throughput under arbitrary load is not claimed.",
+    "Root performs dedicated Bazel and precommit qualification separately.",
+    "Authentication, deployed storage durability and canonical rollout remain outside these local fixtures."
+  ],
+  "logs": [
+    {
+      "path": "mutation-duplicate-notifications.log",
+      "sha256": "001759a8f1fc19acdd2949f061abdb559156dcc979466ce648d392107151bf4c",
+      "bytes": 2076,
+      "gzip_path": "mutation-duplicate-notifications.log.gz",
+      "gzip_sha256": "2a801064999b1700be38d17fcff4fa3c462ac12276143fdb195f33b74e8904a1",
+      "gzip_bytes": 772,
+      "findings": [
+        "thread 'authority_server::tests::standalone_report_seals_preceding_snapshot_before_later_capacity' (2770062) panicked at nativelink-service/src/authority_server.rs:1827:9:",
+        "thread 'authority_server::tests::slow_coordinator_observes_latest_candidate_with_one_pending_notification' (2770061) panicked at nativelink-service/src/authority_server.rs:1763:9:",
+        "test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s"
+      ]
+    },
+    {
+      "path": "mutation-report-barrier-overtaken.log",
+      "sha256": "f5bbe732ee050f67b56f615a35ca4ea79f518f8fbf6cafc4ea85edd81a8e3e8b",
+      "bytes": 1641,
+      "gzip_path": "mutation-report-barrier-overtaken.log.gz",
+      "gzip_sha256": "7c5490be81cac5d3beb84cd6c1e2571f9fcc487285ea9a6a7b1d1c08b5de2d98",
+      "gzip_bytes": 676,
+      "findings": [
+        "thread 'authority_server::tests::standalone_report_seals_preceding_snapshot_before_later_capacity' (2770236) panicked at nativelink-service/src/authority_server.rs:1826:10:",
+        "test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s"
+      ]
+    },
+    {
+      "path": "original-bazel-failure.log",
+      "sha256": "5c10034e2457971f90d88f2bc77e25fff78328b5d43f87390d106590e682d0ea",
+      "bytes": 46048719,
+      "gzip_path": "original-bazel-failure.log.gz",
+      "gzip_sha256": "683b5da5b83e9e7239baaf126db052ffcc5d0671beb710c63ae0091cf1ea935e",
+      "gzip_bytes": 2174833,
+      "findings": [
+        "thread 'activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole' (16) panicked at nativelink-worker/tests/authority_rpc_test.rs:542:13:",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 167.04s"
+      ]
+    },
+    {
+      "path": "physical-and-compatibility.log",
+      "sha256": "68019227b32dea4431690c0d49e533a1164ea4c1057e722c3ce27f2eceb71fde",
+      "bytes": 38214039,
+      "gzip_path": "physical-and-compatibility.log.gz",
+      "gzip_sha256": "d647234550eed0231638feefbdb821d423e0fde2f0acd97c38bd2f7638db1bc2",
+      "gzip_bytes": 2275661,
+      "findings": [
+        "AUTHORITY_AUTOMATIC_RECEIPTS: feature2 activated through actual Raft prepare/activate; beforeissue/beforewire/lostack/reconnect durableoutbox cutpoints; 16 actual quiescent completions beside originalactivehole with ledgerlimit4; exactpendingbody replay and explicit acknowledgment; allreceipts finally retired",
+        "AUTHORITY_RPC: cancel arrived before any dispatch, exact committed cancel receipt released the original grant",
+        "AUTHORITY_RPC: automatic match, accepted-dispatch restart, retained candidate, stable WaitExecution and publication restart exercised",
+        "AUTHORITY_RPC: automatic execution timer, cancellation cleanup, interest expiry, retirement and persisted ingress watermark exercised",
+        "AUTHORITY_INTEREST: paused reader expired; peer_stream_credit=512 peer_connection_credit=4096 adaptive=false heartbeat_bytes=185 last_deadline=600 generation=4 renewal_allowance=6",
+        "AUTHORITY_INTEREST: identical queued-operation heartbeats preserve one interest for four windows; duplicate streams, reconnect and restart retain identity and persisted cadence",
+        "AUTHORITY_INTEREST: equal-clock restart replays due expiry after durable AdvanceTime cutpoint without renewing or postponing the retained deadline",
+        "AUTHORITY_INTEREST: Observe and first poll do not renew; later polling renews; shutdown stops polling; persisted generation rejects delayed expiry; clock jump expires before renewal",
+        "AUTHORITY_RPC: invalid phase/zero sequence/wrong dispatch rejected, stream concurrency bounded, wrong cancel cannot refund, revoked decline closes only exact cancel",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.41s",
+        "AUTHORITY_BRIDGE: real namespaced candidate/restart/acceptance/publication exercised",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.56s",
+        "AUTHORITY_RECEIPT_RETIREMENT: 48 actual quiescent completions with ledger_limit4 and activeattempt1; latest durable qualificationcertificate only; beforecommit/beforewire/lostack/reconnect cutpoints; stalecommands cannot relaunch or stop successor session; no authority acceptance/outbox claim",
+        "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.77s"
+      ]
+    },
+    {
+      "path": "strict-clippy.log",
+      "sha256": "17a0704eca7c567cff0fa2ff17d0aac48054a14bca604491bd82063b41bf3d7b",
+      "bytes": 266,
+      "gzip_path": "strict-clippy.log.gz",
+      "gzip_sha256": "0e4565c08917c1e8c4f0c5326dcf3ebba6f675e82a10adba487fd5447556dcfe",
+      "gzip_bytes": 190,
+      "findings": []
+    },
+    {
+      "path": "unit-baseline.log",
+      "sha256": "9c9f06d9c24fab6c8bee97f5152aee3e96145cea4ff8b41b481fa82ab04b8bec",
+      "bytes": 1046,
+      "gzip_path": "unit-baseline.log.gz",
+      "gzip_sha256": "cac73e206babafc02d342a71a42957b0058fe0d4f2327400679b0e88deb99643",
+      "gzip_bytes": 454,
+      "findings": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.05s"
+      ]
+    },
+    {
+      "path": "unit-restored.log",
+      "sha256": "1e7be7ee26fad33b7b85f711f0ee6a465463d80527e05308539ee19b1e83eb97",
+      "bytes": 1142,
+      "gzip_path": "unit-restored.log.gz",
+      "gzip_sha256": "e1637ea31b8cf03eecea1cd38162032616c9c44e974e881c9b6acf812159e152",
+      "gzip_bytes": 480,
+      "findings": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s"
+      ]
+    }
+  ]
+}

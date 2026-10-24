@@ -1,0 +1,520 @@
+{
+  "scope": "Bounded fixed-authority storage-read producer lifetime; writer closes when producer future completes, and producer error remains authoritative.",
+  "source_commit": "d1c304281bbbccb8408e1045e923581953450689",
+  "author_test_commit": "026be6607c59716e361045536cfdf46f22a12aa5",
+  "author_runtime_commit": "a3f7285ce15caf9cec8ac7e7640a717985fe63a5",
+  "author_qualification_sha256": "ed605ef1fdf2bb04be4d6aff928a6e68f08f9e083afef2fa6d77e6945c0d3818",
+  "author_artifact_manifest_sha256": "0474822a3dc9033b278de5a488d312f3219254eb0f7f438133ed72df641a04d3",
+  "author_archives": [
+    {
+      "path": "author-01.tar.gz",
+      "sha256": "9311f4307d11097568742f162c6055ea98fdb57961904c9c1ce7081a63bf7325",
+      "bytes": 14738891,
+      "files": {
+        "fixed-clippy.log": "866d90c808ccba2372f9a0bcbb86c763363692f0d5dafcba3f417e50cdd96ce1",
+        "fixed-invalid-target-results.json": "b13946200aa505d850a2ddc238e2d3bc8c27dcfb930a54024c8e0275f9170f36",
+        "fixed-focused.json": "c2510a63977fd1e526ebed5de72788290bfffc7c52162580dd20140f61e7289b",
+        "fixed-service-invalid-target.log": "55dc248a3fea78778a47a395aea8703e9f2b041c89e822b127ecef6ac8c6aa9e",
+        "mutants/ignore_error_after_eof/result.json": "93bd68d1e257366ef614c0156f0c5df2e91f27d7f75fa90cfd1de3620906af6c",
+        "environment.json": "7aa825a8fd4a05f969491c395e288c0ad3c3c7e1d1bfd7d1b1e7e4edc676144c",
+        "mutants/double_actual_byte_bound/result.json": "fca2e267943ae3787b1b7b5fa896499d4c6cfb1366d0a05d93baa9bb533f7e50",
+        "mutants/wait_for_pending_producer_on_excess/result.json": "3c0b1d568d4c873203561e49e3092fb30f90836c41c88fcd55eb122f31be154e",
+        "runtime.patch": "cd15c5b89e486fcbf68ed34837fc7600d81ad79a2218364540a3a3afff22a4ba",
+        "original-focused.json": "a56436ad7eacbe50d1495ac0d469fa240473666e7bca313c8fc067841e5642fd",
+        "fixed-focused.log": "4eea45bfdf4b2a00e17d11b9f169fb47d2a00870851691cc49ab43ce16b4b4b4",
+        "fixed-source/manifest.json": "762fd145058a737558812ade571be2c074048fdaed55c7ff5dcf70769576c5fe",
+        "original-source/manifest.json": "8710620683ec3d1539a12071875e3aafa6d4842d0ff3725a1d7b5ea844b4d814",
+        "mutants/ignore_error_after_eof/execution.log": "7b302a41157c11cb1987d38fbe7264564fc7b3f39669dffc0c1b6e8abc0949bb",
+        "mutants/double_actual_byte_bound/execution.log": "411137e207af0dfb441773ff382f62da1b85a378708928cf3310aa569293f5f5",
+        "mutants/wait_for_pending_producer_on_excess/execution.log": "83d14baa266176966412d2496e06cac889720da555a1c742fff8fc6ec9c2c428",
+        "restored-results.json": "3315d6879a47077a5aed21203f02c6fa6f42d3334af0df40cbebe95234ee24d8",
+        "fixed-results.json": "f14cb6b949eb5c15b2b8793145a21713a6e05f0f191e0c51636616175b2c7511",
+        "verify.py": "1cc688927c9adf5a146c61f78fb0ff0aac39d7c15ba93f974121339aff744b42",
+        "hooks-runtime.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+        "hooks-tests-final.log": "f387dea163fafd28660db930899ab33f0ef2ced8a286ffeba9c69c6c6a11a48a",
+        "independent-review/runtime-review.json": "77320b596f52c1ccbffdfb77fd0e15ebd8778fc06c58d4392b129ee9594800b8",
+        "fixed-source/nativelink-scheduler/design/categorical/authority-storage-read-lifetime.md": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+        "independent-review/runtime-source/nativelink-scheduler/design/categorical/authority-storage-read-lifetime.md": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+        "independent-review/review.json": "01ef14b67e521bafddd4f2d554877c62070d16555cce0780f2ae9a1ac77e1e91",
+        "hooks-tests.log": "c28c60106234c1fe8ee6aa018d20892fc8cc705754eac2c4937e89955a6e34b7",
+        "restored-canonical.log": "6c6bca90b73fc3d05d7edfc4cf80e70f46fbedba6f9845d128b1119fd361828a",
+        "mutants/results.json": "12aae9e8adb34297b8ab06e9f01ba2f19d06deee5e8467cff983d487924410a0",
+        "original-focused.log": "5997c6429924bddd25ae7ebca21447b3b9112343da6f288b417c97007040212b",
+        "fixed-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+        "independent-review/runtime-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+        "original-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+        "runtime-and-doc-commit.patch": "ceb3ed970dc9d4b3f051e431a43ee033a8f5eb8b0ef8f5995f31d30038682225",
+        "run-mutants.py": "a8138e427c7e6049484f15dcfb02d8af3bbe7cffdad656b94a99df418f178956",
+        "fixed-canonical.log": "bd3b00b7cc0d3902f3b3f306a24cb811a4b3e9656f5552b84a7e43dfeabbcd2f",
+        "fixed-source/nativelink-service/BUILD.bazel": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+        "independent-review/runtime-source/nativelink-service/BUILD.bazel": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+        "independent-review/source/nativelink-service/BUILD.bazel": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+        "original-source/nativelink-service/BUILD.bazel": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+        "fixed-service.log": "e895871061f3822072753aebdf39d9229efbb00d6d68df335abefcf7ce85d289",
+        "restored-service.log": "cf161ce16a357feb7f1d35fc0a40683a665e0fe0af215d455575a0161806d41b",
+        "fixed-source/nativelink-service/src/authority_storage_read_tests.rs": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "independent-review/runtime-source/nativelink-service/src/authority_storage_read_tests.rs": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "independent-review/source/nativelink-service/src/authority_storage_read_tests.rs": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "original-source/nativelink-service/src/authority_storage_read_tests.rs": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "fixed-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "independent-review/runtime-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "original-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "test-only.patch": "8414115c3bcc9a0162e62c82ac16bda6ba5dd1e23f8264c3a759d2fe4cee147f",
+        "qualification.json": "ed605ef1fdf2bb04be4d6aff928a6e68f08f9e083afef2fa6d77e6945c0d3818",
+        "fixed-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "independent-review/runtime-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "independent-review/source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "original-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "fixed-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "independent-review/runtime-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "independent-review/source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "original-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "independent-review/source/nativelink-service/src/authority_server.rs": "0a9dc7b25872c74f3ae54364068074c7ea98412528e0aa6cbaf63fb1bd4feeb3",
+        "original-source/nativelink-service/src/authority_server.rs": "0a9dc7b25872c74f3ae54364068074c7ea98412528e0aa6cbaf63fb1bd4feeb3",
+        "fixed-source/nativelink-service/src/authority_server.rs": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+        "independent-review/runtime-source/nativelink-service/src/authority_server.rs": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+        "mutants/double_actual_byte_bound/authority_server.rs": "b8c7803f21d6a8e8825cb3be2f11365673ea129b6a34f5ad1365a9bf37b925e1",
+        "mutants/wait_for_pending_producer_on_excess/authority_server.rs": "4f4e2e7a76416d3fb3e3e1b1c5e20a64c2eb2f17b1df16fe98793b934d2c329c",
+        "mutants/ignore_error_after_eof/authority_server.rs": "e7da0e7d908a9d4e813e563beafabf7098009f7baa9eb384558100b5a7873760",
+        "fixed-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "independent-review/runtime-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "original-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "original-test-binary": "0a50c532acbaa83e4fb56649cab06c0cf7e7a4361c82346dc5e8f603c58494e0",
+        "mutants/wait_for_pending_producer_on_excess/test-binary": "7cdd9ae84c0aa08374059526f7ddc1c32d0581e3591dec65da90d3f60cdf3b77",
+        "fixed-focused-test-binary": "5ed6872f541e1fb2ef9337029d075c657c6e24290b43ec78cb248eec9207de43"
+      }
+    },
+    {
+      "path": "author-02.tar.gz",
+      "sha256": "3f44cb1409fee6705c6bc361b8b5fb35b0c86b7cb30c49ffed068f5e5762a1fc",
+      "bytes": 14418463,
+      "files": {
+        "fixed-service-nativelink_service-9e81d23c43a3497d": "5ed6872f541e1fb2ef9337029d075c657c6e24290b43ec78cb248eec9207de43",
+        "restored-service-nativelink_service-9e81d23c43a3497d": "5ed6872f541e1fb2ef9337029d075c657c6e24290b43ec78cb248eec9207de43",
+        "mutants/ignore_error_after_eof/test-binary": "a9b8191e0424a5e8f2a49b829f632f60c8b12d8cfc3dcae83d5bd4589624e955"
+      }
+    },
+    {
+      "path": "author-03.tar.gz",
+      "sha256": "6be74fa0e6ef0d68e4875cfe0f7f71ba40c721236e4b5e388d5761205be92ae0",
+      "bytes": 11683472,
+      "files": {
+        "mutants/double_actual_byte_bound/test-binary": "47dae646d6ca994cfb0ffa9ece1aa29aa51286f2a76ed069420e8cc921496d8d",
+        "fixed-canonical-nativelink_canonical_store-9025409d5062e62b": "aa2b1cee0158d39dca3c4269f0ebb28f10a0fd3719ec7c8c2fd60b1612cc0297"
+      }
+    },
+    {
+      "path": "author-04.tar.gz",
+      "sha256": "663e0c737d349215fa56c340159ba2c108d56063068e23622ad18014b5835f77",
+      "bytes": 14521920,
+      "files": {
+        "restored-canonical-nativelink_canonical_store-9025409d5062e62b": "aa2b1cee0158d39dca3c4269f0ebb28f10a0fd3719ec7c8c2fd60b1612cc0297",
+        "fixed-service-authority_listener_test-9cab74c1076d4950": "8fb4c83eb288f1977e37050762a1b7d4f21990af8fbb1652b31676d382289a9a"
+      }
+    },
+    {
+      "path": "author-05.tar.gz",
+      "sha256": "b9ee2535ebf4520de8cd9e8dcf935b8784b32060b2f0c90281fc2fd53c8e8a91",
+      "bytes": 7648054,
+      "files": {
+        "restored-service-authority_listener_test-9cab74c1076d4950": "8fb4c83eb288f1977e37050762a1b7d4f21990af8fbb1652b31676d382289a9a",
+        "artifact-manifest.json": "0474822a3dc9033b278de5a488d312f3219254eb0f7f438133ed72df641a04d3"
+      }
+    }
+  ],
+  "root_archive": {
+    "path": "root-integration.tar.gz",
+    "sha256": "ba3853243aae4c5ad23b9c177e70ac28413204c959a01608884b12b6d565d627",
+    "bytes": 202627,
+    "files": {
+      "head.txt": "9b931691eedf2e3a4e05453c279262e1b17a5855242900211ee5ccbcf164b21f",
+      "integration.log": "251f8dc55e724575843703ea533068c01ccd9fe7d1a24880f3e6b574d061ab00",
+      "status-before.txt": "f319c2dd106ea10f6a08665484ad874af150cf121fecc61bc9acf7d77b147e97",
+      "command.json": "404488525e782172234d058e93ee92784c9eaf5e8c44b16fd96f9fe4b9346390",
+      "baseline-results.json": "9bdb6e5031ecb7721b77591668a94f28f249ed28c3f5cd035f016f074aaa0b84",
+      "root-results.json": "c77ed24967d8348df5826606b5440e3d166c03af0f19ec4bb31564ab9afb8708",
+      "baseline-sources-before.json": "31516fd06cc8b8d87e6c51bf528f5eebb2d810eecaa6facae8c2588174f0bed1",
+      "service-baseline-test.log": "f6f44e4f5549d74a7f8e530e0142932f5864f1f74108d0887ef2482d8213823f",
+      "sources-before.json": "138dd29511d9bd60f5f1622a3063f752d134ada99e352ee0352cf6a7b7afd278",
+      "sources-after.json": "138dd29511d9bd60f5f1622a3063f752d134ada99e352ee0352cf6a7b7afd278",
+      "service-baseline.log": "87f2aed6183fa8639a2beb7b3e8296c3aa03e90ccd445837d4ab576711b5d41c",
+      "author-root-source-comparison.json": "84349244e26dd0310fba0bbe55bf1f8ac0f822cfffcdd5e0b2756fa3a972cc07",
+      "run-baseline.py": "3675eaeff431712f17545dc4d5fbb1c34399c4ff2ea158e12ab2836302778241",
+      "baseline-head.txt": "95f5610afea86a441891d61f2bc69e264569cec775d6856d3f6f7829df00b967",
+      "run-integration.py": "8baea44a9ec308d46cfc8903ce212ee78e6c6969779639801b575e960b7d8f10",
+      "baseline-sources-after.json": "31516fd06cc8b8d87e6c51bf528f5eebb2d810eecaa6facae8c2588174f0bed1",
+      "normalized-test-summaries.json": "27531ac02a8c9e21cc7f55281b4b838b46d2800c42f6fe7de965af779869d50a",
+      "testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log": "bd2c483849f9c9e0e5e38364d0f5606bf15a3ce3ef482ca1059881ade5dda265",
+      "testlogs/nativelink-scheduler/unit_test/test.log": "5bc8f696f47c633746940303599c02aeef22eb8cf85e51a8ab13ac65b14c254e",
+      "testlogs/tools/canonical-store/canonical_store_test/test.log": "d6455c29da2a0d433e4417beba9a324c5b2ede972fe1a9324521323e0aa3db88",
+      "testlogs/tools/canonical-filesystem/ownership_test/test.log": "076991b6f0ac3d965eea8d8ea8dd6829942efcef204a372eb6493755e2aff51b",
+      "testlogs/tools/canonical-filesystem/journal_test/test.log": "764522e7d1d9bd66bad5e9198a67d798d31eb2d2fdb7f6fce7c4f2d786f3d4d9",
+      "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "fa7be7e499cc9c620a17c3802fc46ed474173ea5523ebbef5dcb6b355bbf2ba1",
+      "testlogs/nativelink-service/unit_test/test.log": "a71431be09f04a66763f0ae4cec228d7cca71fb3950a7ee07a27c74339925a20",
+      "testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "38c3de36ca02bf2ea17a289e27bd2f36edd750fed1e81e52f490e723a4c82838"
+    }
+  },
+  "root_result": {
+    "source_commit": "d1c304281bbbccb8408e1045e923581953450689",
+    "unchanged_tracked_non_evidence_inputs": 1337,
+    "all_input_hashes_verified_against_git_commit": true,
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "--test_output=errors",
+      "--keep_going",
+      "--build_event_json_file=/tmp/nativelink-categorical-evidence/authority-bounded-read-lifetime-integration/events.jsonl",
+      "//nativelink-service:unit_test",
+      "//nativelink-service:integration_tests/authority_listener_test_test",
+      "//tools/canonical-store:canonical_store_test",
+      "//tools/canonical-filesystem:ownership_test",
+      "//tools/canonical-filesystem:journal_test",
+      "//tools/canonical-filesystem:journal_bridge_test",
+      "//nativelink-scheduler:unit_test",
+      "//nativelink-worker:integration_tests/authority_rpc_test_test",
+      "//:nativelink"
+    ],
+    "targets_passed": 8,
+    "targets_executed": 8,
+    "targets_cached": 0,
+    "rust_passes": 303,
+    "ignored": 1,
+    "server_build": "passed",
+    "elapsed_seconds": 61.204,
+    "input_scope": "Every git-tracked path except categorical/evidence; symlink target text hashed, not external target bytes. Dependency/toolchain content not exhaustively hashed by this manifest.",
+    "tests": [
+      {
+        "label": "//tools/canonical-filesystem:journal_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "8.818s",
+        "rust_results": {
+          "passed": 45,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "764522e7d1d9bd66bad5e9198a67d798d31eb2d2fdb7f6fce7c4f2d786f3d4d9"
+      },
+      {
+        "label": "//tools/canonical-filesystem:ownership_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "3.839s",
+        "rust_results": {
+          "passed": 35,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "076991b6f0ac3d965eea8d8ea8dd6829942efcef204a372eb6493755e2aff51b"
+      },
+      {
+        "label": "//tools/canonical-filesystem:journal_bridge_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "0.847s",
+        "rust_results": {
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "fa7be7e499cc9c620a17c3802fc46ed474173ea5523ebbef5dcb6b355bbf2ba1"
+      },
+      {
+        "label": "//nativelink-scheduler:unit_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "13.807s",
+        "rust_results": {
+          "passed": 107,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "5bc8f696f47c633746940303599c02aeef22eb8cf85e51a8ab13ac65b14c254e"
+      },
+      {
+        "label": "//tools/canonical-store:canonical_store_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "9.820s",
+        "rust_results": {
+          "passed": 24,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "d6455c29da2a0d433e4417beba9a324c5b2ede972fe1a9324521323e0aa3db88"
+      },
+      {
+        "label": "//nativelink-service:unit_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "15.141s",
+        "rust_results": {
+          "passed": 43,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "a71431be09f04a66763f0ae4cec228d7cca71fb3950a7ee07a27c74339925a20"
+      },
+      {
+        "label": "//nativelink-service:integration_tests/authority_listener_test_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "3.838s",
+        "rust_results": {
+          "passed": 15,
+          "failed": 0,
+          "ignored": 1,
+          "measured": 0,
+          "filtered": 0
+        },
+        "log_sha256": "38c3de36ca02bf2ea17a289e27bd2f36edd750fed1e81e52f490e723a4c82838"
+      },
+      {
+        "label": "//nativelink-worker:integration_tests/authority_rpc_test_test",
+        "status": "PASSED",
+        "total_run_count": 1,
+        "duration": "36.136s",
+        "rust_results": {
+          "passed": 22,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered": 6
+        },
+        "log_sha256": "bd2c483849f9c9e0e5e38364d0f5606bf15a3ce3ef482ca1059881ade5dda265"
+      }
+    ],
+    "source_comparison": {
+      "namespace": {
+        "source_manifest_sha256": "0540060d45c25b3d74e2aa9138519e037e1b1720932c4f14eb4cc9cafcdbfa5c",
+        "inputs": [
+          {
+            "path": "tools/canonical-filesystem/BUILD.bazel",
+            "author_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+            "root_sha256": "0bc9aa688ef20250e409319af67b63e9d2d142b5db8faa8b781912194122e150",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/Cargo.toml",
+            "author_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+            "root_sha256": "224a301aacb3c274cb056758f4c852e2d139463bf888c6d6509658ea6a96a0af",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/Cargo.lock",
+            "author_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+            "root_sha256": "be186a2ef2f6bb7919501b884df4ccf05e1f76196ac5e296f2544c53eb7e7fff",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/README.md",
+            "author_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+            "root_sha256": "0d840405c54f96ad945a1716fd588316f6021e251d72275bfdb13524a2911c9a",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/lib.rs",
+            "author_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+            "root_sha256": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/namespace.rs",
+            "author_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+            "root_sha256": "9cb238a937e55ee19dc560a22c65f5088bfa866f8331cff4b797462d17a59ca0",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/namespace_tests.rs",
+            "author_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+            "root_sha256": "14390c9e9b3e5504285942deb9857ee3e46bc2ac09e3385391ea1a683d6b4f77",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/src/tests.rs",
+            "author_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+            "root_sha256": "5a24188b29e4151f9c174d2a5e60fc97278742e7f3ac1c9ee930e1f19b080ca5",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-filesystem/fixtures/namespace-v1.hex",
+            "author_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+            "root_sha256": "fbaa010d4d6822ce63cf12b7f09b4b782b1d036648e75aeb4157f31b93d2a130",
+            "identical": true
+          },
+          {
+            "path": "tools/canonical-store/Cargo.lock",
+            "author_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+            "root_sha256": "0e2477c280f51da4a775ac485573f9a258fdcae6b39eaf68611514cae0c63602",
+            "identical": true
+          }
+        ],
+        "identical_count": 10,
+        "input_count": 10
+      },
+      "bounded_read": {
+        "source_manifest_sha256": "762fd145058a737558812ade571be2c074048fdaed55c7ff5dcf70769576c5fe",
+        "inputs": [
+          {
+            "path": "nativelink-service/src/authority_storage_read_tests.rs",
+            "author_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+            "root_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+            "identical": true
+          },
+          {
+            "path": "nativelink-service/src/authority_server.rs",
+            "author_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+            "root_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+            "identical": true
+          },
+          {
+            "path": "nativelink-service/BUILD.bazel",
+            "author_sha256": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+            "root_sha256": "681d1a14fc58b9bf6d7dc3d87a74757251b4ae362144e9cdb50b97dd18edf618",
+            "identical": false
+          },
+          {
+            "path": "nativelink-service/Cargo.toml",
+            "author_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+            "root_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+            "identical": true
+          },
+          {
+            "path": "nativelink-util/src/buf_channel.rs",
+            "author_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+            "root_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+            "identical": true
+          },
+          {
+            "path": "nativelink-util/src/store_trait.rs",
+            "author_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+            "root_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+            "identical": true
+          },
+          {
+            "path": "Cargo.lock",
+            "author_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+            "root_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+            "identical": true
+          },
+          {
+            "path": "Cargo.toml",
+            "author_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+            "root_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+            "identical": true
+          },
+          {
+            "path": "nativelink-scheduler/design/categorical/authority-storage-read-lifetime.md",
+            "author_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+            "root_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+            "identical": true
+          }
+        ],
+        "identical_count": 8,
+        "input_count": 9,
+        "integration_delta": "BUILD source list retains both existing authority_timeout_tests.rs and newly added authority_storage_read_tests.rs in sorted order. All runtime and fixture bytes match author."
+      }
+    },
+    "raw_bep": {
+      "external_path": "/tmp/nativelink-categorical-evidence/authority-bounded-read-lifetime-integration/events.jsonl",
+      "sha256": "daacda0abf62874bc131b09af3423a6635eb7e6b096a19fecaed90dbfc58347c",
+      "repository_packet": "Excluded raw environment/URI-bearing BEP; normalized summaries and all eight exact test logs included."
+    },
+    "limits": [
+      "Focused eight-target integration, not a full workspace run.",
+      "The 303 passes overlap author and older root checks; they are not 303 unique behaviors.",
+      "One normally ignored TLS fixture; no fresh explicit TLS execution at this source boundary.",
+      "Root EOF original-source baseline compiled and ran: four passed, missing-EOF case failed on empty first iteration; partial iteration not reached.",
+      "No production constructor or categorical gate closure."
+    ]
+  },
+  "original_baselines": {
+    "author": "Compiled four passing controls and one missing-EOF failure; first empty iteration times out and partial branch is not reached.",
+    "root": "Same five cases compile and execute against root b47b5ce130 with namespace change present and old producer lifetime: four pass, one empty missing-EOF case times out. Source manifest scope is tracked Rust/Cargo/Bazel extensions as recorded in runner."
+  },
+  "author_qualification": "Five added fixtures, restored 28 service tests plus 15 listener tests plus 24 canonical-store tests, one normally ignored TLS fixture; strict Clippy and source hooks. Three separately compiled behavioral mutations detected; exact nine-source and three restored executable identities retained.",
+  "source_comparison": {
+    "source_manifest_sha256": "762fd145058a737558812ade571be2c074048fdaed55c7ff5dcf70769576c5fe",
+    "inputs": [
+      {
+        "path": "nativelink-service/src/authority_storage_read_tests.rs",
+        "author_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "root_sha256": "e120270ecd625f26033c6fb7523df7e077e76de57c99da5fa55f1d7e474d358b",
+        "identical": true
+      },
+      {
+        "path": "nativelink-service/src/authority_server.rs",
+        "author_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+        "root_sha256": "03ade207dea6bb7188dee55c81f6ae73c3cadd66730fdca987e67c0f98daef61",
+        "identical": true
+      },
+      {
+        "path": "nativelink-service/BUILD.bazel",
+        "author_sha256": "01b816c7b12b3b6a86d38221fc168ae927d304bae88aefbe9040415c73f2e164",
+        "root_sha256": "681d1a14fc58b9bf6d7dc3d87a74757251b4ae362144e9cdb50b97dd18edf618",
+        "identical": false
+      },
+      {
+        "path": "nativelink-service/Cargo.toml",
+        "author_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+        "root_sha256": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+        "identical": true
+      },
+      {
+        "path": "nativelink-util/src/buf_channel.rs",
+        "author_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "root_sha256": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+        "identical": true
+      },
+      {
+        "path": "nativelink-util/src/store_trait.rs",
+        "author_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "root_sha256": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+        "identical": true
+      },
+      {
+        "path": "Cargo.lock",
+        "author_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "root_sha256": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+        "identical": true
+      },
+      {
+        "path": "Cargo.toml",
+        "author_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "root_sha256": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+        "identical": true
+      },
+      {
+        "path": "nativelink-scheduler/design/categorical/authority-storage-read-lifetime.md",
+        "author_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+        "root_sha256": "d511710321d85ce506220fe9d2375fcc36fdaf3ec4cd633c1d532855b41667cb",
+        "identical": true
+      }
+    ],
+    "identical_count": 8,
+    "input_count": 9,
+    "integration_delta": "BUILD source list retains both existing authority_timeout_tests.rs and newly added authority_storage_read_tests.rs in sorted order. All runtime and fixture bytes match author."
+  },
+  "independent_review_sha256": "77320b596f52c1ccbffdfb77fd0e15ebd8778fc06c58d4392b129ee9594800b8",
+  "limitations": [
+    "The producer future owns and drops the writer; missing EOF now reports channel Internal instead of hanging after successful producer return.",
+    "No new timeout, preemption of arbitrary backend blocking, false-EOF detection, whole-value guarantee or physical-IO bound.",
+    "Original missing-EOF fixture fails at its empty iteration; do not count the unreached partial branch as an original execution.",
+    "No production constructor or categorical gate closure."
+  ]
+}

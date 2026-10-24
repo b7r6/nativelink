@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="nativelink-scheduler/terminal_outcome_reference_test" tests="1" failures="0" errors="0">
+    <testcase name="nativelink-scheduler/terminal_outcome_reference_test" status="run" duration="2" time="2"></testcase>
+      <system-out>
+Generated test.log (if the file is not UTF-8, then this may be unreadable):
+<![CDATA[exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //nativelink-scheduler:terminal_outcome_reference_test
+-----------------------------------------------------------------------------
+
+running 29 tests
+test m1::contract_tests::priority_interest_and_invocation_identity_are_distinct_relations ... ok
+test m1::contract_tests::one_live_capacity_observation_cannot_fund_two_dispatches ... ok
+test m1::contract_tests::retired_handle_identity_survives_snapshot_and_invalid_ids_do_not_advance_it ... ok
+test m1::contract_tests::absolute_execution_expiry_is_independent_of_renewed_progress ... ok
+test m1::contract_tests::replacement_requires_cleanup_and_retains_original_charge ... ok
+test m1::contract_tests::transport_reconnect_and_late_decline_do_not_create_a_second_slot ... ok
+test m1::contract_tests::snapshot_keeps_uncertain_effects_and_stale_timer_cannot_expire_progress ... ok
+test cases::full_physical_identity_is_bijective_across_namespaces_and_incarnations ... ok
+test cases::malformed_or_synthetic_result_facts_and_unsupported_events_refuse_unchanged ... ok
+test cases::stale_identity_wrong_grant_and_nonquiescent_reports_are_atomic_refusals ... ok
+test cases::original_zero_memory_grant_uses_explicit_peak_only_for_retry_target ... ok
+test cases::unrelated_publication_operation_and_serving_roots_survive_no_graph_acceptance ... ok
+test cases::per_operation_principal_binding_is_checked_on_admission_and_snapshot_restore ... ok
+test cases::recorded_origin_survives_later_worker_replacement_and_duplicate_report_is_stable ... ok
+test cases::interest_expiry_requires_current_generation_and_advance_only_moves_clocks ... ok
+test cases::last_cancel_closes_logical_credit_but_retains_physical_charge_until_cleanup ... ok
+test cases::retry_growth_is_decided_by_m1_and_preserves_original_requests_and_stages ... ok
+test cases::no_result_complete_preserves_exact_bytes_and_origin_for_both_algorithms ... ok
+test cases::graph_bearing_complete_and_memory_reports_are_refused_without_empty_graph_fallback ... ok
+test cases::worker_unavailability_final_exhaustion_releases_only_unused_logical_credit ... ok
+test cases::each_joined_handle_keeps_its_terminal_in_both_cancel_report_orders ... ok
+test cases::memory_classification_preserves_all_three_actual_final_reasons ... ok
+test cases::unknown_stage_writes_survive_cancel_retry_final_and_expiry_then_late_success ... ok
+test cases::attempt_progress_and_running_timeouts_fence_successors_and_end_in_exhausted ... ok
+test cases::every_retry_then_final_snapshot_cut_keeps_classification_and_exact_payload ... ok
+test cases::finite_stage_and_execution_credits_refuse_without_dispatch_or_borrowing ... ok
+test cases::snapshot_suffix_cuts_preserve_terminals_charges_writes_and_originals ... ok
+test cases::duplicate_admission_is_stable_and_operation_link_rows_are_prepaid ... ok
+test cases::complete_outer_snapshot_byte_gate_refuses_a_valid_terminal_atomically ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.74s]]>
+      </system-out>
+    </testsuite>
+</testsuites>

@@ -41,6 +41,7 @@ pub mod task;
 pub mod telemetry;
 pub mod tls_utils;
 pub mod wire_compression;
+pub mod work_progress;
 
 // Re-export tracing mostly for use in macros.
 pub use tracing as __tracing;

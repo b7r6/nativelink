@@ -1,0 +1,170 @@
+{
+  "scope": "Integrated worker grants, descriptor journal factory and prior ByteStream context repair; no canonical production constructor or memoryfailureRPC activation",
+  "initial_result": "result-initial.json.gz",
+  "expanded_result": "result-extra.json.gz",
+  "final_fixture_result": "result-visibility.json.gz",
+  "source_stability": "536 selected source/build inputs unchanged within each run; intervening changes are journal test dependency, feature, and fixture lint fixes recorded by separate HEADs",
+  "correction": "Earlier morning-ledger clock integration claimed18RPC cases; preserved clock log has12pass6filtered. This integration separately executes all18 across base12/history5/receipt1 targets.",
+  "files": {
+    "authority-history-rpc-test.log.gz": {
+      "sha256": "8c63f3725415bbb1cb66652bb690904ccd553b6a1a5623bd92b093a82ef36431",
+      "uncompressed_sha256": "0b1b90af2020bae4e507e547327325478a03f546663f6f7692104ad5f4c82f2c",
+      "bytes": 761
+    },
+    "authority-receipt-rpc-test.log.gz": {
+      "sha256": "4bf3243b80fb51b5131b02fd14e0b1328c6090ad2591ef45738fc8cb4494ec62",
+      "uncompressed_sha256": "e50be1435301e99d423983c7429a41587584cd97d46b52256e7ae0e35d52bb96",
+      "bytes": 392
+    },
+    "authority-rpc-test.log.gz": {
+      "sha256": "81bde54b1c70269040ad6233d2b09d617f7ad7beace36b7fed5d09857a64dc43",
+      "uncompressed_sha256": "abcb07a8644d260bf1b18dcb7728561b9ee640fe6f9a852fd1326e56832418a0",
+      "bytes": 1319
+    },
+    "authority-worker-test.log.gz": {
+      "sha256": "aa347450bbc961ee794472ddb926eda9bdb66210eb257b9f31cd290a5f6dd838",
+      "uncompressed_sha256": "d99e92911f3ae0b74b36276f8ba107cfc320b4f4cb61563f45291d4f8f90b0ef",
+      "bytes": 1997
+    },
+    "bazel-extra.log.gz": {
+      "sha256": "6847789657cca09eb8e5f02be311d5e0a5f451befae38fbc20d3e3f75b6efc5f",
+      "uncompressed_sha256": "97a11679af813226e0140e624e4cf2bb37f1dc25cdf58694ed16e21112d859a0",
+      "bytes": 2758
+    },
+    "bazel-final.log.gz": {
+      "sha256": "386c9d78c44b5514d453e9d48c5c0aa57220da63bd1d6efb1da52a30ede40c9b",
+      "uncompressed_sha256": "0349d3a21249b12820529cb1de86a78882efb973ee3bf59b81f4689b84007b37",
+      "bytes": 4026
+    },
+    "bazel-retry.log.gz": {
+      "sha256": "97806a70fd3a13d90ed8415ba2a95c6f23ed3978628f18f2735bf116b4f446e7",
+      "uncompressed_sha256": "3441d48d1b1b088af08d87635eaba7d53b1f90f2bf5d13b1f0e30a29b23592a8",
+      "bytes": 2541
+    },
+    "bazel-visibility.log.gz": {
+      "sha256": "af37881d4b1c78275dce347a3ad2cdb262738e534a1d18a86da1627470eebac0",
+      "uncompressed_sha256": "7186bbaa197bbbbb2c258187b1f0d178b48c504e11c8a6e8369a952f4af4a65c",
+      "bytes": 947
+    },
+    "bazel.log.gz": {
+      "sha256": "4963e5633a2b9b375890183286b8ff0072dae3707a0f0cbfcee9caa35df012c6",
+      "uncompressed_sha256": "0d5f1ac40d1c92f1b480c0cec3ff407d4b946301a8c650a844c62a900c09bf20",
+      "bytes": 9935
+    },
+    "before-extra.json.gz": {
+      "sha256": "59a0ef8e883d0ab2ca19741e0a5525015b4b1d90b084bc3696df5f8a9aaa4c8a",
+      "uncompressed_sha256": "8211a9183a2942cb9038357bf350e018ec6f98a9abdf081fd7802816b1594f9d",
+      "bytes": 65355
+    },
+    "before-final.json.gz": {
+      "sha256": "ea686724f0254d113f11d08bc5335a1be811c812592d62e6d933d6cb0ffbfba4",
+      "uncompressed_sha256": "09465bf7bb0b23460b38e4ede79e0b000de57a3a32d29f3b8dff4a984bc3b23d",
+      "bytes": 65355
+    },
+    "before-retry.json.gz": {
+      "sha256": "84635af8483e8b8434f5cb3af63a93e9036596503d2bfef7598fdb3928b7e28c",
+      "uncompressed_sha256": "0c1475cd8c5f41b22db8bff2c8ee8d15b1d7f66d6820d93e808e6f5a47ad0bc7",
+      "bytes": 65355
+    },
+    "before-visibility.json.gz": {
+      "sha256": "301a4816b0710b70de1212a44bb03139db49f50818238d371a3c9d00eab62a9b",
+      "uncompressed_sha256": "52b5743b2bf16b472ad923bd40380822e3a6c38a1180728a11f7afb71728ff91",
+      "bytes": 65425
+    },
+    "before.json.gz": {
+      "sha256": "66c8362244e9596b6213aaa716286aa966f09e9c2c1d5f277a0a76525fb377d1",
+      "uncompressed_sha256": "5396b79951374635895b207ef3b40352cdb535693e0b37e5795548bc16be1e66",
+      "bytes": 65355
+    },
+    "bridge-lint-commit.log.gz": {
+      "sha256": "b0b413af4dbe33e083555d61fa6f5182bde5efe0fbeccc71931e0ac44665e53f",
+      "uncompressed_sha256": "1e6badf2834aabe653a2b63f4732c98cf8ece559bf12fb5d55972b4562157821",
+      "bytes": 2286
+    },
+    "docs-generate.log.gz": {
+      "sha256": "8c4c5fc414039cd343b82426ef9b4e77a0e8475a23a400dd55fbc0bddbb7afcb",
+      "uncompressed_sha256": "29125df7c04c4ed0b97c53c29479fb50b3bfd36efac091de28434afcb8646b68",
+      "bytes": 184
+    },
+    "docs-hooks.log.gz": {
+      "sha256": "d4b5d19fdcb7c9a7741afb247ec23f84ca987691babf67faf9b5e4a8015f2afb",
+      "uncompressed_sha256": "d50a9b396c225b1cb7d45c37ab9e523606174a4a26c93eb4698dc12b831e59b0",
+      "bytes": 2160
+    },
+    "docs-lint-results.json.gz": {
+      "sha256": "aec4eec51e28f816744bcf4c1f15463c82bf6282d4470133b209f95fece77828",
+      "uncompressed_sha256": "70098ec64761627a25958b49fcf286a4d428bf9e8bd1c9d4d6433b85e375a819",
+      "bytes": 913
+    },
+    "filesystem-default-final-test.log.gz": {
+      "sha256": "ef9e39e62971be99a03a918f2664f2ebeadd72f392c3db29b839879d90fb3c61",
+      "uncompressed_sha256": "615cf9ebf9a106f70c5b3701f4a0fa1ea2e7133410cdfb94ec71a5ff12922913",
+      "bytes": 2328
+    },
+    "filesystem-journal-feature-test.log.gz": {
+      "sha256": "92c4a1c159b1fdc990290a3b3d90fcac13a9f3f9d170f3c69dc5602473bc8428",
+      "uncompressed_sha256": "bd2dfae352c41f98eaa526adb4910e65ef5baf5289318d8f0354d7bceaf8d877",
+      "bytes": 3118
+    },
+    "filesystem-journal-final-test.log.gz": {
+      "sha256": "cbbc30e1b785eed94f455c5548eaa1747ebfe5d64893ccbe5af6b26c507eb7d9",
+      "uncompressed_sha256": "7ca35b96ddb076fca3274ebf01b446cde1fa0464a9b1827b7a27b7065f6bdffa",
+      "bytes": 3118
+    },
+    "filesystem-journal-initial-test.log.gz": {
+      "sha256": "cb70cd4fa7c6e93b4aa23fd5a49d74140feb8bbfbf71617b5f2a2e9ebae180c9",
+      "uncompressed_sha256": "733ed49b89ca8337a8abcec8fe568485d15d9fcf3ccf6f52d80aea1673c6ec7f",
+      "bytes": 2326
+    },
+    "fixture-lint-commit.log.gz": {
+      "sha256": "a7f108355749f878d78074b3dcb47d53a7b3dc1378b322214a29c8555d3c1e0e",
+      "uncompressed_sha256": "9129cfd6ac7cc88b48ceb37921358537b83151c182a656c0b6409863ac791c10",
+      "bytes": 2488
+    },
+    "fixture-visibility-commit.log.gz": {
+      "sha256": "20096eb3ccbcdb06156551f3b121115cb48d585151a2e69e5dc84e98f4973bc0",
+      "uncompressed_sha256": "209100c4af36b831f20772b86be2716fd0d81c58b5eb9e4c36d22aaaf8bc7843",
+      "bytes": 2507
+    },
+    "journal-bridge-test.log.gz": {
+      "sha256": "d486df256ecbaaaec64d9de850619628c81974f62e10be745b355058a2df1066",
+      "uncompressed_sha256": "b6e5a42c3a50948ca5d1e60f5f7c7266a09e1ab9926eb385451206a7da9c95fc",
+      "bytes": 787
+    },
+    "journal-feature-commit.log.gz": {
+      "sha256": "ce78ed2a333ac51c77d8a6aaca8e9123732e5c0121d820b59b8d324e5d66f645",
+      "uncompressed_sha256": "3aa237814c7ebd117471f093a24201b2ba460b7f90a58150652748c2326adcdf",
+      "bytes": 2282
+    },
+    "manager-test.log.gz": {
+      "sha256": "f6d9eb131801d64ece02e51a8ee7632b50c4bec342617d7ae6edff23bf96a8ca",
+      "uncompressed_sha256": "3fb13ee7f2ed3995ad29129781d71ff84ab1f487a112d6745e5b681d57cbb581",
+      "bytes": 6724
+    },
+    "result-extra.json.gz": {
+      "sha256": "ddf9a19b111b31fe2ca1c00c18ef881e9d3e5daf44391f1df850f5510237aebe",
+      "uncompressed_sha256": "f4ca7273be55d9dd0085555ffa5782d253b7df0ea9f1c1304a5e2f35a0e4aed7",
+      "bytes": 613
+    },
+    "result-initial.json.gz": {
+      "sha256": "5c120bf2e98d843ac70a7a05fcd0da3b0b5a660d2109d3eafbb3a21a5a918f2b",
+      "uncompressed_sha256": "1f23d068c8410df36ceeb679227aef86a0dac48c2c3546d5d38f7890225479dc",
+      "bytes": 1128
+    },
+    "result-visibility.json.gz": {
+      "sha256": "b634d2ceb09ffbfe7ed21e97a7eed5613124f67a3e6c565e264a010a5b12d005",
+      "uncompressed_sha256": "e8b56f7945aa6a8378008c877ac1cffa6fb3970558a0ecaf034280587fea34da",
+      "bytes": 477
+    },
+    "scheduler-unit-test.log.gz": {
+      "sha256": "a1ef23e01f2c2b9bc2a12b0019a22daafafa23535a41c66761c992af2543178b",
+      "uncompressed_sha256": "16595ede1bb5d75238531af105e25e344ec5b8a24b9f6696cf9ef9e39c564ca1",
+      "bytes": 8362
+    },
+    "final-docs-hooks.log.gz": {
+      "sha256": "d4b5d19fdcb7c9a7741afb247ec23f84ca987691babf67faf9b5e4a8015f2afb",
+      "uncompressed_sha256": "d50a9b396c225b1cb7d45c37ab9e523606174a4a26c93eb4698dc12b831e59b0",
+      "bytes": 2160
+    }
+  }
+}

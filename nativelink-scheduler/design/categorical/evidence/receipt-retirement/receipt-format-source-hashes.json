@@ -1,0 +1,17 @@
+{
+  "implemented": {
+    "nativelink-scheduler/src/authority/format.rs": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+    "nativelink-scheduler/src/authority/journal.rs": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+    "nativelink-scheduler/tests/authority_format_test.rs": "8a097c42e0fca499a6ba5c474b18ec03873439e45d63a19bce87e70b0020a1fc",
+    "nativelink-scheduler/design/categorical/format-activation.md": "772893be6d4501b99645c38535231d4c856f4e0b72bd24da01d9830bd7ff237f",
+    "nativelink-scheduler/tests/format_compatibility/upgraded_writer.rs": "8411646f41c4c389b30649d88a411bb3a7d0b121317c2d1c96f714355a505a05",
+    "nativelink-scheduler/tests/format_compatibility/run.py": "567203095cc2225f40cf444c75c4896e44fbfcd3c69136358d93a895c6139c6d",
+    "nativelink-scheduler/tests/format_compatibility/README.md": "e577a86647b3915fec54706d094eeab653bd000ce43fbd68f9d0bd528103e5ea"
+  },
+  "copied_root_dependencies": {
+    "nativelink-scheduler/src/authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+    "nativelink-scheduler/src/authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661",
+    "nativelink-scheduler/src/authority/receipt_retirement.rs": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e"
+  },
+  "note": "Temporary local Cargo binary/feature and Bazel receipt source registration are smoke wiring only, excluded from patches; source inputs checked by strict Clippy and Bazel format test."
+}

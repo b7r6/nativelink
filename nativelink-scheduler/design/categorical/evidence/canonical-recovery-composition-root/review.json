@@ -1,0 +1,23 @@
+{
+  "manifest_sha256": "4f915de0bdfef3898a7b59d0730b72a3009ca5f96ac9dc33f75bab3af5c2e4cd",
+  "copied_files": {
+    "README.md": "70604160b8c4bc2b894e64ba3b83cd02b0f9fe7b410707e3e40419024abdee7b",
+    "binaries-005.tar.gz": "c36aa50d11cc7f0151e7e39c3ef08c35b1a9ab7c13a9ea225fe3a745f180779f",
+    "binaries-003.tar.gz": "e5e6c89b8b599fe582b5861bef2baceba418298757798907b8877ffa4c017642",
+    "binaries-002.tar.gz": "64a148dfb9d4b9fae3d50f23da2f5684e5ef045fbd033533b04683337124b02d",
+    "verify-bundle.py": "40dabe589297cf5b6bb0f976ab638f9ba1f646c188cea026954733eca5b9c366",
+    "binaries-006.tar.gz": "d22ac5b079a6aa2d7a73647ba117e4b3471503e3d54e4af0db3fc60f6631a94d",
+    "source-logs-and-reviews.tar.gz": "691f532aff4b0503a8d85fe51241ac2e627cb0e9661643f6468733a44dbe56cb",
+    "binaries-004.tar.gz": "90096c952c338db6370e58742869e57916f028fcc452915bc19ff975f14cd739",
+    "binaries-000.tar.gz": "f6cb65b78cd1e04ae82bb8b0c75f8796567b504748e620d9cff82bb9eaccd4a2",
+    "manifest.json": "4f915de0bdfef3898a7b59d0730b72a3009ca5f96ac9dc33f75bab3af5c2e4cd",
+    "binaries-001.tar.gz": "64f011a1d8ab774b14179c76191c261d09c58a91a1cf738c0e713fedb276e940"
+  },
+  "command": [
+    "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7/bin/python",
+    "/tmp/nativelink-canonical-recovery-composition-root-packet-verification/packet/verify-bundle.py"
+  ],
+  "cwd": "/",
+  "exit_code": 0,
+  "review_scope": "Root independently copied and verified sealed archive/member/source/binary/API bindings using the relocation-capable verifier. Runtime and fault source review are separately retained."
+}

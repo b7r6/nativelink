@@ -1,0 +1,41 @@
+Auto-merging nativelink-scheduler/BUILD.bazel
+Auto-merging nativelink-scheduler/src/authority/canonical_temporal_tests.rs
+[categorical-elimination 962262c1f7] Specify closed recovered owner composition and external capability oracles
+ Date: Fri Oct 23 23:04:15 2026 +0000
+ 22 files changed, 1252 insertions(+), 8 deletions(-)
+ create mode 100644 nativelink-scheduler/src/authority/canonical_recovered_owner_tests.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/as_ref.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/clone.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/constructor.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/deref.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/deserialize.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/diagnostic_clock.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/event.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/extract_journal.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/extract_singleton.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/factory.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/new.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/origin.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/positive.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/private_field.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/query.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/sample.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api/singleton_adapter.rs
+ create mode 100644 nativelink-scheduler/tests/canonical_recovered_owner_api_test.rs
+[categorical-elimination 417009b793] Close supervised sealed recovery around the validated private clock
+ Date: Fri Oct 23 23:21:42 2026 +0000
+ 6 files changed, 237 insertions(+), 43 deletions(-)
+[categorical-elimination c307644b12] Seal recovered owner composition with actual controls and API closure evidence
+ Date: Fri Oct 23 23:37:53 2026 +0000
+ 11 files changed, 12146 insertions(+)
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/README.md
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-000.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-001.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-002.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-003.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-004.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-005.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/binaries-006.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/manifest.json
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/source-logs-and-reviews.tar.gz
+ create mode 100644 nativelink-scheduler/design/categorical/evidence/canonical-recovery-composition/verify-bundle.py

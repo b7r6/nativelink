@@ -1,0 +1,14 @@
+{
+  "verify.py": {
+    "bytes": 1975,
+    "sha256": "201cd1597262767bf376977accb92f15c1595fa85bf6bd47fceedc43a5447310"
+  },
+  "source-only-handoff.tar.gz": {
+    "bytes": 229386,
+    "sha256": "3fac1f6146602b4625a172b9d8318f37ddbf284ff3bb76e05853ea9b6b85d2a9"
+  },
+  "manifest.json": {
+    "bytes": 9812,
+    "sha256": "966751211fa7f189c50f4bbc8cfa98334659434fda2b236b1d8447d3f81d5bf9"
+  }
+}

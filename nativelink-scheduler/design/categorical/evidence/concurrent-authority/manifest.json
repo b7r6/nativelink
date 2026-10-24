@@ -1,0 +1,78 @@
+{
+  "scope": "Bounded synthetic single-member journal proposal concurrency experiment. No production capacity, quorum, provider, or shared authority claim; shared host with concurrent builds, no host isolation.",
+  "build_command": "cargo build --locked -p nativelink-scheduler --profile=smol --example authority_budget",
+  "profile": "smol opt-level=z debug-assertions=true",
+  "submission": "Concurrent modes call actual raft.client_write_ff in ordered ingress without awaiting reply, then await all result handles. Events for replay are sorted by actual response log index. max_unawaited_response_handles does not measure internal Raft queue occupancy.",
+  "durability": "All modes retain redb Durability::Immediate. One logical command per Raft log entry. OpenRaft append/apply batching and fsync count are not instrumented. Causal proposal round count is not durable batch count.",
+  "comparison": "width16-concurrent and width16-serial-rounds use the same binary and balanced causal rounds. width1-concurrent preceded a runtime source-path-only build fix; source hashes record this difference. Earlier serial per-execution-stage runs remain preserved in sibling synthetic-authority.",
+  "runs": [
+    {
+      "name": "width1-concurrent",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-concurrent1-01",
+        "5",
+        "1",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "concurrent"
+      ],
+      "summary": "width1-concurrent-summary.json",
+      "raw_samples": "width1-concurrent-samples.json.gz",
+      "raw_uncompressed_sha256": "48709ee522e85fa601ca13ef1df5b5ba9ddba30bf781941535890f74eaca6923",
+      "raw_uncompressed_bytes": 42072,
+      "compressed_bytes": 4058
+    },
+    {
+      "name": "width16-concurrent",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-concurrent16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "concurrent"
+      ],
+      "summary": "width16-concurrent-summary.json",
+      "raw_samples": "width16-concurrent-samples.json.gz",
+      "raw_uncompressed_sha256": "344a6a55341b2932a626f1a905545b81230ce0fff0f2f5bef6509c8ab51129ef",
+      "raw_uncompressed_bytes": 259422,
+      "compressed_bytes": 14451
+    },
+    {
+      "name": "width64-concurrent",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-concurrent64-01",
+        "2",
+        "64",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "concurrent"
+      ],
+      "summary": "width64-concurrent-summary.json",
+      "raw_samples": "width64-concurrent-samples.json.gz",
+      "raw_uncompressed_sha256": "d3baa91e73714ac366ff446f9f6a54a8e5c811e6dd4dba54e92612d064e8c607",
+      "raw_uncompressed_bytes": 674745,
+      "compressed_bytes": 33294
+    },
+    {
+      "name": "width16-serial-rounds",
+      "command": [
+        "target/smol/examples/authority_budget",
+        "/tmp/nativelink-authority-budget-serialrounds16-01",
+        "3",
+        "16",
+        "1024",
+        "smol opt-level=z debug-assertions=true",
+        "serial-rounds"
+      ],
+      "summary": "width16-serial-rounds-summary.json",
+      "raw_samples": "width16-serial-rounds-samples.json.gz",
+      "raw_uncompressed_sha256": "10ca88d28314305adcfaef07ec75b2affb21e9a163f077bfc1f3eef030ce6ebd",
+      "raw_uncompressed_bytes": 258902,
+      "compressed_bytes": 14978
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+[package]
+edition = "2024"
+name = "nativelink-canonical-store"
+publish = false
+rust-version = "1.97.1"
+version = "0.0.0"
+
+[workspace]
+
+[profile.smol]
+debug = false
+inherits = "dev"
+opt-level = "z"
+strip = true
+
+[dependencies]
+async-trait = "0.1.88"
+bytes = "1.10.1"
+futures = "0.3.31"
+nativelink-canonical-config = { path = "../canonical-config" }
+nativelink-canonical-filesystem = { path = "../canonical-filesystem" }
+nativelink-error = { path = "../../nativelink-error" }
+nativelink-metric = { path = "../../nativelink-metric" }
+nativelink-util = { path = "../../nativelink-util" }
+tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread", "sync"] }
+uuid = { version = "1.16.0", features = ["v4"] }
+
+[dev-dependencies]
+hyper-util = { version = "0.1.11", features = ["tokio"] }
+nativelink-config = { path = "../../nativelink-config" }
+nativelink-macro = { path = "../../nativelink-macro" }
+nativelink-proto = { path = "../../nativelink-proto" }
+nativelink-scheduler = { path = "../../nativelink-scheduler" }
+nativelink-service = { path = "../../nativelink-service" }
+nativelink-store = { path = "../../nativelink-store" }
+opentelemetry = "0.32.0"
+prost = "0.14.4"
+tokio-stream = "0.1.17"
+tonic = { version = "0.14.0", features = ["router", "transport"] }
+tower = "0.5.2"
+tracing = "0.1.41"
+tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+# Keep the standalone checker aligned with repository policy exceptions.
+cast_precision_loss = { level = "allow", priority = 1 }
+cast_sign_loss = { level = "allow", priority = 1 }
+large_futures = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_fields_in_debug = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+must_use_candidate = { level = "allow", priority = 1 }
+redundant_pub_crate = { level = "allow", priority = 1 }
+ref_option = { level = "allow", priority = 1 }
+significant_drop_tightening = { level = "allow", priority = 1 }
+std_instead_of_core = { level = "allow", priority = 1 }
+too_many_lines = { level = "allow", priority = 1 }
+unused_async = { level = "allow", priority = 1 }
+unused_self = { level = "allow", priority = 1 }
+
+[package.metadata.cargo-machete]
+ignored = ["tracing", "tracing-test"]

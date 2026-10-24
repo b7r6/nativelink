@@ -1,0 +1,100 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "nativelink-canonical-filesystem",
+    srcs = [
+        "src/capability.rs",
+        "src/journal.rs",
+        "src/lib.rs",
+        "src/namespace.rs",
+        "src/worker.rs",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/canonical-config:nativelink-canonical-config",
+        "@crates//:rustix-1.1.2",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_library(
+    name = "nativelink-canonical-filesystem-redb",
+    srcs = [
+        "src/capability.rs",
+        "src/journal.rs",
+        "src/lib.rs",
+        "src/namespace.rs",
+        "src/worker.rs",
+    ],
+    crate_features = ["redb"],
+    crate_name = "nativelink_canonical_filesystem",
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/canonical-config:nativelink-canonical-config",
+        "@crates//:redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "journal_test",
+    compile_data = [
+        "fixtures/namespace-v1.hex",
+        "src/capability_tests.rs",
+        "src/journal_tests.rs",
+        "src/namespace_tests.rs",
+        "src/tests.rs",
+        "src/worker_tests.rs",
+        "//tools/canonical-config:fixtures/canonical.json",
+    ],
+    crate = ":nativelink-canonical-filesystem-redb",
+    crate_features = ["redb"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Cross-crate constructor/cancellation coverage, intentionally Bazel only.
+rust_test(
+    name = "journal_bridge_test",
+    srcs = ["journal_bridge_test.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    proc_macro_deps = ["//nativelink-macro"],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-canonical-filesystem-redb",
+        "//nativelink-scheduler",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:tokio",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
+)
+
+rust_test(
+    name = "ownership_test",
+    compile_data = [
+        "fixtures/namespace-v1.hex",
+        "src/capability_tests.rs",
+        "src/namespace_tests.rs",
+        "src/tests.rs",
+        "src/worker_tests.rs",
+        "//tools/canonical-config:fixtures/canonical.json",
+    ],
+    crate = ":nativelink-canonical-filesystem",
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)

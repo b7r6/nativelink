@@ -1,0 +1,382 @@
+{
+  "scope": "Uncompressed ByteStream response completion requires channel EOF and producer success; producer errors remain stream errors and stream cancellation releases the producer.",
+  "tests_first_commit": "038a4a067e",
+  "runtime_commit": "13ee484f95e1ab63bf1b2cd34f22633c01a52745",
+  "qualified_source_manifest_sha256": "d973d2c359b00f879433cfb0664b06311aaf858c7ef81ce1eaf2ce205e3967e0",
+  "original": {
+    "exit_code": 3,
+    "compiled_and_executed": true,
+    "passed": 2,
+    "failed": 3,
+    "filtered": 43,
+    "baseline_scope": "Existing production read path; only test module +BUILD references added. Error case fails at first immediateEOF/empty iteration, later yield/data iterations unreached. HTTP2 delivered data then successful stream end, hiding gated producer failure. Pending-producer case acknowledged EOF early.",
+    "sources_unchanged": true,
+    "binary_sha256": "f802f84f4e2b22adf14c3ba8737f366fe7a73530482ad12329e7e094e7c4cf5a",
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "--test_output=errors",
+      "--test_arg=bytestream_server::read_completion_tests::",
+      "//nativelink-service:unit_test"
+    ]
+  },
+  "initial_fixed": {
+    "command": [
+      "bazel",
+      "test",
+      "--jobs=8",
+      "--local_test_jobs=2",
+      "--test_env=RUST_TEST_THREADS=4",
+      "--test_output=errors",
+      "--test_arg=bytestream_server::read_completion_tests::",
+      "//nativelink-service:unit_test"
+    ],
+    "exit_code": 0,
+    "passed": 5,
+    "filtered": 43,
+    "inputs_unchanged": true,
+    "binary_sha256": "4f953f0ebc2ec7055a1e591d0d65b856bf82ccf107c2d812175f06e80e811c73",
+    "note": "Four unnecessary tonic::Code qualification warnings will be corrected in tests only; initial and corrected source retained."
+  },
+  "test_only_correction": "Four redundant tonic::Code qualifiers removed. Initial fixed, corrected fixed and serialized regression executables are byte-identical.",
+  "mutants": {
+    "restored_source_hashes": {
+      "nativelink-service/src/bytestream_read_completion_tests.rs": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+      "nativelink-service/src/bytestream_server.rs": "fbc935a6392b44f9ae7c6bcb907e1ab8b11a1c7379b23c43bfcc87c7db4b4f8c",
+      "nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+      "Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9"
+    },
+    "results": [
+      {
+        "name": "ignore_completed_error",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=bytestream_server::read_completion_tests::",
+          "//nativelink-service:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled_and_executed": true,
+        "source_sha256": "9087b0bbb8907a379149def893b37836a4634cc188e2395379ba5eff34723687",
+        "fixture_sha256": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+        "binary_sha256": "17ff04160880aa31d176512268276ec466bfd2191fc4eac6f929fcb5d4324ff7",
+        "expected_oracle": "producer_error_after_eof_remains_a_stream_error",
+        "detected": true,
+        "rust_counts": [
+          4,
+          1
+        ]
+      },
+      {
+        "name": "ignore_awaited_error",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=bytestream_server::read_completion_tests::",
+          "//nativelink-service:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled_and_executed": true,
+        "source_sha256": "dcc5b2808c95a0692e059145dd7e760be6d9384b81b0fe29806842582391a03c",
+        "fixture_sha256": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+        "binary_sha256": "ceae53248c5d6a0b839d7902df1adb6781da818df5bd8c8da4779ce20f886bf6",
+        "expected_oracle": "http2_reports_late_backend_failure_after_delivered_bytes",
+        "detected": true,
+        "rust_counts": [
+          3,
+          2
+        ]
+      },
+      {
+        "name": "acknowledge_pending_producer",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=bytestream_server::read_completion_tests::",
+          "//nativelink-service:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled_and_executed": true,
+        "source_sha256": "c792ae43b2e0990fc548549e9f4440004de0cb10170de9afa870010f92390b74",
+        "fixture_sha256": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+        "binary_sha256": "3db1fc97f6105affe801360918f95b93d328872567960e3820a5fe2dea07be98",
+        "expected_oracle": "eof_waits_for_producer_and_stream_cancellation_releases_it",
+        "detected": true,
+        "rust_counts": [
+          2,
+          3
+        ]
+      }
+    ]
+  },
+  "initial_rejected_mutant": {
+    "compiled_and_executed": false,
+    "detected": false,
+    "reason": "Bazel Clippy rejected block-shaped mutant with single_match_else before test execution; stale copied test.log from prior mutant is explicitly excluded. No test binary existed. Corrected mutant uses Result::or to inject identical discarded-error behavior."
+  },
+  "initial_regression": {
+    "exit_code": 3,
+    "targets_passed": 5,
+    "targets_failed": 1,
+    "all_executed": true,
+    "rust_passes": 140,
+    "rust_failures": 4,
+    "ignored": 1,
+    "source_commit": "13ee484f95e1ab63bf1b2cd34f22633c01a52745",
+    "unchanged_inputs": 1339,
+    "final_unit_binary_sha256": "4f953f0ebc2ec7055a1e591d0d65b856bf82ccf107c2d812175f06e80e811c73",
+    "startup_failures": [
+      {
+        "test": "blake3_fixed_routes_and_accepted_publication",
+        "message": "called `Result::unwrap()` on an `Err` value: \"timeout after 5s when singleton leader .current_leader == 1 latest: Metrics{id:1, Learner, term:0, vote:T0-N0:uncommitted, last_log:None, last_applied:None, leader:None(since_last_ack:None ms), membership:{log_id:None, {voters:[], learners:[]}}, snapshot:None, purged:None, replication:{}}\""
+      },
+      {
+        "test": "cas_admission::fixed_combined_batch_content_counts_duplicates_and_both_upload_sizes",
+        "message": "called `Result::unwrap()` on an `Err` value: \"timeout after 5s when singleton leader .current_leader == 1 latest: Metrics{id:1, Learner, term:0, vote:T0-N0:uncommitted, last_log:None, last_applied:None, leader:None(since_last_ack:None ms), membership:{log_id:None, {voters:[], learners:[]}}, snapshot:None, purged:None, replication:{}}\""
+      },
+      {
+        "test": "cas_admission::fixed_batches_preserve_independent_errors_and_disabled_compression",
+        "message": "called `Result::unwrap()` on an `Err` value: \"timeout after 5s when singleton leader .current_leader == 1 latest: Metrics{id:1, Learner, term:0, vote:T0-N0:uncommitted, last_log:None, last_applied:None, leader:None(since_last_ack:None ms), membership:{log_id:None, {voters:[], learners:[]}}, snapshot:None, purged:None, replication:{}}\""
+      },
+      {
+        "test": "cas_admission::fixed_batch_admission_precedes_all_store_calls_both_roles_and_hashes",
+        "message": "called `Result::unwrap()` on an `Err` value: \"timeout after 5s when singleton leader .current_leader == 1 latest: Metrics{id:1, Learner, term:0, vote:T0-N0:uncommitted, last_log:None, last_applied:None, leader:None(since_last_ack:None ms), membership:{log_id:None, {voters:[], learners:[]}}, snapshot:None, purged:None, replication:{}}\""
+      }
+    ],
+    "interpretation": "All four fail in fixture Singleton::open at authority_listener_test.rs:152 before request setup. Same five-second startup availability residual as earlier broad gate; no measured causal attribution to load/IO. Producer tests48/48 pass. Unchanged-source serialized rerun follows; timeout unchanged."
+  },
+  "serialized_regression": {
+    "exit_code": 0,
+    "targets_passed": 6,
+    "all_executed": true,
+    "rust_passes": 144,
+    "rust_failures": 0,
+    "ignored": 1,
+    "server_build": true,
+    "source_commit": "13ee484f95e1ab63bf1b2cd34f22633c01a52745",
+    "unchanged_inputs": 1339,
+    "same_inputs_as_initial_run": true,
+    "source_hashes_verified_against_git": true,
+    "timeout_unchanged": true,
+    "scope": "Serialized rerun after four initial fixture leader-wait timeouts; no load independence or fresh explicit TLS run claimed."
+  },
+  "independent_review": "Source-only author-independent review; source snapshots and both reviews archived. No reviewer execution claimed.",
+  "remaining_limits": [
+    "Data may precede a later error; successful channel EOF is still a backend completeness assertion.",
+    "No new timeout, blocking-backend preemption, whole-object digest check, durability or global transfer bound.",
+    "Legacy direct GrpcStore forwarding and compressed-reader behavior unchanged by this patch.",
+    "Production construction and every M0-M9 gate remain open."
+  ],
+  "log_archive": {
+    "path": "qualified-runs.tar.gz",
+    "sha256": "dd3532da5214b33a04f494d639090e8a23d24f3d2f2968c9ebc3abba9c100edf",
+    "bytes": 901829,
+    "files": {
+      "binary-archives.json": "566e81b028b94256622187e661730d8379499856da2bf6aa90ff76d055dfecdc",
+      "fixed-focused-test.log": "bbb7c733b5b9a629b87b3605b47a7ccd75a8783133d617a56e7d7dd5eef07dfc",
+      "fixed-focused.log": "7f3975d32d15919df70b3666ad493f40007abd498a4c1355f30cc5396f13b217",
+      "fixed-initial-result.json": "d2613dafc5d75cc1e79e3897a94c72b586b93a7491bcbdcb6c741efdae4dadf2",
+      "fixed-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "fixed-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "fixed-source/manifest.json": "b3ef2e51029ae8fbddd8ec474a39fb647efc83b1df1047d2ddd54581abd0499d",
+      "fixed-source/nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "fixed-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "fixed-source/nativelink-service/src/bytestream_read_completion_tests.rs": "dc93f586aa4cb3c0012eadbe843d10dbbe2faa97a741a8f7b421b0b5ec7ddb0e",
+      "fixed-source/nativelink-service/src/bytestream_server.rs": "fbc935a6392b44f9ae7c6bcb907e1ab8b11a1c7379b23c43bfcc87c7db4b4f8c",
+      "fixed-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "fixed-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+      "hooks-runtime.log": "37b6c9b303361272dd9351db1cbf298faf67222db96c5e7dd7584cb4cda1f551",
+      "independent-review/qualified-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-review/qualified-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "independent-review/qualified-source/manifest.json": "d973d2c359b00f879433cfb0664b06311aaf858c7ef81ce1eaf2ce205e3967e0",
+      "independent-review/qualified-source/nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "independent-review/qualified-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "independent-review/qualified-source/nativelink-service/src/bytestream_read_completion_tests.rs": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+      "independent-review/qualified-source/nativelink-service/src/bytestream_server.rs": "fbc935a6392b44f9ae7c6bcb907e1ab8b11a1c7379b23c43bfcc87c7db4b4f8c",
+      "independent-review/qualified-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "independent-review/qualified-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+      "independent-review/review.json": "ac8709efa27ba1f9677dd0160bda8d0cd11a165e39931082cc118e6bb320f3f1",
+      "independent-review/runtime-addendum.json": "d8005749467600c7d6eea980fd7eb9ec0130f0339646194066faebf763bfe130",
+      "independent-review/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-review/source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "independent-review/source/manifest.json": "26e274f183c23a1b77c287440d3c371c680285ef0dbb23e1e473d29dd5c1160a",
+      "independent-review/source/nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "independent-review/source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "independent-review/source/nativelink-service/src/bytestream_read_completion_tests.rs": "dc93f586aa4cb3c0012eadbe843d10dbbe2faa97a741a8f7b421b0b5ec7ddb0e",
+      "independent-review/source/nativelink-service/src/bytestream_server.rs": "6891d3d8f786dbe330c61198983b2abe0de6cebc070f6f08480f54633e03ced6",
+      "independent-review/source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "independent-review/source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+      "mutant-results.json": "4b322ea20058b890b097cc2a0a98250a67c44acba3bb7b787fe3e0ef5a60bd78",
+      "mutants/acknowledge_pending_producer/build-and-test.log": "f5d17a06abf65894dd1ea936eaa61088bbedbe90ced631826b7823d7afa25cd6",
+      "mutants/acknowledge_pending_producer/bytestream_server.rs": "c792ae43b2e0990fc548549e9f4440004de0cb10170de9afa870010f92390b74",
+      "mutants/acknowledge_pending_producer/result.json": "2547afbfa174f92463df9924def3c0ed7c977c74223e8a769cf40a5c761063e3",
+      "mutants/acknowledge_pending_producer/test.log": "1c225d8cab5289ba30a19d46d657d47acd04bdb8315694e6cae2ad031389963e",
+      "mutants/ignore_awaited_error/build-and-test.log": "3b05d110bd2e633217f31ac5fe0569c732e32e17dd3c9791fed2b08f681833bb",
+      "mutants/ignore_awaited_error/bytestream_server.rs": "dcc5b2808c95a0692e059145dd7e760be6d9384b81b0fe29806842582391a03c",
+      "mutants/ignore_awaited_error/result.json": "f103044296853a8969d9c63d93166bc331c4b1ecad438b3b492b1b7cd1be7100",
+      "mutants/ignore_awaited_error/test.log": "3ed64c30262ea23de16305d95ab5dd2aa6d75d84e56ff5c6cac3448aabb63fef",
+      "mutants/ignore_awaited_error_compile_rejected/build-and-test.log": "ad673c0c4bf382207eaafcf0782b71f2a2d49ae1e0d02de41c8aac01cd0f9fef",
+      "mutants/ignore_awaited_error_compile_rejected/bytestream_server.rs": "18720d5694c45c384f541a93cf27669736a23f3f350f1288252a1bd6f7f9811f",
+      "mutants/ignore_awaited_error_compile_rejected/result.json": "d7ed83c0f1da9a6083ae8a6b62fc218c2de091e07706e282d77dc194926155f3",
+      "mutants/ignore_awaited_error_compile_rejected/test.log": "9ba9b94739d96de845f6c4292c4573610a06351c87e29a8a55e203b6477fa94e",
+      "mutants/ignore_completed_error/build-and-test.log": "9c7710df143f107f7210c1db90e7d738fa0658c873e5b9ff598188946fa3b047",
+      "mutants/ignore_completed_error/bytestream_server.rs": "9087b0bbb8907a379149def893b37836a4634cc188e2395379ba5eff34723687",
+      "mutants/ignore_completed_error/result.json": "f8e221074f3865f6bdd74022be4007f21ad36b44604137688e8b3e79e741133f",
+      "mutants/ignore_completed_error/test.log": "9ba9b94739d96de845f6c4292c4573610a06351c87e29a8a55e203b6477fa94e",
+      "original-result.json": "90633638f7c0a1174db899ced885e0087a699cb8a8c02ef84504fb7a776326de",
+      "original-test.log": "49023fc87046a11555e6fe0740ab53dfa0b440aa531bd99063489ed4eb1d2a17",
+      "original.log": "4a2db53cf83508029f6a01a9f48e8aad38b1079a9ccd0f8c8b2d37ef7d243109",
+      "qualified-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "qualified-source/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "qualified-source/manifest.json": "d973d2c359b00f879433cfb0664b06311aaf858c7ef81ce1eaf2ce205e3967e0",
+      "qualified-source/nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "qualified-source/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "qualified-source/nativelink-service/src/bytestream_read_completion_tests.rs": "e019f658dee64c33b9886a7297012e4e45b815893b6c69d7b38ba5c0cd9b839f",
+      "qualified-source/nativelink-service/src/bytestream_server.rs": "fbc935a6392b44f9ae7c6bcb907e1ab8b11a1c7379b23c43bfcc87c7db4b4f8c",
+      "qualified-source/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "qualified-source/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f",
+      "regression-command.json": "19a1d4cac449df5c002de803d411cc66d415ec6b6104893b223a2d9a602a95cb",
+      "regression-head.txt": "74e9c89286b2dc9f1a09f9edfd6cc0761b288e0bf3b3e24167b0ada709933d20",
+      "regression-initial-result.json": "2a0aa411354a66b75d526f875b6fc3cec48ee9103e8e4d40d5036c19c2340d6d",
+      "regression-rerun/regression-command.json": "4d3b43b6b83adeaa71eb367c401c7862486f30a30abbf53ec1e89fabe168c24a",
+      "regression-rerun/regression-head.txt": "74e9c89286b2dc9f1a09f9edfd6cc0761b288e0bf3b3e24167b0ada709933d20",
+      "regression-rerun/regression-sources-after.json": "75f7ae10a3c99515d949b2203eefaa4434d60514e069babd23aa5b8d47af64f5",
+      "regression-rerun/regression-sources-before.json": "75f7ae10a3c99515d949b2203eefaa4434d60514e069babd23aa5b8d47af64f5",
+      "regression-rerun/regression-status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "regression-rerun/regression-summaries.json": "6ab7a3cbb813095c739bb8319fd7061f59e718263428975661b2a99fb8b365a2",
+      "regression-rerun/regression-testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "ea748772a9dae7cf1c49217008b1646c8ba55eddf09a8842b73139502376aa81",
+      "regression-rerun/regression-testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "dfa599ec97ab6689f7737c3842ffdead83ecbc92de308310543db832089f4a25",
+      "regression-rerun/regression-testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "206216e3fdb8af451cb0734c78f053ac2740b77146cf33f1a8546715659b43a2",
+      "regression-rerun/regression-testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "2d7381ca3c96c066302a28d1f8f4b7c5c4e9c61c9cf3f31a4441e33219c02a23",
+      "regression-rerun/regression-testlogs/nativelink-service/unit_test/test.log": "8e4961817c7673d5266321ccffd3067f0894c74780a23a3d3047ab6c11dc509b",
+      "regression-rerun/regression-testlogs/tools/canonical-store/canonical_store_test/test.log": "32b0a3209aab699fa4b04b50ba02ff1f9b27205093c8cfac477f300f77ec1505",
+      "regression-rerun/regression.log": "94a9e1b019151f53fdc61a466632dc5562d6d2e9d86dab0b2c79eff4dfc20864",
+      "regression-rerun/result.json": "f724304f246d3bab6b9ae6e135db30aed11bcf48204005cfa9197f168c03fb8f",
+      "regression-rerun/run-regression.py": "2ba3417ea193d2fd8718fd4efcce82ac1f95789587922464e8667c1fc95cd0c5",
+      "regression-sources-after.json": "75f7ae10a3c99515d949b2203eefaa4434d60514e069babd23aa5b8d47af64f5",
+      "regression-sources-before.json": "75f7ae10a3c99515d949b2203eefaa4434d60514e069babd23aa5b8d47af64f5",
+      "regression-status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "regression-summaries.json": "eb0fc5a3166f88f9586185ec408967b434723947669dcd27750ff059111346e5",
+      "regression-testlogs/nativelink-service/integration_tests/authority_listener_test_test/test.log": "4303efc23f443349b71ca2c9fa8b0cfe290d4bd249aaaeeb1a294a1ee26ddc0c",
+      "regression-testlogs/nativelink-service/integration_tests/bytestream_server_test_test/test.log": "800163cf036df2a57410dc24d2e4f2fac48a02e44ae7f74f4684951c77bea2f8",
+      "regression-testlogs/nativelink-service/integration_tests/grpc_wire_compression_test_test/test.log": "7521784a434649f2b984f61bd22042c47e1e350a84cbaa3d1dd7cf5219d41922",
+      "regression-testlogs/nativelink-service/integration_tests/wire_compression_test_test/test.log": "d09d095f51c2a285728170feb3c988632058563e54a6a253130bf0a0bae78771",
+      "regression-testlogs/nativelink-service/unit_test/test.log": "a1e51b9698f9fa501d0ac17fd2579c2f91c35e6deaf7f4539b2242505e4f9a47",
+      "regression-testlogs/tools/canonical-store/canonical_store_test/test.log": "8044a0c23862b988c65961eba6a65549d13f4069a91f8a7d89231de9e44d16d3",
+      "regression.log": "c8cda8db20e93107c3817ca0ce16ac589e55b050b815b331c21bccd64d8e4704",
+      "run-mutants.py": "7d32b8912426f69b072cf0faa8c03389d6ef9f67ad8628e7ce198680143d52d2",
+      "run-regression.py": "8e342e31f479e1c09459c686dca1a89671385697ddd8324da6322e7f1db5f6a8",
+      "runtime.patch": "0ac07609c1f24575eb03db67099f4ace5815f64d420b4b8e4f83cdd3048dbac0",
+      "tests-first/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "tests-first/Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "tests-first/manifest.json": "26e274f183c23a1b77c287440d3c371c680285ef0dbb23e1e473d29dd5c1160a",
+      "tests-first/nativelink-service/BUILD.bazel": "c00278c13903d29c66ee2e3c1c6311bd7286f11f20ffbdd2ee08a0fdd064f5ab",
+      "tests-first/nativelink-service/Cargo.toml": "4ee3369c98107be1df1da7b31750f7dd77b858844732ac8e91c5c9045105fce4",
+      "tests-first/nativelink-service/src/bytestream_read_completion_tests.rs": "dc93f586aa4cb3c0012eadbe843d10dbbe2faa97a741a8f7b421b0b5ec7ddb0e",
+      "tests-first/nativelink-service/src/bytestream_server.rs": "6891d3d8f786dbe330c61198983b2abe0de6cebc070f6f08480f54633e03ced6",
+      "tests-first/nativelink-util/src/buf_channel.rs": "5db8ef60ea1f17a0df66384b556d7ae143d4e4150966564ed08c520fdb68bcf7",
+      "tests-first/nativelink-util/src/store_trait.rs": "647d10dce747102acba6c3bb7f7e92d6a629842587a1efc592c45eb79899a71f"
+    }
+  },
+  "executable_archives": [
+    {
+      "path": "executable-01.tar.gz",
+      "bytes": 18560930,
+      "sha256": "e5153035e8d2714b21fef6e322196c7b0230d55a80eb3356286cb2caaa0e735e",
+      "member": {
+        "path": "mutants/ignore_completed_error/test-binary",
+        "bytes": 98339656,
+        "sha256": "17ff04160880aa31d176512268276ec466bfd2191fc4eac6f929fcb5d4324ff7"
+      },
+      "identical_external_paths": [
+        "mutants/ignore_completed_error/test-binary"
+      ]
+    },
+    {
+      "path": "executable-02.tar.gz",
+      "bytes": 18560187,
+      "sha256": "96bc8b31e9e3aa865535044423984d061125faf9ce3357d323866229c0088cdc",
+      "member": {
+        "path": "mutants/acknowledge_pending_producer/test-binary",
+        "bytes": 98334792,
+        "sha256": "3db1fc97f6105affe801360918f95b93d328872567960e3820a5fe2dea07be98"
+      },
+      "identical_external_paths": [
+        "mutants/acknowledge_pending_producer/test-binary"
+      ]
+    },
+    {
+      "path": "executable-03.tar.gz",
+      "bytes": 18557760,
+      "sha256": "8aee7e678dd1dcbdc09d88a04afc16a2637f2e4cad546327e9d1d8b8b74533b7",
+      "member": {
+        "path": "final-test-binary",
+        "bytes": 98339424,
+        "sha256": "4f953f0ebc2ec7055a1e591d0d65b856bf82ccf107c2d812175f06e80e811c73"
+      },
+      "identical_external_paths": [
+        "fixed-initial-test-binary",
+        "final-test-binary",
+        "regression-rerun/final-test-binary"
+      ]
+    },
+    {
+      "path": "executable-04.tar.gz",
+      "bytes": 18559682,
+      "sha256": "fb3cdab25176a709643515a63dbe3a44e0d9f3a562d86792be2fdf68eb3a43b1",
+      "member": {
+        "path": "mutants/ignore_awaited_error/test-binary",
+        "bytes": 98340040,
+        "sha256": "ceae53248c5d6a0b839d7902df1adb6781da818df5bd8c8da4779ce20f886bf6"
+      },
+      "identical_external_paths": [
+        "mutants/ignore_awaited_error/test-binary"
+      ]
+    },
+    {
+      "path": "executable-05.tar.gz",
+      "bytes": 18558570,
+      "sha256": "6c4e0d4b6c52db3f642e99e3d5184c83a0a007ab76d296f5f62c4f963cbe8e01",
+      "member": {
+        "path": "original-test-binary",
+        "bytes": 98332112,
+        "sha256": "f802f84f4e2b22adf14c3ba8737f366fe7a73530482ad12329e7e094e7c4cf5a"
+      },
+      "identical_external_paths": [
+        "original-test-binary"
+      ]
+    }
+  ],
+  "external_build_events": {
+    "regression-events.jsonl": {
+      "sha256": "755c00334528fa29c412af87d3b72d01ef5aa403ad8c3c70742f09d53883e864",
+      "bytes": 2121856,
+      "scope": "Raw Bazel build events retained externally; normalized summaries and test logs archived."
+    },
+    "regression-rerun/regression-events.jsonl": {
+      "sha256": "ba10970ad5c6c6fc3c91be3f38d9ce27277054f28f9dfc1a3bae46a42e13fa18",
+      "bytes": 561240,
+      "scope": "Raw Bazel build events retained externally; normalized summaries and test logs archived."
+    }
+  },
+  "later_checks": "The integrated digest-default gate and strict Cargo Clippy use a later source boundary and are recorded with that repair."
+}

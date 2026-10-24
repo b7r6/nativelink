@@ -1,0 +1,254 @@
+{
+  "scope": "Root composition of private final database custody drain with previously qualified inert temporal owner. No supervised lifecycle or recovered clock in this source boundary.",
+  "result": {
+    "head": "0ae388d72331306dbf079846f9fd9a0d06089998",
+    "targets": 5,
+    "executed": 5,
+    "counts": [
+      [
+        47,
+        0,
+        0
+      ],
+      [
+        35,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        163,
+        0,
+        1
+      ],
+      [
+        12,
+        0,
+        0
+      ]
+    ],
+    "total": [
+      258,
+      0,
+      1
+    ],
+    "tracked_inputs": 1357,
+    "unchanged": true,
+    "all_match_git": true,
+    "binaries": [
+      {
+        "path": "binaries/tools/canonical-filesystem/journal_test",
+        "bytes": 16430912,
+        "sha256": "9c565cc755a71a50b5aba602fcb88e7ef3c82711655751211c04649f9423f06c"
+      },
+      {
+        "path": "binaries/tools/canonical-filesystem/ownership_test",
+        "bytes": 11181744,
+        "sha256": "c9969deec77b4d8327ef426992065bdbc93924ce4546f2a39d587d5d66a844ac"
+      },
+      {
+        "path": "binaries/nativelink-scheduler/canonical_owner_api_test",
+        "bytes": 41223648,
+        "sha256": "9eb7103addc928c7c7f7de50cc9ee2f41834b0a8570502ee5ec27a9eea1143d7"
+      },
+      {
+        "path": "binaries/nativelink-scheduler/unit_test",
+        "bytes": 71508776,
+        "sha256": "22008b0e3ce5ebb09bcd3eb671f932066fa19289a8f018f9d12f3f492c9dc8b6"
+      },
+      {
+        "path": "binaries/tools/canonical-filesystem/journal_bridge_test",
+        "bytes": 62113072,
+        "sha256": "eda8f75c6ff55574e110ba35ccfc40f4e1e4d6a77c2165359a6a06d241740bd5"
+      }
+    ],
+    "source_boundary": "Private qualified custody helper composed with existing temporal admission on root. No lifecycle runtime or clock changes."
+  },
+  "root_commits": [
+    "80c4065314",
+    "05ab0b5836",
+    "0ae388d723"
+  ],
+  "author_source": "f2ae7427ee304bd8ce870c46064c0c22fd86771d",
+  "author_package_sha256": "aac5854810e3531221f0b7e00d47e0080c61a0e5928e1d19ab43f86a2131d2e3",
+  "author_seal_sha256": "e6ed963b25ac70dd291c4cf34b585407b30eb2f228f83f4a1b46de1ad7072c78",
+  "independent_review_sha256": "ce5a91a1dd17fe3ceed559ed49f045f1396d894cf5e258394507ddf7558be4b3",
+  "source_comparison": "16of19 author-selected files exact; owner, test wiring and BUILD add the previously qualified temporal audit. Helper and12custody fixtures exact.",
+  "archive": {
+    "path": "qualified-runs.tar.gz",
+    "bytes": 914184,
+    "sha256": "4c8d212f1062f0eec5715a244387decdfa0ebca4a33f0910760f575273cd8afa",
+    "files": {
+      "author-package-verification.json": "4abc4f8de8819a4e9792a002acd8d7865f943157b0d95db7827e85fa0ccad81f",
+      "bazel.log": "a2bd59a87fe2106328b72082301515f1ff620582ecb2f45203c76bce494582f4",
+      "command.json": "811a23d1b310eb35f0f08e121321101a8bdbde4bd48b120826c745a04dbaeac0",
+      "disposable-cache-cleanup.json": "9a54e05629732602f5cb6665a02f4ae75cb3bbdcf73666984ddc755cb77af1c7",
+      "events.jsonl": "cbd75f2b7e593d223dec883cc05670ed9c2c34e15fe38f208e747d07f7c0685f",
+      "exit-code.json": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17",
+      "git-source-verification.json": "887626df452a4bf7f7e14457ecf4444d56c9260c580ac843b59c66016b88234b",
+      "head.txt": "56b0082a8056a22fced8f07bf1061c3b99eeeb43024816063fd44a201b77d10f",
+      "hook-config-regeneration.json": "59ec3ede96f614c42fb150b1d6d44121a1ff79c7337f7827342e41817327cc4b",
+      "independent-storage-review/author-package/package-seal.json": "e6ed963b25ac70dd291c4cf34b585407b30eb2f228f83f4a1b46de1ad7072c78",
+      "independent-storage-review/author-package/package.json": "aac5854810e3531221f0b7e00d47e0080c61a0e5928e1d19ab43f86a2131d2e3",
+      "independent-storage-review/author-qualified-source/.claude/skills/nativelink-rust-change/SKILL.md": "72fdebc3737e84dbb3de99ab985f28e69f450c9e87495febeea5842f83171c81",
+      "independent-storage-review/author-qualified-source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "independent-storage-review/author-qualified-source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/BUILD.bazel": "06a885edea917f80e6d75cb186827f7e5bbf7d4c2eb97941249bdd668b87a680",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/accepted_history.rs": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/canonical_cleanup.rs": "5cf7b245f0ad536a6b82f350dbae97579e9e529bf3cce5fe71abcb1a819e4b06",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/canonical_cleanup_tests.rs": "fc4993017628684eff529a403a84d5b24a8af41864f697478f785e2829899503",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/canonical_custody_tests.rs": "e4cbb8e44fe9da51a28a5305bcbf9eda96377c1e11fae1d91c877feb8c71584b",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/canonical_owner.rs": "59ad1037d5291db5c1ab787022a1fb8e637868bd0ce12f93f05ed5c1f3c4fcd5",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs": "4207fda7dbaae1ef48fae030e50ba0ce8452c0dbf9b352950d6423aaa0a7e3a2",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/format.rs": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "independent-storage-review/author-qualified-source/nativelink-scheduler/tests/authority_format_test.rs": "07eb86366ff25fd0f58949ee59e0baaaca5c2165e00b6b4e05070ba6c2d8122b",
+      "independent-storage-review/author-qualified-source/nativelink-util/src/task.rs": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+      "independent-storage-review/author-qualified-source/tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "independent-storage-review/author-qualified-source/tools/canonical-filesystem/src/lib.rs": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "independent-storage-review/author-qualified-source/tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "independent-storage-review/author-qualified-source-manifest.json": "1fe38d6b99495a430312ed2909883202b6b6e4d289e3bcbfc4ff540db9de7f01",
+      "independent-storage-review/author-to-root.patch": "aecafa25887ea6652f841c6058686e62a166998af0636ca0910f89e6e9dbbd33",
+      "independent-storage-review/review.json": "ce5a91a1dd17fe3ceed559ed49f045f1396d894cf5e258394507ddf7558be4b3",
+      "independent-storage-review/root-comparison-source/.claude/skills/nativelink-rust-change/SKILL.md": "72fdebc3737e84dbb3de99ab985f28e69f450c9e87495febeea5842f83171c81",
+      "independent-storage-review/root-comparison-source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "independent-storage-review/root-comparison-source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/BUILD.bazel": "ca1cc7fa08200efe2d9c5bee0b0140a8f4adc43a11e529005d70ef67571c06f1",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/accepted_history.rs": "b1b7df6218fd27f09a78fe3de8d3e1d487cb4f2b1cb9157f4bde9ed22d18f3cf",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/canonical_cleanup.rs": "5cf7b245f0ad536a6b82f350dbae97579e9e529bf3cce5fe71abcb1a819e4b06",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/canonical_cleanup_tests.rs": "fc4993017628684eff529a403a84d5b24a8af41864f697478f785e2829899503",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/canonical_custody_tests.rs": "e4cbb8e44fe9da51a28a5305bcbf9eda96377c1e11fae1d91c877feb8c71584b",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/canonical_owner.rs": "e425794d329786e7f929dd9627f493b0c64c05ded46f453165f55aaa1fa554bb",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs": "b2a558275cfa5010d3bccf5aa250f55781fda2c174caae9fdd3c5a22849e142c",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/format.rs": "3447aa9189287760110306dd7f1e64e83298bb392ceef8a23e22b837093f3386",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/src/authority/types.rs": "e7b70fa6e50dbf4ac0ca64da8019dd75a812b0a695d8fe8576a9c63c71ed1d4d",
+      "independent-storage-review/root-comparison-source/nativelink-scheduler/tests/authority_format_test.rs": "07eb86366ff25fd0f58949ee59e0baaaca5c2165e00b6b4e05070ba6c2d8122b",
+      "independent-storage-review/root-comparison-source/nativelink-util/src/task.rs": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+      "independent-storage-review/root-comparison-source/tools/canonical-filesystem/src/journal.rs": "b55784ec4d2c46fac5fad9217a46aaad60a0c58e1d09cc7105bda57a0435a9d9",
+      "independent-storage-review/root-comparison-source/tools/canonical-filesystem/src/lib.rs": "b81d76450171c1ffba81751a50ba6bd6f3ac51743609720c6d0930219f3174de",
+      "independent-storage-review/root-comparison-source/tools/canonical-filesystem/src/namespace.rs": "11dc4d9c19dad4cecb16b264169f6aa3bed902a5f989e0ac5966e9736e512f43",
+      "independent-storage-review/root-evidence/author-package-verification.json": "4abc4f8de8819a4e9792a002acd8d7865f943157b0d95db7827e85fa0ccad81f",
+      "independent-storage-review/root-evidence/bazel.log": "a2bd59a87fe2106328b72082301515f1ff620582ecb2f45203c76bce494582f4",
+      "independent-storage-review/root-evidence/command.json": "811a23d1b310eb35f0f08e121321101a8bdbde4bd48b120826c745a04dbaeac0",
+      "independent-storage-review/root-evidence/events.jsonl": "cbd75f2b7e593d223dec883cc05670ed9c2c34e15fe38f208e747d07f7c0685f",
+      "independent-storage-review/root-evidence/exit-code.json": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17",
+      "independent-storage-review/root-evidence/git-source-verification.json": "887626df452a4bf7f7e14457ecf4444d56c9260c580ac843b59c66016b88234b",
+      "independent-storage-review/root-evidence/head.txt": "56b0082a8056a22fced8f07bf1061c3b99eeeb43024816063fd44a201b77d10f",
+      "independent-storage-review/root-evidence/result.json": "80e10f4ffa7747097ec57bc9b0207cf4d42b1d46b7a8960ed9b6d7ea8015f214",
+      "independent-storage-review/root-evidence/run-bazel.py": "0b1a65602a445af2bd39f83856b519f61df13fe5cfed8043ff7125e7ee388269",
+      "independent-storage-review/root-evidence/selected-source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "independent-storage-review/root-evidence/selected-source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/BUILD.bazel": "ca1cc7fa08200efe2d9c5bee0b0140a8f4adc43a11e529005d70ef67571c06f1",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_cleanup.rs": "5cf7b245f0ad536a6b82f350dbae97579e9e529bf3cce5fe71abcb1a819e4b06",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_cleanup_tests.rs": "fc4993017628684eff529a403a84d5b24a8af41864f697478f785e2829899503",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_custody_tests.rs": "e4cbb8e44fe9da51a28a5305bcbf9eda96377c1e11fae1d91c877feb8c71584b",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_owner.rs": "e425794d329786e7f929dd9627f493b0c64c05ded46f453165f55aaa1fa554bb",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs": "b2a558275cfa5010d3bccf5aa250f55781fda2c174caae9fdd3c5a22849e142c",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_temporal.rs": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs": "47cd9b6c0af144db49f05c363be4ebfe5dabdfe5c178952ed30b609eb21cdf44",
+      "independent-storage-review/root-evidence/selected-source/nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "independent-storage-review/root-evidence/selected-source/nativelink-util/src/task.rs": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+      "independent-storage-review/root-evidence/sources-after.json": "cb302d28692ad6ba8878963b5ac0f664902b09fea8d52e4c208cded501622024",
+      "independent-storage-review/root-evidence/sources-before.json": "cb302d28692ad6ba8878963b5ac0f664902b09fea8d52e4c208cded501622024",
+      "independent-storage-review/root-evidence/status-before.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "independent-storage-review/root-evidence/test-summaries.json": "b75721113652af12f8b4d5487d629f9d0efeeefa07031fc1e1469f2819430ed8",
+      "independent-storage-review/root-evidence/testlogs/nativelink-scheduler/canonical_owner_api_test/test.log": "b90d61f71f68b4b0d610e567c626081dd3724b4f274cfc001fbaf44cde57c40c",
+      "independent-storage-review/root-evidence/testlogs/nativelink-scheduler/unit_test/test.log": "f494ca629c659edb113a0e79bfa4097808afb9e0ca97b2faa60080c61c147049",
+      "independent-storage-review/root-evidence/testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "9ad1d527bdf6546c2d138e7978a5baa19002e10e30e389a0c98e47bf22d1d19b",
+      "independent-storage-review/root-evidence/testlogs/tools/canonical-filesystem/journal_test/test.log": "15f92d9fe3e03a54c21d623b75cfacd7e7417466ac05e022a8d0ad1812985583",
+      "independent-storage-review/root-evidence/testlogs/tools/canonical-filesystem/ownership_test/test.log": "0f43f59201d69fdab028b7a314aaeedf008a327e1469e97e29c5593a991a2648",
+      "package.py": "8e18d8308f752ba1024dac44d1c3ede3b50b51f2291291f429832e56848e054e",
+      "result.json": "80e10f4ffa7747097ec57bc9b0207cf4d42b1d46b7a8960ed9b6d7ea8015f214",
+      "run-bazel.py": "0b1a65602a445af2bd39f83856b519f61df13fe5cfed8043ff7125e7ee388269",
+      "selected-source/Cargo.lock": "a8e327c10f7d32440b6f9bc3ec36b4d59134d499f0e06aa931a2f9238ee6f51d",
+      "selected-source/Cargo.toml": "921ff9dd93263a48329a349b467293a6b4ea373d33464b637409bd2c1e679932",
+      "selected-source/nativelink-scheduler/BUILD.bazel": "ca1cc7fa08200efe2d9c5bee0b0140a8f4adc43a11e529005d70ef67571c06f1",
+      "selected-source/nativelink-scheduler/Cargo.toml": "d0e6d67e52fdfd5be2d74e6b0122b4216b3572c9d2718c16841130ed9938b225",
+      "selected-source/nativelink-scheduler/src/authority/canonical_cleanup.rs": "5cf7b245f0ad536a6b82f350dbae97579e9e529bf3cce5fe71abcb1a819e4b06",
+      "selected-source/nativelink-scheduler/src/authority/canonical_cleanup_tests.rs": "fc4993017628684eff529a403a84d5b24a8af41864f697478f785e2829899503",
+      "selected-source/nativelink-scheduler/src/authority/canonical_custody_tests.rs": "e4cbb8e44fe9da51a28a5305bcbf9eda96377c1e11fae1d91c877feb8c71584b",
+      "selected-source/nativelink-scheduler/src/authority/canonical_owner.rs": "e425794d329786e7f929dd9627f493b0c64c05ded46f453165f55aaa1fa554bb",
+      "selected-source/nativelink-scheduler/src/authority/canonical_owner_tests.rs": "b2a558275cfa5010d3bccf5aa250f55781fda2c174caae9fdd3c5a22849e142c",
+      "selected-source/nativelink-scheduler/src/authority/canonical_temporal.rs": "e3bd457b8d24796f245c4b326c7f1d55c96c7a1b3a54480d21e59ea30636382b",
+      "selected-source/nativelink-scheduler/src/authority/canonical_temporal_tests.rs": "47cd9b6c0af144db49f05c363be4ebfe5dabdfe5c178952ed30b609eb21cdf44",
+      "selected-source/nativelink-scheduler/src/authority/journal.rs": "f52a02d8fb8f217a434d81fd94b8cbb142b4e7a91b0d79b66fdcb91065772c95",
+      "selected-source/nativelink-util/src/task.rs": "231a5e54513e066c431a9060c8830691cbae33b83c1915f5a825af0a86cb78f1",
+      "sources-after.json": "cb302d28692ad6ba8878963b5ac0f664902b09fea8d52e4c208cded501622024",
+      "sources-before.json": "cb302d28692ad6ba8878963b5ac0f664902b09fea8d52e4c208cded501622024",
+      "status-before.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test-summaries.json": "b75721113652af12f8b4d5487d629f9d0efeeefa07031fc1e1469f2819430ed8",
+      "testlogs/nativelink-scheduler/canonical_owner_api_test/test.log": "b90d61f71f68b4b0d610e567c626081dd3724b4f274cfc001fbaf44cde57c40c",
+      "testlogs/nativelink-scheduler/unit_test/test.log": "f494ca629c659edb113a0e79bfa4097808afb9e0ca97b2faa60080c61c147049",
+      "testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "9ad1d527bdf6546c2d138e7978a5baa19002e10e30e389a0c98e47bf22d1d19b",
+      "testlogs/tools/canonical-filesystem/journal_test/test.log": "15f92d9fe3e03a54c21d623b75cfacd7e7417466ac05e022a8d0ad1812985583",
+      "testlogs/tools/canonical-filesystem/ownership_test/test.log": "0f43f59201d69fdab028b7a314aaeedf008a327e1469e97e29c5593a991a2648"
+    }
+  },
+  "executables": [
+    {
+      "path": "executable-binaries-nativelink-scheduler-canonical_owner_api_test.tar.gz",
+      "bytes": 8719209,
+      "sha256": "a40dde06b6524944ed5a3e60115ef0bb8de904ba8d7dacb755a724e61bc21ebf",
+      "member": {
+        "path": "binaries/nativelink-scheduler/canonical_owner_api_test",
+        "bytes": 41223648,
+        "sha256": "9eb7103addc928c7c7f7de50cc9ee2f41834b0a8570502ee5ec27a9eea1143d7"
+      }
+    },
+    {
+      "path": "executable-binaries-nativelink-scheduler-unit_test.tar.gz",
+      "bytes": 13316740,
+      "sha256": "6495d59802c0a07ed56192befe18b67260d870924bf2db912ef64949acaa2769",
+      "member": {
+        "path": "binaries/nativelink-scheduler/unit_test",
+        "bytes": 71508776,
+        "sha256": "22008b0e3ce5ebb09bcd3eb671f932066fa19289a8f018f9d12f3f492c9dc8b6"
+      }
+    },
+    {
+      "path": "executable-binaries-tools-canonical-filesystem-journal_bridge_test.tar.gz",
+      "bytes": 11801479,
+      "sha256": "578de4653ae60e59c29c4a30dd32292b85d709c3bfd38dc9e06ff59b48479984",
+      "member": {
+        "path": "binaries/tools/canonical-filesystem/journal_bridge_test",
+        "bytes": 62113072,
+        "sha256": "eda8f75c6ff55574e110ba35ccfc40f4e1e4d6a77c2165359a6a06d241740bd5"
+      }
+    },
+    {
+      "path": "executable-binaries-tools-canonical-filesystem-journal_test.tar.gz",
+      "bytes": 3915388,
+      "sha256": "d982ea77412240f29dc01b9b91ada05a9a2a3620499db2d7646354e88a6542e8",
+      "member": {
+        "path": "binaries/tools/canonical-filesystem/journal_test",
+        "bytes": 16430912,
+        "sha256": "9c565cc755a71a50b5aba602fcb88e7ef3c82711655751211c04649f9423f06c"
+      }
+    },
+    {
+      "path": "executable-binaries-tools-canonical-filesystem-ownership_test.tar.gz",
+      "bytes": 2887231,
+      "sha256": "cac7a2b35e13acb4064bdafc2135e3845a5a450d84aa00741206703636e9661a",
+      "member": {
+        "path": "binaries/tools/canonical-filesystem/ownership_test",
+        "bytes": 11181744,
+        "sha256": "c9969deec77b4d8327ef426992065bdbc93924ce4546f2a39d587d5d66a844ac"
+      }
+    }
+  ],
+  "limits": [
+    "All5targets executed uncached; 258 passes and1 existing ignore. Server built; its ELF is not archived.",
+    "Every1357 tracked non-evidence input unchanged and matches Git0ae388d723. Selected source copies, rawlogs/BEP and5testELFs retained. Not a hermetic dependency closure or reproducible-build proof.",
+    "Private drain requires a permanent uncancelled supervisor. It does not provide cancellation supervision itself or change PreparedCanonicalOwner::release.",
+    "Final database destruction is not an observable flush-success or durability acknowledgement. External ownership aliases may retain namespace locks; blocked holders leave cleanup pending."
+  ]
+}

@@ -1,0 +1,49 @@
+[
+  {
+    "label": "service-clippy-final",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-service",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 12.236329454986844,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    }
+  },
+  {
+    "label": "worker-clippy-complete",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--lib",
+      "--test",
+      "authority_rpc_test",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 15.887646610965021,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    }
+  }
+]

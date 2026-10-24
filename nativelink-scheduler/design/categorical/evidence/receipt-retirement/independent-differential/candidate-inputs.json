@@ -1,0 +1,12 @@
+{
+  "nativelink-scheduler/src/authority/format.rs": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e",
+  "nativelink-scheduler/src/authority/journal.rs": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4",
+  "nativelink-scheduler/src/authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+  "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+  "nativelink-scheduler/src/authority/receipt_retirement.rs": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e",
+  "nativelink-scheduler/src/authority/receipt_retirement_tests.rs": "3ca0263ea4bc34a11d1faf43ff135c48686d92bc2c889ac652bea4afa6fdf5f8",
+  "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+  "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+  "nativelink-scheduler/src/authority/tests.rs": "683ff055015a45ae3931e76f42f6fb53e1620c004b8bb24c735f17d948b56b10",
+  "nativelink-scheduler/src/authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661"
+}

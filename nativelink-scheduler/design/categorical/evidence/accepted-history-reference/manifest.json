@@ -1,0 +1,392 @@
+{
+  "base_commit": "552aaa890c",
+  "scope": "Independent accepted-history component specification and oracle sensitivity. No actual-State equivalence or journal/provider integration claim.",
+  "patch_sha256": "48851d003e7634d7fef7181731da33196953ef6c69c6c152ea43686736b70b76",
+  "archive_tar_sha256": "48226dce71578117d4df65d032fd134d4362b3d7f6cd0e0692b5cc487fecfd55",
+  "source_sha256": {
+    "nativelink-scheduler/tests/accepted_history/types.rs": "4c8184770be214e22cfdb6758c3b41e0ca64a92ca7188a6c9a013247e78ab7b2",
+    "nativelink-scheduler/tests/accepted_history/reference.rs": "d2c7cec0a14c07f323575d6bb0e8af378a85a1ebc5fa57b34325016c146a0a5c",
+    "nativelink-scheduler/tests/accepted_history/README.md": "482fa4775ab741944767f0828ae04bc96efd09b65cd36910550046b69f219ee7",
+    "nativelink-scheduler/tests/accepted_history_reference_test.rs": "b034ab976016ce5d20af9bddd9ba9ba91b73e830fd3f2fe6579bf521b169a1f3"
+  },
+  "validation": [
+    {
+      "command": "cargo test --locked --offline --profile smol -p nativelink-scheduler --test accepted_history_reference_test -j 8",
+      "result": "14 passed",
+      "log": "history-reference-integrated-cargo.log.gz"
+    },
+    {
+      "command": "bazel test --jobs=8 //nativelink-scheduler:accepted_history_reference_test",
+      "result": "14 passed",
+      "log": "history-reference-integrated-bazel.log.gz"
+    }
+  ],
+  "notes": [
+    "Eight compiled semantic mutations of the oracle were killed; restored baseline, strict Clippy and formatting pass in the independently pinned manifest.",
+    "Initial source permitted only nonzero caller identities and compared epochs by order. The final contract corrected these from the public identity semantics before freezing; earlier source and failed/style receipts remain archived.",
+    "No candidate history transition implementation was read by the reference author.",
+    "Integration changes only the three new Rust file license headers to the repository-required FSL 1.1 Apache 2.0 Future License. The original frozen sources and hashes remain archived; no model code or expected result changes."
+  ],
+  "receipts": [
+    {
+      "file": "bazel-first.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/bazel-first.log",
+      "source_sha256": "bee4d13af0211113ab3c7ab6b477148993705b0cdb46b91629a9416e7d3f7c47",
+      "archive_sha256": "466cb969050991d31835201e0b779b662a1533012aeec5664dc8ad36bbacea33"
+    },
+    {
+      "file": "bazel-frozen.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/bazel-frozen.log",
+      "source_sha256": "f54b4faa06037efb6d87160b0c158abc16bcf2cf584fdf064e25b522ccdac547",
+      "archive_sha256": "8511afc48ac8e885e9b4bc8b2e79ec5de94710a7b5509d386dfd6d8ec2064f7d"
+    },
+    {
+      "file": "bazel-test.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/bazel-test.log",
+      "source_sha256": "416378a4d7694350d2e713dbee7c6c387a4120b65e2a6b85355a1a151304e98e",
+      "archive_sha256": "974ac09b7bdad0e7f23e95e31b170ce265f6f32c51b1cb4ae3940c167fb2028f"
+    },
+    {
+      "file": "buildifier.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/buildifier.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "cargo-metadata.json.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/cargo-metadata.json",
+      "source_sha256": "6d155425e6a0391bb7503f48877d95c7a7256ac4cd216da3f9917130e4f5c24c",
+      "archive_sha256": "81c37e244fb766d5603faa7b3e68a2e69b8d2bc214ef892a9198873c67b2edb2"
+    },
+    {
+      "file": "cargo-tests-first.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/cargo-tests-first.log",
+      "source_sha256": "4ef96e9533a43a37f89a1275d249618857c148d612a18f7fef33c0accbdf5132",
+      "archive_sha256": "1ddd2a2b8436750581f580aef597a0fa616e8837b00753b52b41cc77e12709f8"
+    },
+    {
+      "file": "cargo-tests.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/cargo-tests.log",
+      "source_sha256": "d8f7b15a08da0f1dfacca0fd299e3a9138f730135ac20a2b11bcc9ffaee997ae",
+      "archive_sha256": "0faa3068d73ddae03caa05de0c0fa36f3a1bbc8719181dcd09fdf8363ac15f9a"
+    },
+    {
+      "file": "clippy-13-tests.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/clippy-13-tests.log",
+      "source_sha256": "c939aeba5132c751efccf2e4c7c1cb7cd62a31b032286e7efb407eb87ab6f378",
+      "archive_sha256": "269237af03e1126fd8bf7db6bfd2c91cc09cde18c1a3f98a326f389e51d6085b"
+    },
+    {
+      "file": "clippy-14-tests.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/clippy-14-tests.log",
+      "source_sha256": "720a1964721b1a6934cf800ba7db3115a2f87260bf5d377d9dfc7f84f773dc89",
+      "archive_sha256": "53b56f8fdbf5b88ec341fd7c2bf1ab0342836cec14fd4dec6c1c55796375fbfe"
+    },
+    {
+      "file": "clippy-final.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/clippy-final.log",
+      "source_sha256": "eed9656161b1be160ef2dd978359e7014647491d12b85d93ca337bbb5866ab4e",
+      "archive_sha256": "dce13d52eaa6a0572baeb81df68832071a73b5aafb628d2f83db245659527005"
+    },
+    {
+      "file": "clippy-first.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/clippy-first.log",
+      "source_sha256": "82940c48b2ffecaac7dc39add2d145e4be27759cc536f3a2a3c313ab7e890c8b",
+      "archive_sha256": "1e8a6a41bb2594cc726157ffc4113ad2ad4ad1f5887265b5ab7701b28503fe3e"
+    },
+    {
+      "file": "clippy-frozen.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/clippy-frozen.log",
+      "source_sha256": "9c7eb25532e212df1d9c97ba1f5ea136427a640b77cd595e1a5c5a67ae2f074f",
+      "archive_sha256": "1bef2bb627c23adaa4d323df92d5afc53f667033f12a075a7271b7ef4121cde7"
+    },
+    {
+      "file": "final-source/Cargo.lock.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/Cargo.lock",
+      "source_sha256": "35346d6790c06f604e0bd1c35cd00db31781bf4d5eccea64aa9f799d59113e03",
+      "archive_sha256": "0277c6127189e5418368cd00a23511e8e07432b01349d605b5893e0c69d7283f"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/BUILD.bazel.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/BUILD.bazel",
+      "source_sha256": "3e1b2bc677f71717e700fe9c0cd01531232738838dc6cc3658d1cedd199d66f2",
+      "archive_sha256": "6f2bebd28004c41ce76307c777b5ed8b2455fbce6f5042dc1e045f38beffaf84"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/Cargo.toml.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/Cargo.toml",
+      "source_sha256": "3f052d46b38150ff24502ecadf44119dc4eec867cc9a41ca2723a2f9ef138b0d",
+      "archive_sha256": "f6b9090c1fa3c3f084fd555bca80056973038306500bc12621f32a83764b3cd6"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/accepted_history/README.md.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/tests/accepted_history/README.md",
+      "source_sha256": "482fa4775ab741944767f0828ae04bc96efd09b65cd36910550046b69f219ee7",
+      "archive_sha256": "f141e9c0fff147fcacfcdbe8ee9ae22ae98d298beaa90c3fbea13c6f13cc7880"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/accepted_history/reference.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/tests/accepted_history/reference.rs",
+      "source_sha256": "488445e2df8a2721b6711b792665364d50f2c9b837f0dabd64d7258cb53e9da1",
+      "archive_sha256": "e56190dd7d6980777a204c7025cf6e672ca9f2e013e3bba02707ba1d8bbbd1b9"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/accepted_history/types.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/tests/accepted_history/types.rs",
+      "source_sha256": "7f005e9a424fb8332525d2f29bb4fc284108f4f90f21575c67b3bae5696e9c98",
+      "archive_sha256": "a91385ae65d94d342a56900c16fd459715e84b5f836455e9c77f685fedaa83dc"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/accepted_history_reference_test.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/final-source/nativelink-scheduler/tests/accepted_history_reference_test.rs",
+      "source_sha256": "62aef7d0be4732d611ab99d993667f406b43bc63c1fcec76bdd4cb757aa06802",
+      "archive_sha256": "9534fb12718d55977df3659457a41ddc1ad0e722f4ae887e118e9a97787b1b00"
+    },
+    {
+      "file": "initial-cargo.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/initial-cargo.log",
+      "source_sha256": "d9fe8779ad242ef2c0f5498950a5ed91dfeff4a04d6a3bcf82eb9b2df21323ca",
+      "archive_sha256": "fd3be79f176c4880991222e5b1f83267cc0183a25b1342cf1ab376d372fb25ab"
+    },
+    {
+      "file": "lock-refresh.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/lock-refresh.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "manifest.json.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/manifest.json",
+      "source_sha256": "3e6ea5648c0ee44e09bcace5a15be913b44fd50d66775141c9f1b151bffa207d",
+      "archive_sha256": "297142ef5a2f3d4fd6b7eabb20ce5b7c03233fc9b9f9c48d47e7c1c0cf9da8e8"
+    },
+    {
+      "file": "mutate_reference.py.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutate_reference.py",
+      "source_sha256": "4f6fbc463a091af5fc95122574c58c01b79c09f86b1727b77dcfb57d53c3454c",
+      "archive_sha256": "3e9c879e41c6777c8c398cf9a2401f8dbe88e54fcdc5025a192592ca1079e212"
+    },
+    {
+      "file": "mutation-accept-wrong-publication-object.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-accept-wrong-publication-object.log",
+      "source_sha256": "8b9c4a8898c25c2b6db8473c8fdd754c4a07267be03d788310ebc33ca6028acb",
+      "archive_sha256": "9d598106eab17645e3e87feac097e428e9d3f3ddd898640a305e5538c52cae30"
+    },
+    {
+      "file": "mutation-allow-zero-attempt-id.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-allow-zero-attempt-id.log",
+      "source_sha256": "c77c8361d791cb02e79c72fedff6719cf6181b6e3b27058a830d38b682a8fc1f",
+      "archive_sha256": "5260a56a5fbc6e8067b172020916521f65cbd041dd7c1a412dc36a14983a8c8a"
+    },
+    {
+      "file": "mutation-backfill-preactivation-terminal.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-backfill-preactivation-terminal.log",
+      "source_sha256": "c67b0a6901f8c5d5d628c55249ee8638d409d234dbd6acb2c8325b3d66b89128",
+      "archive_sha256": "df364a34ab1a5a4364287aad943bb78a159036cf7627abe46026adbc8794fe93"
+    },
+    {
+      "file": "mutation-baseline.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-baseline.log",
+      "source_sha256": "ee65bea1221fac42243a22d28115a478a605e4f9190dfb93d48bbf0f7f1535bb",
+      "archive_sha256": "5b600f38c3297d5a79321c87700cdac37277732552d5a1c075e6db307b560362"
+    },
+    {
+      "file": "mutation-materialize-failed-publication.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-materialize-failed-publication.log",
+      "source_sha256": "01504f47636c3ddcd51790af6330d58ebb670cffd3a6efb3284504f60f526403",
+      "archive_sha256": "230ab3154032f74a5e45d7a03d4f88e093ffb1ad0ca57763ec41da727e12b9ad"
+    },
+    {
+      "file": "mutation-omit-history-id-headroom.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-omit-history-id-headroom.log",
+      "source_sha256": "2b563f5b4c04b30c0f9f4d4d6889fb8cf9585783bb6bd5ee01ac096bfb079c2f",
+      "archive_sha256": "46f55d1ed235e1f0d1cfafcf22635c3888878f92cfb3fca9bbc34e7fcbd66674"
+    },
+    {
+      "file": "mutation-restored.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-restored.log",
+      "source_sha256": "33e651c7dd10ab4a1f920b02e89c2af24d33a49d9c4080da24a63708558d4fad",
+      "archive_sha256": "51f7bcfe77c37a8a157c72c190b98860c61f005c8a04f51334f889a22a2a6097"
+    },
+    {
+      "file": "mutation-revoke-already-accepted-history.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-revoke-already-accepted-history.log",
+      "source_sha256": "26a2401e5a6e582989ec88ea9e85cb1bbfc1abdb79391cb6ce4e16960921fa4f",
+      "archive_sha256": "42366826490abbc368f0997e847a0d15029bb498622c68c8b6aa5e27e7bc71e3"
+    },
+    {
+      "file": "mutation-run.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-run.log",
+      "source_sha256": "af99510c8d35d41531122b56c6b47ee5e24eb8a905d54cd5430d666a74cc9b0e",
+      "archive_sha256": "17bf79bb34e9d885fc5e2bb93cd84554370dd39d6dc61bf851543a58f1a93234"
+    },
+    {
+      "file": "mutation-skip-acceptance-authorization.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-skip-acceptance-authorization.log",
+      "source_sha256": "71d4b78fa0d1773ae05442b24f93a0b0010f820bb258fe9dd44bea567bd6ba92",
+      "archive_sha256": "cf2c42974c6c4d6f15b0b2716a1d83de997365d1831cccfd95b6c99597d7726f"
+    },
+    {
+      "file": "mutation-skip-noncacheable-history.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutation-skip-noncacheable-history.log",
+      "source_sha256": "7d918d485b17edb1c9b1df54a9b7aab3e3213e587170759fa472a431459b2b0c",
+      "archive_sha256": "560444a3fe5a1b9260c477524024ddda96c1d7efd2cbbf12aa4450618f4e0537"
+    },
+    {
+      "file": "mutations.json.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/mutations.json",
+      "source_sha256": "a81fc8938550c8daeaa5a2a48b4e60a91e6830dcd600a5154baef54087f2fffc",
+      "archive_sha256": "4869ff1788e6fc1098c708164494c9c2f44b8d1d59eda6cb4da9a04907231d17"
+    },
+    {
+      "file": "pre-caller-id-correction/bazel-first.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/bazel-first.log",
+      "source_sha256": "bee4d13af0211113ab3c7ab6b477148993705b0cdb46b91629a9416e7d3f7c47",
+      "archive_sha256": "466cb969050991d31835201e0b779b662a1533012aeec5664dc8ad36bbacea33"
+    },
+    {
+      "file": "pre-caller-id-correction/clippy-13-tests.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/clippy-13-tests.log",
+      "source_sha256": "c939aeba5132c751efccf2e4c7c1cb7cd62a31b032286e7efb407eb87ab6f378",
+      "archive_sha256": "269237af03e1126fd8bf7db6bfd2c91cc09cde18c1a3f98a326f389e51d6085b"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-accept-wrong-publication-object.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-accept-wrong-publication-object.log",
+      "source_sha256": "294d42253f4edd804cb3db45419c40bc535297cb78b8178c64fd1fdb3e1ff6a3",
+      "archive_sha256": "30cd00b596b60e90d6a845d628ca00eb0571cdfd2265327178ae000100152da2"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-backfill-preactivation-terminal.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-backfill-preactivation-terminal.log",
+      "source_sha256": "22d7f27e57b5f4c7d2c8fafde31f6737f1cf964343009c1e9c70c375435fbda6",
+      "archive_sha256": "2544dd5ed3cf4a11546d9a8e4419ac15df5a8a43907dbc42e5d66097e16107ed"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-baseline.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-baseline.log",
+      "source_sha256": "dcd9fab65d8499a24318e0923e23166a22e65df6e316bd347f67c926cc9e7efd",
+      "archive_sha256": "6d8adba5e1329e32312053891a928701bffd938b75d27103f70f6671d89dfd74"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-materialize-failed-publication.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-materialize-failed-publication.log",
+      "source_sha256": "bdb3504f8d5650e36fad137f4be48b315d18c6076e5f9e31ece61a0816aa8565",
+      "archive_sha256": "5ef990ff71d4acff6b06f8684202db926b4110b5d27f695fece8c51bc6169352"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-omit-history-id-headroom.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-omit-history-id-headroom.log",
+      "source_sha256": "916f61391ac055788349fe3ca39bd8d0e0ea23e103c07712dca71971a0b771bf",
+      "archive_sha256": "35d177bb2363f4ffa1f7b74b7bb8ec4ea199b854cbaaa4c5ee986963a1e94b2d"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-restored.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-restored.log",
+      "source_sha256": "b4d83284b5d8cdb60c6c1c83076d713a60ac3b9f743f48363e4866255513cd02",
+      "archive_sha256": "17ed49f09ea2cfe341d4e80ac8cae05c267411a4a7db1d7426105fff05a3b664"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-revoke-already-accepted-history.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-revoke-already-accepted-history.log",
+      "source_sha256": "f0ce06263f2a926787c5d6479876a79c9e3a7afb27a132a9fa6965704612a6a0",
+      "archive_sha256": "5236040bf90a31178d1790ca1dfbc881bb67508008300d4528181fd05f545b77"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-run.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-run.log",
+      "source_sha256": "4c0c1f12c0b7a72696291cb176e556d2f6d50a184ee229cb99231f0f4a1b2c1b",
+      "archive_sha256": "71d91a31eb3e640501fe16644f18c8b86dee0fe054b5d5a4f82017ce46f276e3"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-skip-acceptance-authorization.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-skip-acceptance-authorization.log",
+      "source_sha256": "cc72650c35b24d9342df6a228513d600e53dad4a55c559de936829728df7194e",
+      "archive_sha256": "68fdcfcaed95e1660ff6e8a851e77e1ea8d4f52784a3002dacbefaf5867883f4"
+    },
+    {
+      "file": "pre-caller-id-correction/mutation-skip-noncacheable-history.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutation-skip-noncacheable-history.log",
+      "source_sha256": "0e47e66dbe8aed8b8fb9da3d0ef1d4a64b81bf3852a127acc329a7e81882b9c1",
+      "archive_sha256": "9480fb319602e4fcb44bf6481b01a25d4ac81b22e5ee9a41609f0dc5bcf4181d"
+    },
+    {
+      "file": "pre-caller-id-correction/mutations.json.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/mutations.json",
+      "source_sha256": "ff76a701929d98ed11883094ce2dce303c2706ded3ee7adc5815274001ad94aa",
+      "archive_sha256": "6d2a566b1500d69792f5e704e9f071773da14cf3eb31dfa0ca73769aed168864"
+    },
+    {
+      "file": "pre-caller-id-correction/nativelink-scheduler/tests/accepted_history/reference.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/nativelink-scheduler/tests/accepted_history/reference.rs",
+      "source_sha256": "8780a5ca56eaf62acc6253b190306a294ead344492887b79f26f082707189d0d",
+      "archive_sha256": "db1597ec99267bbb692abc15a854083b57cd8c7efa0dba9286f8ed8c83092a0b"
+    },
+    {
+      "file": "pre-caller-id-correction/nativelink-scheduler/tests/accepted_history/types.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/nativelink-scheduler/tests/accepted_history/types.rs",
+      "source_sha256": "7f005e9a424fb8332525d2f29bb4fc284108f4f90f21575c67b3bae5696e9c98",
+      "archive_sha256": "a91385ae65d94d342a56900c16fd459715e84b5f836455e9c77f685fedaa83dc"
+    },
+    {
+      "file": "pre-caller-id-correction/nativelink-scheduler/tests/accepted_history_reference_test.rs.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/pre-caller-id-correction/nativelink-scheduler/tests/accepted_history_reference_test.rs",
+      "source_sha256": "5e0967073ad9162e34ea81748f2fe196a6bda8201b21f269bfa88767b6234215",
+      "archive_sha256": "09bbfe6007f4012d675fb1aefa9479848f23dedb5aca8900955286aa60cde89d"
+    },
+    {
+      "file": "reference.patch.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/reference.patch",
+      "source_sha256": "48851d003e7634d7fef7181731da33196953ef6c69c6c152ea43686736b70b76",
+      "archive_sha256": "8d39e99d143dba3340a8120d442034c171b1d06e1fa81c075883084b41ac7e32"
+    },
+    {
+      "file": "rustfmt.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/rustfmt.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "typos-final.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/typos-final.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "typos.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/typos.log",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "vale-final.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/vale-final.log",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "vale-initial.log.gz",
+      "source": "/tmp/nativelink-accepted-history-reference-evidence/vale-initial.log",
+      "source_sha256": "45ab32bf71f63e98f4a60d85daa7afd76c43455ba1b666317638bb86137962dd",
+      "archive_sha256": "83ec7e5933fda0b3255d109ba204efb1a210bb9171d933ab768c950ef7ce6be4"
+    },
+    {
+      "file": "history-reference-integrated-bazel.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-reference-integrated-bazel.log",
+      "source_sha256": "5964180fce42a49b879409e6d80f31d1e8f7b26cd587a5241dfe3d57e8dd90db",
+      "archive_sha256": "b9356596de8711e424d98aea673abc1f2cf2b357a5c5867984aba47167bcf443"
+    },
+    {
+      "file": "history-reference-integrated-cargo.log.gz",
+      "source": "/tmp/nativelink-categorical-evidence/history-reference-integrated-cargo.log",
+      "source_sha256": "52f9f518ca964d1caee769ee50d5557f60664115881461b501a59a95dab9aff2",
+      "archive_sha256": "307cccc789435ef009b8432af3b51ebaa0df07b68b17c51377ca94fe290f1759"
+    }
+  ],
+  "frozen_source_sha256": {
+    "nativelink-scheduler/tests/accepted_history/types.rs": "7f005e9a424fb8332525d2f29bb4fc284108f4f90f21575c67b3bae5696e9c98",
+    "nativelink-scheduler/tests/accepted_history/reference.rs": "488445e2df8a2721b6711b792665364d50f2c9b837f0dabd64d7258cb53e9da1",
+    "nativelink-scheduler/tests/accepted_history/README.md": "482fa4775ab741944767f0828ae04bc96efd09b65cd36910550046b69f219ee7",
+    "nativelink-scheduler/tests/accepted_history_reference_test.rs": "62aef7d0be4732d611ab99d993667f406b43bc63c1fcec76bdd4cb757aa06802"
+  }
+}

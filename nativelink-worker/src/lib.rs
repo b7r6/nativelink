@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod authority_worker;
+pub mod authority_worker_transport;
 pub mod buck2_file_capture;
 pub mod capacity;
 pub mod directory_cache;

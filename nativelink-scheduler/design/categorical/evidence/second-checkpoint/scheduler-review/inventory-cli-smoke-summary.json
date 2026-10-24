@@ -1,0 +1,26 @@
+[
+  {
+    "binary": "target/debug/examples/experimental_migration_inventory",
+    "source": "nativelink-config/examples/basic_cas.json5",
+    "input_sha256": "686bf3cc7e5ba1976e818ef3e020573ba93109f6132eb0aeadd2e1cf58015cb3",
+    "unchanged": true,
+    "deterministic": true,
+    "exit_code": 2,
+    "constructions": 5,
+    "references": 15,
+    "blockers": 12,
+    "report_sha256": "f1633d14ee5e9955309dbb806617d5872bcc417da1e20c244c542a94ae0ae0f2"
+  },
+  {
+    "binary": "bazel-bin/nativelink-config/experimental-migration-inventory",
+    "source": "nativelink-config/examples/basic_cas.json5",
+    "input_sha256": "686bf3cc7e5ba1976e818ef3e020573ba93109f6132eb0aeadd2e1cf58015cb3",
+    "unchanged": true,
+    "deterministic": true,
+    "exit_code": 2,
+    "constructions": 5,
+    "references": 15,
+    "blockers": 12,
+    "report_sha256": "f1633d14ee5e9955309dbb806617d5872bcc417da1e20c244c542a94ae0ae0f2"
+  }
+]

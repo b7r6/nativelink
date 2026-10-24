@@ -1,0 +1,82 @@
+# Inert canonical journal owner
+
+`PreparedCanonicalOwner` is a Linux-only owner for a bound journal. Its opening
+methods consume a `SyncedNamespace`, derive node, epoch, nonzero authority
+namespace and the fixed namespace commitment from that retained capability, and
+keep all four cooperative root locks until the journal backend is released.
+Cold preparation and sealed reopening perform storage work only. The public
+surface also provides copied diagnostics, consuming release, and a separate
+`recover_sealed` transition. It exposes no journal, Raft, arbitrary event,
+factory, clock sample, seal setter, snapshot or singleton constructor.
+
+`recover_sealed` consumes an existing sealed owner into a permanent supervisor.
+Actual Raft recovery and an applied read barrier precede the complete temporal
+audit and fixed monotonic clock capture. The returned `RecoveredCanonicalOwner`
+provides only a copied diagnostic and consuming shutdown; its diagnostic records
+the capture and does not report current health. Cancellation and shutdown retain
+custody until actual storage work and final backend destruction finish. This
+transition starts no listener, worker, effect driver or admission loop. Cold
+preparation still remains `preparing` and cannot enter this recovery path.
+
+The [closed recovery packet](evidence/canonical-recovery-composition/README.md)
+records the composed lifecycle and clock qualification, six compiled controls,
+and separate external API probes. These results extend the storage-only packet
+below without making the canonical runtime ready to serve.
+
+Cold preparation exclusively creates the fixed journal and writes compatible
+identity, fixed finite limits and `preparing` metadata in one Immediate
+transaction, followed by the creation-parent sync. Those limits are 64 executions,
+256 operations, 32 workers, 512 effects and 65,536 payload bytes. The owner does
+not use generic default limits or initialize a preexisting database. A current
+parent capability is retained on both paths; its availability is never evidence
+of exclusive creation.
+
+Both successful paths then verify current namespace records and configured root
+attachment, validate the exact expected bootstrap phase and immutable contract in
+a new Immediate transaction, commit, and synchronize the pinned journal directory
+between further current-record and attachment checks. The owner is returned only
+after this current barrier succeeds. The transaction changes no authority record.
+An earlier readable commit or seal cannot substitute for its acknowledgement.
+Redb may repair during opening; a fixed internal observer records this fact in the
+successful diagnostic without exposing callbacks or changing policy. A failed
+repair, validation or current sync returns no owner and may leave artifacts.
+
+Ordinary reopening requires an existing sealed journal and validates retained
+snapshot and log compatibility. No production code writes the seal. Tests alone
+synthesize sealed singleton history to exercise recovery, including actual redb
+repair after abrupt process exit. Cold preparation leaves `preparing`, and either
+ordinary reopen or another cold attempt refuses that storage. This remains a
+prerequisite for the future bootstrap protocol, not an operational deployment.
+
+Blocking opening, synchronization and redb destruction retain namespace custody
+when their async waiter is cancelled. Explicit release waits for blocking
+destruction; redb destruction can suppress errors and grants no new durability
+acknowledgement. Existing experimental ownership aliases remain possible. The
+cooperative lock and attachment checks do not defend against a hostile writer in
+the same process or prove lifetime physical-directory continuity.
+
+The external API test exercises the exact filesystem crate identity used by the
+Linux Bazel dependency and Cargo feature union. Separate compiler controls reject
+raw bytes, raw ownership and access to internal owner functionality; compiler
+refusals are API evidence, not semantic mutation detections. The synchronization
+harness observes real file and parent syncs while the owner is alive, injects
+current-stage EIO failures, and requires explicit repair observation. Its syscall
+receipts establish the tested software boundary, not power-loss durability or
+production readiness.
+
+The [sealed author packet](evidence/canonical-journal-owner/author/README.md)
+retains the original fixtures, final source, executed binaries, independent
+reviews and restoration checks. The final source passes 116 scheduler unit tests,
+one external API test and 47 filesystem tests, plus three strict Clippy
+configurations. Eleven compiled runtime faults are detected. The separate API
+compiler controls comprise one positive and fourteen expected refusals. These
+counts and the author synchronization matrix belong to the author source;
+restoration reproduces its exact pre-mutation executable. The packet verifier
+checks all nine archives and 1,134 mapped files, including the receipts file.
+
+The [root integration receipt](evidence/canonical-journal-owner/root-integration.json)
+preserves the initial missing Bazel test dependency, the corrected nine-target
+gate and an independent execution of the full synchronization matrix against the
+Bazel-built binary. Its three successful opens, six injected sync refusals and
+nine setup invocations remain distinct from compiler controls and semantic
+mutation qualification.

@@ -1,0 +1,295 @@
+{
+  "scope": "Additive atomic encoded-byte admission around the unchanged frozen v2 model. No cap increase, discarded obligation or production capacity guarantee.",
+  "validation": [
+    "Four focused scenarios and four compiled guard mutants pass/detected. Integrated Bazel passes.",
+    "Cargo auto-discovery exposed a packaging error for the helper at tests root. Its unchanged bytes are now under publication_activation_v2/bounded.rs; only the test and BUILD include paths changed.",
+    "Near-cap protection growth is rejected with byte-identical previous state; exactly 524288-byte active baseline remains readable."
+  ],
+  "receipts": [
+    {
+      "file": "PROVENANCE.md.gz",
+      "source_sha256": "2531e69a0b47ec95f8182eb0190e1ef3d44f635e96881c0708dd81458f508a8b",
+      "archive_sha256": "486c188724848fea9753f2042b85af6e23a6cf356d39f3e7a57c0e4cf42fc5a6"
+    },
+    {
+      "file": "archive-manifest.json.gz",
+      "source_sha256": "a1739270b95a24065dfbb143bb9058a197893affb0b1517709fe425cef46f590",
+      "archive_sha256": "3e667ac0243e24f2af08807ac4ea54cca7f9d5e541370617aff0df7561b4617d"
+    },
+    {
+      "file": "bazel-test.log.gz",
+      "source_sha256": "b977114c8d750a49b117c911ee3bdbfd71c390830a29230c4f9e1ef72afa7dd8",
+      "archive_sha256": "c4f6a293bbbcb294d7f766eb13236bd44ded1863ed5079df3df8f4e29961744b"
+    },
+    {
+      "file": "bazel-test.xml.gz",
+      "source_sha256": "f08afc1e48939d1a0b5d2be0f97fd9344701f2e7b6e01858ad23edf514d6df96",
+      "archive_sha256": "a629a2d64eba5485c7085b332edbdc981258917c4ee38eda803f44af043110ce"
+    },
+    {
+      "file": "bazel.log.gz",
+      "source_sha256": "73b14db666ec1040ad3aa203077ca0f8a3e3c919b98d0cf5ec195a26fc2b9d47",
+      "archive_sha256": "f54bd86cae2fd1fb89b43424d87a73ffce9088358fd26d820800efbd895bc775"
+    },
+    {
+      "file": "buildifier.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "cargo-tests.log.gz",
+      "source_sha256": "bc7209b4c76cacacee9e55be2da3089f18f43e8fc6e34014c9570728bbdedb66",
+      "archive_sha256": "3f898774f0d03b2c9552254a80befb493ac9e206f89c9c86fdee5fa433f4b6cd"
+    },
+    {
+      "file": "clippy-final.log.gz",
+      "source_sha256": "46c77752a078543ba02ce78472a7cada3a6cdb7097943c9b47e4e73059d28d28",
+      "archive_sha256": "62e3d2197afa2bf34c765a82da58a78eaae9ef7b76354b5737b0f7e64b9c72b4"
+    },
+    {
+      "file": "clippy.log.gz",
+      "source_sha256": "fbb7870334ab600a18887df2fe654ce209bdfd7aded6d1b7598d014a9e6824a8",
+      "archive_sha256": "78695f4960ca506ccf131ec8d4b40b0ba47a12ac4cf76bd43544bd513826b950"
+    },
+    {
+      "file": "final-source-manifest.json.gz",
+      "source_sha256": "17649ed0fe0356968e38890ad807a02409f560b27c7c4c545ffe60e8132b5d0a",
+      "archive_sha256": "b164c4400b0733a4a7422f2988fbaf65fb8f519af93c7f6f3d6e7320cfd97233"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "90d909d1316da41a2dc918fd8fc09e681ecba2bd6a4d76123097808061180a5e",
+      "archive_sha256": "31d3acb4377533826c057d0f017c60b96a3debafb4d2376d84a6cfc7ba1823a9"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/publication_activation_bounded.md.gz",
+      "source_sha256": "72e821a1c66f91b87fdeea6786fbf7946f19585be88f87dc7fce91d75805d3b9",
+      "archive_sha256": "d297291b3387e57576761f1eb52f4b70e00b3d514dc5dfc34f05e3dc90b47f54"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/publication_activation_bounded.rs.gz",
+      "source_sha256": "1158c71b088e38d8331f997654361d3c98d0bcda1e5b1ed8b40b9bdafbbd9b13",
+      "archive_sha256": "da1918c982377efd25a09f920ac4983c93e44d49172cbe349ad0f97c7473df1c"
+    },
+    {
+      "file": "final-sources/nativelink-scheduler/tests/publication_activation_bounded_test.rs.gz",
+      "source_sha256": "15715a9bb210a5f8e48748f81afd936c654c2f0b6b9c6528816155af4dc4a7bb",
+      "archive_sha256": "8b2ecc53ea1875dde46000a302ef56cf6d2f4feb9007b4f0d63f54d1d60b3b15"
+    },
+    {
+      "file": "first-test-run.log.gz",
+      "source_sha256": "e995a4ad62264a16e2c9e1106d5b3b6eba287a4a643e438787cb380dd25aeccc",
+      "archive_sha256": "478200c701176706fb59aa06c7c87978fc5db3781f15a5b2c6e85426d71c02b5"
+    },
+    {
+      "file": "frozen-v2-manifest.json.gz",
+      "source_sha256": "47adeab546416fed1196b4b995776a9cff5666c6fa4887a5a052c87d590b61b0",
+      "archive_sha256": "4eafae37e46867b3332f7ae5f44b68529ed33fb6294348d7172fdb387678f8c5"
+    },
+    {
+      "file": "mutate.py.gz",
+      "source_sha256": "4abea7fe2f50f693877f8ebe6151d59dd6860238ea9da9bfaea2d6b09100f0bc",
+      "archive_sha256": "dc548b387cf5d8bafef0a65d27458e397e138e450ff686241ff4684f76f4ef12"
+    },
+    {
+      "file": "mutation-results.json.gz",
+      "source_sha256": "91c6d586b001f2a43de42cde3de5a214d96dfd42ba259a031b51482a95e6bb41",
+      "archive_sha256": "b6380c997f355487dee00f27390761e69469b7b91d9aeec77c3410b868376252"
+    },
+    {
+      "file": "mutation-run.log.gz",
+      "source_sha256": "b268b827e81f43177473387183fcdf90ff701af50f435825525fa07b8a85fe3b",
+      "archive_sha256": "e84aacf6d6fb47d1e6b170eab505e56b14df832701b7b8488ae9950b8bf7a379"
+    },
+    {
+      "file": "mutations/baseline/compile.log.gz",
+      "source_sha256": "1e1c67cb6bc95db79db455e91998b348268f11b6496b5cdeff6dee894b1ca032",
+      "archive_sha256": "142dad7317bb613df0723208f6e6246de892419c6f748bf01cbe0bce5cefbe46"
+    },
+    {
+      "file": "mutations/baseline/reference.rs.gz",
+      "source_sha256": "1158c71b088e38d8331f997654361d3c98d0bcda1e5b1ed8b40b9bdafbbd9b13",
+      "archive_sha256": "da1918c982377efd25a09f920ac4983c93e44d49172cbe349ad0f97c7473df1c"
+    },
+    {
+      "file": "mutations/baseline/result.json.gz",
+      "source_sha256": "026aaee9185af38a989e0eda69570b1d8883fa5552b034ac9a156716a193fc82",
+      "archive_sha256": "0fda38a641d9f56da612d740b653f4ef4f9a9778c84767177c44d06835377c37"
+    },
+    {
+      "file": "mutations/baseline/test.log.gz",
+      "source_sha256": "0ab9396db32a6984dbb3c841ef6f14f1d14e5b8bb3e4739f170ff45c09658f26",
+      "archive_sha256": "34854d878a2e107beb4a2e4affb4117cd82226a23d5412298c753a4a0d4faeb6"
+    },
+    {
+      "file": "mutations/byte-check-only-activation/compile.log.gz",
+      "source_sha256": "84ce42d46e350aac3d48c92353fcacc381fe4d2af948fc67608140e3f1aaadb6",
+      "archive_sha256": "b5b6c988c1afb3991ddc2157934de5ff8bdd95492eab35b65785783f13d517f2"
+    },
+    {
+      "file": "mutations/byte-check-only-activation/reference.rs.gz",
+      "source_sha256": "767b9845334ccfd215c926b50769d844e9202a6da7e9993691b717878192d7c8",
+      "archive_sha256": "3eea35ad37e25c8953a7041735f824c08ac3811134a8f2208bdfdb91af5754f2"
+    },
+    {
+      "file": "mutations/byte-check-only-activation/result.json.gz",
+      "source_sha256": "06c629be82c58a9366ebc1b68c5a375e988de5110694fe3d9eb772bfd54f48b9",
+      "archive_sha256": "ba05a5b37da83232c6a3a59ed60913c74b5b6927f264890190842514045da0af"
+    },
+    {
+      "file": "mutations/byte-check-only-activation/test.log.gz",
+      "source_sha256": "fd48d80ca998f7852601b88f87737e698fffef43a4dd9a7a86328f3a433ded17",
+      "archive_sha256": "8eba7651a3cc968b51844ed66f6aefffdaf823c27cfc586ab3da2a16ec1a9e92"
+    },
+    {
+      "file": "mutations/install-before-byte-admission/compile.log.gz",
+      "source_sha256": "87f507058c136ddce40c5ab86e7afa375ae19791516ea5373919397ed77969a4",
+      "archive_sha256": "8c08c789c1666c02e7a059edb467259f8be193c222864341efc971322a9f18e5"
+    },
+    {
+      "file": "mutations/install-before-byte-admission/reference.rs.gz",
+      "source_sha256": "d12f0b0ced30327cf4ba8d239df1907867c0ca7b5077728ffa9fd65f11a1fafd",
+      "archive_sha256": "7bc38228a5c342954bb4b77f698bde0d28f4db3e2c31f06767837c30e2b949be"
+    },
+    {
+      "file": "mutations/install-before-byte-admission/result.json.gz",
+      "source_sha256": "80e642144d90e04a68b76e6500d9452135adc5b28b6ddbda5f0d667d6abfece3",
+      "archive_sha256": "0b24282ceec2fc58fce4f2547997bff7724329c42596d3c700df201fb80ac2cc"
+    },
+    {
+      "file": "mutations/install-before-byte-admission/test.log.gz",
+      "source_sha256": "c970bb22a750d4889b43d1772b9cbebff6cb05fc550e710c985492a4e6e815b6",
+      "archive_sha256": "03d5734dd43ae359c2e371f19f53d007d5487a3e75cb91fe1f7689e2684ba0e4"
+    },
+    {
+      "file": "mutations/restored/compile.log.gz",
+      "source_sha256": "b50458195d02f127ecced8a23f363f25155219348938363f24082a6081f2e76b",
+      "archive_sha256": "118008d2647d95b38df1785701cb4a509dd900c544d8e82b1fc3227de3d03754"
+    },
+    {
+      "file": "mutations/restored/reference.rs.gz",
+      "source_sha256": "1158c71b088e38d8331f997654361d3c98d0bcda1e5b1ed8b40b9bdafbbd9b13",
+      "archive_sha256": "da1918c982377efd25a09f920ac4983c93e44d49172cbe349ad0f97c7473df1c"
+    },
+    {
+      "file": "mutations/restored/result.json.gz",
+      "source_sha256": "c8587087c5ed358579b15dd3769d1c03b49192c0258415b917b09ebe3b1dd4a9",
+      "archive_sha256": "596222c357ff548d54def7272e79ee046aa356553cbd4d73cd5e87d7696b0c4d"
+    },
+    {
+      "file": "mutations/restored/test.log.gz",
+      "source_sha256": "0ab9396db32a6984dbb3c841ef6f14f1d14e5b8bb3e4739f170ff45c09658f26",
+      "archive_sha256": "34854d878a2e107beb4a2e4affb4117cd82226a23d5412298c753a4a0d4faeb6"
+    },
+    {
+      "file": "mutations/unbounded-construction/compile.log.gz",
+      "source_sha256": "d26d07c8283ca4363ccf74450d82312dffda89e3e3ba2643a91a0011edb47a7e",
+      "archive_sha256": "acf51c3e0aa8e84f55986538c004ebe4207d53dd5aef93eb1b6003433b37d40a"
+    },
+    {
+      "file": "mutations/unbounded-construction/reference.rs.gz",
+      "source_sha256": "63a39be541a4478fdcce5105c0865c0531ccb0f43ac3ccc0494f3cd90a43e191",
+      "archive_sha256": "5e5ec5d78e5cfd25b6c5135ce98c37649acbb7d44cf178aea11754c75fab8cde"
+    },
+    {
+      "file": "mutations/unbounded-construction/result.json.gz",
+      "source_sha256": "e7a6c73e37ab79520c64af037380372343cb2d8083804ddcce323bbdece1fc8d",
+      "archive_sha256": "971cd8bd7e45aaf84172f618c77cdf951ffa2b883c1fea3e01ad63c75a970179"
+    },
+    {
+      "file": "mutations/unbounded-construction/test.log.gz",
+      "source_sha256": "1cce2e19a18e37c1ebbea06dc716ec4f85364eea8c3eb8ddd1ed7359a84487e4",
+      "archive_sha256": "3ee1aa3814a5c81a3c3e86433629fcd94d9fd37eddc5224b39ce6f2ff667db1e"
+    },
+    {
+      "file": "mutations/unbounded-transition/compile.log.gz",
+      "source_sha256": "1587287c9f964555829dfbb1ae097054fa76342c4834ed8161440cdc95e0cecc",
+      "archive_sha256": "c88381bcbec38d2e54925508e1d9b0e57033fe77819d12378c7e0b35c61f467b"
+    },
+    {
+      "file": "mutations/unbounded-transition/reference.rs.gz",
+      "source_sha256": "76c2885223879b7093bc9b2359876bcc6ad7df7a038d63ff3a9edf0a728a4f0c",
+      "archive_sha256": "3b229471a25aba430357c47c8690fd1110c9c80e5f791c8ff73c12a88325bc4b"
+    },
+    {
+      "file": "mutations/unbounded-transition/result.json.gz",
+      "source_sha256": "4da4ea7b68ed67ac8f9ddcfc361c5046f2ceaf6eca5553e213bd9208b00e21fc",
+      "archive_sha256": "2f37d95512ce383a47adf79374b120576ca7580636a3ac49f2c313e6c34f9ae1"
+    },
+    {
+      "file": "mutations/unbounded-transition/test.log.gz",
+      "source_sha256": "5c0e0d6658f077dfb6728e664b2b3cb0cdf38324a2e43f3844e8efb155a45844",
+      "archive_sha256": "a0be75d2ba6d8e24e1f6b5f2f6864dfe854d74b725c8a37d003dd7cc7b8e3ad6"
+    },
+    {
+      "file": "nativelink-publication-activation-bounded.patch.gz",
+      "source_sha256": "94e3f9889cb68cb5f98ad27c399af40063563ccaf9084471cad6bb5b11f40912",
+      "archive_sha256": "718c34891d6961ebf7c490f4f26a7e58d8ba9b929fa5efaed3fe4a6d79ea51eb"
+    },
+    {
+      "file": "original-counterexample.log.gz",
+      "source_sha256": "7e878ff9f033a127b27dc8995e2650b5abd8d77a53c52f9beb1dc5fa102afec2",
+      "archive_sha256": "1adeb3a6c2941ede6a12201d0abdb888ca207a088dbfcee52cf0f39ed9280204"
+    },
+    {
+      "file": "original-counterexample.rs.gz",
+      "source_sha256": "85c1692f6f6bfe5a3ad27345698637f44ef8f3793800d77ce64213a140f7dcc2",
+      "archive_sha256": "1d4f128f5aa2e0d19dd136f3fa3fddc2035cbaba7b2916461e00a451545b9806"
+    },
+    {
+      "file": "qualification.json.gz",
+      "source_sha256": "6bc836ee8aa477ce23c53f21456b5e3fc873cb0b3fcd371d9c6b4023f395e9eb",
+      "archive_sha256": "af0d8eaf397c04a57d165bc06ddaf04284165178f624aa0ca2cfc4ff8e4786fb"
+    },
+    {
+      "file": "rustfmt.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "snapshot-bound-audit.md.gz",
+      "source_sha256": "72e821a1c66f91b87fdeea6786fbf7946f19585be88f87dc7fce91d75805d3b9",
+      "archive_sha256": "d297291b3387e57576761f1eb52f4b70e00b3d514dc5dfc34f05e3dc90b47f54"
+    },
+    {
+      "file": "typos.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "vale-final.log.gz",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "vale.log.gz",
+      "source_sha256": "49aee8d34d494efe09ae271bf7110b877a735a44093445f90ce602c462ccd9c5",
+      "archive_sha256": "a3220e6f1d24958d3b55aaf18523c3d376f295a69e48c9e29bada75603eea582"
+    },
+    {
+      "file": "integrated-bazel.log.gz",
+      "source_sha256": "23b43f97a21b40c419f0ecd78eb3b9b2a75463c430d1fd041ccfeb350d06194e",
+      "archive_sha256": "661441f905c31af178ecc74bedd4eed8e2edef8b2a9e0f9ba54ca9b9f51587b1"
+    },
+    {
+      "file": "auto-discovery-failure.log.gz",
+      "source_sha256": "5012255805a82cb14f9d1a7ae00c28364fc4e40f9c71c472f594024318ab077e",
+      "archive_sha256": "290b0d9c1e2e67bd902f6a19eeca5637a4bdc22ea2ad3c7205017afaffecf23f"
+    },
+    {
+      "file": "relocated-integrated-bazel.log.gz",
+      "source_sha256": "9465b70fb7cdeaf17b8790ea7caaf200c1d31e14f25e9eb29d1636e75b2f4784",
+      "archive_sha256": "5d342740e458ba1d46d86ea6fb843446df8d98e4af69aaf19dc48b36d30d61e4"
+    },
+    {
+      "file": "integrated-bounded-test.rs.gz",
+      "source_sha256": "c2ae09cc5b1e2a40d2cdd7af36041a6a132126bd8c5b28a2a1517e326eb08100",
+      "archive_sha256": "57f4078a524ec56e60fcdd94676be6463a5bd5ea6bc50f8b1517b34a5088ca6e"
+    },
+    {
+      "file": "integrated-bounded.rs.gz",
+      "source_sha256": "1158c71b088e38d8331f997654361d3c98d0bcda1e5b1ed8b40b9bdafbbd9b13",
+      "archive_sha256": "da1918c982377efd25a09f920ac4983c93e44d49172cbe349ad0f97c7473df1c"
+    }
+  ]
+}

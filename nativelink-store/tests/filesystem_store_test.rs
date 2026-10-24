@@ -54,6 +54,12 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tracing::{Instrument, debug, info};
 
+// These tests share the process-wide descriptor semaphore. Tests that observe
+// its global zero or temporarily consume its permits need exclusive access;
+// ordinary tests keep running together under a shared guard. Per-test upload
+// races still execute concurrently inside the guarded fixture.
+static DESCRIPTOR_BUDGET_TESTS: RwLock<()> = RwLock::new(());
+
 const VALID_HASH: &str = "0123456789abcdef000000000000000000010000000000000123456789abcdef";
 
 fn make_random_data(sz: usize) -> Vec<u8> {
@@ -367,6 +373,7 @@ const STRING_NAME: &str = "String_Filename";
 
 #[nativelink_test]
 async fn evict_page_cache_defaults_off_and_round_trips_when_on() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     assert!(
         !FilesystemSpec::default().evict_page_cache,
         "evict_page_cache should default to off"
@@ -394,6 +401,7 @@ async fn evict_page_cache_defaults_off_and_round_trips_when_on() -> Result<(), E
 
 #[nativelink_test]
 async fn valid_results_after_shutdown_test() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -448,6 +456,7 @@ async fn temp_files_get_deleted_on_replace_test() -> Result<(), Error> {
             DELETES_FINISHED.fetch_add(1, Ordering::Relaxed);
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
@@ -522,6 +531,7 @@ async fn file_continues_to_stream_on_content_replace_test() -> Result<(), Error>
             DELETES_FINISHED.fetch_add(1, Ordering::Relaxed);
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
@@ -630,6 +640,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
             DELETES_FINISHED.fetch_add(1, Ordering::Relaxed);
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let digest2 = DigestInfo::try_new(HASH2, VALUE2.len())?;
@@ -720,6 +731,7 @@ async fn file_gets_cleans_up_on_cache_eviction() -> Result<(), Error> {
 // `FileEntry` file contents should be immutable for the lifetime of the object.
 #[nativelink_test]
 async fn digest_contents_replaced_continues_using_old_data() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
 
     let store = Box::pin(
@@ -779,6 +791,7 @@ async fn eviction_on_insert_calls_unref_once() -> Result<(), Error> {
             .unwrap();
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let small_digest = StoreKey::Digest(DigestInfo::try_new(HASH1, SMALL_VALUE.len())?);
     let big_digest = DigestInfo::try_new(HASH1, BIG_VALUE.len())?;
@@ -869,6 +882,7 @@ async fn rename_on_insert_fails_due_to_filesystem_error_proper_cleanup_happens()
             );
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
 
@@ -948,6 +962,7 @@ async fn rename_on_insert_fails_due_to_filesystem_error_proper_cleanup_happens()
 
 #[nativelink_test]
 async fn get_part_timeout_test() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let large_value = "x".repeat(1024);
     let digest = DigestInfo::try_new(HASH1, large_value.len())?;
     let content_path = make_temp_path("content_path");
@@ -994,6 +1009,7 @@ async fn get_part_timeout_test() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn get_part_is_zero_digest() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::new(Sha256::new().finalize().into(), 0);
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -1036,6 +1052,7 @@ async fn get_part_is_zero_digest() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn has_with_results_on_zero_digests() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::new(Sha256::new().finalize().into(), 0);
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -1094,6 +1111,7 @@ where
 
 #[nativelink_test]
 async fn update_whole_file_with_zero_digest() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     wrap_update_zero_digest(async |digest, store| {
         let temp_file_dir = make_temp_path("update_with_zero_digest");
         std::fs::create_dir_all(&temp_file_dir)?;
@@ -1116,12 +1134,14 @@ async fn update_whole_file_with_zero_digest() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn update_oneshot_with_zero_digest() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     wrap_update_zero_digest(async |digest, store| store.update_oneshot(digest, Bytes::new()).await)
         .await
 }
 
 #[nativelink_test]
 async fn update_with_zero_digest() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     wrap_update_zero_digest(async |digest, store| {
         let (mut writer, reader) = make_buf_channel_pair();
         writer.send_eof()?;
@@ -1135,6 +1155,7 @@ async fn update_with_zero_digest() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn get_file_entry_for_zero_digest_returns_not_found() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     // Regression test for: zero-digest blobs have no backing file on disk,
     // so `get_file_entry_for_digest` previously handed back a synthetic
     // FileEntry whose content_path did not exist. Downstream callers (the
@@ -1178,6 +1199,7 @@ async fn update_file_future_drops_before_rename() -> Result<(), Error> {
     static RENAME_REQUEST_PAUSE_MUX: async_lock::Mutex<()> = async_lock::Mutex::new(());
     // Boolean used to know if the rename function is currently paused.
     static RENAME_IS_PAUSED: AtomicBool = AtomicBool::new(false);
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
 
@@ -1277,6 +1299,7 @@ async fn update_file_future_drops_before_rename() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn deleted_file_removed_from_store() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -1328,6 +1351,7 @@ async fn deleted_file_removed_from_store() -> Result<(), Error> {
 // 5K data size = 8K size on disk
 #[nativelink_test]
 async fn get_file_size_uses_block_size() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -1363,6 +1387,7 @@ async fn get_file_size_uses_block_size() -> Result<(), Error> {
 #[nativelink_test]
 async fn has_reports_content_length_while_eviction_counts_size_on_disk() -> Result<(), Error> {
     const BLOCK_SIZE: u64 = 4 * 1024;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
         content_path: make_temp_path("content_path"),
@@ -1424,6 +1449,7 @@ async fn has_reports_content_length_while_eviction_counts_size_on_disk() -> Resu
 
 #[nativelink_test]
 async fn update_with_whole_file_closes_file() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.write().await;
     #[expect(clippy::collection_is_never_read)] // TODO(jhpratt) investigate
     let mut permits = vec![];
     // Grab all permits to ensure only 2 permits are available.
@@ -1481,6 +1507,7 @@ async fn update_with_whole_file_closes_file() -> Result<(), Error> {
 #[nativelink_test]
 async fn update_with_whole_file_uses_same_inode() -> Result<(), Error> {
     use std::os::unix::fs::MetadataExt;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -1555,6 +1582,7 @@ async fn file_slot_taken_when_ready() -> Result<(), Error> {
             Ok(())
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     *WRITER_PERMIT.lock() = Some(WRITER_SEMAPHORE.acquire().await.unwrap());
     *FILE_PERMIT.lock() = Some(FILE_SEMAPHORE.acquire().await.unwrap());
@@ -1632,9 +1660,10 @@ async fn file_slot_taken_when_ready() -> Result<(), Error> {
 // evicted, without deadlocking.
 #[nativelink_test]
 async fn safe_small_safe_eviction() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let store_spec = FilesystemSpec {
-        content_path: "/tmp/nativelink/safe_fs".into(),
-        temp_path: "/tmp/nativelink/safe_fs_temp".into(),
+        content_path: make_temp_path("safe_fs"),
+        temp_path: make_temp_path("safe_fs_temp"),
         eviction_policy: Some(EvictionPolicy {
             max_bytes: 1,
             ..Default::default()
@@ -1684,6 +1713,7 @@ async fn safe_small_safe_eviction() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn add_too_early_files() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
 
@@ -1721,6 +1751,7 @@ async fn add_too_early_files() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn check_health_ok_when_content_path_is_a_directory() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     fs::create_dir_all(&content_path).await?;
@@ -1742,6 +1773,7 @@ async fn check_health_ok_when_content_path_is_a_directory() -> Result<(), Error>
 
 #[nativelink_test]
 async fn check_health_failed_when_content_path_is_missing() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     // Construct the store against a real path, then delete it so the
     // stat() inside check_health fails with ENOENT.
     let content_path = make_temp_path("content_path");
@@ -1781,6 +1813,7 @@ async fn check_health_failed_when_content_path_is_missing() -> Result<(), Error>
 #[nativelink_test]
 async fn executable_hardlink_source_created_once_and_readonly() -> Result<(), Error> {
     use std::os::unix::fs::MetadataExt;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -1889,6 +1922,7 @@ async fn read_only_executable_dir_preserves_cas_reads_without_reusing_variants()
                 .expect("restore executable digest directory permissions");
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let content_path = make_temp_path("content_path_read_only_exec");
     let temp_path = make_temp_path("temp_path_read_only_exec");
@@ -1937,6 +1971,7 @@ async fn read_only_executable_dir_preserves_cas_reads_without_reusing_variants()
 #[cfg(target_family = "unix")]
 #[nativelink_test]
 async fn evicting_digest_deletes_its_executable_variant() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
@@ -1987,6 +2022,7 @@ async fn evicting_digest_deletes_its_executable_variant() -> Result<(), Error> {
 async fn executable_variant_hit_refreshes_blob_recency() -> Result<(), Error> {
     const HASH3: &str = "0123456789abcdef000000000000000000030000000000000123456789abcdef";
     const VALUE3: &str = "5555555555";
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let digest2 = DigestInfo::try_new(HASH2, VALUE2.len())?;
@@ -2039,6 +2075,7 @@ async fn executable_variant_hit_refreshes_blob_recency() -> Result<(), Error> {
 #[cfg(target_family = "unix")]
 #[nativelink_test]
 async fn orphaned_executable_variant_is_a_miss() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let store = Box::pin(
@@ -2078,6 +2115,7 @@ async fn deferred_write_error_does_not_emplace_truncated_file() -> Result<(), Er
     use rlimit::Resource;
 
     const FILE_SIZE_LIMIT: u64 = 1024 * 1024;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let content_path = make_temp_path("content_path");
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
@@ -2129,6 +2167,7 @@ async fn setup_store_for_duplicates()
 
 #[nativelink_test]
 async fn duplicate_upload_of_same_entry() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let (digest, store) = setup_store_for_duplicates().await?;
 
     let entry = store.get_file_entry_for_digest(&digest).await?;
@@ -2145,6 +2184,7 @@ async fn duplicate_upload_of_same_entry() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn detect_duplicate_upload_different_size() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let (digest, store) = setup_store_for_duplicates().await?;
 
     let key = &StoreKey::Digest(digest);
@@ -2163,6 +2203,7 @@ async fn detect_duplicate_upload_different_size() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn detect_duplicate_upload() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let (digest, store) = setup_store_for_duplicates().await?;
 
     let key = &StoreKey::Digest(digest);
@@ -2189,6 +2230,7 @@ async fn detect_duplicate_upload() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn detect_same_key_different_contents() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let (digest, store) = setup_store_for_duplicates().await?;
 
     let key = &StoreKey::Digest(digest);
@@ -2211,6 +2253,7 @@ async fn detect_same_key_different_contents() -> Result<(), Error> {
 /// comparison with ENOENT. Cover both digest and arbitrary string keys.
 #[nativelink_test]
 async fn upload_self_heals_map_disk_divergence() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
         content_path: make_temp_path("content_path"),
         temp_path: make_temp_path("temp_path"),
@@ -2253,6 +2296,7 @@ async fn stale_read_does_not_remove_replacement_upload() -> Result<(), Error> {
             RESUME_READ.acquire().await.unwrap().forget();
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let store = FilesystemStore::<TestFileEntry<GatedReadHooks>>::new(&FilesystemSpec {
@@ -2294,6 +2338,7 @@ async fn stale_read_does_not_remove_replacement_upload() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn duplicate_comparison_checks_every_byte_and_empty_files() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
         content_path: make_temp_path("content_path"),
         temp_path: make_temp_path("temp_path"),
@@ -2332,6 +2377,7 @@ async fn failed_publish_preserves_previous_generation() -> Result<(), Error> {
         }
         std::fs::rename(from, to)
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let store = FilesystemStore::<FileEntryImpl>::new_with_timeout_and_rename_fn(
         &FilesystemSpec {
@@ -2368,6 +2414,7 @@ async fn older_upload_finishing_last_does_not_replace_newer_generation() -> Resu
             Ok(())
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let content_path = make_temp_path("content_path");
     let store = FilesystemStore::<TestFileEntry<StartedHooks>>::new(&FilesystemSpec {
@@ -2408,6 +2455,7 @@ async fn older_upload_finishing_last_does_not_replace_newer_generation() -> Resu
 #[nativelink_test]
 async fn duplicate_comparison_propagates_permission_errors() -> Result<(), Error> {
     use std::os::unix::fs::PermissionsExt;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
         content_path: make_temp_path("content_path"),
@@ -2441,6 +2489,7 @@ async fn duplicate_comparison_propagates_permission_errors() -> Result<(), Error
 /// recoverable warn and remove the stale entry — not a fatal error.
 #[nativelink_test]
 async fn get_part_on_map_disk_divergence_warns_and_removes_entry() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let store = Box::pin(
@@ -2490,6 +2539,7 @@ async fn get_part_on_map_disk_divergence_warns_and_removes_entry() -> Result<(),
 /// vanished path again.
 #[nativelink_test]
 async fn unref_is_idempotent_when_file_already_gone() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let store = Box::pin(
@@ -2525,6 +2575,7 @@ async fn unref_is_idempotent_when_file_already_gone() -> Result<(), Error> {
 /// leave the content file intact rather than flip to Temp and orphan it.
 #[nativelink_test]
 async fn unref_does_not_orphan_content_file_when_temp_dir_missing() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -2575,6 +2626,7 @@ async fn unref_does_not_orphan_content_file_when_temp_dir_missing() -> Result<()
 #[nativelink_test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_upload_burst_round_trip_test() -> Result<(), Error> {
     const NUM_BLOBS: u64 = 200;
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path_burst");
     let temp_path = make_temp_path("temp_path_burst");
     let spec = FilesystemSpec {
@@ -2661,6 +2713,7 @@ async fn stale_unref_must_not_delete_reuploaded_file() -> Result<(), Error> {
             }
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     // Sized apart from VALUE1 so the hook can tell the two unrefs apart.
     let other_value = "y".repeat(64);
@@ -2753,6 +2806,7 @@ async fn reupload_after_completed_unref_is_readable() -> Result<(), Error> {
             }
         }
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
 
     let other_value = "y".repeat(64);
     let digest1 = DigestInfo::try_new(HASH1, VALUE1.len())?;
@@ -2815,6 +2869,7 @@ const LEGACY_STR_ENTRIES: [(&str, &str); 4] = [
 
 #[nativelink_test]
 async fn upgrade_from_v1_folders_stamps_generation_on_all_keys() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     fs::create_dir_all(format!("{content_path}/{STR_FOLDER_V1}")).await?;
@@ -2868,6 +2923,7 @@ async fn upgrade_from_v1_folders_stamps_generation_on_all_keys() -> Result<(), E
 /// both migrations must run, in order.
 #[nativelink_test]
 async fn upgrade_from_flat_layout_moves_digests_then_stamps_generation() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     fs::create_dir_all(&content_path).await?;
@@ -2906,6 +2962,7 @@ async fn upgrade_from_flat_layout_moves_digests_then_stamps_generation() -> Resu
 
 #[nativelink_test]
 async fn upgraded_layout_is_not_migrated_again_on_restart() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.write().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     fs::create_dir_all(format!("{content_path}/{STR_FOLDER_V1}")).await?;
@@ -2965,6 +3022,7 @@ async fn upgraded_layout_is_not_migrated_again_on_restart() -> Result<(), Error>
 
 #[nativelink_test]
 async fn generations_assigned_after_upgrade_survive_restart() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.write().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     fs::create_dir_all(format!("{content_path}/{STR_FOLDER_V1}")).await?;
@@ -3017,6 +3075,7 @@ async fn generations_assigned_after_upgrade_survive_restart() -> Result<(), Erro
 
 #[nativelink_test]
 async fn startup_keeps_newest_generation_and_advances_counter() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.write().await;
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
     let dir = format!("{content_path}/{STR_FOLDER_V2}");
@@ -3051,6 +3110,7 @@ async fn startup_keeps_newest_generation_and_advances_counter() -> Result<(), Er
 
 #[nativelink_test]
 async fn failed_flat_migration_remains_readable() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     fs::create_dir_all(&content_path).await?;
     let digest = DigestInfo::try_new(HASH1, VALUE1.len())?;
@@ -3073,6 +3133,7 @@ async fn failed_flat_migration_remains_readable() -> Result<(), Error> {
 
 #[nativelink_test]
 async fn replacing_unmigrated_entry_retires_legacy_file() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let content_path = make_temp_path("content_path");
     let legacy_dir = format!("{content_path}/{STR_FOLDER_V1}");
     fs::create_dir_all(&legacy_dir).await?;
@@ -3120,6 +3181,7 @@ async fn partial_migration_stays_readable_and_retries_next_startup() -> Result<(
         }
         std::fs::rename(from, to)
     }
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.write().await;
 
     let content_path = make_temp_path("content_path");
     let temp_path = make_temp_path("temp_path");
@@ -3190,6 +3252,7 @@ async fn partial_migration_stays_readable_and_retries_next_startup() -> Result<(
 
 #[nativelink_test]
 async fn incomplete_whole_file_does_not_replace_existing_blob() -> Result<(), Error> {
+    let _descriptor_budget = DESCRIPTOR_BUDGET_TESTS.read().await;
     let temp_path = make_temp_path("whole_file_integrity");
     let store = FilesystemStore::<FileEntryImpl>::new(&FilesystemSpec {
         content_path: make_temp_path("whole_file_integrity_content"),

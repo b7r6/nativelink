@@ -1,0 +1,331 @@
+{
+  "scope": "Same typed-retention test composition through actual Azure SDK for SHA256 and BLAKE3, with no production placement or provider lifecycle claim.",
+  "patch_sha256": "f91ba5848189fad2aefd4b6c3b0132dfe1cc330c1ff52cba70ec259dff1767be",
+  "validation": [
+    "BLAKE3:37 actual SDK requests and3 conditional deletes; SHA256:33 requests and3 conditional deletes; original adapter82 requests.",
+    "Three compiled algorithm faults detected; restored baseline and strict checks pass.",
+    "Old checkpoint corruption cases could be unchanged when random identity byte was already zero. XOR mutation and an explicit changed-value assertion repair that fixture; failing root run is retained."
+  ],
+  "receipts": [
+    {
+      "file": "adapter-provider-final.log.gz",
+      "source_sha256": "55b4ab41fc29faae6196fb47846241f82cf36a21a5254bcc1e0898b46886bbe2",
+      "archive_sha256": "ef012d3eb581bdabf723a357760da34e33e7d90759a62b69b3e3ec37132fe33a"
+    },
+    {
+      "file": "azure-blake3-retention.patch.gz",
+      "source_sha256": "f91ba5848189fad2aefd4b6c3b0132dfe1cc330c1ff52cba70ec259dff1767be",
+      "archive_sha256": "cec703b04a23854607741ba65a762ac1ee6b98d5071df2cb1a8aa22fedf0fe9a"
+    },
+    {
+      "file": "blake3-provider-final.log.gz",
+      "source_sha256": "4936e6d1bc4f0dd419dc6b2fece214a1249f1b8d59f987b598c0feb84e3939a4",
+      "archive_sha256": "99cedc4752f9b2b18774a40ffbbfb6284d35d71ace221cf2568d3bc60083f105"
+    },
+    {
+      "file": "blake3-qualified.log.gz",
+      "source_sha256": "fee661d4e0bb131291f458ea68d2bb792eac84134fe7d7d80a0c623efe910555",
+      "archive_sha256": "a0c6913f6ebf43873f847e424b2c8bc4958e6a2a9e64743703500a5b3029184c"
+    },
+    {
+      "file": "bridge-flake-clippy.log.gz",
+      "source_sha256": "0f651274f21730d3f182a3c0d19367fd3b49bd942cc9e2c91047fbf65dce01b1",
+      "archive_sha256": "ff8b6845030d972a17a9e7b78db9864d75e72bdef3a5f7053ff7069d34aa9c4d"
+    },
+    {
+      "file": "bridge-flake-fixed.log.gz",
+      "source_sha256": "06f754a35ec18a25af49d9a84c598ecae19aea1767908e0fecbed11ff864d4ea",
+      "archive_sha256": "4ff092517f88dff4dbf071ee980924b21d8a104416040418f55f7fb75a83bc99"
+    },
+    {
+      "file": "checkpoint-flake-archive.json.gz",
+      "source_sha256": "1a86a06584f4fb4b1e362bc583f6e6b137e6594cf51f4743064f8112eaeeaf39",
+      "archive_sha256": "578f43a4166cfb00910c754fdf7160535646361a62ad929a22ce2b5bbdf92c2e"
+    },
+    {
+      "file": "checkpoint-flake-checks.json.gz",
+      "source_sha256": "30a7a7016d32d9608c1e6b5d92fbf54b29cd87749e220e7626c5c59fc4ecabc8",
+      "archive_sha256": "3551875371814d3b05d975372c97580a36f50fe1facbabc9f64b3d1f129337aa"
+    },
+    {
+      "file": "clippy-final.log.gz",
+      "source_sha256": "64a6c7f67e8b71411aacd38c56190fc684c45997225f8900c625455cda877ce8",
+      "archive_sha256": "3c6051aad757dc1d3ce7c9149268f7e96aa18535a4fd2a22a6ce8168b7fcb68c"
+    },
+    {
+      "file": "clippy-fixed.log.gz",
+      "source_sha256": "59d3b0d52d4ee63c765a2ba1f8a0b6b3d6fc8b6e17d2f2634456bceb6690932b",
+      "archive_sha256": "6fffbdc2ac5fd371753ea0d62ba2bc75d21463c43d97fe3dc99e148fee1b3b77"
+    },
+    {
+      "file": "diff-check-final.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "final-checks.json.gz",
+      "source_sha256": "738db39e1f8958ba269745066187ec8caa4efd2625adaa0e9a77e2b4997a1b6b",
+      "archive_sha256": "08716b8ffe7a82b86f8ddbfc5995bae4561dc4a015ade9e1a0e72bc2e38f0685"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/design/categorical/physical-azure.md.gz",
+      "source_sha256": "55cd06a1efe14323294a8e9a30efd117fb52e2d28ec43e9603a8d72cef807f4c",
+      "archive_sha256": "e6a4c093a5ccbced0936dbaeabce9a146f25b0f12cd36106928d233cfceed8b8"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/design/categorical/typed-retention-bridge.md.gz",
+      "source_sha256": "4db7b7079bd42d78d79375fe700bade5d1ba29e1e25a3a9d3e5ba1e10b2957ca",
+      "archive_sha256": "fae156b453007b9a13bdc4da2fa83f8959964e2856cdb156c6f3189a6cd1ac76"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/retention/typed_bridge.rs.gz",
+      "source_sha256": "c1437a8083fbf170508c78b4374077d1975215937982aae9efbf5c8dc1ea107f",
+      "archive_sha256": "4cce976e98eb312ab2a7429253982a8d9cdb69c2a6ac4af19b6c10b5f7f0b7cc"
+    },
+    {
+      "file": "final-source/nativelink-scheduler/tests/typed_physical_retention_test.rs.gz",
+      "source_sha256": "6e15d42d4dcc30f3a4d3406899bb6bb29abf1718a5b728a5e1ee70d3f321f1e7",
+      "archive_sha256": "e3e874ede1d07247d7cde74fff8660d4c7c5547452cd8c346e711df00b521c5e"
+    },
+    {
+      "file": "final-source/nativelink-store/tests/physical_azure/retention.rs.gz",
+      "source_sha256": "74fbedccd9f4b2ba5baee5c8fc5571bc95746a9d55b00f3d6bee146b4d09e87b",
+      "archive_sha256": "f010d9d4eccec56a55b9a4b701547e94eeaa2c50cd22240b037a6d2059bfb429"
+    },
+    {
+      "file": "final-source/nativelink-store/tests/physical_azure_test.rs.gz",
+      "source_sha256": "f0f1b6c9327f53add0859e88a80d1105e43b444f696f9be688d8e1c6b7a371e2",
+      "archive_sha256": "49a8c48ecc16ac0aad4d64716adcd88a3a29151f554bfa943ec6c1d00a02be75"
+    },
+    {
+      "file": "fmt-final.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "force_sha256_upload-compile.log.gz",
+      "source_sha256": "d9f06a06d8d07f0ce37478266131222ed27ab61197435afd3786b984d4d6cdf7",
+      "archive_sha256": "00b8dd69a24093127e58a58a31e95852138b4903863668f96733d1d5ecfcd3a6"
+    },
+    {
+      "file": "force_sha256_upload-source.rs.gz",
+      "source_sha256": "bf95c8d0973479f120a7a692b356589eb4b570a91f726c42f217c93bae042f7e",
+      "archive_sha256": "7d9719840a98093d8e4d76770350bbd5728af9ba8e5824dea4e8e30f16a4f8d9"
+    },
+    {
+      "file": "force_sha256_upload-test.log.gz",
+      "source_sha256": "00caa4afbd3aee00ab54874694c741935ab5f1b0d436aedb3d6fb3593dde3ea6",
+      "archive_sha256": "0cd2d1ae7cae294ebdf74a77fc01a824f45fe1ba23c71e9724ffa1ef755feac2"
+    },
+    {
+      "file": "ignore_manifest_algorithm-compile.log.gz",
+      "source_sha256": "e9f3fe98ec18d2400bc5a2974b1f083ff86c4a288b683b8bd06dfa3adc83d1a4",
+      "archive_sha256": "6f9564312e8f353e16fb0441f050a0666402fa2990aa667ec04b2a678c649e28"
+    },
+    {
+      "file": "ignore_manifest_algorithm-source.rs.gz",
+      "source_sha256": "41dc6d4d09b60cea4accb91c8972c8cdcb5c1ddbf3be34abf9ae8ab1d68684ae",
+      "archive_sha256": "9666a71b6ff733ef65cb39ecaefce7587f9bd4ab78cc71c377e2d95cf3f8640a"
+    },
+    {
+      "file": "ignore_manifest_algorithm-test.log.gz",
+      "source_sha256": "33e3ef2101e44a044968c7165b8a712485ed8dac45e2d60828f3d6fe87e757a6",
+      "archive_sha256": "6a882296c517dfa40d06596cc2bdfc574ed0ddcaaa617a645f6900ee81395d35"
+    },
+    {
+      "file": "initial-source-hashes.json.gz",
+      "source_sha256": "9e79e2380430ffb373b92aac4c844f932931e3570378cb4ab4c90f1842bcee5e",
+      "archive_sha256": "fa771ca152fec9a6cfeebeb9002b4338a5d1ba458eb49606a3eb839025b47475"
+    },
+    {
+      "file": "missing-emulator-final.log.gz",
+      "source_sha256": "c4b451fcbe7fb9475a8b215074ac7033e322b23fe4110cd11db997b8ee758ecd",
+      "archive_sha256": "f5121655fb4753b1205bc81e7a1747967437fbd3b40a5e1d1063f516ae585f64"
+    },
+    {
+      "file": "mixed-catalogue-bridge.rs.gz",
+      "source_sha256": "d855c2a3fbceb6bb3a1c2f23c5374458eead57f0ebfa6054d41b51007e57fc21",
+      "archive_sha256": "2a004510cc1d9cffbff870947c2a65588e73662ad95afa127c9911fee281084c"
+    },
+    {
+      "file": "mixed-catalogue-reproduction.log.gz",
+      "source_sha256": "20d949a58d59c07a44c44fd71b22f98cd35e0b6142a1f45ec177567ff71fddd2",
+      "archive_sha256": "74fba463b1d6ee70be0d8eaf432435cc478319f9e6d759c886142e34f2c75c55"
+    },
+    {
+      "file": "mixed-catalogue-source.patch.gz",
+      "source_sha256": "a716f11e5c56d1eeebbeb9fb8e7c250c153f0357600741ff5caeef324deb865c",
+      "archive_sha256": "ddcedce989a7e0d1821184aba6b2f14aeea7f9e2291a356dc65b1a2bb9e05166"
+    },
+    {
+      "file": "mutation-baseline-compile.log.gz",
+      "source_sha256": "90fd25ccd79de15124a8877be683c8fbfa187cd2577bd1b0c5d9c1f0f95a207d",
+      "archive_sha256": "428945485b7f5b69fc4652836aae866adb61a64bcb132e1ec40a14184aaa21da"
+    },
+    {
+      "file": "mutation-baseline-provider.log.gz",
+      "source_sha256": "f81dbc90a4e9cb18c394a444426434dc3182d8504bdc4154cdf752f6b1a94cd8",
+      "archive_sha256": "a001ddcf30f444e8ce63aa92635ce94b3ede7d0ce42e5dc22590d600db28af81"
+    },
+    {
+      "file": "mutation-baseline-restore.log.gz",
+      "source_sha256": "60a95279eaf1ef3c4d28bab11db38d5dd4f86a1078fee44fa1d1111e1f72d156",
+      "archive_sha256": "672cc583130ff210da972673379fb3a0d084759082af021e75bbce51f1cac6d4"
+    },
+    {
+      "file": "mutation-restored-compile.log.gz",
+      "source_sha256": "a29fe2a33bb63c07693ded8fe8e714480ee07cedc7346b4e2c3d99a3df22827d",
+      "archive_sha256": "cdb528bedd55fb45b1cd9355dc0358f221664eb0c05b3d9e07d1bdf4b47f4881"
+    },
+    {
+      "file": "mutation-restored-provider.log.gz",
+      "source_sha256": "667780fd57449afba9f1fc743de8cbc4675c4d7971c90c617b3914af873444fe",
+      "archive_sha256": "ae73fd8b0c477b964a06eb38681162c7375c1cc829f77fc1ec8d5d5bc09d0a92"
+    },
+    {
+      "file": "mutation-restored-restore.log.gz",
+      "source_sha256": "09e7b5fe08b37cba07045fb16e45236ec4cb4f4308a655602bded8ff92f4381a",
+      "archive_sha256": "a06f196072a3794b6f1f90ebc097bac775d8fdc33b9b18bca04d6e3f571bec82"
+    },
+    {
+      "file": "mutation-results.json.gz",
+      "source_sha256": "213d751bcba2cc0cce9f61d530e10e5a4c34a0e251a9c8d9a6e4b28aaf055a69",
+      "archive_sha256": "4e3aa1728c29f90e55eae00807b3d40c5e2e4d6af902098be0e356f9b5cdf670"
+    },
+    {
+      "file": "mutations-run.log.gz",
+      "source_sha256": "26b4d04d81f39b32fe604cf4cd50de97c69692221a3a5eac556451593f7d9e30",
+      "archive_sha256": "78c586a838b05f68d4fc6ec57a38e4a5c4b0960972b39843de9af05ec219166b"
+    },
+    {
+      "file": "mutations.py.gz",
+      "source_sha256": "b2c36871936d1cd018dabcd2c41aca2489d01dade49149c98d2acbe3d51321ab",
+      "archive_sha256": "33316fde7c5f1189e36d53c5a2a81ba4cbb0f7a9b0db9dfab36b1089d5b2b6bf"
+    },
+    {
+      "file": "normalize_unknown_algorithm-compile.log.gz",
+      "source_sha256": "6552d3674a3513d7468e6e94071289c43337b9563f8f3bfe25dae5bf73c8cbfa",
+      "archive_sha256": "d63f92b2f5ca4b0ae507c26d656c21315eb44f10f0996dc8fdb9fedcd28f7561"
+    },
+    {
+      "file": "normalize_unknown_algorithm-source.rs.gz",
+      "source_sha256": "ceae71a5b52c70f1000d39c11160816a8ff81eabd3db5eca7b71567332e5171e",
+      "archive_sha256": "14ce12b221a804ed08613411ed2f4bb2eae1f7b21ee14537e148db2e73b7f971"
+    },
+    {
+      "file": "normalize_unknown_algorithm-test.log.gz",
+      "source_sha256": "ecc2edfc47c0b478cb74ba719dc6bfc862473644f6939ecf786c2c35b3ea2506",
+      "archive_sha256": "57a1d9a1776e0e98c888037a5976b8c92343502fafa99d8e6c80f56c3ddd61ba"
+    },
+    {
+      "file": "pre-checkpoint-flake/azure-blake3-retention.patch.gz",
+      "source_sha256": "cca3db85965060183a829eb0e1478040dfe55495ad26b0f24c5136c939dc11ae",
+      "archive_sha256": "0a80c1d8cf4ba7c5c5d66b3ac5275437e86610e202beda8a478eb894b2fd0dd8"
+    },
+    {
+      "file": "pre-checkpoint-flake/qualification.json.gz",
+      "source_sha256": "461956df6246c1ae10cf0d02b4fe9ecd4059b00c9b42ee53d9cba43d2f7e798f",
+      "archive_sha256": "0dc698f7300d4728c83a1fcf2b03cda2462cb736e9332f58998479a2f5144090"
+    },
+    {
+      "file": "pre-checkpoint-flake/source-hashes.json.gz",
+      "source_sha256": "9b085b546a27b89d4e586b74fd194fd926f3986b49ba97cd0625ba6cba6a3001",
+      "archive_sha256": "c8d06940a522fa8bc4f7016b97bba9a122a4c9180d200fc4c8a7feb7c80bfbe8"
+    },
+    {
+      "file": "pre-checkpoint-flake/typed_physical_retention_test.rs.gz",
+      "source_sha256": "c452209fcb100b9f89b2dd00be5a06096bb2cfb1822cfdbc7fb4011c1bcf33f9",
+      "archive_sha256": "e52a2e623a8f50e465b036954cb42e01619c051640806d83a870f7f8c7063aa6"
+    },
+    {
+      "file": "qualification.json.gz",
+      "source_sha256": "afd2418eb618e61cd1f47282827b580fb6b93a60ed1bc495677495483e65965b",
+      "archive_sha256": "b4065c4cbf43ce3b8d749b34ed2b607a9e9236f62681c2d21a4a9425fc0825f2"
+    },
+    {
+      "file": "regression-baseline.log.gz",
+      "source_sha256": "71b4f08aca82075e008f80577471abb20cc4a1a9cc7a141cea09ff06549b1c9f",
+      "archive_sha256": "d8b1a9818d79bc11cc427a2d55f0b8d05675d2d71ca4d4f58ef26a960cd7b7e7"
+    },
+    {
+      "file": "root-typed-retention-flake.log.gz",
+      "source_sha256": "4ffc9f64cc2318089c94478430de98bc955ef803469a55b8ba8767ac20f49ecb",
+      "archive_sha256": "9b165e6e868da2cb56d747f4395e36de0926ffe9593efb0adf239a408440245f"
+    },
+    {
+      "file": "root-workspace-bazel-failure.log.gz",
+      "source_sha256": "a5d79865a91af1d09d6617f9017e8a077de6d00ef2c05b09ea1ddc4a73c04ac3",
+      "archive_sha256": "64903a72f8fd4248243e536032925a1bec87365843927f467cdaebcf8d991803"
+    },
+    {
+      "file": "sha256-provider-final.log.gz",
+      "source_sha256": "74ac2ef2cf77eb5b8a07a653936cb28be999904ecc98eaff3334ed36f45980b6",
+      "archive_sha256": "a3addebc9888d7df0b925ecab3bef0d9f1d94fda5d637c742608452100e3a126"
+    },
+    {
+      "file": "sha256-row-guard-reproduction.log.gz",
+      "source_sha256": "dd4be767ec974dd4330fb1530a0220fa45817897d250ef93cd2b54d1d91f34ab",
+      "archive_sha256": "c25e23b787c361126649e795a9a213c6ed907fbbd5f3141c261c67ad9d534176"
+    },
+    {
+      "file": "sha256-row-guard-source/nativelink-scheduler/tests/retention/typed_bridge.rs.gz",
+      "source_sha256": "7fe81aa00a58c487188652c191e70e2bb4f57f5b207e7a0eb4de0ce9fcda1dd6",
+      "archive_sha256": "08b1bf91f90b9c6d5338b2d19a3a7ac0741a71dd9b910d670bc181e3268c4c2b"
+    },
+    {
+      "file": "sha256-row-guard-source/nativelink-store/tests/physical_azure/retention.rs.gz",
+      "source_sha256": "04081815b43852fcf82b70f0f3b6ccd540290e5f55040974ce7c548fdbf2cd81",
+      "archive_sha256": "9178c90be655c4f6cf3e0ef7432fdbea6d5555ac4847285c4f7f050002998675"
+    },
+    {
+      "file": "sha256-row-guard-source/nativelink-store/tests/physical_azure_test.rs.gz",
+      "source_sha256": "f0f1b6c9327f53add0859e88a80d1105e43b444f696f9be688d8e1c6b7a371e2",
+      "archive_sha256": "49a8c48ecc16ac0aad4d64716adcd88a3a29151f554bfa943ec6c1d00a02be75"
+    },
+    {
+      "file": "sha256-row-guard-source.patch.gz",
+      "source_sha256": "4891d5e7044989a63bdd4aac2b27579d974031c48ce2c075ac5930e1ddbce92b",
+      "archive_sha256": "368bf75967a80c6be67654a354a5ac196fdbdb323028763ec2e75a61924be5eb"
+    },
+    {
+      "file": "source-hashes.json.gz",
+      "source_sha256": "d56e271d14a175261745a3cb6104f3220e6a4b6d405a76a34b89a9cc96985891",
+      "archive_sha256": "50d85a74173030868c9d884770bd84edd40ce009d808e35d4822484daeb48a6f"
+    },
+    {
+      "file": "static-checks.json.gz",
+      "source_sha256": "cfb7f36fa60a8e9b15912de21e58ab52feead9b82eaa9754840450615f2e6445",
+      "archive_sha256": "6290315e52bb63d2b36213f872493f95c50d66bbd260fbf6366e7a8077ba2f42"
+    },
+    {
+      "file": "typos-final.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "vale-final.log.gz",
+      "source_sha256": "f10c81ff63126b6213590a94251971b3715cbe861ddf8d496f7893cb29a8833c",
+      "archive_sha256": "fc0a418f43e20774223864abe83fa0cc16a7e75623b7ea520e551c58b76eb63a"
+    },
+    {
+      "file": "vale.log.gz",
+      "source_sha256": "f10c81ff63126b6213590a94251971b3715cbe861ddf8d496f7893cb29a8833c",
+      "archive_sha256": "fc0a418f43e20774223864abe83fa0cc16a7e75623b7ea520e551c58b76eb63a"
+    },
+    {
+      "file": "azure-blake3-integrated-bazel.log.gz",
+      "source_sha256": "a2c8f5d38ec78c371599093cd5a3eb90c3fd715beb247de884717a139e88f5a6",
+      "archive_sha256": "febba47c90c6dfd1538ee803a0ead7094f02c7a68b13c0664b48f4b21714b64d"
+    },
+    {
+      "file": "azure-blake3-integrated-bazel-exact.log.gz",
+      "source_sha256": "10712fd3dd6b26c901e5a646eadf14e5979430414e37a546fa45afe745da8f93",
+      "archive_sha256": "386f9fbc79a321856fa4dd3bed3f0f55fcc858a397caef02abe6ce2602bc5dac"
+    }
+  ],
+  "integrated_validation": {
+    "sha256": "First integrated filter selected only local_azurite_typed_retention_contract: 1 passed.",
+    "blake3": "Second invocation selected exact local_azurite_blake3_retention_contract: 1 passed.",
+    "combined_workspace": "../history-workspace/manifest.json"
+  }
+}

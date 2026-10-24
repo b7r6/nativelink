@@ -1,0 +1,561 @@
+{
+  "scope": "bounded synthetic scheduler journal experiment; not a supported operating point",
+  "dependencies": {
+    "openraft": "0.9.25",
+    "redb": "4.4.0",
+    "durability": "redb Immediate, fsync-backed callbacks; no power-loss certification"
+  },
+  "profile_label_supplied_by_runner": "smol opt-level=z debug-assertions=true",
+  "debug_assertions": true,
+  "runtime_worker_threads": 2,
+  "topology": {
+    "authority_members": 1,
+    "physical_workers": 0,
+    "simulated_worker_advertisements": 1
+  },
+  "workload": {
+    "cycles": 3,
+    "simultaneously_admitted_executions": 64,
+    "padding_bytes_per_request": 1024,
+    "completed_executions": 192,
+    "proposal_submission": "serial; one event per client_write; no proposal batching",
+    "snapshot_schedule": "one persisted snapshot per cycle while all attempts have charged reservations and pending dispatch",
+    "lookups": "recorded misses; no cache backend",
+    "publication": "recorded handoff outcome; no external execution"
+  },
+  "counts": {
+    "logical_commands": 1924,
+    "client_write_proposals": 1924,
+    "raft_log_entries_during_workload": 1924,
+    "recorded_event_json_bytes": 438157,
+    "linearizable_reads": 10,
+    "snapshots": 3
+  },
+  "timing_ns": {
+    "bootstrap": 668299069,
+    "workload_including_reads_and_snapshots": 67949597295,
+    "shutdown": 7038396,
+    "reopen_elect_and_read_barrier": 18232514
+  },
+  "observed_rates": {
+    "logical_commands_per_s": 28.315105263200365,
+    "completed_executions_per_s": 2.825623810049101
+  },
+  "latency": {
+    "write_commit_apply_reply": {
+      "count": 1924,
+      "min_ns": 11448407,
+      "p50_ns": 26843495,
+      "p95_ns": 54692180,
+      "p99_ns": 130079290,
+      "max_ns": 2370955236
+    },
+    "per_command": {
+      "advance_logical_time": {
+        "count": 3,
+        "min_ns": 21312488,
+        "p50_ns": 24863167,
+        "p95_ns": 27314673,
+        "p99_ns": 27314673,
+        "max_ns": 27314673
+      },
+      "complete": {
+        "count": 192,
+        "min_ns": 22145012,
+        "p50_ns": 29596404,
+        "p95_ns": 61526465,
+        "p99_ns": 102773950,
+        "max_ns": 105587030
+      },
+      "lookup_miss": {
+        "count": 192,
+        "min_ns": 18528993,
+        "p50_ns": 24586538,
+        "p95_ns": 86682232,
+        "p99_ns": 2047930095,
+        "max_ns": 2370955236
+      },
+      "match": {
+        "count": 192,
+        "min_ns": 19757477,
+        "p50_ns": 28118507,
+        "p95_ns": 46777690,
+        "p99_ns": 88066258,
+        "max_ns": 236259305
+      },
+      "preparing": {
+        "count": 192,
+        "min_ns": 21637427,
+        "p50_ns": 29289413,
+        "p95_ns": 70572252,
+        "p99_ns": 142193802,
+        "max_ns": 177752280
+      },
+      "publication_handoff_outcome": {
+        "count": 192,
+        "min_ns": 20431414,
+        "p50_ns": 25601595,
+        "p95_ns": 36060361,
+        "p99_ns": 48885624,
+        "max_ns": 60662479
+      },
+      "register": {
+        "count": 1,
+        "min_ns": 30866335,
+        "p50_ns": 30866335,
+        "p95_ns": 30866335,
+        "p99_ns": 30866335,
+        "max_ns": 30866335
+      },
+      "retire_terminal_execution": {
+        "count": 192,
+        "min_ns": 11720808,
+        "p50_ns": 18087843,
+        "p95_ns": 28995927,
+        "p99_ns": 136442859,
+        "max_ns": 1004032995
+      },
+      "running": {
+        "count": 192,
+        "min_ns": 22047813,
+        "p50_ns": 28805716,
+        "p95_ns": 53452362,
+        "p99_ns": 93406548,
+        "max_ns": 115532554
+      },
+      "submit": {
+        "count": 192,
+        "min_ns": 11448407,
+        "p50_ns": 20983460,
+        "p95_ns": 35010576,
+        "p99_ns": 1295433977,
+        "max_ns": 1707720807
+      },
+      "uploading": {
+        "count": 192,
+        "min_ns": 22075028,
+        "p50_ns": 29367149,
+        "p95_ns": 56476735,
+        "p99_ns": 91341137,
+        "max_ns": 92490680
+      },
+      "worker_accepted": {
+        "count": 192,
+        "min_ns": 22042093,
+        "p50_ns": 29239975,
+        "p95_ns": 59377516,
+        "p99_ns": 94836200,
+        "max_ns": 101677850
+      }
+    },
+    "linearizable_read_including_persisted_state_decode": {
+      "count": 10,
+      "min_ns": 293108,
+      "p50_ns": 4451682,
+      "p95_ns": 7116923,
+      "p99_ns": 7116923,
+      "max_ns": 7116923
+    },
+    "read_barrier_only_singleton_no_network_quorum": {
+      "count": 10,
+      "min_ns": 32401,
+      "p50_ns": 51005,
+      "p95_ns": 163320,
+      "p99_ns": 163320,
+      "max_ns": 163320
+    },
+    "snapshot_build_and_durable_write": {
+      "count": 3,
+      "min_ns": 14350420,
+      "p50_ns": 29920469,
+      "p95_ns": 40245424,
+      "p99_ns": 40245424,
+      "max_ns": 40245424
+    },
+    "core_snapshot_serialize": {
+      "count": 3,
+      "min_ns": 2034090,
+      "p50_ns": 3124891,
+      "p95_ns": 3532759,
+      "p99_ns": 3532759,
+      "max_ns": 3532759
+    }
+  },
+  "state_sizes": {
+    "peak_core_snapshot_bytes": 323619,
+    "peak_persisted_snapshot_bytes": 372214,
+    "drained_core_snapshot_bytes": 1704,
+    "redb_allocated_file_bytes_after_restart": 3174400,
+    "file_size_interpretation": "allocated database file size, NOT durable write volume or replication bytes"
+  },
+  "raft_metrics": {
+    "initial": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 1,
+      "last_applied": null,
+      "snapshot": null,
+      "purged": null,
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 1
+        }
+      }
+    },
+    "final": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 1925,
+      "last_applied": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 1925
+      },
+      "snapshot": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 1476
+      },
+      "purged": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 476
+      },
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 1925
+        }
+      }
+    },
+    "reopened": {
+      "running_state": {
+        "Ok": null
+      },
+      "id": 1,
+      "current_term": 1,
+      "vote": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "committed": true
+      },
+      "last_log_index": 1925,
+      "last_applied": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 1925
+      },
+      "snapshot": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 1476
+      },
+      "purged": {
+        "leader_id": {
+          "term": 1,
+          "node_id": 1
+        },
+        "index": 476
+      },
+      "state": "Leader",
+      "current_leader": 1,
+      "millis_since_quorum_ack": 0,
+      "membership_config": {
+        "log_id": {
+          "leader_id": {
+            "term": 0,
+            "node_id": 0
+          },
+          "index": 0
+        },
+        "membership": {
+          "configs": [
+            [
+              1
+            ]
+          ],
+          "nodes": {
+            "1": {
+              "addr": ""
+            }
+          }
+        }
+      },
+      "replication": {
+        "1": {
+          "leader_id": {
+            "term": 1,
+            "node_id": 1
+          },
+          "index": 1925
+        }
+      }
+    }
+  },
+  "unmeasured": [
+    "three-member quorum/replication bytes",
+    "block-device write bytes",
+    "production RPC/workers",
+    "direct ActionCache updates",
+    "immutable publications",
+    "root/closure indexes",
+    "serving leases/renewals",
+    "retirement/GC and sustained-renewal collection",
+    "provider latency/faults",
+    "controller dynamics",
+    "representative production workload distributions",
+    "historical Lane B harness"
+  ],
+  "qualification": "M0 production representation and persistent-format freeze remain gated. The adapter persists full state each apply batch; synthetic rates do not establish shared-authority capacity.",
+  "component_probes": {
+    "scope": "separate serial probes after Raft shutdown; raw bytes omit journal envelopes and runtime scheduling",
+    "core_apply_same_recorded_workload": {
+      "count": 1924,
+      "min_ns": 682,
+      "p50_ns": 3797,
+      "p95_ns": 18364,
+      "p99_ns": 21136,
+      "max_ns": 27840
+    },
+    "core_snapshot_including_validation": {
+      "count": 1924,
+      "min_ns": 9306,
+      "p50_ns": 1810962,
+      "p95_ns": 1896594,
+      "p99_ns": 2031411,
+      "max_ns": 2375865
+    },
+    "core_restore_including_validation": {
+      "count": 1924,
+      "min_ns": 7424,
+      "p50_ns": 2082708,
+      "p95_ns": 2165040,
+      "p99_ns": 2277108,
+      "max_ns": 3182764
+    },
+    "filesystem_and_redb": [
+      {
+        "payload_bytes": 1024,
+        "file_write_seek_sync_all": {
+          "count": 20,
+          "min_ns": 3836157,
+          "p50_ns": 4666914,
+          "p95_ns": 5613641,
+          "p99_ns": 8705414,
+          "max_ns": 8705414
+        },
+        "redb_immediate_transaction_replace": {
+          "count": 20,
+          "min_ns": 2828489,
+          "p50_ns": 3585851,
+          "p95_ns": 12595277,
+          "p99_ns": 13545389,
+          "max_ns": 13545389
+        }
+      },
+      {
+        "payload_bytes": 323619,
+        "file_write_seek_sync_all": {
+          "count": 20,
+          "min_ns": 5627336,
+          "p50_ns": 6459706,
+          "p95_ns": 33109598,
+          "p99_ns": 78389138,
+          "max_ns": 78389138
+        },
+        "redb_immediate_transaction_replace": {
+          "count": 20,
+          "min_ns": 5859802,
+          "p50_ns": 7179551,
+          "p95_ns": 36149695,
+          "p99_ns": 179486328,
+          "max_ns": 179486328
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "unix_time_seconds": 1792703371,
+    "command_arguments": [
+      "target/smol/examples/authority_budget",
+      "/tmp/nativelink-authority-budget-width64-controlled-01",
+      "3",
+      "64",
+      "1024",
+      "smol opt-level=z debug-assertions=true"
+    ],
+    "git_head": "283ff776264fd4f7afe672d209995df088fc347d",
+    "environment": {
+      "recorded_at": "2026-10-22T20:39:00.668406+00:00",
+      "checkout": "/home/b7r6/src/tracemachina/nativelink/nativelink-b7r6-0x03",
+      "baseline_head": "283ff776264fd4f7afe672d209995df088fc347d",
+      "original_branch": "main",
+      "original_worktree": "clean",
+      "implementation_branch": "categorical-elimination",
+      "plan_sha256": "5dcfe5cf1eeb9be05fb286aac1d76bf902b56ac82b378630785efcb969fc89c6",
+      "platform": "Linux-7.2.9-x86_64-with-glibc2.42",
+      "tools": [
+        {
+          "command": [
+            "cargo",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "cargo 1.97.1 (c980f4866 2026-06-30)\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "rustc",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "rustc 1.97.1 (8bab26f4f 2026-07-14)\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "bazel",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "bazel 9.1.1\n",
+          "stderr": ""
+        },
+        {
+          "command": [
+            "bun",
+            "--version"
+          ],
+          "status": 0,
+          "stdout": "1.3.13\n",
+          "stderr": ""
+        }
+      ],
+      "cpu": {
+        "command": [
+          "lscpu"
+        ],
+        "status": 0,
+        "stdout": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 57 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  64\nOn-line CPU(s) list:                     0-63\nVendor ID:                               GenuineIntel\nModel name:                              INTEL(R) XEON(R) PLATINUM 8573C\nCPU family:                              6\nModel:                                   207\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               2\nStepping:                                2\nMicrocode version:                       0xffffffff\nCPU(s) scaling MHz:                      131%\nCPU max MHz:                             2300.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                4599.99\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch tpr_shadow ept vpid fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves vnmi avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid fsrm arch_capabilities\nVirtualization:                          VT-x\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               1.5 MiB (32 instances)\nL1i cache:                               1 MiB (32 instances)\nL2 cache:                                64 MiB (32 instances)\nL3 cache:                                520 MiB (2 instances)\nNUMA node(s):                            2\nNUMA node0 CPU(s):                       0-31\nNUMA node1 CPU(s):                       32-63\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Vulnerable\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Retpoline\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Vulnerable: Clear CPU buffers attempted, no microcode; SMT Host state unknown\nVulnerability Vmscape:                   Not affected\n",
+        "stderr": ""
+      },
+      "memory": {
+        "command": [
+          "free",
+          "-b"
+        ],
+        "status": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:     270431936512 33337257984 19669864448    50524160 219462889472 237094678528\nSwap:    135215443968     2129920 135213314048\n",
+        "stderr": ""
+      },
+      "upstream_delta": {
+        "command": [
+          "git",
+          "diff",
+          "--stat",
+          "a7bb376e6f66284eb37a77b22d2f258c03ba9a7f..283ff776264fd4f7afe672d209995df088fc347d"
+        ],
+        "status": 0,
+        "stdout": " .bazelversion                                      |   2 +-\n .github/workflows/main.yaml                        |  16 +-\n .github/workflows/native-bazel.yaml                |  10 +-\n MODULE.bazel.lock                                  | 222 ++++++++++-----------\n .../src/memory_awaited_action_db.rs                | 104 ++++++----\n .../tests/simple_scheduler_state_manager_test.rs   |  45 -----\n web/apps/docs/content/docs/contribute/bazel.mdx    |   2 +-\n 7 files changed, 192 insertions(+), 209 deletions(-)\n",
+        "stderr": ""
+      }
+    },
+    "source_sha256": {
+      "../Cargo.lock": "3c1766968bad83294ec60e656e6a361bd4b1585bfb1c98f5e282d03b5c456710",
+      "examples/authority_budget.rs": "ea68ba2f8eb1cc7bbf4ef6a607cb65cb6f33463b4882e8921ac5eef8174479f8",
+      "src/authority/journal.rs": "ee27cb7275096d6e888435d110da525cdb6335c740abc3077a0ed44dc293caca",
+      "src/authority/mod.rs": "89aa74292e27ef84dfa7f58ddb231955e5dbba7c96fb7f4809de59d9dff5c07b",
+      "src/authority/types.rs": "8125e5ad889b1570a94e526e25734354327b73e8686750fc1eaacd71bc0c5fb4"
+    },
+    "filesystem": "TARGET SOURCE    FSTYPE OPTIONS\n/      /dev/sda2 ext4   rw,relatime\n",
+    "ambient_load": "shared development host; concurrent builds/tests may run; no performance isolation"
+  }
+}

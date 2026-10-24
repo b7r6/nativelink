@@ -1,0 +1,118 @@
+{
+  "scope": "Two actual namespace-process worker histories with exact accepted diagnostics, pending restart and stable terminal. Qualification construction only.",
+  "patch_sha256": "0bd3ff071ff903c9da8fdf7df52876ce4c9a663f1dc21096d828cf734ec6b687",
+  "source_sha256": {
+    "nativelink-worker/BUILD.bazel": "0e8163e0eba0fe8b3a26fdb701221b75fa7e92f408a10cdd2173cdee61330fca",
+    "nativelink-worker/tests/authority_rpc_test.rs": "ff143fbf4e66973fad782e0b5a6bb0a4d8834fb9efaa36f606a5ff127b26cf58",
+    "nativelink-worker/tests/authority_history_rpc/cases.rs": "ef1b15b05134236651811954ebf729b2922da2dea6edcf9dbaa953eb6474fb03"
+  },
+  "validation": [
+    "Noncacheable success and cacheable exit7 execute actual processes; output,stdout,stderr and diagnostic bytes verify through CAS.",
+    "Legacy worker Everything policies and message template are configured but unused by the authority recipient; offline candidate alone produces no legacy AC/history write.",
+    "Focused strict Clippy and original default/feature2 regression histories pass; compilation cancellation and initial lint failure retained.",
+    "These two process histories use SHA256; the separate logical-CAS RPC fixtures cover both supported algorithms."
+  ],
+  "receipts": [
+    {
+      "file": "attempt2-source-hashes.json.gz",
+      "source_sha256": "9a442fdce530e6acb6a324f4ea34de8042ac53d99df42dfb43d9fc92ad22bc6e",
+      "archive_sha256": "ea6e0060ad92f8110ab0b3db61c1b125bf422ac721ef4906a8de0b97055fc831"
+    },
+    {
+      "file": "cargo-history-attempt1.log.gz.gz",
+      "source_sha256": "f6c13beb256e11ebe11d11388a2436dcc269e9a9ec3bb37de3e64d2e64ab58d5",
+      "archive_sha256": "ae18a7ec6a76e89db845b99a67dd87b60c630972ce89750c7a027b8a1f103ad3"
+    },
+    {
+      "file": "cargo-history-attempt2.log.gz.gz",
+      "source_sha256": "dbfb0618b41d10925f792907dfaeda1c816771749c4c446b2d9ac8384cef13a6",
+      "archive_sha256": "926ad421ec1870f37cfcffe688bbbdf363a90e3ce7f5527a3bdba740899b3234"
+    },
+    {
+      "file": "cargo-history-final.log.gz.gz",
+      "source_sha256": "870c1c33b0f659cbc66afe31880137e81d59f048c13277b60df23261af3eab14",
+      "archive_sha256": "359fc7b6ff95c014336c47c892d0759a9a2355f3e7eea1c939c6ff69b1c4d835"
+    },
+    {
+      "file": "cases-attempt2.rs.gz",
+      "source_sha256": "dcbf53adbb395d535e47d9ff1e450f09013a138da0819943ffb8759eb3dbe5d2",
+      "archive_sha256": "e106000317bb7d9d1ea61a197eaa040eeb230096d6e6a85bc31824f35b6541da"
+    },
+    {
+      "file": "changes.patch.gz",
+      "source_sha256": "0bd3ff071ff903c9da8fdf7df52876ce4c9a663f1dc21096d828cf734ec6b687",
+      "archive_sha256": "e0bfa94489e79616b431b0c96fbb05e343f67e5a58bfa29248c7b54802d4722b"
+    },
+    {
+      "file": "clippy-attempt1.log.gz.gz",
+      "source_sha256": "7b47e31d62fe6629fc3898eb8fe05d77b93fe4adb301338a0a16f3d668719ac5",
+      "archive_sha256": "33474dd85884c55a54501b21998280f4b82109c4cc26c7d5e1ee2d979a7a1375"
+    },
+    {
+      "file": "clippy-final.log.gz.gz",
+      "source_sha256": "f85201b3d39aa1eea699872610564fa9916ff27d9b85487d509e5d9a5afc6ddc",
+      "archive_sha256": "0faed871fb2fbe38deebd73003cc0fd419f6725b75f46c3d90de23f70cd409a1"
+    },
+    {
+      "file": "format-checks.json.gz",
+      "source_sha256": "4a7c83df2ea9a5b230df8f5e3eca2c847b26406c3b91085881e6bb975333c521",
+      "archive_sha256": "8187ed4d4d0ebe755ad6d698f1074d4175a5ee4ca21bbafc7c49c48ef7459738"
+    },
+    {
+      "file": "manifest.json.gz",
+      "source_sha256": "9a5a9add2ea8c296d6da3aff3377e7bb3943e71fc0ff9ca8a609d6425dd00110",
+      "archive_sha256": "aa2296d912e066e5219ff6f584613a3a5199ab145aae3973e6824df93af35edf"
+    },
+    {
+      "file": "regression-command.json.gz",
+      "source_sha256": "2a38b5e984b2b791a33ec6e083e13ac71ed66f9d657a2e888ff81244aca5a872",
+      "archive_sha256": "3007783c85a2fdb7f020547a33c07e405e17b389f184626f90d413e2b3967fc6"
+    },
+    {
+      "file": "regression.log.gz.gz",
+      "source_sha256": "2abc5429427b90432775c66cd747aab3515f31e9cb2d0e416d2070a36fea4d0a",
+      "archive_sha256": "0ce3dce22f8bb33da5ca7b75248648b7239ddb5faa63b4728c544d260226f13c"
+    },
+    {
+      "file": "sources/nativelink-worker/BUILD.bazel.gz",
+      "source_sha256": "0c74ca3c17cacb282c698bd6fe0c4649d630063c21e7bf48713be9bf47b4826c",
+      "archive_sha256": "ce742906fa64a120f7ecda954123bf4da83c77378a2cc14b1e9b5c4d6f6a203e"
+    },
+    {
+      "file": "sources/nativelink-worker/tests/authority_history_rpc/cases.rs.gz",
+      "source_sha256": "ef1b15b05134236651811954ebf729b2922da2dea6edcf9dbaa953eb6474fb03",
+      "archive_sha256": "130b4def16cd0873bcf8eefc022860d57b23c894eb8b6579fbc91900f687b77a"
+    },
+    {
+      "file": "sources/nativelink-worker/tests/authority_rpc_test.rs.gz",
+      "source_sha256": "ff143fbf4e66973fad782e0b5a6bb0a4d8834fb9efaa36f606a5ff127b26cf58",
+      "archive_sha256": "657ca3b93c7f06c6c3b86522965592194224d8c951fa4f6d2722cbb7cf51f1a5"
+    },
+    {
+      "file": "history-workspace-bazel-final.log.gz",
+      "source_sha256": "646c87e05cd352257e54aa94c96cadb0379caf50c9672bbaad626f36ed6b09f5",
+      "archive_sha256": "b278ff2b2a6bfebb1909d78ad25310cdb9407d67a0e9177f7e8b1efb4ba02b68"
+    },
+    {
+      "file": "real-worker-root-format.patch.gz",
+      "source_sha256": "89b581f67f1d613b0ea55ff5a35f1244311cb0c9592ed06181145edb29dce9d0",
+      "archive_sha256": "b0dd2910ed1bcbc1848bcd60b74f5c0523d28e31adc38c078b5e27de2b345e71"
+    },
+    {
+      "file": "integrated-bazel-test.log.gz",
+      "source_sha256": "3228ebb2a019e653fe689e0cd3881b884b2457b2d5464b906a459f63635e7dbf",
+      "archive_sha256": "c9ca49b4301b56381e0c2f99a5a18b6addbc38e31abe82ef66964add6a7efe16"
+    }
+  ],
+  "integrated_source_sha256": {
+    "nativelink-worker/BUILD.bazel": "0e8163e0eba0fe8b3a26fdb701221b75fa7e92f408a10cdd2173cdee61330fca",
+    "nativelink-worker/tests/authority_rpc_test.rs": "4bccbd447d538c3674746a6696691400f654ba34fe027ec5c8f7639d4a439afb",
+    "nativelink-worker/tests/authority_history_rpc/cases.rs": "ef1b15b05134236651811954ebf729b2922da2dea6edcf9dbaa953eb6474fb03"
+  },
+  "integrated_validation": {
+    "source_delta": "Pinned root rustfmt wrapped the parent helper call at line 236. BUILD also includes the separately qualified manager suite timeout adjustment. Original hashes remain above.",
+    "bazel": "2 passed in the final 153/153 workspace run; initial rustfmt build refusal is retained.",
+    "combined_workspace": "../history-workspace/manifest.json",
+    "namespace_scope": "Original --nocapture Cargo log contains real execution traces and no namespace-unavailable skip. Bazel passes both cases."
+  }
+}

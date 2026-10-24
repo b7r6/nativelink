@@ -1778,3 +1778,277 @@ async fn the_listing_reads_records_concurrently_in_the_stores_order() -> Result<
     );
     Ok(())
 }
+
+/// A listing's next page and an operation update share the database lock.
+/// Tokio's FIFO mutex makes the queued reservation deterministic: after the
+/// holder drops, a newer update cannot pass an unpolled page-read waiter.
+#[derive(Default)]
+struct ListingProgress {
+    rows: AtomicUsize,
+    tail_started: AtomicBool,
+    tail_finished: AtomicBool,
+    tail_dropped: AtomicBool,
+}
+
+struct ListingTailGuard(Arc<ListingProgress>);
+
+impl Drop for ListingTailGuard {
+    fn drop(&mut self) {
+        self.0.tail_dropped.store(true, Ordering::SeqCst);
+    }
+}
+
+struct ReservedListingDb<T: AwaitedActionDb> {
+    inner: T,
+    access: Arc<tokio::sync::Mutex<()>>,
+    progress: Arc<ListingProgress>,
+}
+
+impl<T: AwaitedActionDb> MetricsComponent for ReservedListingDb<T> {
+    fn publish(
+        &self,
+        kind: MetricKind,
+        field_metadata: MetricFieldData,
+    ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+        self.inner.publish(kind, field_metadata)
+    }
+}
+
+impl<T: AwaitedActionDb> AwaitedActionDb for ReservedListingDb<T> {
+    type Subscriber = T::Subscriber;
+
+    async fn get_awaited_action_by_id(
+        &self,
+        client_operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        let _guard = self.access.lock().await;
+        self.inner
+            .get_awaited_action_by_id(client_operation_id)
+            .await
+    }
+
+    async fn get_all_awaited_actions(
+        &self,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.inner.get_all_awaited_actions().await
+    }
+
+    async fn get_by_operation_id(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        let _guard = self.access.lock().await;
+        self.inner.get_by_operation_id(operation_id).await
+    }
+
+    async fn get_range_of_actions(
+        &self,
+        state: SortedAwaitedActionState,
+        start: Bound<SortedAwaitedAction>,
+        end: Bound<SortedAwaitedAction>,
+        desc: bool,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        let listed: Vec<_> = self
+            .inner
+            .get_range_of_actions(state, start, end, desc)
+            .await?
+            .collect()
+            .await;
+        let tail = stream::once(async {
+            let _tail = ListingTailGuard(self.progress.clone());
+            self.progress.tail_started.store(true, Ordering::SeqCst);
+            let _guard = self.access.lock().await;
+            self.progress.tail_finished.store(true, Ordering::SeqCst);
+            None
+        })
+        .filter_map(future::ready);
+        Ok(stream::iter(listed)
+            .inspect(|_| {
+                self.progress.rows.fetch_add(1, Ordering::SeqCst);
+            })
+            .chain(tail))
+    }
+
+    async fn update_awaited_action(&self, new_awaited_action: AwaitedAction) -> Result<(), Error> {
+        let _guard = self.access.lock().await;
+        self.inner.update_awaited_action(new_awaited_action).await
+    }
+
+    async fn add_action(
+        &self,
+        client_operation_id: OperationId,
+        action_info: Arc<ActionInfo>,
+        no_event_action_timeout: Duration,
+    ) -> Result<Self::Subscriber, Error> {
+        let _guard = self.access.lock().await;
+        self.inner
+            .add_action(client_operation_id, action_info, no_event_action_timeout)
+            .await
+    }
+}
+
+fn reserved_listing_state_manager(
+    access: Arc<tokio::sync::Mutex<()>>,
+    progress: Arc<ListingProgress>,
+) -> Arc<
+    SimpleSchedulerStateManager<
+        impl AwaitedActionDb,
+        MockInstantWrapped,
+        fn() -> MockInstantWrapped,
+    >,
+> {
+    let now_fn: fn() -> MockInstantWrapped = MockInstantWrapped::default;
+    let task_change_notify = Arc::new(Notify::new());
+    SimpleSchedulerStateManager::new(
+        5,
+        WORKER_TIMEOUT,
+        Duration::from_mins(5),
+        MAX_EXECUTING,
+        ReservedListingDb {
+            inner: memory_awaited_action_db_factory(
+                0,
+                &task_change_notify,
+                MockInstantWrapped::default,
+            ),
+            access,
+            progress,
+        },
+        now_fn,
+        Some(Arc::new(WorkerRegistry::new())),
+    )
+}
+
+async fn wait_for_listing_progress(predicate: impl Fn() -> bool + Send + Sync) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !predicate() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("listing task must make progress independently of its consumer");
+}
+
+/// A prefetched page can be waiting for the same database lock the matcher
+/// needs to assign the row just yielded. That read must keep making progress
+/// even when the consumer stops polling the listing to assign the row.
+#[nativelink_test]
+async fn a_listed_action_can_be_assigned_without_polling_the_listing_again() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let access = Arc::new(tokio::sync::Mutex::new(()));
+    let progress = Arc::new(ListingProgress::default());
+    let state_mgr = reserved_listing_state_manager(access.clone(), progress.clone());
+    let _clients = add_prioritised_actions(state_mgr.as_ref(), 1).await?;
+    let guard = access.lock().await;
+    let mut listing = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?;
+    let mut next = listing.next().boxed();
+    let first_poll = futures::poll!(&mut next);
+    wait_for_listing_progress(|| progress.tail_started.load(Ordering::SeqCst)).await;
+    assert!(
+        !progress.tail_finished.load(Ordering::SeqCst),
+        "the page read is queued behind the held lock"
+    );
+    drop(guard);
+    let row = match first_poll {
+        core::task::Poll::Ready(row) => row,
+        core::task::Poll::Pending => next.await,
+    }
+    .expect("the queued action is listed");
+    let (state, _) = row.as_state().await?;
+    let operation_id = state.client_operation_id.clone();
+    let worker_id = WorkerId::default();
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        state_mgr.assign_operation(&operation_id, Ok(&worker_id)),
+    )
+    .await
+    .expect("assignment must not wait behind an unpolled listing's lock reservation")?;
+    let (state, _) = row.as_state().await?;
+    assert_eq!(state.stage, ActionStage::Executing);
+    assert!(progress.tail_finished.load(Ordering::SeqCst));
+    Ok(())
+}
+
+/// A full output queue must stop prefetch before a page starts reserving the
+/// database mutex. Moving buffered reads wholesale into a sending task would
+/// leave that reservation unpolled behind channel backpressure.
+#[nativelink_test]
+async fn listing_backpressure_does_not_reserve_the_assignment_lock() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let access = Arc::new(tokio::sync::Mutex::new(()));
+    let progress = Arc::new(ListingProgress::default());
+    let state_mgr = reserved_listing_state_manager(access.clone(), progress.clone());
+    let count = 2 * LISTING_READ_CONCURRENCY;
+    let _clients =
+        add_prioritised_actions(state_mgr.as_ref(), i32::try_from(count).unwrap()).await?;
+    let guard = access.lock().await;
+    let mut listing = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?;
+    // Ensure the first consumer poll has a full batch available even when
+    // producer and consumer run on different runtime threads.
+    wait_for_listing_progress(|| progress.rows.load(Ordering::SeqCst) == LISTING_READ_CONCURRENCY)
+        .await;
+    let row = tokio::time::timeout(Duration::from_secs(1), listing.next())
+        .await
+        .expect("a listed row must arrive before the pending tail")
+        .expect("the queued action is listed");
+    wait_for_listing_progress(|| progress.rows.load(Ordering::SeqCst) == count).await;
+    assert!(
+        !progress.tail_started.load(Ordering::SeqCst),
+        "a full listing channel must stop before polling the next page"
+    );
+    drop(guard);
+    let (state, _) = row.as_state().await?;
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        state_mgr.assign_operation(&state.client_operation_id, Ok(&WorkerId::default())),
+    )
+    .await
+    .expect("assignment must progress while the listing channel is full")?;
+    assert_eq!(row.as_state().await?.0.stage, ActionStage::Executing);
+    Ok(())
+}
+
+#[nativelink_test]
+async fn dropping_a_listing_cancels_its_pending_page_read() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let access = Arc::new(tokio::sync::Mutex::new(()));
+    let progress = Arc::new(ListingProgress::default());
+    let state_mgr = reserved_listing_state_manager(access.clone(), progress.clone());
+    let _clients = add_prioritised_actions(state_mgr.as_ref(), 1).await?;
+    let guard = access.lock().await;
+    let listing = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?;
+    wait_for_listing_progress(|| progress.tail_started.load(Ordering::SeqCst)).await;
+    // Drop before even polling the returned stream. Its task must relinquish
+    // the pending mutex waiter without needing the holder to unlock first.
+    drop(listing);
+    wait_for_listing_progress(|| progress.tail_dropped.load(Ordering::SeqCst)).await;
+    assert!(!progress.tail_finished.load(Ordering::SeqCst));
+    drop(guard);
+    let _guard = tokio::time::timeout(Duration::from_secs(1), access.lock())
+        .await
+        .expect("dropping the stream must remove its fair-mutex reservation");
+    Ok(())
+}

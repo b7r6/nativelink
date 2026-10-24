@@ -1,0 +1,412 @@
+{
+  "scope": "Actual namespace worker output to staged filesystem publication, same original authority; test-only, no canonical gateway acknowledgment.",
+  "frozen_patch_sha256": "1781a0bf0480faa80a4863d4c33c059b7dc8e39a5111e10860588cc39db686ef",
+  "unchanged_shared_source_hashes": {
+    "nativelink-scheduler/tests/publication_candidate/binding.rs": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+    "nativelink-scheduler/tests/publication_candidate/capacity.rs": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+    "nativelink-scheduler/tests/publication_candidate/cases.rs": "31cde8af71148731105dcc7e5c3ebf2e62c63ce8ee3b7799b464a49fb2926cae",
+    "nativelink-scheduler/tests/publication_candidate/engine.rs": "c667458611759b16caa31f3a102d1efa16714c940c533517dd8c01255eae3067",
+    "nativelink-scheduler/tests/publication_candidate/real_request.rs": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+    "nativelink-scheduler/tests/publication_candidate/real_request_tests.rs": "8f5c9a4cfe016998629a1775eb729dc015c37d2b064539685836a508bf06dc99",
+    "nativelink-scheduler/tests/publication_candidate/types.rs": "32948341c3c71a884c6d0f0d447083fce8afc82395de5936ba959e500af68aab",
+    "nativelink-scheduler/tests/publication_candidate/validation.rs": "a3d12a6ab61981ba6f1e50c875426c879e0f1902286b07550a7610c49342a0aa",
+    "nativelink-scheduler/tests/publication_physical/fixture.rs": "a3b8a5365a8acc6a1da073a4ac2f6793c488498c3eb6c1214721349298628fb8",
+    "nativelink-scheduler/tests/retention/coarse.rs": "dfbe4d3701a510421be2425cef4e24b67aadd9a77e5be0e260ac2550f80042ad",
+    "nativelink-scheduler/tests/retention/protocol.rs": "ba8942094b22d31574a3c64f68f83c5a87de2c9d3f8bcdd3e74f1cbac4067c67"
+  },
+  "receipts": [
+    {
+      "file": "manifest.json.gz",
+      "source_sha256": "82cb6f2c858c3c33ba2ca15ba6ab45831f877cf13e7488712ba270260cbdc961",
+      "archive_sha256": "cf9a1eec5e4f36b24313ac9fe4db4a1fa1ae1e082e0935bb5cb045662192e350"
+    },
+    {
+      "file": "nativelink-operation-request-accessor.patch.gz",
+      "source_sha256": "1d29e6c6983523d499e2f647932ccdc99b3061dca2719476e9c79cad28e33dbc",
+      "archive_sha256": "f79469f3b874db427a7a4ce2a25ea57ca8e3ca540e26f6ffae60555833da9bf9"
+    },
+    {
+      "file": "nativelink-publication-candidate-second-postfreeze.patch.gz",
+      "source_sha256": "f64cdd5be87be24ab51290003c100baf637c15430067779d2ef8e8f7fa2b341f",
+      "archive_sha256": "72bf2e81634857a50cd53b21e7a5501c83fb92d319b6b3fce00fd3f4764fd28e"
+    },
+    {
+      "file": "nativelink-request-principal-accessor.patch.gz",
+      "source_sha256": "107d313247a0a564d683680388d0a73e49f79f572e9ad3b53a8578e0b166040c",
+      "archive_sha256": "67cf685c2b51c52be6aca10380cd22aa99ad791e03ce8f9535364a641a418f8e"
+    },
+    {
+      "file": "publication-physical.patch.gz",
+      "source_sha256": "ac0041e8ce2504f0e25a74a11decce4ec47ea20c19c19836ba4e41830cb8f2e0",
+      "archive_sha256": "c2e744954fc5fcb0463ff91ef022d760b2c9458184f2d3b3acebda901c8e0c3a"
+    },
+    {
+      "file": "publication-real-request.patch.gz",
+      "source_sha256": "d75d812d6ebb9b19b2449182953cdd2589b264b17c4fa7fd088d5402dab8cde0",
+      "archive_sha256": "f5bbd92d185c88612109b12e95e32d7720f8a5a314354a242039ad8e6a3244ac"
+    },
+    {
+      "file": "publication-worker.patch.gz",
+      "source_sha256": "1781a0bf0480faa80a4863d4c33c059b7dc8e39a5111e10860588cc39db686ef",
+      "archive_sha256": "47a26f68a9c7798a923c2a131061fde1174171af546759557dd870fdbebae137"
+    },
+    {
+      "file": "qualification.json.gz",
+      "source_sha256": "8289c7152319069a51d469e0647e8038cc174cab763dc6a98ad41d39b8710ea2",
+      "archive_sha256": "3442260d0143dd1bce53329bec16acaffa25deeb72f65d7a0aa173b704aa5647"
+    },
+    {
+      "file": "run-01/cargo-test.log.gz",
+      "source_sha256": "d530e3b0ab71d3e717da8a747d66b3296beafbb4eb03d1a54c73ca183064651e",
+      "archive_sha256": "e8c9319f12d202287ca9fcd21078194fb543315df6e71fe7e1fa653768792b8f"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "97fbb592f943c783b5dc451a1e023200632dbb2fb729d66b75f5bac57fb80163",
+      "archive_sha256": "044d82813010ac5d8979e314f6729e9719f5e681ea3c90ae5bca08cc212ce697"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source_sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+      "archive_sha256": "170adc94d800f78b33a6cce01682bd5c6bc5ea704ed4fbd5af03c80ab809ebc7"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/src/authority/request.rs.gz",
+      "source_sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "archive_sha256": "9927bff8b5c2585fab90b6f64a7b779eb4cfb7866151d876f447620024b403aa"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/binding.rs.gz",
+      "source_sha256": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+      "archive_sha256": "a14971795b1f3673c841ce0468dc6b87e1a4f861ee48f8e45dcced7f4f8dc051"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/capacity.rs.gz",
+      "source_sha256": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+      "archive_sha256": "0ca72e6d6405056a8538810d01f33fce084336a330b05feffbe1e469a488f11d"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/cases.rs.gz",
+      "source_sha256": "31cde8af71148731105dcc7e5c3ebf2e62c63ce8ee3b7799b464a49fb2926cae",
+      "archive_sha256": "5b99b74e5c8dad708330d6ad75876d4aabe9e5dff83ea5fe04d65bc148f9c843"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/engine.rs.gz",
+      "source_sha256": "c667458611759b16caa31f3a102d1efa16714c940c533517dd8c01255eae3067",
+      "archive_sha256": "cfb6c8389521272346032e1d8f934102d0d74e06ae031cefe8673e7596898848"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/real_request.rs.gz",
+      "source_sha256": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+      "archive_sha256": "a9281702dcfc10b81d108d46d843b0f9f9a54e2c30464731560859be2a6a4b16"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs.gz",
+      "source_sha256": "8f5c9a4cfe016998629a1775eb729dc015c37d2b064539685836a508bf06dc99",
+      "archive_sha256": "d57364fecdb0424958c23297b28f92f0f753d3b9de6e01730dc2e6181f397ad6"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/types.rs.gz",
+      "source_sha256": "32948341c3c71a884c6d0f0d447083fce8afc82395de5936ba959e500af68aab",
+      "archive_sha256": "f4cd504c9ee525beb8970700d0d7f7fc756c376502109a5bc560ae55e789d37b"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_candidate/validation.rs.gz",
+      "source_sha256": "a3d12a6ab61981ba6f1e50c875426c879e0f1902286b07550a7610c49342a0aa",
+      "archive_sha256": "6ebb9cd22987689b245d3f9b3d150ee2bb97e0f0d243425cd989ae458f980fbe"
+    },
+    {
+      "file": "run-01/source/nativelink-scheduler/tests/publication_physical/fixture.rs.gz",
+      "source_sha256": "a3b8a5365a8acc6a1da073a4ac2f6793c488498c3eb6c1214721349298628fb8",
+      "archive_sha256": "024f2d126c1bf2528ee22f1605d41aa9478953564d07f1d2176cd0a7a5d23f14"
+    },
+    {
+      "file": "run-01/source/nativelink-worker/BUILD.bazel.gz",
+      "source_sha256": "cfff868064f936a7ea5cfbb08be3aab9b83e7a95664a3c3ddc6fa87c0c02857d",
+      "archive_sha256": "8c5850e66b934e25de4e157312ff8ef10a7eaf6408f77ddf24b3b726324b11f7"
+    },
+    {
+      "file": "run-01/source/nativelink-worker/src/authority_worker.rs.gz",
+      "source_sha256": "a3b2829754a88db92702fb67d920f9e99cf5cd2b14f4c677a0a218f4c29cd53b",
+      "archive_sha256": "c9a7c1e00a8c7178df24f61cc609a1eb216a320e6f3685b50d8bfe7d2d8600e0"
+    },
+    {
+      "file": "run-01/source/nativelink-worker/tests/authority_publication/cases.rs.gz",
+      "source_sha256": "82d0e1d020c7015ac22b65f638d847e10bd406eb7b0b5830b92be0e09fceba28",
+      "archive_sha256": "e5739063ffe9fc0bff929a12dc4fdefdbbee3b15fe3213ee1c235ca74683a334"
+    },
+    {
+      "file": "run-01/source/nativelink-worker/tests/authority_scheduler_test.rs.gz",
+      "source_sha256": "cf8ba91e1678f1d61c77e770bd9af271df1b0085fb9ed666390b17c52a2a46d3",
+      "archive_sha256": "20d17cf16e97ad61e5a05925ee8f14e0f0bfa21f34297c3b1735f1e6243c0316"
+    },
+    {
+      "file": "run-01/sources.json.gz",
+      "source_sha256": "9233fbd4a08d5904e5d5cdddb9c5e3a4144d6c3fa6ceb2c4380b3270cc320020",
+      "archive_sha256": "c1ed826d2037941cdc9ce18ce918b89889dab653fd519ba3432ade54ef8de05f"
+    },
+    {
+      "file": "run-02/buildifier.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-02/clippy.log.gz",
+      "source_sha256": "1c506eef6dfe3c336570638827a3c7e0625c8ee895c85f26d7e13eb3d8235da9",
+      "archive_sha256": "a1af9e37b9637a2c1afcd6f2b07e05fb84e56f11a5a299acb6cc84a950eea124"
+    },
+    {
+      "file": "run-02/diff.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-02/format.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "97fbb592f943c783b5dc451a1e023200632dbb2fb729d66b75f5bac57fb80163",
+      "archive_sha256": "044d82813010ac5d8979e314f6729e9719f5e681ea3c90ae5bca08cc212ce697"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/design/categorical/publication-worker.md.gz",
+      "source_sha256": "27a979f74c1b880997483418ca39d2b4ef54306f5e33eef5aad4c268c2c91eb0",
+      "archive_sha256": "9c103caf43bbef04dfca818d96faf703641e5cbae09c5560c9316b422238728a"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source_sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+      "archive_sha256": "170adc94d800f78b33a6cce01682bd5c6bc5ea704ed4fbd5af03c80ab809ebc7"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/src/authority/request.rs.gz",
+      "source_sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "archive_sha256": "9927bff8b5c2585fab90b6f64a7b779eb4cfb7866151d876f447620024b403aa"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/binding.rs.gz",
+      "source_sha256": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+      "archive_sha256": "a14971795b1f3673c841ce0468dc6b87e1a4f861ee48f8e45dcced7f4f8dc051"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/capacity.rs.gz",
+      "source_sha256": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+      "archive_sha256": "0ca72e6d6405056a8538810d01f33fce084336a330b05feffbe1e469a488f11d"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/cases.rs.gz",
+      "source_sha256": "31cde8af71148731105dcc7e5c3ebf2e62c63ce8ee3b7799b464a49fb2926cae",
+      "archive_sha256": "5b99b74e5c8dad708330d6ad75876d4aabe9e5dff83ea5fe04d65bc148f9c843"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/engine.rs.gz",
+      "source_sha256": "c667458611759b16caa31f3a102d1efa16714c940c533517dd8c01255eae3067",
+      "archive_sha256": "cfb6c8389521272346032e1d8f934102d0d74e06ae031cefe8673e7596898848"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/real_request.rs.gz",
+      "source_sha256": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+      "archive_sha256": "a9281702dcfc10b81d108d46d843b0f9f9a54e2c30464731560859be2a6a4b16"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs.gz",
+      "source_sha256": "8f5c9a4cfe016998629a1775eb729dc015c37d2b064539685836a508bf06dc99",
+      "archive_sha256": "d57364fecdb0424958c23297b28f92f0f753d3b9de6e01730dc2e6181f397ad6"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/types.rs.gz",
+      "source_sha256": "32948341c3c71a884c6d0f0d447083fce8afc82395de5936ba959e500af68aab",
+      "archive_sha256": "f4cd504c9ee525beb8970700d0d7f7fc756c376502109a5bc560ae55e789d37b"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_candidate/validation.rs.gz",
+      "source_sha256": "a3d12a6ab61981ba6f1e50c875426c879e0f1902286b07550a7610c49342a0aa",
+      "archive_sha256": "6ebb9cd22987689b245d3f9b3d150ee2bb97e0f0d243425cd989ae458f980fbe"
+    },
+    {
+      "file": "run-02/source/nativelink-scheduler/tests/publication_physical/fixture.rs.gz",
+      "source_sha256": "a3b8a5365a8acc6a1da073a4ac2f6793c488498c3eb6c1214721349298628fb8",
+      "archive_sha256": "024f2d126c1bf2528ee22f1605d41aa9478953564d07f1d2176cd0a7a5d23f14"
+    },
+    {
+      "file": "run-02/source/nativelink-worker/BUILD.bazel.gz",
+      "source_sha256": "cfff868064f936a7ea5cfbb08be3aab9b83e7a95664a3c3ddc6fa87c0c02857d",
+      "archive_sha256": "8c5850e66b934e25de4e157312ff8ef10a7eaf6408f77ddf24b3b726324b11f7"
+    },
+    {
+      "file": "run-02/source/nativelink-worker/src/authority_worker.rs.gz",
+      "source_sha256": "a3b2829754a88db92702fb67d920f9e99cf5cd2b14f4c677a0a218f4c29cd53b",
+      "archive_sha256": "c9a7c1e00a8c7178df24f61cc609a1eb216a320e6f3685b50d8bfe7d2d8600e0"
+    },
+    {
+      "file": "run-02/source/nativelink-worker/tests/authority_publication/cases.rs.gz",
+      "source_sha256": "98e585cd5593d99b976bacf652049ed2c4d9ef9a90acac9c2d343b9f27070213",
+      "archive_sha256": "a815d3e9e82064fe521ae0de633a1dcd6d19c9457ddbb22f3be3321312732d53"
+    },
+    {
+      "file": "run-02/source/nativelink-worker/tests/authority_scheduler_test.rs.gz",
+      "source_sha256": "cf8ba91e1678f1d61c77e770bd9af271df1b0085fb9ed666390b17c52a2a46d3",
+      "archive_sha256": "20d17cf16e97ad61e5a05925ee8f14e0f0bfa21f34297c3b1735f1e6243c0316"
+    },
+    {
+      "file": "run-02/sources.json.gz",
+      "source_sha256": "7536e5f74d5148a2992820a92d33ad6a29c31fceee4c886c63c626e45d2d998c",
+      "archive_sha256": "54820220461b551fc46a922cb2ff6115a099bab6e935b4b2779fc6e9f7ade01c"
+    },
+    {
+      "file": "run-02/typos.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-02/vale.log.gz",
+      "source_sha256": "9d1fca315ebd2c6d61b8f49df209989428f90be1cf7b552122ce5b7b89ee765b",
+      "archive_sha256": "686d949fd8faf431f1cd95ee4b45c8dec7c52691287d394d0ea308e7a3c91a5b"
+    },
+    {
+      "file": "run-03/buildifier.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-03/cargo-test.log.gz",
+      "source_sha256": "9d1d0a5623bef9a96efb8b7f38b427024e168a9b02a6e6e7b5d4ca421bcca683",
+      "archive_sha256": "1306fb607bb99c8744d643db6f2022239edf6952a4fcbc51cb48029cd47143f1"
+    },
+    {
+      "file": "run-03/diff.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-03/format.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/BUILD.bazel.gz",
+      "source_sha256": "97fbb592f943c783b5dc451a1e023200632dbb2fb729d66b75f5bac57fb80163",
+      "archive_sha256": "044d82813010ac5d8979e314f6729e9719f5e681ea3c90ae5bca08cc212ce697"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/design/categorical/publication-worker.md.gz",
+      "source_sha256": "6bea41ab40a0f0f075d53aa49a02cb56f2d6752399b8564d20885f78f8dbe6a4",
+      "archive_sha256": "cd8ee9ad1013e2a2cbdb89d65a5d41cf2f3735db71b63a93d4fe0b60cf61924c"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/src/authority/mod.rs.gz",
+      "source_sha256": "8cf6e43594b03c7e425e5947b3bfadd1046649ff209e7dee7c46fda26f924f0d",
+      "archive_sha256": "170adc94d800f78b33a6cce01682bd5c6bc5ea704ed4fbd5af03c80ab809ebc7"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/src/authority/request.rs.gz",
+      "source_sha256": "0ead3c162f76f3a72295adcd73ca18d391ed67db024df2394c640f89552b253d",
+      "archive_sha256": "9927bff8b5c2585fab90b6f64a7b779eb4cfb7866151d876f447620024b403aa"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/binding.rs.gz",
+      "source_sha256": "8b24530501054fa820fb3db38e900dc0dd547f14ef0405f50888ac4aa4c32b1f",
+      "archive_sha256": "a14971795b1f3673c841ce0468dc6b87e1a4f861ee48f8e45dcced7f4f8dc051"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/capacity.rs.gz",
+      "source_sha256": "738d9104fd63e3c4c8fbde6e7596b6526730e17e5225e7ca4f2200dceade5f39",
+      "archive_sha256": "0ca72e6d6405056a8538810d01f33fce084336a330b05feffbe1e469a488f11d"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/cases.rs.gz",
+      "source_sha256": "31cde8af71148731105dcc7e5c3ebf2e62c63ce8ee3b7799b464a49fb2926cae",
+      "archive_sha256": "5b99b74e5c8dad708330d6ad75876d4aabe9e5dff83ea5fe04d65bc148f9c843"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/engine.rs.gz",
+      "source_sha256": "c667458611759b16caa31f3a102d1efa16714c940c533517dd8c01255eae3067",
+      "archive_sha256": "cfb6c8389521272346032e1d8f934102d0d74e06ae031cefe8673e7596898848"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/real_request.rs.gz",
+      "source_sha256": "a5721a3c6f9ea3cddd2165e9128e43d7a1dbe42256f99b9aa02802dfee52ca36",
+      "archive_sha256": "a9281702dcfc10b81d108d46d843b0f9f9a54e2c30464731560859be2a6a4b16"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/real_request_tests.rs.gz",
+      "source_sha256": "8f5c9a4cfe016998629a1775eb729dc015c37d2b064539685836a508bf06dc99",
+      "archive_sha256": "d57364fecdb0424958c23297b28f92f0f753d3b9de6e01730dc2e6181f397ad6"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/types.rs.gz",
+      "source_sha256": "32948341c3c71a884c6d0f0d447083fce8afc82395de5936ba959e500af68aab",
+      "archive_sha256": "f4cd504c9ee525beb8970700d0d7f7fc756c376502109a5bc560ae55e789d37b"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_candidate/validation.rs.gz",
+      "source_sha256": "a3d12a6ab61981ba6f1e50c875426c879e0f1902286b07550a7610c49342a0aa",
+      "archive_sha256": "6ebb9cd22987689b245d3f9b3d150ee2bb97e0f0d243425cd989ae458f980fbe"
+    },
+    {
+      "file": "run-03/source/nativelink-scheduler/tests/publication_physical/fixture.rs.gz",
+      "source_sha256": "a3b8a5365a8acc6a1da073a4ac2f6793c488498c3eb6c1214721349298628fb8",
+      "archive_sha256": "024f2d126c1bf2528ee22f1605d41aa9478953564d07f1d2176cd0a7a5d23f14"
+    },
+    {
+      "file": "run-03/source/nativelink-worker/BUILD.bazel.gz",
+      "source_sha256": "cfff868064f936a7ea5cfbb08be3aab9b83e7a95664a3c3ddc6fa87c0c02857d",
+      "archive_sha256": "8c5850e66b934e25de4e157312ff8ef10a7eaf6408f77ddf24b3b726324b11f7"
+    },
+    {
+      "file": "run-03/source/nativelink-worker/src/authority_worker.rs.gz",
+      "source_sha256": "a3b2829754a88db92702fb67d920f9e99cf5cd2b14f4c677a0a218f4c29cd53b",
+      "archive_sha256": "c9a7c1e00a8c7178df24f61cc609a1eb216a320e6f3685b50d8bfe7d2d8600e0"
+    },
+    {
+      "file": "run-03/source/nativelink-worker/tests/authority_publication/cases.rs.gz",
+      "source_sha256": "98e585cd5593d99b976bacf652049ed2c4d9ef9a90acac9c2d343b9f27070213",
+      "archive_sha256": "a815d3e9e82064fe521ae0de633a1dcd6d19c9457ddbb22f3be3321312732d53"
+    },
+    {
+      "file": "run-03/source/nativelink-worker/tests/authority_scheduler_test.rs.gz",
+      "source_sha256": "cf8ba91e1678f1d61c77e770bd9af271df1b0085fb9ed666390b17c52a2a46d3",
+      "archive_sha256": "20d17cf16e97ad61e5a05925ee8f14e0f0bfa21f34297c3b1735f1e6243c0316"
+    },
+    {
+      "file": "run-03/sources.json.gz",
+      "source_sha256": "1172ca7071d4b6045b065c61de741f9904d813f3e128f703140688f5fc721086",
+      "archive_sha256": "73cda882a46f1a49cb4e36f26fb61a91e3bae797caba252d58d666e1d44ce76b"
+    },
+    {
+      "file": "run-03/typos.log.gz",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "file": "run-03/vale.log.gz",
+      "source_sha256": "62159136fed6ad4f67f83d4e59283a44cb59e1a9963625046b2325d4b573ddbd",
+      "archive_sha256": "86ee0203a36543bde7f7706accac29e1b7d3a0df9ece544b786ac624783e69da"
+    },
+    {
+      "file": "root-integrated-bazel.log.gz",
+      "source_sha256": "282d96e3162675dd5b1d3ed2d0b01ec66a3d9bdaa0311dfa45e5610510df1d32",
+      "archive_sha256": "02e46515b053d0146c557648fbd4889fa55a941a212378020d6689d7ea0fab67"
+    },
+    {
+      "file": "root-worker-test.log.gz",
+      "source_sha256": "90d0e9f06a08eab615b07a1e838a5c98b41dcd372947a20d50e7247581334ab6",
+      "archive_sha256": "9b1bedf799e24d876800df56d447ee0e1aa185146bef0ee76f8baf7f4c81b659"
+    },
+    {
+      "file": "root-worker-test.xml.gz",
+      "source_sha256": "74aeb36808612453a90ef237956a66e43caaecd682b47037eb02c5143a7a1623",
+      "archive_sha256": "3c9e51e4a47be758fa631bcd8b9283d900dcf6c6faeb47f11bcfac273021adc7"
+    }
+  ],
+  "root_integration": {
+    "command": "bazel test --jobs=8 --local_test_jobs=2 --test_env=RUST_TEST_THREADS=8 //nativelink-worker:integration_tests/authority_scheduler_test_test",
+    "status": "PASS",
+    "tests": 7,
+    "elapsed_seconds": 33.699,
+    "skip_marker_count": 0,
+    "note": "Bazel success output captures test names; isolated nocapture receipts additionally require both actual-process PASS markers."
+  }
+}

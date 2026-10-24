@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "/tmp/nativelink-authority-bytestream-identity-package-restored/verify-evidence.py"
+  ],
+  "returncode": 0,
+  "elapsed_s": 1.6789047718048096,
+  "log_sha256": "bd0ea5fa4954ba46aeeb82a0539d3fea3ed11b83aecc7a89932a75c300a13d58",
+  "identical_to_original_verification": true
+}

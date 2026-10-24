@@ -1,0 +1,401 @@
+{
+  "artifact_sha256": {
+    "activated.redb": "d6bb004cd1cd53a3d38bd3d844f4a00955ae1c0e21913f1e00eccec7c92ae08c",
+    "activated.snapshot.json": "6279b3abbcc2e30cb58f17afe1dbb0dba320eb981eb6d60dce613e183886524c",
+    "committed-before-apply.redb": "f4f74921c63ba61742fa660c5f8d3fa236603bcb57c379ad189d437b9cc7f738",
+    "preactivation.redb": "0e4c94a9d8202b26838aca2605e70a0845926313661ef783f437ec97c7d505a1",
+    "preactivation.snapshot.json": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+    "uncommitted-activation.redb": "41b3fc3c642fd055dde981faf279e6fa37193d842b1c1362282c0dd30a8a4af7"
+  },
+  "base_binary_sha256": "cf70d786ef772158620d9192de2822740ed434f3c8080f090b317740c8a6a729",
+  "base_compiled_fixture_sha256": "0efe65c72f5f8827a03bd6e14eaed35ae80fb14cc41363f27d8384c0667b8355",
+  "base_compiled_sources_sha256": {
+    "Cargo.lock": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "db1804889f1cade952304ce62ae945ff396c49a5d5cd636d33635d39ef2d880b",
+    "nativelink-scheduler/src/authority/format.rs": "00d3ff1e7ac5027c1c98e69feeec3aa8ca958ea73ff3ab22f358f0e558a0a7b2",
+    "nativelink-scheduler/src/authority/journal.rs": "594879da0c157754e4caaaf697d0d4239204fed8f03ace3c1528b3a5265e4f88",
+    "nativelink-scheduler/src/authority/mod.rs": "ed30463703b334df7302d9a4f30407284caf55d1ae4dab61223c7bf2f83527e2",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "base_source_archive_sha256": "11a6fad2e9b54a2314a82e367c5d1bdcca44cc7c4d161a845617767f58517f91",
+  "base_target_directory": "/tmp/nativelink-frozen-build-cache/base-a69f9203bfd96eb5c40e0d784e1a48943d23e7e33b2331198a8e7e93a88fcde4",
+  "cases": [
+    {
+      "accepted": true,
+      "error": null,
+      "exit_status": 0,
+      "input_sha256": "0e4c94a9d8202b26838aca2605e70a0845926313661ef783f437ec97c7d505a1",
+      "name": "preactivation-journal",
+      "phase": "raft_recovered",
+      "quorum_read_completed": true,
+      "raft_started": true,
+      "rebuilt_snapshot_sha256": "2b79c13b01df0cfba8c380fabb9a865d2df27ce529bba88172d4180d04fd323e",
+      "state_sha256": "9079709a71ad05c57fb99593b099d3f8ef6f13f1cfa9bb0d83a0ff748b8c0d24",
+      "vote_reads": 1,
+      "working_artifact_sha256": "264f586da476eff94eb28c25d25e329b4b9ab6d6ee5ead5be12867fada8143c1"
+    },
+    {
+      "accepted": true,
+      "error": null,
+      "exit_status": 0,
+      "input_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e",
+      "name": "preactivation-snapshot",
+      "phase": "snapshot_recovered",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_sha256": "9079709a71ad05c57fb99593b099d3f8ef6f13f1cfa9bb0d83a0ff748b8c0d24",
+      "vote_reads": 1,
+      "working_artifact_sha256": "0384a4d953ac142da4a59d6dc8b175f7016b0802381971f6652ceb446ee7c96e"
+    },
+    {
+      "accepted": true,
+      "error": null,
+      "exit_status": 0,
+      "input_sha256": "41b3fc3c642fd055dde981faf279e6fa37193d842b1c1362282c0dd30a8a4af7",
+      "name": "uncommitted-control-decode",
+      "phase": "artifact_decoded_without_admission",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_json": null,
+      "vote_reads": 0,
+      "working_artifact_sha256": "3aee1ef0452eef109ec70aa3885dd9dccb8936b60eb620075d07bb8c75eeb831"
+    },
+    {
+      "accepted": false,
+      "error": "when Read Store: std::io::error::Error: process cannot participate in activated format",
+      "exit_status": 2,
+      "input_sha256": "41b3fc3c642fd055dde981faf279e6fa37193d842b1c1362282c0dd30a8a4af7",
+      "name": "uncommitted-control-admission",
+      "phase": "journal_open",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_json": null,
+      "vote_reads": 0,
+      "working_artifact_sha256": "6700ccdce755967994c76b9ac20b309324824a081d787d5a9b21db9657aa37cf"
+    },
+    {
+      "accepted": false,
+      "error": "when Read Store: std::io::error::Error: unsupported or stale committed activation",
+      "exit_status": 2,
+      "input_sha256": "f4f74921c63ba61742fa660c5f8d3fa236603bcb57c379ad189d437b9cc7f738",
+      "name": "committed-before-apply",
+      "phase": "recover_admission",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_json": null,
+      "vote_reads": 0,
+      "working_artifact_sha256": "808e332bf2149b06b17e59effcbb8d40c02b934119b2adb0a3ce7cb0510b1bcc"
+    },
+    {
+      "accepted": false,
+      "error": "when Read Store: std::io::error::Error: data did not match any variant of untagged enum SchedulerSection at line 1 column 7674",
+      "exit_status": 2,
+      "input_sha256": "d6bb004cd1cd53a3d38bd3d844f4a00955ae1c0e21913f1e00eccec7c92ae08c",
+      "name": "activated-journal",
+      "phase": "recover_admission",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_json": null,
+      "vote_reads": 0,
+      "working_artifact_sha256": "60fbbd8dd3b226e7ecb7fd6dbd667a39ea128a3dd01a228940888b6428b3a396"
+    },
+    {
+      "accepted": false,
+      "error": "when Read Store: std::io::error::Error: data did not match any variant of untagged enum SchedulerSection at line 1 column 7913",
+      "exit_status": 2,
+      "input_sha256": "6279b3abbcc2e30cb58f17afe1dbb0dba320eb981eb6d60dce613e183886524c",
+      "name": "activated-snapshot",
+      "phase": "install_snapshot",
+      "quorum_read_completed": false,
+      "raft_started": false,
+      "state_json": null,
+      "vote_reads": 0,
+      "working_artifact_sha256": "6279b3abbcc2e30cb58f17afe1dbb0dba320eb981eb6d60dce613e183886524c"
+    }
+  ],
+  "charged_reservations": 2,
+  "commands": [
+    {
+      "argv": [
+        "rustc",
+        "-Vv"
+      ],
+      "cwd": "/tmp/nativelink-categorical-format",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache"
+      },
+      "log": "rustc-version.log",
+      "returncode": 0,
+      "seconds": 0.007775227015372366
+    },
+    {
+      "argv": [
+        "cargo",
+        "-Vv"
+      ],
+      "cwd": "/tmp/nativelink-categorical-format",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache"
+      },
+      "log": "cargo-version.log",
+      "returncode": 0,
+      "seconds": 0.00778513599652797
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "/tmp/nativelink-categorical-format/nativelink-scheduler/tests/format_compatibility/base-only.patch"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/base-a69f9203bfd96eb5c40e0d784e1a48943d23e7e33b2331198a8e7e93a88fcde4"
+      },
+      "log": "base-overlay-check.log",
+      "returncode": 0,
+      "seconds": 0.004266995005309582
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "/tmp/nativelink-categorical-format/nativelink-scheduler/tests/format_compatibility/base-only.patch"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/base-a69f9203bfd96eb5c40e0d784e1a48943d23e7e33b2331198a8e7e93a88fcde4"
+      },
+      "log": "base-overlay.log",
+      "returncode": 0,
+      "seconds": 0.14234412199584767
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--bin",
+        "authority-base-compatibility-fixture"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized/base-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/base-a69f9203bfd96eb5c40e0d784e1a48943d23e7e33b2331198a8e7e93a88fcde4"
+      },
+      "log": "base-build.log",
+      "returncode": 0,
+      "seconds": 95.00742441701004
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--profile",
+        "smol",
+        "-p",
+        "nativelink-scheduler",
+        "--bin",
+        "authority-upgraded-compatibility-fixture"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized/upgraded-source",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "upgraded-build.log",
+      "returncode": 0,
+      "seconds": 41.172358874056954
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-upgraded-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/artifacts"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "upgraded-produce.log",
+      "returncode": 0,
+      "seconds": 0.5155126439640298
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/preactivation-journal/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "preactivation-journal.log",
+      "returncode": 0,
+      "seconds": 0.11448121798457578
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/preactivation-snapshot/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "preactivation-snapshot.log",
+      "returncode": 0,
+      "seconds": 0.01597658294485882
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/uncommitted-control-decode/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "uncommitted-control-decode.log",
+      "returncode": 0,
+      "seconds": 0.0321682519861497
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/uncommitted-control-admission/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "uncommitted-control-admission.log",
+      "returncode": 2,
+      "seconds": 0.03328850702382624
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/committed-before-apply/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "committed-before-apply.log",
+      "returncode": 2,
+      "seconds": 0.0320045180269517
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/activated-journal/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "activated-journal.log",
+      "returncode": 2,
+      "seconds": 0.03204414702486247
+    },
+    {
+      "argv": [
+        "/tmp/nativelink-frozen-base-normalized/authority-base-compatibility-fixture",
+        "/tmp/nativelink-frozen-base-normalized/activated-snapshot/request.json"
+      ],
+      "cwd": "/tmp/nativelink-frozen-base-normalized",
+      "environment": {
+        "CARGO_TARGET_DIR": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41"
+      },
+      "log": "activated-snapshot.log",
+      "returncode": 2,
+      "seconds": 0.016054898966103792
+    }
+  ],
+  "expected_state_sha256": "9079709a71ad05c57fb99593b099d3f8ef6f13f1cfa9bb0d83a0ff748b8c0d24",
+  "fixture_source_sha256": {
+    "base-only.patch": "405c4cb222ff4b9fab212ec3e0e75b1becbcd9f5106843afe1818f30f27e41e2",
+    "base_reader.rs": "0efe65c72f5f8827a03bd6e14eaed35ae80fb14cc41363f27d8384c0667b8355",
+    "run.py": "bea2e0214eeefa90477e7752fdde919d2bd4b60652b9589cf3b24a78892f5b57",
+    "upgraded_writer.rs": "0659b22c5813b46fb72c58bbd16c7914af8f90597790db28c0f2ac40bb5a0a3e"
+  },
+  "limitations": [
+    "Synthesized frozen Base fixture, not a historical released NativeLink executable",
+    "No compatibility claim for public experimental format2/core4",
+    "Uncommitted-control decoding does not authorize Base voting while admission remains unresolved",
+    "Real singleton startup and storage trait calls; no deployed peer authentication or admission qualification"
+  ],
+  "pending_effects": 4,
+  "pin": {
+    "description": "Synthesized Base envelope3/core5 fixture; not a historical released binary",
+    "format_relevant_sources_sha256": {
+      "Cargo.lock": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+      "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+      "nativelink-scheduler/Cargo.toml": "1e5f10e36f7a8ce633d9079f65180cf1aefbda07b1448db70987819ae68217fd",
+      "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+      "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+      "nativelink-scheduler/src/authority/mod.rs": "ed30463703b334df7302d9a4f30407284caf55d1ae4dab61223c7bf2f83527e2",
+      "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+      "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+      "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+      "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+      "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+      "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+      "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+    },
+    "frozen_fixture_sha256": {
+      "base-only.patch": "405c4cb222ff4b9fab212ec3e0e75b1becbcd9f5106843afe1818f30f27e41e2",
+      "base_reader.rs": "0efe65c72f5f8827a03bd6e14eaed35ae80fb14cc41363f27d8384c0667b8355"
+    },
+    "revision": "c54260986c4f3b7a1197dc75dae017dbc0a09489",
+    "source_archive_sha256": "11a6fad2e9b54a2314a82e367c5d1bdcca44cc7c4d161a845617767f58517f91",
+    "tree": "46b669075b8f001505aad341b68ca356c72957f2"
+  },
+  "scope": "Synthesized frozen Base executable, envelope3/core5; no released format2/core4 compatibility",
+  "status": "passed",
+  "upgraded_binary_sha256": "5c723d55632e21eeae61d8fb9dc16ade97df68a794103b3ef6ce03a85b333f4b",
+  "upgraded_compiled_fixture_sha256": "0659b22c5813b46fb72c58bbd16c7914af8f90597790db28c0f2ac40bb5a0a3e",
+  "upgraded_compiled_sources_sha256": {
+    "Cargo.lock": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "e40b441621c3cd3c6a0ea160ac32b4f931c131d5537574ec055a54e8ed11b29e",
+    "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+    "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+    "nativelink-scheduler/src/authority/mod.rs": "ed30463703b334df7302d9a4f30407284caf55d1ae4dab61223c7bf2f83527e2",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "upgraded_source_archive_sha256": "11a6fad2e9b54a2314a82e367c5d1bdcca44cc7c4d161a845617767f58517f91",
+  "upgraded_target_directory": "/tmp/nativelink-frozen-build-cache/upgraded-a874e1317af8a1413d10f1f7fa64881eb74e676e7fb01b79d3495a66f9422e41",
+  "writer_format_relevant_sources_sha256": {
+    "Cargo.lock": "ff01bbfe2967739a844abfec9bd213f22e3bf16bef19c396d6032715d233d494",
+    "Cargo.toml": "bb5b05cbac0c47e85e6907edb5b2898ad4952bfa6d14437a2ae0b37d8021b5d9",
+    "nativelink-scheduler/Cargo.toml": "1e5f10e36f7a8ce633d9079f65180cf1aefbda07b1448db70987819ae68217fd",
+    "nativelink-scheduler/src/authority/format.rs": "f506e1d7ba87793528131ee09f060a1ffe0867b2fdf34513ec84705296c01cd6",
+    "nativelink-scheduler/src/authority/journal.rs": "5cd6c22bf511b26bf991aaaa08412fa578d427a0a4159d76b75d5924adbbd1d7",
+    "nativelink-scheduler/src/authority/mod.rs": "ed30463703b334df7302d9a4f30407284caf55d1ae4dab61223c7bf2f83527e2",
+    "nativelink-scheduler/src/authority/reapi.rs": "2904be6f9022eb2af8e9a304fd0da1005677e8f5c0634b7b007c60912cc224c9",
+    "nativelink-scheduler/src/authority/request.rs": "d1c2a4474a0040b695a319c426adc272dd6ea3f4913df1571e468d254dfaa8c8",
+    "nativelink-scheduler/src/authority/snapshot_buffer.rs": "75ef4c2a20130bfc45324788445a44c426da391760b82ed9c4e9b5f55a093c8e",
+    "nativelink-scheduler/src/authority/types.rs": "0ad1dce738e6426001892c9a5894ec5f377c60405f9830f46660b6feb9242a99",
+    "nativelink-scheduler/src/lib.rs": "ee7ba225e3bf14e26cf71131c2702bed4a7242b6f63d2b6498ff5a8131d6befe",
+    "nativelink-util/Cargo.toml": "a02b37b63b4f4debf1cdec4987cdbc18a3c86da0fbe711fc415ead4eb40808d3",
+    "nativelink-util/src/digest_hasher.rs": "e505bbcae847b15ff8c89fa1d61a1f9bac4b867193185c06ffc0aa1ae33f6a1d"
+  },
+  "writer_revision": "c54260986c4f3b7a1197dc75dae017dbc0a09489"
+}

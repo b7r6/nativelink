@@ -1,0 +1,64 @@
+[
+  {
+    "label": "mutation-implicit-absent-ack",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+      "--",
+      "--exact",
+      "--show-output"
+    ],
+    "exit": 101,
+    "seconds": 36.56998789001955,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    },
+    "baseline_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+    "replacement": {
+      "before": "        let (Some(identity), Some(certificate)) = (session.worker, certificate) else {\n            return Ok(());\n        };",
+      "after": "        let Some(identity) = session.worker else { return Ok(()); };\n        let certificate = certificate.or_else(|| {\n            self.receipts.as_ref().as_ref()\n                .and_then(|receipts| receipts.streams.get(&WorkerId(identity.worker_id)))\n                .and_then(|stream| stream.pending.as_ref())\n                .map(wire_receipt_certificate)\n        });\n        let Some(certificate) = certificate else { return Ok(()); };"
+    },
+    "compiled": true,
+    "killed": true
+  },
+  {
+    "label": "mutation-changed-wire-watermark",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "smol",
+      "-p",
+      "nativelink-worker",
+      "--test",
+      "authority_rpc_test",
+      "activated_receipt_outbox_survives_rpc_restart_cutpoints_and_old_active_hole",
+      "--",
+      "--exact",
+      "--show-output"
+    ],
+    "exit": 101,
+    "seconds": 17.921912537014578,
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "CARGO_TARGET_DIR": "/tmp/nativelink-categorical-runtime-target"
+    },
+    "baseline_sha256": "ed2d462cbc33ff188b3245f34f2d7ff15972913267c195f3cc7d2f3b406e876e",
+    "replacement": {
+      "before": "        effects_through: value.effects_through.0,",
+      "after": "        effects_through: value.effects_through.0 + 1,"
+    },
+    "compiled": true,
+    "killed": true
+  }
+]

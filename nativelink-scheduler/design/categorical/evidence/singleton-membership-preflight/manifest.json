@@ -1,0 +1,302 @@
+{
+  "scope": "Constructor-only singleton membership projection before admission registration and mutating Raft startup",
+  "test_commit": "540358f113",
+  "source_commit": "bf573b75eda15b2d38a29d8793c533fb5fc8879a",
+  "author_source_commit": "3c0c707788a1cd5718ba72fa5401ebdd886ba73a",
+  "source_comparison": "All seven author inputs, including Cargo.lock and three test/build inputs, match integrated source exactly. Reviewer18 frozen inputs verified.",
+  "archive": {
+    "path": "qualified-evidence.tar.gz",
+    "sha256": "e138eb9afaf45cfd9b5651bf213c553744ae137d6368b5ab2f7ff3a93c83e70d",
+    "bytes": 789223,
+    "files": {
+      "allow-retained-learners-test.log": "456a54ec059f715ca6478cf82f9947fdf0a448471f60135be1851d5c42646831",
+      "allow-retained-learners.log": "7b86210e6669ae2c598d47ce097ab697236eb1e0031eddeee6db26bc809fb141",
+      "allow-retained-learners.rs": "e36960476e73f0b96611dd082c235a6ba6dae0d29f1c0242049519bb4f5599c8",
+      "author/author-receipt.json": "896f8505d6795ae5e388aba7b5c46866cc6a730141a11b0e9cf32f2d68de7b1a",
+      "author/cargo-clippy.log": "31629f95fe0f34d86f2e361e6793f590aff0104e6e5619d2f5720b0166691f43",
+      "author/cargo-lib.log": "509c2b4cfcea4ac4570f6c3a37223126f40181a555157efbc8be11dd6f44eec0",
+      "author/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "author/source/nativelink-scheduler/BUILD.bazel": "6d882b1cf53b8e2be37ef009fdab2ecf4b00b0633c4585c787729aa9b75af9d7",
+      "author/source/nativelink-scheduler/design/categorical/descriptor-journal.md": "c99cb077bb522976ca03f0a392e160bbbaf7998bd1696aeed59f347fb24fdc4d",
+      "author/source/nativelink-scheduler/src/authority/journal.rs": "4c0c46217fddd630640d8809aab079984d79124920c5a39057dcd3cde475eb47",
+      "author/source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "d60d019c0e7c3380daf2356d52bb91d866a93a47d9b045eb056a4b3fe3db872c",
+      "author/source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "1d3e55a9f778b36be78d3291999c0d5f0ea07a0aa25dbf3c815f09bbed546ed5",
+      "author/source/tools/canonical-filesystem/journal_bridge_test.rs": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "baseline-bridge-test.log": "cea174c9c77ce668843c5939c9319cb5750a60dc824777430548cf9e3cf8e5e2",
+      "baseline-bridge.log": "786a10594c5813eec58cefe9133f754eae3ee4ad7fa4670f8003418eb2f2ce5d",
+      "baseline-head.txt": "a6fdd7040aef221ef5b222e18e6a04bdffcb6838a813f5eee2c42bac1c4777c0",
+      "baseline-results.json": "95ea0ce846e4c9fa36c18207fc459ce968fa60024a44b1febac60dfb53d6463c",
+      "baseline-source/nativelink-scheduler/BUILD.bazel": "6d882b1cf53b8e2be37ef009fdab2ecf4b00b0633c4585c787729aa9b75af9d7",
+      "baseline-source/nativelink-scheduler/src/authority/journal.rs": "4e375e99ade8765ef132f9ee542b632d6f0f2b9e9922850966e409fe84ea20e6",
+      "baseline-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "d60d019c0e7c3380daf2356d52bb91d866a93a47d9b045eb056a4b3fe3db872c",
+      "baseline-source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "1d3e55a9f778b36be78d3291999c0d5f0ea07a0aa25dbf3c815f09bbed546ed5",
+      "baseline-source/tools/canonical-filesystem/journal_bridge_test.rs": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "baseline-sources.json": "32d519dc3dcbe69abd3d9ed9ed4de54b83438e28d64124093e8d6d70beb43b49",
+      "baseline-unit-test.log": "ddc128cb16f4fa293b57f086add76b35477c80711c4956a248ea826b38d2935a",
+      "baseline-unit.log": "ac3313e7794419330801744182cfbd08178c6ed87eadcebcdfa327a2a94719b9",
+      "fixed-bridge-test.log": "5f73e718935eba04349f13bc126e8e97dffbb3e3d6f82ab146748a58cb66e381",
+      "fixed-command.json": "208699fef512e801f3d91fddeac051f5546ba0f78c90af3ac2d71a34820136c4",
+      "fixed-head.txt": "1af8d8feffc3fc198a596ba6e7a01438969072d21e24d8302a87fc6626867742",
+      "fixed-source/nativelink-scheduler/BUILD.bazel": "6d882b1cf53b8e2be37ef009fdab2ecf4b00b0633c4585c787729aa9b75af9d7",
+      "fixed-source/nativelink-scheduler/design/categorical/descriptor-journal.md": "c99cb077bb522976ca03f0a392e160bbbaf7998bd1696aeed59f347fb24fdc4d",
+      "fixed-source/nativelink-scheduler/src/authority/journal.rs": "4c0c46217fddd630640d8809aab079984d79124920c5a39057dcd3cde475eb47",
+      "fixed-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "d60d019c0e7c3380daf2356d52bb91d866a93a47d9b045eb056a4b3fe3db872c",
+      "fixed-source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "1d3e55a9f778b36be78d3291999c0d5f0ea07a0aa25dbf3c815f09bbed546ed5",
+      "fixed-source/tools/canonical-filesystem/journal_bridge_test.rs": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "fixed-sources.json": "bbbe23c31e2a27ea7f1f30b5f894d0d762211898da586943c6820af22cb42bfa",
+      "fixed-unit-test.log": "daa8a4265adbc515191408a8ced24be99b3365ee26cbeca3a885749d5a847428",
+      "fixed.log": "9c19f7781cdb33f735c84e5e9c08c553c44b7a3663801c72b37d32d468cd2feb",
+      "ignore-membership-index-test.log": "0f49c2a54976270d53c56ea1d655900e78336b953634b6daf331f67936a052bc",
+      "ignore-membership-index.log": "7ce02ab289e1cba6d65147c468b11d826b1c665cd074cd5a4018a00cedba846f",
+      "ignore-membership-index.rs": "698501e40212bf2db149037da0d9d9d0bed9eadbf4e1c6612edd4a9fa36e13c5",
+      "ignore-pending-membership-test.log": "f4661ac1a5d00bf4fb7cad42585a900c9acb05f0f26836bb1ec59ea1e8cec35d",
+      "ignore-pending-membership.log": "d437364f88a27e608b66c2a6f6874a4848e54249069628310762d605bd85636c",
+      "ignore-pending-membership.rs": "6b316bc617e98fe60243b7ed64ee93febdc264e3589459c322d424e1b70b7cb8",
+      "ignore-uncommitted-membership-test.log": "e1346a1bfaf6875105a6d8aa4bd1d68bdd7ae54e64b0e7d9a396033d8515149c",
+      "ignore-uncommitted-membership.log": "03b8734dc983be5fe5341ae0b6cb5e5cf85561af9ab16addb295a50f6423b7b8",
+      "ignore-uncommitted-membership.rs": "7e235ce4514f56c619f274eb1d63d2f9504b915648519eb560540188fd2c850a",
+      "independent-review/audit/audit.json": "6277a0f2677e3c9303cd11a5c79a1aed809b932087878a989451a59bfb7e842e",
+      "independent-review/audit/source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-review/audit/source/nativelink-scheduler/src/authority/journal.rs": "4e375e99ade8765ef132f9ee542b632d6f0f2b9e9922850966e409fe84ea20e6",
+      "independent-review/audit/source/openraft-0.9.25/src/membership/membership.rs": "7389209faea27916aa22c24661770b9ef7f739ff9ca4ab8f0c2aff1dba34fa6f",
+      "independent-review/audit/source/openraft-0.9.25/src/membership/stored_membership.rs": "0040d46a169c47b3efdc5d35f1b7c707488a45bd0d9b09306c970a5a47b59130",
+      "independent-review/audit/source/openraft-0.9.25/src/raft/mod.rs": "2efdb0cde8f4f0f38acd76efdb93efff0f39419180ca05f0592e945ee8579c23",
+      "independent-review/audit/source/openraft-0.9.25/src/raft_state/membership_state/mod.rs": "e094f54ddc2152ac0ae3f77902a0bce41577156d739adcb9934df598bf28d115",
+      "independent-review/audit/source/openraft-0.9.25/src/raft_state/mod.rs": "3d344a46647d2d9c05926f100f1acee4930d2c305b793cbaaf9274035883f2b0",
+      "independent-review/audit/source/openraft-0.9.25/src/storage/helper.rs": "762e5d8747e535a3fe81ee4e86602dd4def2161c4dc9fba66dc2b5cb7cba4817",
+      "independent-review/patches/3c0c707788a1cd5718ba72fa5401ebdd886ba73a.patch": "7d5b9a4821109e48ef1dc185c57c85aff7f1861a3aae9f7156c716222dc6616a",
+      "independent-review/patches/74f3dd5823ec02b5df5d602163e294fe960bc72a.patch": "1f6d78ecd5d55df3fd7a7b72eb4594731f733a905bb3594bc23139335236a6e1",
+      "independent-review/review.json": "7c0c75c85f27725e651f0706696b494ef3a7d1b10f3a31370adf0843ec0de926",
+      "independent-review/reviewed-source/Cargo.lock": "b950a25a40efbb9d6be36548d1b4d76c26edac7470fa1d99bd7f4f2f21d103d8",
+      "independent-review/reviewed-source/nativelink-scheduler/BUILD.bazel": "6d882b1cf53b8e2be37ef009fdab2ecf4b00b0633c4585c787729aa9b75af9d7",
+      "independent-review/reviewed-source/nativelink-scheduler/design/categorical/descriptor-journal.md": "c99cb077bb522976ca03f0a392e160bbbaf7998bd1696aeed59f347fb24fdc4d",
+      "independent-review/reviewed-source/nativelink-scheduler/src/authority/journal.rs": "4c0c46217fddd630640d8809aab079984d79124920c5a39057dcd3cde475eb47",
+      "independent-review/reviewed-source/nativelink-scheduler/src/authority/journal_factory_tests.rs": "d60d019c0e7c3380daf2356d52bb91d866a93a47d9b045eb056a4b3fe3db872c",
+      "independent-review/reviewed-source/nativelink-scheduler/src/authority/singleton_recovery_tests.rs": "1d3e55a9f778b36be78d3291999c0d5f0ea07a0aa25dbf3c815f09bbed546ed5",
+      "independent-review/reviewed-source/tools/canonical-filesystem/journal_bridge_test.rs": "e8249a795d688d74f73e8d47e02d1c8e623a01b4aea78606606c4764f2c434cd",
+      "initial-format-ignore-pending-membership-test.log": "daa8a4265adbc515191408a8ced24be99b3365ee26cbeca3a885749d5a847428",
+      "initial-format-ignore-pending-membership.log": "7ceb495962d1ff8da85986002e82c0d07da8fe16535ccb8648d84c8194a62444",
+      "initial-format-ignore-pending-membership.rs": "3dd2027866ad1cb79903ad20f966b51a4bbd120642b345ea8def5e351cca55d2",
+      "initial-format-mutants.json": "81e89979ac632d84d672304c25aae2c56d1b7fe0b2957f1c9d52a5f07ad09c10",
+      "initial-format-mutation-driver.log": "a2071eb121616127c5624e1bc2fe15f2af3500ac172affa354f5401e9b4d8b3c",
+      "initial-format-run-mutants.py": "b1262987b39989b060959a50d9384bf9f98d955673a3a92aa1d8914274264650",
+      "masked-final-position-ignore-pending-membership-test.log": "f4661ac1a5d00bf4fb7cad42585a900c9acb05f0f26836bb1ec59ea1e8cec35d",
+      "masked-final-position-ignore-pending-membership.log": "d437364f88a27e608b66c2a6f6874a4848e54249069628310762d605bd85636c",
+      "masked-final-position-ignore-pending-membership.rs": "6b316bc617e98fe60243b7ed64ee93febdc264e3589459c322d424e1b70b7cb8",
+      "masked-final-position-mutants.json": "757122b68ea26e96989ccf7778322ecffede389c5d30ba8a0072110f40b9c3b8",
+      "masked-final-position-mutation-driver.log": "9ac662c2a467c0a732d5bb632ecc890c7d0401b973fdc59a9132e137a2663e40",
+      "masked-final-position-run-mutants.py": "39fae75e7a30a0e7fbc6a0e612f46cbffe33e034f15efc6df8299a43c1b839fb",
+      "mutants.json": "524536d19c3eae3d8d3eb87914fd1b1a7c70fa8073eaf1f9fa989d0f3eb2db66",
+      "mutation-driver.log": "424b4b5906f5e15782f64c86517a1dcbcd4740529e074b1fdd5616029eb6a33f",
+      "project-by-logid-not-index-test.log": "53ced8a80b7f835f15d9e6b4432ec62d3adf9dbc3678189be318c9ea39b3b47b",
+      "project-by-logid-not-index.log": "788f28d6729a402f573beacebffb615bbe6bf6343af5f852d4047e768bb87f08",
+      "project-by-logid-not-index.rs": "565a064ef9f66c055a4e608934002afba8773ef09e7504945b431e0781f2fc6e",
+      "reject-historical-snapshot-test.log": "b6606e8737d8dbcb30abe3aed4a3c9fdeaf9b6f9051288ebaea632e20a0e4208",
+      "reject-historical-snapshot.log": "c4b962f955832998f4db753b02a4956c05532a41d9ef7b2a1587b00af0f0ab74",
+      "reject-historical-snapshot.rs": "108401a4189aff73be0d9f93a61cc5f541a3d39efa521aeff2ddecd132b1d43e",
+      "restored-command.json": "cba2dbb97afb4710f10540516507eabcda0236283c556d1d472088b895e9bb54",
+      "restored-sources-after.json": "91de1ec80371b632b55941671b551b95843fbecb5b31ec07f88962baef98bedf",
+      "restored-sources-before.json": "91de1ec80371b632b55941671b551b95843fbecb5b31ec07f88962baef98bedf",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log": "4e7a6d076a4b915b6cfdf39596d52a5eb8587e972ed7efaa3857ada523cf3540",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log": "b98a22ad450343297cb01c43199f4d80f7deff849af5453cb933b74b90389106",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log": "f66e3dbb96f202817fc9f8556483c7370d31835b10ad7bea8ed44b15caf2214b",
+      "restored-testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log": "ff8040bb2446641997b149e0f0350359c224eb8bef8a0c7aab0823b62fb5ade2",
+      "restored-testlogs/nativelink-scheduler/unit_test/test.log": "d4003822d83ba2032fceaeb2700c460753e5d908f2d4b119f554bca90b11e8ea",
+      "restored-testlogs/nativelink-service/unit_test/test.log": "fb8ac076bcc880e43b3131f3569d6096033864be03beab1fa9529473a6b5ba97",
+      "restored-testlogs/nativelink-worker/authority_history_rpc_test/test.log": "af1acb3a70dac57e7d9a2ea1b087f5ecc26305f66cb8199920c4a8b161090fef",
+      "restored-testlogs/nativelink-worker/authority_replicated_rpc_test/test.log": "ca33306ad5536d2767d274777bf5d9b1bea4fb515fbb50063d19750ec50b75bb",
+      "restored-testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log": "508c7d52aac32ab0ad59f77ebeae3d2d20682c670ce3b28d096130a66b017c9f",
+      "restored-testlogs/tools/canonical-filesystem/journal_bridge_test/test.log": "5f73e718935eba04349f13bc126e8e97dffbb3e3d6f82ab146748a58cb66e381",
+      "restored-testlogs/tools/canonical-store/canonical_store_test/test.log": "7529104b8956ec0e82dd4070247b13314e6d643c009c9f4cd679a61c80beb121",
+      "restored.log": "9e5ffd1964e6f91ea7c517225047f71896a4078feefcb2845955d77ce75d2738",
+      "run-baseline.py": "1ccdf4d982d8643dd5f4bf77da1bf792f9337cee1068164e25ec60683f9ea129",
+      "run-mutants.py": "dd9eea94346551e7450bb3b48f7f8341a423fca40c6e95336f3c89581001360f",
+      "run-restored.py": "6e9d6e88923c341d973bd17068e112c2982a28d2ed33d9791c2075f7da4cded8"
+    }
+  },
+  "qualification": {
+    "author": "98 scheduler Cargo library tests and strict all-tests Clippy; receipt/logs archived, separate from root execution",
+    "compiled_baseline": "2 new recovery cases passed,7 failed; strengthened descriptor retry case failed. Failures include mutation-before-refusal, acceptance, wrong refusal and an OpenRaft panic from unsupported state. Not all are successful old constructors.",
+    "fixed": "98 scheduler units and12 descriptor bridge cases passed, both Bazel targets executed",
+    "selected_compiled_mutants": [
+      {
+        "name": "ignore-uncommitted-membership",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_refuses_pending_membership_even_when_it_still_names_only_self",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled": true,
+        "detected": true,
+        "sha256": "7e235ce4514f56c619f274eb1d63d2f9504b915648519eb560540188fd2c850a"
+      },
+      {
+        "name": "project-by-logid-not-index",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_committed_projection_uses_raft_index_interval",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled": true,
+        "detected": true,
+        "sha256": "565a064ef9f66c055a4e608934002afba8773ef09e7504945b431e0781f2fc6e"
+      },
+      {
+        "name": "allow-retained-learners",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_refuses_foreign_joint_learner_and_unsupported_applied_membership",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled": true,
+        "detected": true,
+        "sha256": "e36960476e73f0b96611dd082c235a6ba6dae0d29f1c0242049519bb4f5599c8"
+      },
+      {
+        "name": "ignore-membership-index",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_rejects_membership_position_beyond_recovered_index",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled": true,
+        "detected": true,
+        "sha256": "698501e40212bf2db149037da0d9d9d0bed9eadbf4e1c6612edd4a9fa36e13c5"
+      },
+      {
+        "name": "reject-historical-snapshot",
+        "command": [
+          "bazel",
+          "test",
+          "--jobs=8",
+          "--local_test_jobs=2",
+          "--test_env=RUST_TEST_THREADS=4",
+          "--test_output=errors",
+          "--test_arg=singleton_recovers_committed_three_to_one_with_historical_snapshot",
+          "//nativelink-scheduler:unit_test"
+        ],
+        "exit_code": 3,
+        "compiled": true,
+        "detected": true,
+        "sha256": "108401a4189aff73be0d9f93a61cc5f541a3d39efa521aeff2ddecd132b1d43e"
+      }
+    ],
+    "initial_mutations": [
+      "First isolated guard deletion failed Rustfmt before test execution; initial-format-* preserved. Any copied testlog there is stale from prior fixed run, not mutant execution evidence.",
+      "Formatted deletion of pending-membership guard survived because its projection included pending entries and final membership-position validation rejected them. masked-final-position-* preserves this result.",
+      "Revised fault ignores uncommitted membership while validating only committed projection; it compiled and was detected. This represents the actual proposed failure, not evidence that the narrower redundant deletion was detected."
+    ],
+    "restored": {
+      "targets_passed": 11,
+      "executed": 10,
+      "cached": 1,
+      "elapsed_seconds": 82.321,
+      "server_build": "//:nativelink",
+      "unchanged_inputs": 554,
+      "per_log": [
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_cluster_test_test/test.log",
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_format_test_test/test.log",
+          "passed": 28,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_raft_test_test/test.log",
+          "passed": 24,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/integration_tests/authority_volatile_test_test/test.log",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-scheduler/unit_test/test.log",
+          "passed": 98,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-service/unit_test/test.log",
+          "passed": 23,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-worker/authority_history_rpc_test/test.log",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-worker/authority_replicated_rpc_test/test.log",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/nativelink-worker/integration_tests/authority_rpc_test_test/test.log",
+          "passed": 22,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/tools/canonical-filesystem/journal_bridge_test/test.log",
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "log": "restored-testlogs/tools/canonical-store/canonical_store_test/test.log",
+          "passed": 20,
+          "failed": 0,
+          "ignored": 0
+        }
+      ]
+    },
+    "independent_review": {
+      "path": "independent-review/review.json",
+      "sha256": "7c0c75c85f27725e651f0706696b494ef3a7d1b10f3a31370adf0843ec0de926",
+      "kind": "Source-only; no blocker against bounded contract"
+    }
+  },
+  "limitations": [
+    "Synthetic committed three-to-one histories run real singleton startup; no actual multi-node migration or historical quorum certification.",
+    "Older saved snapshot internal membership index can be inconsistent under existing full-LogId validation; loader does not install it at startup. Broader snapshot consistency remains separate.",
+    "Public experimental Raft/Journal handles can mutate membership after construction.",
+    "Logical record equality does not assert byte-identical physical redb files after opening.",
+    "No canonical clock/namespace binding, full bootstrap, fencing or deployment claim."
+  ]
+}

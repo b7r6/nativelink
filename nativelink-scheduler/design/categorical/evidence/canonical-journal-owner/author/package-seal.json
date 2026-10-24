@@ -1,0 +1,93 @@
+{
+  "source_commit": "f1847e64c39203ae81c73d05edfd177d0dba5ce2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2375,
+      "sha256": "6c8529dc5df9e29f08e3debd81901aa0fdf239cc04d8a97ef881b66b58b1f6c2"
+    },
+    {
+      "path": "author-01.tar.gz",
+      "bytes": 12838870,
+      "sha256": "0aa5142b522539b2efca2e69cc3a28f85dddbfe279c05370a45d3af47d1de386"
+    },
+    {
+      "path": "author-02.tar.gz",
+      "bytes": 9707646,
+      "sha256": "150ec57d7a22290cb31090e6ebdb55f2845873d74f0f5030932a88c675aa7d14"
+    },
+    {
+      "path": "author-03.tar.gz",
+      "bytes": 7468193,
+      "sha256": "105a019275c251975fa1556c6ec341eddc9f86230f22feae04f0fcf2403be5c4"
+    },
+    {
+      "path": "author-04.tar.gz",
+      "bytes": 9635804,
+      "sha256": "4c2a8acdf46d15725c953906766dfbd72cf5e0787e921e87579a05bacb0f5f80"
+    },
+    {
+      "path": "author-05.tar.gz",
+      "bytes": 7549932,
+      "sha256": "b864e7f68950c2ad8e344b74005d36b4fc50458379bc26563cb38f77d1f827c6"
+    },
+    {
+      "path": "author-06.tar.gz",
+      "bytes": 14523904,
+      "sha256": "41c3b61ed9086623199f9fbb88c5755610242ebcd1c0eba47cb13065683d152f"
+    },
+    {
+      "path": "author-07.tar.gz",
+      "bytes": 10467596,
+      "sha256": "d1f9f457143370f6d7fb532940ff82e65d21b94f4e4f17103822ef50bdfbb37c"
+    },
+    {
+      "path": "author-08.tar.gz",
+      "bytes": 14495270,
+      "sha256": "8a3827533401d7cafd8536270af6f85f5fc46708e257e41b2bb8be62282500be"
+    },
+    {
+      "path": "author-09.tar.gz",
+      "bytes": 12922,
+      "sha256": "52709cf17ac416a13092b10fdf903e4ea27a05c03c333bc27200e0c43bca2396"
+    },
+    {
+      "path": "build-package.py",
+      "bytes": 2693,
+      "sha256": "8c9275d66aeac6fc7ed998d1dd95afe59834a3e19e5fc0ebc4c0ce82a8ce4779"
+    },
+    {
+      "path": "package-verification.json",
+      "bytes": 314,
+      "sha256": "e7fcba31132c433e894a7d6820b3e9b9abc575b7f2ea94365eed876ca8587b7f"
+    },
+    {
+      "path": "package-verification.log",
+      "bytes": 180,
+      "sha256": "a0c499d31b4453e08f148b1dbc86899f6948e61e0d4731564d7d4acbf1c10b33"
+    },
+    {
+      "path": "package.json",
+      "bytes": 239322,
+      "sha256": "fe029b73391739e14e2c87c63040741f9412ec27021b6459ccbf7afed0ff815e"
+    },
+    {
+      "path": "packet.py",
+      "bytes": 3132,
+      "sha256": "f48cd6905d6383dbb483f718eb12676a0ef3321a6c9a8984456fceb448262869"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 215681,
+      "sha256": "656bc9e58d61e203271891a9f9f6b81e98ec28c2ce853a6c53d3ac10eba82d13"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 58759,
+      "sha256": "7aaa8fc06e71dc5a83eb1a578d7c8c7b95abe0da829dcb8bc71dce79b83662e0"
+    }
+  ],
+  "package_verification": "package-verification.json",
+  "artifact_count": 17,
+  "artifact_bytes": 87222593
+}

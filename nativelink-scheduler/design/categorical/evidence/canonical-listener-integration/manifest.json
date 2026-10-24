@@ -1,0 +1,78 @@
+{
+  "artifacts": [
+    {
+      "archive": "conversion-test.log.gz",
+      "archive_sha256": "36b07de22058c91fbbadc1bf1c5dd8e0e4edf070099a48a6db807e6ebb0c0aeb",
+      "sha256": "df431e0ce53b3d16e8cde3c2fcac52fa46615c26dfd1a8563d54bcfcd0694a56",
+      "source": "conversion-test.log"
+    },
+    {
+      "archive": "listener-test.log.gz",
+      "archive_sha256": "d6e222afbe9356ef81954a9678cd1bdfc0f4dea13c98ce6d6786f2520fc869ec",
+      "sha256": "86428121b1d5a49f81111d604051bd55fd3536e1f1977593b0e0b0a6714909fa",
+      "source": "listener-test.log"
+    },
+    {
+      "archive": "parser-test.log.gz",
+      "archive_sha256": "b84229845d8dcb662477a79c03e2c85fcc068187de4c6f9e77732866151701c4",
+      "sha256": "49a3df2327642a04ec9c8a0297e36bb72ba23aa6271c9589d31f11e310ce291f",
+      "source": "parser-test.log"
+    },
+    {
+      "archive": "root-bazel-test-corrected.json.gz",
+      "archive_sha256": "466e2d6ec63989878b678ec872285a0c2ae00192189023674dcdef6e56d245b1",
+      "sha256": "18633774a89062ed5b8520faea7e1e0d88f078f2198a9cb9e630563efe5fb658",
+      "source": "root-bazel-test-corrected.json"
+    },
+    {
+      "archive": "root-bazel-test-corrected.log.gz",
+      "archive_sha256": "e10c8ba9a946f0714b6e55c552a00e2ac12cdb4ef33f835e2f9031d687419265",
+      "sha256": "f2fcfb3632881e8a4c0ae61f176c73aa4b5c90d50a639547dee2e1ceaef50e90",
+      "source": "root-bazel-test-corrected.log"
+    },
+    {
+      "archive": "root-bazel-test.json.gz",
+      "archive_sha256": "e9471d8f9adff3c4040c388c06736b858e376c19126ccde3995045509f72004c",
+      "sha256": "3c329a8c6093653137a47d0b33dc36dae5388239e2a5494f34efe717e741eed0",
+      "source": "root-bazel-test.json"
+    },
+    {
+      "archive": "root-bazel-test.log.gz",
+      "archive_sha256": "f3a5e8fbca917e404bf2c4b13b192cf2b883d341133b9a0c08b6dbf791e41129",
+      "sha256": "33f63f2869f3620daa84005813ef0bdad1f2419d0ac74b53be9a2e9491a22eec",
+      "source": "root-bazel-test.log"
+    },
+    {
+      "archive": "source-after.json.gz",
+      "archive_sha256": "d7776ce8921c281795a3b792f40f832590c9510f4a117ca977fc528876ca246d",
+      "sha256": "9689d9a5132ed867d8cd68ca329d7b329cf0a2ec3b1fe0042ed1ab1edb2b1616",
+      "source": "source-after.json"
+    },
+    {
+      "archive": "source-before.json.gz",
+      "archive_sha256": "97b7da055f25cded9315a313f939b97197da35d2866daca6c895cdbac52a5de0",
+      "sha256": "96ec65dde9ef440994a1f93e4091d322c8ede04d1d360bd32c385717ef69dd1c",
+      "source": "source-before.json"
+    },
+    {
+      "archive": "tls/manifest.json.gz",
+      "archive_sha256": "21dadc2347cd648bd122ffd1d7cce5cbf526421a05f1d42f01640e49bc672e22",
+      "sha256": "1d4b6c4ce36db60b5cbceeafc129841f90ad45ef8cc8171eb5ac3e53c57bb8d1",
+      "source": "tls/manifest.json"
+    },
+    {
+      "archive": "tls/observations.json.gz",
+      "archive_sha256": "fde948d54c03df9589636464643f696cec5e315bf34c714e3e01f55b76867844",
+      "sha256": "906c91c2c76dcf885d65466d529569768de8765b23c0cb03f635d9f3dd2b60de",
+      "source": "tls/observations.json"
+    },
+    {
+      "archive": "tls/test.log.gz",
+      "archive_sha256": "a0d5e9601475e2a0a12c81029d62413bd890432e535c1852702271b87e63561e",
+      "sha256": "20d13e38b9b3468ff5cd1476c5aa6c282d80317457b9503feac83e72d06659ee",
+      "source": "tls/test.log"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Root Bazel manual converter/parser and fixed listener tests, followed by explicit four-case mTLS run; source-to-binary hashes linked in receipts"
+}

@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-10-22T21:11:37.013676+00:00",
+  "columns": [
+    "PID",
+    "COMMAND",
+    "ELAPSED",
+    "%CPU",
+    "%MEM"
+  ],
+  "processes": [
+    [
+      "3392335",
+      "bazel",
+      "95",
+      "0.1",
+      "0.0"
+    ]
+  ],
+  "note": "Names and aggregate CPU only; no environment/arguments. Another Bazel build was observed during the width64 run. The matrix is serial but the host is not isolated."
+}

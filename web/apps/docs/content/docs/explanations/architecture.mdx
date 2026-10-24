@@ -99,6 +99,16 @@ Linux workers can optionally share cached input directories between actions
 through [read-only mounts](/reference/nativelink-config/main#localworkerconfig),
 avoiding repeated directory creation.
 
+Connection loss, action-directory cleanup, and process termination are separate
+observations. A disconnected worker can still have running commands, and a
+terminated wrapper can still be waiting for its process namespace to exit.
+Reusing a worker identity or deleting its files does not establish that those
+processes have stopped. See the
+[process-isolation limits](/operate/security-hardening#the-sandbox-is-not-a-security-boundary)
+before relying on worker replacement to reclaim capacity.
+
+<SourceLink file="nativelink-worker/src/namespace_utils.rs" symbol="configure_namespace" />
+
 Workers hold no durable state. A worker that dies mid-action costs you that
 action, not your cache. What they do hold is a local filesystem that is
 deliberately not clean between actions;

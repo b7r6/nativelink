@@ -1,0 +1,7 @@
+{
+  "nativelink-scheduler/src/authority/mod.rs": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4",
+  "nativelink-scheduler/src/authority/tests.rs": "683ff055015a45ae3931e76f42f6fb53e1620c004b8bb24c735f17d948b56b10",
+  "nativelink-scheduler/src/authority/receipt_retirement.rs": "0bca43334752740ab2375c42852a1cb95ec06fd0871dd877cd6d37f52145a591",
+  "nativelink-scheduler/src/authority/receipt_retirement_tests.rs": "e8fb3a1e55f5eb1c17cdf697e21e8c245053679df48f9426b8180ed520a00c4a",
+  "nativelink-scheduler/src/authority/types.rs": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661"
+}

@@ -1,0 +1,96 @@
+{
+  "source_commit": "4841fae0ed7b6901e976742daf7040c799634f93",
+  "package_sha256": "a68e7c33e22da79078156b76cc7234ca3316370cd6feed4964e6969985831335",
+  "seal_sha256": "30e74c8d845c0b39557f8dd06fddf4b26e6fa6384ff0eb5def15bcc861ad4ced",
+  "copied_files": [
+    {
+      "path": "build.py",
+      "bytes": 4863,
+      "sha256": "891c80407664e9af7999c4c173758a9d1adaef7e0290d0ec02e3a55021845f75"
+    },
+    {
+      "path": "clock-01.tar.gz",
+      "bytes": 10204226,
+      "sha256": "c16a15b2466fc72c8b551ec61efe207505b09b0d78b8970741bdadb23029d68b"
+    },
+    {
+      "path": "clock-02.tar.gz",
+      "bytes": 10282206,
+      "sha256": "b24fbbce64303b561d46431ca3f5dfe067dd172dd1d84361539e1f18540e5f0d"
+    },
+    {
+      "path": "clock-03.tar.gz",
+      "bytes": 8612526,
+      "sha256": "3615a8b5216ab7207352692495690158c32beb3110b74f84f91f965d9e5f665c"
+    },
+    {
+      "path": "clock-04.tar.gz",
+      "bytes": 10109574,
+      "sha256": "78cf1b68d387b7833d358a8b61e53c498d540c68f784b9b36ca1037a0d17e49b"
+    },
+    {
+      "path": "clock-05.tar.gz",
+      "bytes": 10255586,
+      "sha256": "33692e0c31bebd0027017fe416adc0b70365b01f78d7a1cdc1abaec5747bd2e5"
+    },
+    {
+      "path": "clock-06.tar.gz",
+      "bytes": 10123894,
+      "sha256": "93260c49e84bddf6631b6fed6b8b8efdc15216b33cb28d94228b3d11db68ab75"
+    },
+    {
+      "path": "clock-07.tar.gz",
+      "bytes": 10189573,
+      "sha256": "b54da312b3b55af16630031a7ee01dafe4ffe46de60eb114a3bbc3bda2df1201"
+    },
+    {
+      "path": "clock-08.tar.gz",
+      "bytes": 5107777,
+      "sha256": "a2d0a5b0a1bc8c68a94ecb6c721ce07e8011934e621a619b8081b03351758425"
+    },
+    {
+      "path": "package-seal.json",
+      "bytes": 2232,
+      "sha256": "30e74c8d845c0b39557f8dd06fddf4b26e6fa6384ff0eb5def15bcc861ad4ced"
+    },
+    {
+      "path": "package-verification.json",
+      "bytes": 352,
+      "sha256": "d33d90338c947236100fbcaec31b7eced7de474cfd5edec3da2b431ddb3ad174"
+    },
+    {
+      "path": "package-verification.log",
+      "bytes": 180,
+      "sha256": "feaef5ed6c0bc4e4745e145bf90113c046cf4cf8ca759326497dfe0590679646"
+    },
+    {
+      "path": "package.json",
+      "bytes": 369639,
+      "sha256": "a68e7c33e22da79078156b76cc7234ca3316370cd6feed4964e6969985831335"
+    },
+    {
+      "path": "packet.py",
+      "bytes": 3132,
+      "sha256": "f48cd6905d6383dbb483f718eb12676a0ef3321a6c9a8984456fceb448262869"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 8988,
+      "sha256": "efd51424a2d970bf0c549bba70368d14bf12037764e1b471dade08dcfd5c6faf"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 4073,
+      "sha256": "aca9485af758750296cf070e6962af91572dc0c3c623decd9fea9904778d0924"
+    }
+  ],
+  "all_copied_bytes_equal": true,
+  "command": [
+    "python3",
+    "nativelink-scheduler/design/categorical/evidence/canonical-recovery-clock/author/packet.py"
+  ],
+  "exit_code": 0,
+  "stdout": "{\n  \"files\": 1495,\n  \"unique_blobs\": 343,\n  \"archives\": 8,\n  \"total_original_bytes\": 554653124,\n  \"result\": \"Every archive, blob, original path, size and mode mapping verified.\"\n}\n",
+  "stderr": "",
+  "scope": "Author/root verifies sealed packet after copying into integration checkout; independent source/execution reviews are preserved within packet. No new Rust execution."
+}

@@ -40,7 +40,9 @@ use nativelink_util::operation_state_manager::{
 };
 use nativelink_util::origin_event::OriginMetadata;
 use nativelink_util::platform_properties::PlatformProperties;
+use nativelink_util::spawn;
 use opentelemetry::KeyValue;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, trace, warn};
 
 use super::awaited_action_db::{
@@ -452,7 +454,7 @@ where
 {
     /// Database for storing the state of all actions.
     #[metric(group = "action_db")]
-    action_db: T,
+    action_db: Arc<T>,
 
     /// Maximum number of times a job can be retried.
     // TODO(palfrey) This should be a scheduler decorator instead
@@ -522,7 +524,7 @@ where
             max_escalations,
         } = retry_limits.into();
         Arc::new_cyclic(|weak_self| Self {
-            action_db,
+            action_db: Arc::new(action_db),
             max_job_retries,
             max_worker_loss_retries,
             max_escalations,
@@ -1615,14 +1617,7 @@ where
             filter.order_by_priority_direction,
             Some(OrderDirection::Desc)
         );
-        let stream = self
-            .action_db
-            .get_range_of_actions(
-                sorted_awaited_action_state,
-                Bound::Unbounded,
-                Bound::Unbounded,
-                desc,
-            )
+        let stream = background_listing(self.action_db.clone(), sorted_awaited_action_state, desc)
             .await
             .err_tip(|| "In SimpleSchedulerStateManager::filter_operations")?
             .filter_map(|listed| async move { listed_or_lost(listed) })
@@ -1646,6 +1641,58 @@ where
             });
         Ok(Box::pin(stream))
     }
+}
+
+/// A page read may reserve the same fair database mutex used to assign a
+/// yielded action. Drive it independently so a consumer can stop polling to
+/// assign that action. Reserve channel room before polling the listing: when
+/// backpressure stops this task, no page read is suspended inside it.
+async fn background_listing<T: AwaitedActionDb>(
+    db: Arc<T>,
+    state: SortedAwaitedActionState,
+    desc: bool,
+) -> Result<impl futures::Stream<Item = Result<T::Subscriber, Error>> + Send, Error> {
+    let (sender, receiver) = mpsc::channel(LISTING_READ_CONCURRENCY);
+    let (initialized, initialization) = oneshot::channel();
+    let task = spawn!("awaited_action_listing", async move {
+        let listing = match db
+            .get_range_of_actions(state, Bound::Unbounded, Bound::Unbounded, desc)
+            .await
+        {
+            Ok(listing) => {
+                if initialized.send(Ok(())).is_err() {
+                    return;
+                }
+                listing
+            }
+            Err(error) => {
+                let _ignored = initialized.send(Err(error));
+                return;
+            }
+        };
+        futures::pin_mut!(listing);
+        while let Ok(permit) = sender.reserve().await {
+            let Some(item) = listing.next().await else {
+                break;
+            };
+            permit.send(item);
+        }
+    });
+    initialization.await.map_err(|error| {
+        make_err!(
+            Code::Internal,
+            "Listing task stopped before initialization: {error}"
+        )
+    })??;
+    // Retaining the guard in the stream aborts a pending page read on drop.
+    // Join after channel EOF so a producer panic cannot become silent EOF.
+    Ok(stream::unfold(receiver, |mut receiver| async move {
+        receiver.recv().await.map(|item| (item, receiver))
+    })
+    .chain(
+        stream::once(async move { task.await.err_tip(|| "Listing task failed") })
+            .filter_map(|result| future::ready(result.err().map(Err))),
+    ))
 }
 
 /// A listed entry the store could not even hand over: the row was gone

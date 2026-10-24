@@ -1,0 +1,7 @@
+{
+  "test_sha256": "e8fb3a1e55f5eb1c17cdf697e21e8c245053679df48f9426b8180ed520a00c4a",
+  "before_source_sha256": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e",
+  "final_source_sha256": "0bca43334752740ab2375c42852a1cb95ec06fd0871dd877cd6d37f52145a591",
+  "before_returncode": 101,
+  "restored_returncode": 0
+}

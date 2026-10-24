@@ -1,0 +1,140 @@
+{
+  "source_directory": "/tmp/nativelink-canonical-worker-materialization-tests-addendum",
+  "archives": [
+    {
+      "path": "tests-addendum-01.tar.gz",
+      "bytes": 45229,
+      "sha256": "eb313cf1e461c40281aca5307c98345b623fbf79d535ab81ecf9b44f5886f61b",
+      "files": 18,
+      "source_bytes": 186414
+    }
+  ],
+  "members": [
+    {
+      "path": "tests-addendum/candidate-source/tools/canonical-filesystem/BUILD.bazel",
+      "bytes": 2837,
+      "sha256": "24b24c63505a17017033099ed1a1375540b5621688a267c55c3be0ad641eb997",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/candidate-source/tools/canonical-filesystem/src/tests.rs",
+      "bytes": 13428,
+      "sha256": "e304aeb65ce888b9154abf7f4331d9cbe7971e7a9bb51cb1b7d5be0be7861e41",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/candidate-source/tools/canonical-filesystem/src/worker_tests.rs",
+      "bytes": 42984,
+      "sha256": "cafb721735aeb7f8bc2d6faafa9e40f1feaadd8bec9ca49d4f46d77377bd424d",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/freeze.py",
+      "bytes": 10129,
+      "sha256": "9dc6c5b5c83ec07ef8e85ba0d745cf664ee440d14a898e964cfdc3797147e90f",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/inputs.json",
+      "bytes": 8294,
+      "sha256": "f4854823c8ab85f2f541e876b008bc25b065944c439cc81baa93bdfcd1052429",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/proposal.json",
+      "bytes": 22382,
+      "sha256": "0ca1fd50f8af0a5daf063cff6e36e5104b16c1ee4d07a06db5967d75ef6c67cb",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/receipts.json",
+      "bytes": 7544,
+      "sha256": "1643cfa709e5cdc9d46f08d1f1e0039cc1034cd390e6f783f23ea532460260cf",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/seal.json",
+      "bytes": 514,
+      "sha256": "d2331bdfc4690564cf0cbc9737a42cddecbd93925354d748098bbcd3511caa88",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/tools/canonical-filesystem/src/worker_tests.rs",
+      "bytes": 36616,
+      "sha256": "df773e3ddd01b11c49c409700061b60b2602e991c0629b0444998d73a56212eb",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/original/verification.json",
+      "bytes": 1061,
+      "sha256": "6b7b7e92c8af21487a9087d3fca53011c6f9ccd15ffb6850eeb6481cc8446d62",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/proposal.json",
+      "bytes": 27211,
+      "sha256": "6ba903a617663f9402f122d67985c7a1500eec09faad63af976c21739a91f5f7",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/receipts.json",
+      "bytes": 2441,
+      "sha256": "cc2d777c9c5b17d717bc95802d091308cd3bfc19b2b22e9b03ccd9dbd430883a",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/root-review.json",
+      "bytes": 2176,
+      "sha256": "011a15c532adc27702d71164ce6ce80db25ec91b1932e463a0699caf1758396f",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/rustfmt.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/rustfmt.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/seal.json",
+      "bytes": 707,
+      "sha256": "7e36b81e35de1e24dc6ce3457c233dedfbc565256333d85776a31779d70262de",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/test-addendum.patch",
+      "bytes": 6777,
+      "sha256": "09732f8362742fda5a1110fedd97fc2d4e284c2edb78e6b5d3f4567c0b0c01c9",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    },
+    {
+      "path": "tests-addendum/verification.json",
+      "bytes": 1313,
+      "sha256": "135a69c5586fdf041035de3efaa9a78cbedc0974d61787c96350361925ae83b1",
+      "mode": 420,
+      "archive": "tests-addendum-01.tar.gz"
+    }
+  ]
+}

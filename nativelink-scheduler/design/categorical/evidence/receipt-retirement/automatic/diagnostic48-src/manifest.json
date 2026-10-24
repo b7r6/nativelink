@@ -1,0 +1,41 @@
+{
+  "provenance": "Exact diagnostic48 variant reconstructed by reversing the known subsequent count16 and explicit absent-ack probe/counter edits; unchanged dependencies copied opaquely before root core resync. Not a source snapshot captured at compilation time.",
+  "files": [
+    {
+      "path": "nativelink-service/src/authority_server.rs",
+      "sha256": "c71cd8639e6c456fa2e99eec36cdcea1702ddc78b5c0e464643014eaa85f5e1c"
+    },
+    {
+      "path": "nativelink-worker/tests/authority_rpc_test.rs",
+      "sha256": "efeadc31a383708c2b314f7f52e74e62c346e7187a8649e650c96afb60e63311"
+    },
+    {
+      "path": "nativelink-worker/src/authority_worker.rs",
+      "sha256": "c0e8d648f99e647ec531b5a32ba7cba38f9be82510da67ab5fd7bd56d35381ab"
+    },
+    {
+      "path": "nativelink-worker/src/authority_worker_transport.rs",
+      "sha256": "ba6f39b2f6482b64e27f66efc3e1f8e17014c013aa5d265d03fd0fe52fc19377"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/mod.rs",
+      "sha256": "ebeb043cabc52a9b745ddc8c2ada26a0c7ca11b0aa4be218ec9ac8176d5442e4"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/types.rs",
+      "sha256": "1aba11da68b4ebb98ddc5d15ee7925ac4823090e65ef6fb8c8c88b03dbd07661"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/receipt_retirement.rs",
+      "sha256": "650ffb55e3f0dc56df2396b48e4f58b14442cb80051dd78956e1b1842f93b03e"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/journal.rs",
+      "sha256": "197b73973851a1e0949f03535d526cd931e95d6a91a3e9658bf35c0a6c8eddd4"
+    },
+    {
+      "path": "nativelink-scheduler/src/authority/format.rs",
+      "sha256": "e78329b8bdc63100e3c553c0119e32f3ac95eeb2f18ab5e209fb62b2caa5305e"
+    }
+  ]
+}

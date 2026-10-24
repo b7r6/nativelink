@@ -1,5 +1,6 @@
 load(
     "@rules_rust//rust:defs.bzl",
+    "rust_binary",
     "rust_doc",
     "rust_doc_test",
     "rust_library",
@@ -7,11 +8,102 @@ load(
     "rust_test_suite",
 )
 
+# Shared singleton retention experiment; the store's explicit provider fixture
+# compiles this same authority and catalogue instead of copying them.
+exports_files(
+    [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/retention/typed_bridge.rs",
+    ],
+    visibility = ["//nativelink-store:__pkg__"],
+)
+
+# Reuse the frozen test authorities and owned-filesystem preparation in the
+# worker process experiment without copying their implementations.
+filegroup(
+    name = "publication_fixture_sources",
+    srcs = [
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_physical/fixture.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    visibility = ["//nativelink-worker:__pkg__"],
+)
+
+rust_binary(
+    name = "history_budget",
+    srcs = ["examples/history_budget.rs"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+    ],
+)
+
+rust_binary(
+    name = "authority_budget",
+    srcs = ["examples/authority_budget.rs"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "@crates//:futures",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+    ],
+)
+
 rust_library(
     name = "nativelink-scheduler",
     srcs = [
         "src/admin.rs",
         "src/api_worker_scheduler.rs",
+        "src/authority/accepted_history.rs",
+        "src/authority/accepted_history_tests.rs",
+        "src/authority/canonical_binding.rs",
+        "src/authority/canonical_binding_tests.rs",
+        "src/authority/canonical_cleanup.rs",
+        "src/authority/canonical_cleanup_tests.rs",
+        "src/authority/canonical_clock.rs",
+        "src/authority/canonical_clock_tests.rs",
+        "src/authority/canonical_custody_tests.rs",
+        "src/authority/canonical_owner.rs",
+        "src/authority/canonical_owner_tests.rs",
+        "src/authority/canonical_recovered_owner_tests.rs",
+        "src/authority/canonical_recovery.rs",
+        "src/authority/canonical_recovery_clock_tests.rs",
+        "src/authority/canonical_recovery_tests.rs",
+        "src/authority/canonical_temporal.rs",
+        "src/authority/canonical_temporal_tests.rs",
+        "src/authority/format.rs",
+        "src/authority/journal.rs",
+        "src/authority/journal_factory_tests.rs",
+        "src/authority/mod.rs",
+        "src/authority/reapi.rs",
+        "src/authority/receipt_retirement.rs",
+        "src/authority/receipt_retirement_tests.rs",
+        "src/authority/request.rs",
+        "src/authority/singleton_recovery_tests.rs",
+        "src/authority/snapshot_buffer.rs",
+        "src/authority/tests.rs",
+        "src/authority/types.rs",
         "src/awaited_action_db/awaited_action.rs",
         "src/awaited_action_db/mod.rs",
         "src/cache_lookup_scheduler.rs",
@@ -50,9 +142,13 @@ rust_library(
         "@crates//:futures",
         "@crates//:humantime",
         "@crates//:lru",
+        "@crates//:openraft",
         "@crates//:opentelemetry",
         "@crates//:opentelemetry-semantic-conventions",
         "@crates//:parking_lot",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:redb",
         "@crates//:redis",
         "@crates//:scopeguard",
         "@crates//:serde",
@@ -63,6 +159,184 @@ rust_library(
         "@crates//:tonic",
         "@crates//:tracing",
         "@crates//:uuid",
+    ] + select({
+        "@platforms//os:linux": ["//tools/canonical-filesystem:nativelink-canonical-filesystem-redb"],
+        "//conditions:default": [],
+    }),
+)
+
+rust_test(
+    name = "authority_test",
+    # The full 64-seed campaign checks canonical bytes after every apply and
+    # recovery; unoptimized fastbuild runs need a longer CPU-work allowance.
+    timeout = "long",
+    srcs = ["tests/authority_test.rs"],
+    compile_data = [
+        "//:Cargo.lock",
+        "src/authority/mod.rs",
+        "src/authority/reapi.rs",
+        "src/authority/receipt_retirement.rs",
+        "src/authority/receipt_retirement_tests.rs",
+        "src/authority/request.rs",
+        "src/authority/types.rs",
+        "tests/authority/adversarial.rs",
+        "tests/authority/campaign.rs",
+        "tests/authority/fixtures/committed_lookup.json",
+        "tests/authority/harness.rs",
+        "tests/authority/recipient.rs",
+        "tests/authority/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "receipt_retirement_reference_test",
+    srcs = ["tests/receipt_retirement_reference_test.rs"],
+    compile_data = [
+        "tests/receipt_retirement/differential.rs",
+        "tests/receipt_retirement/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "receipt_retirement_differential_test",
+    srcs = ["tests/receipt_retirement_differential_test.rs"],
+    compile_data = [
+        "tests/receipt_retirement/differential.rs",
+        "tests/receipt_retirement/reference.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "publication_activation_reference_test",
+    srcs = ["tests/publication_activation_reference_test.rs"],
+    compile_data = [
+        "tests/publication_activation/reference.rs",
+        "tests/publication_activation/types.rs",
+    ],
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "publication_head_reference_test",
+    srcs = ["tests/publication_head_reference_test.rs"],
+    compile_data = [
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+    ],
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "accepted_history_reference_test",
+    srcs = ["tests/accepted_history_reference_test.rs"],
+    compile_data = [
+        "tests/accepted_history/reference.rs",
+        "tests/accepted_history/types.rs",
+    ],
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "accepted_history_differential_test",
+    srcs = ["tests/accepted_history_differential_test.rs"],
+    compile_data = [
+        "tests/accepted_history/reference.rs",
+        "tests/accepted_history/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "retention_test",
+    timeout = "moderate",
+    srcs = ["tests/retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+    ],
+    deps = [
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "physical_retention_test",
+    timeout = "moderate",
+    srcs = ["tests/physical_retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+    ],
+    deps = [
+        "//nativelink-store",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
+    ],
+)
+
+rust_test(
+    name = "typed_physical_retention_test",
+    timeout = "moderate",
+    srcs = ["tests/typed_physical_retention_test.rs"],
+    compile_data = [
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/retention/typed_bridge.rs",
+    ],
+    deps = [
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
     ],
 )
 
@@ -72,6 +346,12 @@ rust_test_suite(
     srcs = [
         "tests/action_messages_test.rs",
         "tests/admin_test.rs",
+        "tests/authority_cluster_test.rs",
+        "tests/authority_format_test.rs",
+        "tests/authority_raft_test.rs",
+        "tests/authority_reapi_test.rs",
+        "tests/authority_request_test.rs",
+        "tests/authority_volatile_test.rs",
         "tests/backpressure_test.rs",
         "tests/cache_lookup_scheduler_test.rs",
         "tests/dispatch_ack_test.rs",
@@ -96,6 +376,10 @@ rust_test_suite(
         "tests/worker_registry_test.rs",
         "tests/worker_running_operations_report_test.rs",
     ],
+    args = [
+        "--skip",
+        "saturated_admission_can_finalize_and_snapshot_escaping_heavy_results",
+    ],
     compile_data = [
         "tests/utils/scheduler_utils.rs",
     ],
@@ -116,12 +400,16 @@ rust_test_suite(
         "@crates//:bytes",
         "@crates//:futures",
         "@crates//:mock_instant",
+        "@crates//:openraft",
         "@crates//:opentelemetry",
         "@crates//:opentelemetry-semantic-conventions",
         "@crates//:parking_lot",
         "@crates//:pretty_assertions",
         "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:redb",
         "@crates//:redis",
+        "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
         "@crates//:tokio-stream",
@@ -132,9 +420,37 @@ rust_test_suite(
     ],
 )
 
+# This maximum-size snapshot workload took 59 seconds alone in fastbuild and
+# exceeded the short suite's allowance during a workspace build. Keep its
+# assertions intact and run it with a separate CPU-work budget.
+rust_test(
+    name = "authority_snapshot_capacity_test",
+    timeout = "moderate",
+    srcs = ["tests/authority_raft_test.rs"],
+    args = [
+        "--exact",
+        "saturated_admission_can_finalize_and_snapshot_escaping_heavy_results",
+    ],
+    proc_macro_deps = ["//nativelink-macro"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "@crates//:openraft",
+        "@crates//:redb",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+        "@crates//:uuid",
+    ],
+)
+
 rust_test(
     name = "unit_test",
-    timeout = "short",
+    # Journal lifecycle cases perform real filesystem syncs. Concurrent
+    # sanitizer runs can exceed the short 60-second budget for the full suite.
+    timeout = "moderate",
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
     crate = ":nativelink-scheduler",
     proc_macro_deps = [
         "//nativelink-macro",
@@ -143,6 +459,42 @@ rust_test(
         "@crates//:pretty_assertions",
         "@crates//:redis",
         "@crates//:tracing-test",
+    ] + select({
+        "@platforms//os:linux": [
+            "//tools/canonical-config:nativelink-canonical-config",
+            "@crates//:rustix-1.1.2",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+rust_test(
+    name = "publication_physical_test",
+    timeout = "moderate",
+    srcs = ["tests/publication_physical_test.rs"],
+    compile_data = [
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_physical/cases.rs",
+        "tests/publication_physical/fixture.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:uuid",
     ],
 )
 
@@ -156,4 +508,321 @@ rust_doc_test(
     name = "doc_test",
     timeout = "short",
     crate = ":nativelink-scheduler",
+)
+
+# Actual scheduler and retention composition, separately frozen before comparison.
+rust_test(
+    name = "publication_candidate_test",
+    srcs = ["tests/publication_candidate_test.rs"],
+    compile_data = [
+        "tests/publication_candidate/capacity.rs",
+        "tests/publication_candidate/snapshot_boundary_tests.rs",
+        "tests/publication_candidate/real_request_tests.rs",
+        "tests/publication_candidate/direct_client_tests.rs",
+        "tests/publication_candidate/prepared_memory_tests.rs",
+        "tests/publication_candidate/prepared_memory_audit_tests.rs",
+        "tests/publication_candidate/terminal_tests.rs",
+        "tests/publication_candidate/cases.rs",
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "publication_differential_test",
+    srcs = ["tests/publication_differential_test.rs"],
+    compile_data = [
+        "tests/publication_differential/real_requests.rs",
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "publication_activation_bounded_test",
+    srcs = [
+        "tests/publication_activation_bounded_test.rs",
+        "tests/publication_activation_v2/bounded.rs",
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+    ],
+    crate_root = "tests/publication_activation_bounded_test.rs",
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+# Independent activation v2 oracle; deliberately no scheduler implementation dependency.
+rust_test(
+    name = "publication_activation_v2_reference_test",
+    srcs = [
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+        "tests/publication_activation_v2_reference_test.rs",
+    ],
+    crate_root = "tests/publication_activation_v2_reference_test.rs",
+    deps = [
+        "@crates//:blake3",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "terminal_outcome_reference_test",
+    srcs = ["tests/terminal_outcome_reference_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/terminal_outcome/cases.rs",
+        "tests/terminal_outcome/reference.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "prepared_memory_reference_test",
+    srcs = ["tests/prepared_memory_reference_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/prepared_memory/cases.rs",
+        "tests/prepared_memory/audit_tests.rs",
+        "tests/prepared_memory/head.rs",
+        "tests/prepared_memory/reference.rs",
+        "tests/prepared_memory/types.rs",
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+        "tests/retention/protocol.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "terminal_outcome_restore_audit_test",
+    srcs = ["tests/terminal_outcome_restore_audit_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/terminal_outcome/cases.rs",
+        "tests/terminal_outcome/reference.rs",
+        "tests/terminal_outcome/restore_audit.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "terminal_outcome_differential_test",
+    srcs = ["tests/terminal_outcome_differential_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/retention/reference.rs",
+        "tests/terminal_outcome/reference.rs",
+        "tests/terminal_outcome/types.rs",
+        "tests/terminal_outcome_differential/adapter.rs",
+        "tests/terminal_outcome_differential/cases.rs",
+        "tests/terminal_outcome_differential/fixtures.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "activation_inventory_test",
+    srcs = ["tests/activation_inventory_test.rs"],
+    compile_data = [
+        "tests/activation_inventory/adapter.rs",
+        "tests/publication_activation_v2/bounded.rs",
+        "tests/publication_activation_v2/reference.rs",
+        "tests/publication_activation_v2/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+rust_test(
+    name = "prepared_memory_differential_test",
+    srcs = ["tests/prepared_memory_differential_test.rs"],
+    compile_data = [
+        "tests/authority/reference.rs",
+        "tests/prepared_memory/head.rs",
+        "tests/prepared_memory/reference.rs",
+        "tests/prepared_memory/types.rs",
+        "tests/prepared_memory_differential/adapter.rs",
+        "tests/prepared_memory_differential/cases.rs",
+        "tests/prepared_memory_differential/fixtures.rs",
+        "tests/prepared_memory_differential/observations.rs",
+        "tests/publication_candidate/binding.rs",
+        "tests/publication_candidate/direct_client.rs",
+        "tests/publication_candidate/engine.rs",
+        "tests/publication_candidate/prepared_memory.rs",
+        "tests/publication_candidate/real_request.rs",
+        "tests/publication_candidate/terminal.rs",
+        "tests/publication_candidate/terminal_types.rs",
+        "tests/publication_candidate/types.rs",
+        "tests/publication_candidate/validation.rs",
+        "tests/publication_head/reference.rs",
+        "tests/publication_head/types.rs",
+        "tests/retention/coarse.rs",
+        "tests/retention/protocol.rs",
+        "tests/terminal_outcome/types.rs",
+    ],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-proto",
+        "//nativelink-store",
+        "//nativelink-util",
+        "@crates//:blake3",
+        "@crates//:prost",
+        "@crates//:prost-types",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+    ],
+)
+
+# The filesystem redb variant must be the same crate identity used by the owner.
+rust_test(
+    name = "canonical_owner_api_test",
+    srcs = ["tests/canonical_owner_api_test.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    proc_macro_deps = ["//nativelink-macro"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem-redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:tokio",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
+)
+
+# The filesystem redb variant must be the same crate identity used by the owner.
+rust_test(
+    name = "canonical_recovered_owner_api_test",
+    srcs = ["tests/canonical_recovered_owner_api_test.rs"],
+    compile_data = ["//tools/canonical-config:fixtures/canonical.json"],
+    proc_macro_deps = ["//nativelink-macro"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":nativelink-scheduler",
+        "//nativelink-util",
+        "//tools/canonical-config:nativelink-canonical-config",
+        "//tools/canonical-filesystem:nativelink-canonical-filesystem-redb",
+        "@crates//:rustix-1.1.2",
+        "@crates//:tokio",
+        "@crates//:tracing",
+        "@crates//:tracing-test",
+    ],
 )
