@@ -87,9 +87,12 @@ pub(crate) fn start_observer(socket_path: &Path) -> JoinHandleDropGuard<()> {
 /// above an assumed fixed allocation. Neither the grants nor enforcement change.
 pub(crate) fn allocate_to_target(target_kb: u64, upper_bound_kb: u64) -> Vec<Vec<u8>> {
     assert!(target_kb < upper_bound_kb);
-    let chunk_kb = target_kb.div_ceil(ALLOCATION_STEPS).max(1024);
-    assert!(upper_bound_kb - target_kb > chunk_kb);
-    let chunk_bytes = usize::try_from(chunk_kb.checked_mul(1024).unwrap()).unwrap();
+    // Every observation walks the resident pages of both processes. Use the
+    // measured deficit instead of repeatedly scanning after tiny fixed chunks.
+    // Keep each chunk within a quarter of the accepted window; actual runtime
+    // growth and sharing changes must still pass the final measured upper bound.
+    let max_chunk_kb = (upper_bound_kb - target_kb) / 4;
+    assert!(max_chunk_kb >= 1024);
     let path = std::env::var_os(OBSERVER_ENV).expect("The memory observer must be configured");
     let mut socket = UnixStream::connect(path).unwrap();
     let timeout = Duration::from_secs(5);
@@ -105,15 +108,20 @@ pub(crate) fn allocate_to_target(target_kb: u64, upper_bound_kb: u64) -> Vec<Vec
     socket.write_all(&group_id.to_le_bytes()).unwrap();
     let started = Instant::now();
     let mut allocations = Vec::new();
+    let mut allocated_kb = 0_u64;
+    let mut last_observed_kb = None;
     loop {
         assert!(
             started.elapsed() < timeout,
-            "Memory calibration exceeded its deadline"
+            "Memory calibration exceeded its deadline: elapsed={:?}, chunks={}, allocated={allocated_kb} KiB, last_observed={last_observed_kb:?} KiB, target={target_kb} KiB",
+            started.elapsed(),
+            allocations.len(),
         );
         socket.write_all(&[1]).unwrap();
         let mut response = [0_u8; 8];
         socket.read_exact(&mut response).unwrap();
         let memory_kb = u64::from_le_bytes(response);
+        last_observed_kb = Some(memory_kb);
         assert!(
             !allocations.is_empty() || memory_kb < target_kb,
             "Fixture runtime already exceeds the workload target: {memory_kb} KiB"
@@ -127,13 +135,20 @@ pub(crate) fn allocate_to_target(target_kb: u64, upper_bound_kb: u64) -> Vec<Vec
             return allocations;
         }
         assert!(
-            u64::try_from(allocations.len()).unwrap() < target_kb.div_ceil(chunk_kb),
-            "Resident allocation did not reach its target"
+            u64::try_from(allocations.len()).unwrap() < ALLOCATION_STEPS
+                && allocated_kb < target_kb,
+            "Resident allocation did not reach its target: chunks={}, allocated={allocated_kb} KiB, observed={memory_kb} KiB, target={target_kb} KiB",
+            allocations.len(),
         );
+        let chunk_kb = (target_kb - memory_kb)
+            .clamp(1024, max_chunk_kb)
+            .min(target_kb - allocated_kb);
+        let chunk_bytes = usize::try_from(chunk_kb.checked_mul(1024).unwrap()).unwrap();
         let mut bytes = vec![0_u8; chunk_bytes];
         for byte in bytes.iter_mut().step_by(4096) {
             *byte = 17;
         }
         allocations.push(bytes);
+        allocated_kb += chunk_kb;
     }
 }
