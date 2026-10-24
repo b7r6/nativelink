@@ -1626,8 +1626,19 @@ where
             .await
             .err_tip(|| "In SimpleSchedulerStateManager::filter_operations")?
             .filter_map(|listed| async move { listed_or_lost(listed) })
-            .map(read_listed)
-            .buffered(LISTING_READ_CONCURRENCY)
+            // Finish fetching a batch before reading or yielding its rows.
+            // `buffered` polls ahead: on a lock-backed listing that can leave
+            // the next page's mutex waiter pending while the consumer tries
+            // to update a yielded row under the same mutex. A fair mutex
+            // reserves the unlocked mutex for that unpolled waiter, so both
+            // operations stop. Complete the page fetch before the consumer
+            // can suspend this stream to process a row.
+            .chunks(LISTING_READ_CONCURRENCY)
+            .flat_map(|listed| {
+                stream::iter(listed)
+                    .map(read_listed)
+                    .buffered(LISTING_READ_CONCURRENCY)
+            })
             .try_filter_map(|read| future::ready(Ok(read)))
             .try_filter_map(move |(subscriber, awaited_action)| {
                 let filter = filter.clone();

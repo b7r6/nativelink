@@ -1778,3 +1778,161 @@ async fn the_listing_reads_records_concurrently_in_the_stores_order() -> Result<
     );
     Ok(())
 }
+
+/// A listing's next page and an operation update share the database lock.
+/// Tokio's FIFO mutex makes the queued reservation deterministic: after the
+/// holder drops, a newer update cannot pass an unpolled page-read waiter.
+struct ReservedListingDb<T: AwaitedActionDb> {
+    inner: T,
+    access: Arc<tokio::sync::Mutex<()>>,
+    tail_started: Arc<AtomicBool>,
+    tail_finished: Arc<AtomicBool>,
+}
+
+impl<T: AwaitedActionDb> MetricsComponent for ReservedListingDb<T> {
+    fn publish(
+        &self,
+        kind: MetricKind,
+        field_metadata: MetricFieldData,
+    ) -> Result<MetricPublishKnownKindData, nativelink_metric::Error> {
+        self.inner.publish(kind, field_metadata)
+    }
+}
+
+impl<T: AwaitedActionDb> AwaitedActionDb for ReservedListingDb<T> {
+    type Subscriber = T::Subscriber;
+
+    async fn get_awaited_action_by_id(
+        &self,
+        client_operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        let _guard = self.access.lock().await;
+        self.inner
+            .get_awaited_action_by_id(client_operation_id)
+            .await
+    }
+
+    async fn get_all_awaited_actions(
+        &self,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        self.inner.get_all_awaited_actions().await
+    }
+
+    async fn get_by_operation_id(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<Self::Subscriber>, Error> {
+        let _guard = self.access.lock().await;
+        self.inner.get_by_operation_id(operation_id).await
+    }
+
+    async fn get_range_of_actions(
+        &self,
+        state: SortedAwaitedActionState,
+        start: Bound<SortedAwaitedAction>,
+        end: Bound<SortedAwaitedAction>,
+        desc: bool,
+    ) -> Result<impl Stream<Item = Result<Self::Subscriber, Error>> + Send, Error> {
+        let listed: Vec<_> = self
+            .inner
+            .get_range_of_actions(state, start, end, desc)
+            .await?
+            .collect()
+            .await;
+        let tail = stream::once(async {
+            self.tail_started.store(true, Ordering::SeqCst);
+            let _guard = self.access.lock().await;
+            self.tail_finished.store(true, Ordering::SeqCst);
+            None
+        })
+        .filter_map(future::ready);
+        Ok(stream::iter(listed).chain(tail))
+    }
+
+    async fn update_awaited_action(&self, new_awaited_action: AwaitedAction) -> Result<(), Error> {
+        let _guard = self.access.lock().await;
+        self.inner.update_awaited_action(new_awaited_action).await
+    }
+
+    async fn add_action(
+        &self,
+        client_operation_id: OperationId,
+        action_info: Arc<ActionInfo>,
+        no_event_action_timeout: Duration,
+    ) -> Result<Self::Subscriber, Error> {
+        let _guard = self.access.lock().await;
+        self.inner
+            .add_action(client_operation_id, action_info, no_event_action_timeout)
+            .await
+    }
+}
+
+/// A prefetched page can be waiting for the same database lock the matcher
+/// needs to assign the row just yielded. The stream must finish that page
+/// read before handing the row to a consumer that can stop polling it.
+#[nativelink_test]
+async fn a_listed_action_can_be_assigned_without_polling_the_listing_again() -> Result<(), Error> {
+    MockClock::set_time(Duration::from_secs(NOW_TIME));
+    let access = Arc::new(tokio::sync::Mutex::new(()));
+    let tail_started = Arc::new(AtomicBool::new(false));
+    let tail_finished = Arc::new(AtomicBool::new(false));
+    let task_change_notify = Arc::new(Notify::new());
+    let state_mgr = SimpleSchedulerStateManager::new(
+        5,
+        WORKER_TIMEOUT,
+        Duration::from_mins(5),
+        MAX_EXECUTING,
+        ReservedListingDb {
+            inner: memory_awaited_action_db_factory(
+                0,
+                &task_change_notify,
+                MockInstantWrapped::default,
+            ),
+            access: access.clone(),
+            tail_started: tail_started.clone(),
+            tail_finished: tail_finished.clone(),
+        },
+        MockInstantWrapped::default,
+        Some(Arc::new(WorkerRegistry::new())),
+    );
+    let _clients = add_prioritised_actions(state_mgr.as_ref(), 1).await?;
+    let guard = access.lock().await;
+    let mut listing = MatchingEngineStateManager::filter_operations(
+        state_mgr.as_ref(),
+        OperationFilter {
+            stages: OperationStageFlags::Queued,
+            order_by_priority_direction: Some(OrderDirection::Desc),
+            ..Default::default()
+        },
+    )
+    .await?;
+    let mut next = listing.next().boxed();
+    let first_poll = futures::poll!(&mut next);
+    assert!(
+        tail_started.load(Ordering::SeqCst),
+        "the next page was polled"
+    );
+    assert!(
+        !tail_finished.load(Ordering::SeqCst),
+        "the page read is queued behind the held lock"
+    );
+    drop(guard);
+    let row = match first_poll {
+        core::task::Poll::Ready(row) => row,
+        core::task::Poll::Pending => next.await,
+    }
+    .expect("the queued action is listed");
+    let (state, _) = row.as_state().await?;
+    let operation_id = state.client_operation_id.clone();
+    let worker_id = WorkerId::default();
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        state_mgr.assign_operation(&operation_id, Ok(&worker_id)),
+    )
+    .await
+    .expect("assignment must not wait behind an unpolled listing's lock reservation")?;
+    let (state, _) = row.as_state().await?;
+    assert_eq!(state.stage, ActionStage::Executing);
+    assert!(tail_finished.load(Ordering::SeqCst));
+    Ok(())
+}
