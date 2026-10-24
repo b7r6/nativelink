@@ -133,11 +133,14 @@ async fn queued_operation_cancel_get_wait_and_restart_preserve_each_interest() {
             tonic::Code::InvalidArgument
         );
     }
+    // Obtaining the initial observation commits through the real journal.
+    // Allow that work in this positive finite-wait case; the short transport
+    // deadline below and service unit tests exercise deadline expiry itself.
     let waiting = client
         .wait_operation(WaitOperationRequest {
             name: b.name.clone(),
             timeout: Some(prost_types::Duration {
-                seconds: 1,
+                seconds: 10,
                 nanos: 0,
             }),
         })
